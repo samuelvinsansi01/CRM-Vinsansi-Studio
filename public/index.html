@@ -232,7 +232,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 .field-group{display:flex;flex-direction:column;}
 
 /* fila */
-.fila-items{display:flex;flex-direction:column;gap:8px;max-height:500px;overflow-y:auto;}
+.fila-items{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 260px);overflow-y:auto;scroll-behavior:smooth;}
 .fila-item{background:var(--bg);border:1px solid var(--border2);border-radius:10px;overflow:hidden;position:relative;transition:border-color 0.2s;}
 .fila-item.enviado{border-color:rgba(78,203,113,0.35);}
 .fila-item.erro{border-color:rgba(255,92,92,0.35);}
@@ -328,6 +328,13 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 .chip-tab{padding:5px 14px;border:1px solid var(--border2);border-radius:7px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;}
 .chip-tab.active{border-color:var(--ok);color:var(--ok);background:rgba(78,203,113,0.06);}
 .chip-tab:hover:not(.active){color:var(--text2);}
+
+/* ══ VISITED LINKS — feedback visual ══ */
+.val-sub-panel a:visited, #atribList a:visited, #valComSiteList a:visited {
+  color: #8888aa !important;
+  opacity: 0.7;
+}
+.td-link a:visited { color: #8888aa; }
 </style>
 </head>
 <body>
@@ -858,6 +865,18 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   </div>
 </div>
 
+<!-- MODAL CONFIRMAÇÃO GENÉRICA -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-title">Confirmar <span style="color:var(--error)">remoção</span></div>
+    <div class="modal-sub" id="confirmModalMsg" style="margin-bottom:20px"></div>
+    <div class="modal-btns">
+      <button class="modal-btn-ok" id="confirmModalOk" style="background:var(--error);color:#fff">Remover</button>
+      <button class="modal-btn-cancel" onclick="fecharConfirmModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL MENSAGEM -->
 <div class="modal-overlay" id="msgModal" onclick="if(event.target===this)fecharMsgModal()">
   <div class="modal" style="max-width:520px">
@@ -1348,10 +1367,16 @@ function atribuirLote() {
 }
 
 function removerDaAtribuicao(id) {
-  saveAtribuicaoData(getAtribuicaoData().filter(a => a.id !== id));
-  atribSelecionados.delete(id);
-  renderAtribuicao(); updateBadges();
-  notify('Lead removido');
+  const lead = getAtribuicaoData().find(a => a.id === id);
+  abrirModalConfirm(
+    `Remover <strong>${lead ? escHtml(lead.nome) : 'este lead'}</strong> da Base de Atribuição?`,
+    () => {
+      saveAtribuicaoData(getAtribuicaoData().filter(a => a.id !== id));
+      atribSelecionados.delete(id);
+      renderAtribuicao(); updateBadges();
+      notify('Lead removido');
+    }
+  );
 }
 
 
@@ -1421,6 +1446,24 @@ function confirmarLimparExcluidos() {
 /* mantém compatibilidade com chamadas antigas */
 function limparExcluidos() { abrirModalLimparExcluidos(); }
 
+
+/* ════════════════════════════
+   MODAL CONFIRMAÇÃO GENÉRICA
+════════════════════════════ */
+let _confirmCallback = null;
+function abrirModalConfirm(msg, callback) {
+  document.getElementById('confirmModalMsg').innerHTML = msg;
+  _confirmCallback = callback;
+  document.getElementById('confirmModal').classList.add('open');
+  document.getElementById('confirmModalOk').onclick = () => {
+    fecharConfirmModal();
+    if (_confirmCallback) _confirmCallback();
+  };
+}
+function fecharConfirmModal() {
+  document.getElementById('confirmModal').classList.remove('open');
+  _confirmCallback = null;
+}
 
 function notify(msg, type) {
   const el = document.getElementById('notify');
@@ -1771,10 +1814,17 @@ function saveWhatsapp(id, day) {
 }
 function deleteEmpresa(id, day) {
   const data = ensureWeekData();
-  if (!data.days[day]) return;
-  data.days[day] = data.days[day].filter(e => e.id !== id);
-  saveWeekData(data); renderInicio(); updateBadges();
-  notify('Empresa removida');
+  const emp = (data.days[day]||[]).find(e => e.id === id);
+  abrirModalConfirm(
+    `Remover <strong>${emp ? escHtml(emp.nome) : 'esta empresa'}</strong> da semana?`,
+    () => {
+      const d = ensureWeekData();
+      if (!d.days[day]) return;
+      d.days[day] = d.days[day].filter(e => e.id !== id);
+      saveWeekData(d); renderInicio(); updateBadges();
+      notify('Empresa removida');
+    }
+  );
 }
 function clearAll() { document.getElementById('clearModal').classList.add('open'); }
 function confirmClear() {
@@ -2533,13 +2583,20 @@ function removerImagem(id) {
 }
 function removerFila(id) {
   if (!filaDisparo[disparoChipId]) return;
-  filaDisparo[disparoChipId] = filaDisparo[disparoChipId].filter(f => f.id !== id);
-  const data = ensureWeekData();
-  Object.keys(data.days).forEach(day => {
-    const emp = (data.days[day]||[]).find(e => e.id === id);
-    if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
-  });
-  saveWeekData(data); updateBadges(); renderDisparoEmpresas(); renderFila();
+  const item = filaDisparo[disparoChipId].find(f => f.id === id);
+  abrirModalConfirm(
+    `Remover <strong>${item ? escHtml(item.nome) : 'esta empresa'}</strong> da fila?`,
+    () => {
+      if (!filaDisparo[disparoChipId]) return;
+      filaDisparo[disparoChipId] = filaDisparo[disparoChipId].filter(f => f.id !== id);
+      const data = ensureWeekData();
+      Object.keys(data.days).forEach(day => {
+        const emp = (data.days[day]||[]).find(e => e.id === id);
+        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+      });
+      saveWeekData(data); updateBadges(); renderDisparoEmpresas(); renderFila();
+    }
+  );
 }
 function limparFila() {
   if (disparoEmAndamento) { notify('// disparo em andamento','warn'); return; }
