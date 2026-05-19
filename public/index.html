@@ -232,8 +232,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 .field-group{display:flex;flex-direction:column;}
 
 /* fila */
-.fila-items{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 260px);overflow-y:auto;scroll-behavior:smooth;}
-.fila-item{background:var(--bg);border:1px solid var(--border2);border-radius:10px;overflow:hidden;position:relative;transition:border-color 0.2s;}
+.fila-items{display:flex;flex-direction:column;gap:8px;overflow-y:auto;scroll-behavior:smooth;}
+.fila-item{background:var(--bg);border:1px solid var(--border2);border-radius:10px;position:relative;transition:border-color 0.2s;}
 .fila-item.enviado{border-color:rgba(78,203,113,0.35);}
 .fila-item.erro{border-color:rgba(255,92,92,0.35);}
 .fila-item.enviando{border-color:rgba(184,240,89,0.35);}
@@ -245,7 +245,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 .fila-item-status.enviado{color:var(--ok);border-color:rgba(78,203,113,0.3);}
 .fila-item-status.erro{color:var(--error);border-color:rgba(255,92,92,0.3);}
 .fila-item-status.enviando{color:var(--accent);border-color:var(--accent-border);}
-.fila-item-body{padding:0 14px 12px;display:flex;flex-direction:column;gap:8px;}
+.fila-item-body{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px;}
 .fila-msg-area{background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);white-space:pre-wrap;line-height:1.7;max-height:100px;overflow-y:auto;}
 .fila-msg-shuffle{background:none;border:1px solid var(--border2);color:var(--muted);border-radius:4px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 8px;cursor:pointer;transition:all 0.18s;margin-top:4px;}
 .fila-msg-shuffle:hover{border-color:var(--accent);color:var(--accent);}
@@ -613,8 +613,9 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         <div id="disparoEmpresasList" class="stretch-list stretch-items"></div>
       </div>
     </div>
-    <div>
-      <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;flex-direction:column;min-height:0;gap:12px">
+      <!-- Controles de disparo: fixos no topo -->
+      <div class="card" style="flex-shrink:0">
         <div class="card-title">Disparar</div>
         <div style="margin-bottom:10px">
           <label>Chip ativo</label>
@@ -646,12 +647,13 @@ tr:hover td{background:rgba(255,255,255,0.015);}
           </div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-title">Fila <span id="filaCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(0 empresas)</span></div>
-        <div class="fila-empty" id="filaVazia">Nenhuma empresa na fila.</div>
-        <div class="fila-items" id="filaItens" style="display:none"></div>
+      <!-- Fila: cresce e rola livremente -->
+      <div class="stretch-card" style="min-height:0">
+        <div class="card-title" style="flex-shrink:0">Fila <span id="filaCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(0 empresas)</span></div>
+        <div class="fila-empty" id="filaVazia" style="flex-shrink:0">Nenhuma empresa na fila.</div>
+        <div class="fila-items" id="filaItens" style="display:none;flex:1;max-height:none;overflow-y:auto"></div>
       </div>
-      <div class="disparo-log" id="disparoLog"></div>
+      <div class="disparo-log" id="disparoLog" style="flex-shrink:0"></div>
     </div>
   </div>
 </div>
