@@ -359,6 +359,11 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <span class="nav-label">Validação</span>
       <span class="nav-badge" id="badge-validacao">0</span>
     </div>
+    <div class="nav-item" onclick="switchPanel('atribuicao')" data-label="Atribuição">
+      <div class="nav-icon">🗂️</div>
+      <span class="nav-label">Atribuição</span>
+      <span class="nav-badge" id="badge-atribuicao">0</span>
+    </div>
     <div class="nav-section-label">Envio</div>
     <div class="nav-item" onclick="switchPanel('fila-zap')" data-label="Fila WhatsApp">
       <div class="nav-icon">💬</div>
@@ -390,74 +395,57 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="page-title">Empresas da <span>semana.</span></div>
     <div class="page-sub">// leads validados · prontos para prospecção</div>
   </div>
-  <div class="inicio-grid">
-    <div>
-      <div class="card">
-        <div class="card-title">Leads ativos</div>
-        <div class="day-tabs" id="inicioDayTabs"></div>
-        <div class="status-tabs" id="inicioStatusTabs"></div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Empresa</th><th>Instagram</th><th>Site</th><th>WhatsApp</th><th>Status</th><th>Msg</th><th></th></tr>
-            </thead>
-            <tbody id="inicioTbody">
-              <tr><td colspan="7" class="table-empty">Nenhuma empresa neste dia</td></tr>
-            </tbody>
-          </table>
+  <!-- BARRA DE AÇÕES DO INÍCIO -->
+  <div class="btn-row" style="margin-bottom:16px">
+    <button class="btn btn-primary" onclick="abrirModalNovoLead()">+ Novo lead</button>
+    <button class="btn btn-excel" onclick="exportExcel()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+      Exportar semana
+    </button>
+    <select id="exportDaySelect" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:7px 10px;width:auto;cursor:pointer"><option value="">Exportar dia...</option></select>
+    <button class="btn btn-excel" onclick="exportExcelDay()">Dia específico</button>
+    <button class="btn btn-danger" style="margin-left:auto" onclick="clearAll()">Limpar semana</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Leads ativos</div>
+    <div class="day-tabs" id="inicioDayTabs"></div>
+    <div class="status-tabs" id="inicioStatusTabs"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Empresa</th><th>Instagram</th><th>Site</th><th>WhatsApp</th><th>Status</th><th>Msg</th><th></th></tr>
+        </thead>
+        <tbody id="inicioTbody">
+          <tr><td colspan="7" class="table-empty">Nenhuma empresa neste dia</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="history-section" id="historySection">
+      <div class="history-header">
+        <div class="history-title">Semana anterior <span class="history-badge" id="historyBadge"></span></div>
+        <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="toggleHistory()" id="historyToggleBtn">Mostrar</button>
+      </div>
+      <div class="history-content" id="historyContent">
+        <div class="table-wrap" style="margin-bottom:10px">
+          <table><thead><tr><th>Data</th><th>Empresa</th><th>Site</th><th>WhatsApp</th><th>Status</th></tr></thead>
+          <tbody id="historyTbody"></tbody></table>
         </div>
-        <div class="export-bar">
-          <button class="btn btn-excel" onclick="exportExcel()">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
-            Exportar semana
-          </button>
-          <select id="exportDaySelect"><option value="">Selecionar dia...</option></select>
-          <button class="btn btn-excel" onclick="exportExcelDay()">Dia específico</button>
-          <button class="btn btn-danger" onclick="clearAll()">Limpar semana</button>
-        </div>
-        <div class="history-section" id="historySection">
-          <div class="history-header">
-            <div class="history-title">Semana anterior <span class="history-badge" id="historyBadge"></span></div>
-            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="toggleHistory()" id="historyToggleBtn">Mostrar</button>
-          </div>
-          <div class="history-content" id="historyContent">
-            <div class="table-wrap" style="margin-bottom:10px">
-              <table><thead><tr><th>Data</th><th>Empresa</th><th>Site</th><th>WhatsApp</th><th>Status</th></tr></thead>
-              <tbody id="historyTbody"></tbody></table>
-            </div>
-            <div class="btn-row">
-              <button class="btn btn-excel" onclick="exportExcelHistory()">Baixar Excel</button>
-              <button class="btn btn-ghost" onclick="archiveHistory()">Arquivar semana anterior</button>
-            </div>
-          </div>
+        <div class="btn-row">
+          <button class="btn btn-excel" onclick="exportExcelHistory()">Baixar Excel</button>
+          <button class="btn btn-ghost" onclick="archiveHistory()">Arquivar semana anterior</button>
         </div>
       </div>
     </div>
-    <!-- MSG PANEL -->
-    <div>
-      <div class="card">
-        <div class="card-title">Mensagem</div>
-        <div class="msg-panel" id="msgPanel">
-          <div class="msg-panel-header">
-            <span class="msg-panel-label">// TEMPLATE ATIVO</span>
-            <span class="msg-panel-empresa" id="msgPanelEmpresa">selecione uma empresa →</span>
-          </div>
-          <div class="msg-body" id="msgBody">Clique em "Msg" em uma empresa para ver a mensagem.</div>
-          <div class="msg-panel-footer">
-            <button class="msg-copy-btn" id="msgCopyBtn" onclick="copyMsg()" disabled>Copiar</button>
-            <button class="msg-shuffle-btn" onclick="shuffleMsg()">↻ Sortear</button>
-            <div class="msg-hint">// {EMPRESA} é substituído pelo nome real</div>
-          </div>
-        </div>
-      </div>
-      <div class="card" style="margin-top:16px">
-        <div class="card-title">Sites já vistos <span id="excludedCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px">Bloqueados permanentemente na importação da Apify.</div>
-        <div id="excludedList" style="max-height:180px;overflow-y:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);"></div>
-        <div class="btn-row" style="margin-top:10px">
-          <button class="btn btn-danger" onclick="limparExcluidos()">Limpar lista</button>
-        </div>
-      </div>
+  </div>
+
+  <!-- SITES JÁ VISTOS — abaixo dos leads ativos -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-title">Sites já vistos <span id="excludedCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px">Bloqueados permanentemente na importação da Apify.</div>
+    <div id="excludedList" style="max-height:180px;overflow-y:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);"></div>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn btn-danger" onclick="abrirModalLimparExcluidos()">Limpar lista</button>
     </div>
   </div>
 </div>
@@ -484,10 +472,6 @@ tr:hover td{background:rgba(255,255,255,0.015);}
             <div id="subRamosList" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"></div>
           </div>
         </div>
-        <div style="margin-bottom:10px">
-          <label>Dia de destino</label>
-          <div class="day-tabs" id="importDayTabs"></div>
-        </div>
         <div style="margin-bottom:12px">
           <label>Cole o JSON <span class="tag">results[]</span></label>
           <textarea id="importJsonInput" placeholder='[{"title":"Empresa X","website":"https://...","phone":"+55 11 9...","categoryName":"Contabilidade"},...]' style="min-height:260px" oninput="importPreview()"></textarea>
@@ -512,12 +496,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 <div class="panel" id="panel-validacao">
   <div class="page-header">
     <div class="page-title">Validação <span>de Leads.</span></div>
-    <div class="page-sub">// valide números · separe com site / sem site · evite duplicatas</div>
+    <div class="page-sub">// valide números · aprovados vão para Base de Atribuição</div>
   </div>
-  <div class="val-tabs">
-    <div class="val-tab active" onclick="setValTab('com-site')" id="valTabComSite">Com site <span id="valCountComSite" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)"></span></div>
-  </div>
-
   <!-- COM SITE -->
   <div class="val-sub-panel active" id="valPanelComSite">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
@@ -553,7 +533,37 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 
 </div>
 
-<!-- ── FILA WHATSAPP ── -->
+<!-- ── ATRIBUIÇÃO ── -->
+<div class="panel" id="panel-atribuicao">
+  <div class="page-header">
+    <div class="page-title">Base de <span>Atribuição.</span></div>
+    <div class="page-sub">// leads validados · sem dia atribuído · prontos para entrar na semana</div>
+  </div>
+
+  <!-- Barra de ações em lote -->
+  <div id="atribAcoesLote" style="display:none;margin-bottom:12px;background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:10px 14px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
+    <span id="atribLoteLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)">0 selecionados</span>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Atribuir para:</span>
+      <div class="day-tabs" id="atribLoteDayTabs" style="margin-bottom:0"></div>
+    </div>
+    <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;margin-left:auto" onclick="atribuirLote()">Atribuir selecionados →</button>
+    <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="deselecionarTodos()">Cancelar</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      Aguardando atribuição
+      <span id="atribTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
+      <button onclick="selecionarTodos()" style="margin-left:8px;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer;transition:all 0.18s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Selecionar todos</button>
+    </div>
+    <div id="atribList">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição</div>
+    </div>
+  </div>
+</div>
+
+
 <div class="panel" id="panel-fila-zap">
   <div class="page-header">
     <div class="page-title">Fila <span>WhatsApp.</span></div>
@@ -759,7 +769,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 <div class="modal-overlay" id="clearModal">
   <div class="modal">
     <div class="modal-title">Limpar <span style="color:var(--error)">semana?</span></div>
-    <div class="modal-sub">// todos os leads da semana atual serão removidos. A semana anterior será preservada.</div>
+    <div class="modal-sub">// leads <strong style="color:var(--text)">Não enviados</strong> voltarão para a Base de Atribuição. Leads com status (Enviada, Respondida etc.) serão preservados no histórico.</div>
     <div class="modal-btns">
       <button class="modal-btn-ok" style="background:var(--error);color:#fff" onclick="confirmClear()">Limpar mesmo assim</button>
       <button class="modal-btn-cancel" onclick="document.getElementById('clearModal').classList.remove('open')">Cancelar</button>
@@ -808,6 +818,68 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   </div>
 </div>
 
+<!-- MODAL NOVO LEAD -->
+<div class="modal-overlay" id="novoLeadModal">
+  <div class="modal">
+    <div class="modal-title">Novo <span style="color:var(--accent)">lead</span></div>
+    <div class="modal-sub">// cadastre manualmente uma empresa para prospecção</div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label>Nome da empresa <span class="tag">OBRIGATÓRIO</span></label>
+      <input type="text" id="nlNome" placeholder="Ex: Studio Silva"/>
+    </div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label>Site</label>
+      <input type="text" id="nlSite" placeholder="https://..."/>
+    </div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label>WhatsApp</label>
+      <input type="text" id="nlWhatsapp" placeholder="Ex: 11999999999"/>
+    </div>
+    <div class="field-group" style="margin-bottom:16px">
+      <label>Dia de destino</label>
+      <div class="day-tabs" id="nlDayTabs" style="margin-bottom:0"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn-ok" onclick="salvarNovoLead()">Salvar lead</button>
+      <button class="modal-btn-cancel" onclick="fecharModalNovoLead()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LIMPAR EXCLUÍDOS -->
+<div class="modal-overlay" id="limparExcluidosModal">
+  <div class="modal">
+    <div class="modal-title">Limpar <span style="color:var(--error)">sites vistos?</span></div>
+    <div class="modal-sub">// todos os domínios da lista serão removidos e voltarão a aparecer nas importações.</div>
+    <div class="modal-btns">
+      <button class="modal-btn-ok" style="background:var(--error);color:#fff" onclick="confirmarLimparExcluidos()">Limpar mesmo assim</button>
+      <button class="modal-btn-cancel" onclick="document.getElementById('limparExcluidosModal').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MENSAGEM -->
+<div class="modal-overlay" id="msgModal" onclick="if(event.target===this)fecharMsgModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-title" style="margin-bottom:4px">Mensagem — <span style="color:var(--accent)" id="msgPanelEmpresaTitle"></span></div>
+    <div class="msg-panel">
+      <div class="msg-panel-header">
+        <span class="msg-panel-label">// TEMPLATE ATIVO</span>
+        <span class="msg-panel-empresa" id="msgPanelEmpresa">selecione uma empresa</span>
+      </div>
+      <div class="msg-body" id="msgBody" style="max-height:260px;overflow-y:auto">Clique em "Msg" em uma empresa para ver a mensagem.</div>
+      <div class="msg-panel-footer">
+        <button class="msg-copy-btn" id="msgCopyBtn" onclick="copyMsg()" disabled>Copiar</button>
+        <button class="msg-shuffle-btn" onclick="shuffleMsg()">↻ Sortear</button>
+        <div class="msg-hint">// {EMPRESA} substituído pelo nome real</div>
+      </div>
+    </div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button class="modal-btn-cancel" onclick="fecharMsgModal()">Fechar</button>
+    </div>
+  </div>
+</div>
+
 <div class="notify" id="notify"></div>
 
 <script>
@@ -824,6 +896,7 @@ const RAMOS_KEY      = 'vs_ramos_v2';
 const TEMPLATES_KEY  = 'vs_templates_v2';
 const TEMPLATES_RAMO_KEY = 'vs_templates_ramo_v1'; // templates por ramo+tipo
 const VAL_KEY        = 'vs_validacao_v2';   // fila de validação
+const ATRIBUICAO_KEY = 'vs_atribuicao_v1';  // base de atribuição (leads validados sem dia)
 const INSTA_KEY      = 'vs_insta_fila_v2';  // fila instagram
 const INSTA_SCHED_KEY = 'vs_insta_sched_v1'; // cronograma instagram
 
@@ -1054,8 +1127,301 @@ function pickOtherTemplate(nome, cur) {
 }
 
 /* ════════════════════════════
-   NOTIFY
+   BASE DE ATRIBUIÇÃO
 ════════════════════════════ */
+let atribSelecionados = new Set();
+let atribDiaLote = null;
+
+function diasEmEspera(criadoEm) {
+  if (!criadoEm) return 0;
+  const [d, m, y] = criadoEm.split('/').map(Number);
+  const criado = new Date(y, m - 1, d);
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  return Math.floor((hoje - criado) / 86400000);
+}
+
+function renderAtribuicao() {
+  const leads = getAtribuicaoData();
+  const weekDays = currentWeekDays();
+  const today = todayStr();
+  if (!atribDiaLote || !weekDays.includes(atribDiaLote)) atribDiaLote = today;
+
+  // badge total
+  const totalEl = document.getElementById('atribTotalBadge');
+  if (totalEl) totalEl.textContent = leads.length ? `(${leads.length} lead${leads.length!==1?'s':''})` : '';
+
+  // day tabs para lote
+  const loteTabsEl = document.getElementById('atribLoteDayTabs');
+  if (loteTabsEl) {
+    loteTabsEl.innerHTML = weekDays.map(day => {
+      const data = ensureWeekData();
+      const count = (data.days[day]||[]).length;
+      const active = day === atribDiaLote;
+      return `<div class="day-tab${active?' active':''}" onclick="setAtribDiaLote('${day}')" style="font-size:9px;padding:4px 10px">
+        ${dayLabel(day)}${day===today?' <span style="color:var(--accent);font-size:8px">●</span>':''}
+        ${count>0?`<span class="day-count">${count}</span>`:''}
+      </div>`;
+    }).join('');
+  }
+
+  // painel de ações em lote
+  const acoesEl = document.getElementById('atribAcoesLote');
+  const loteLabel = document.getElementById('atribLoteLabel');
+  if (acoesEl) {
+    const temSel = atribSelecionados.size > 0;
+    acoesEl.style.display = temSel ? 'flex' : 'none';
+    if (loteLabel) loteLabel.textContent = `${atribSelecionados.size} selecionado${atribSelecionados.size!==1?'s':''}`;
+  }
+
+  // lista
+  const listEl = document.getElementById('atribList');
+  if (!listEl) return;
+
+  if (!leads.length) {
+    listEl.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição</div>';
+    return;
+  }
+
+  listEl.innerHTML = '<div class="ext-list">' + leads.map(lead => {
+    const sel = atribSelecionados.has(lead.id);
+    const dias = diasEmEspera(lead.validadoEm || lead.criadoEm);
+    const voltou = lead.voltouDaSemana;
+
+    let ageBadge = '';
+    if (dias >= 2) {
+      ageBadge = `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--warning);background:rgba(240,164,41,0.1);border:1px solid rgba(240,164,41,0.25);border-radius:4px;padding:2px 7px">⏳ há ${dias} dia${dias!==1?'s':''}</span>`;
+    } else if (dias === 1) {
+      ageBadge = `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--warning);background:rgba(240,164,41,0.08);border:1px solid rgba(240,164,41,0.2);border-radius:4px;padding:2px 7px">⏳ desde ontem</span>`;
+    }
+
+    let voltouBadge = '';
+    if (voltou) {
+      voltouBadge = `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--text2);background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px">↩ voltou da semana</span>`;
+    }
+
+    const cardBorder = sel
+      ? 'border-color:var(--accent);background:var(--accent-dim)'
+      : dias >= 1 ? 'border-color:rgba(240,164,41,0.3)' : '';
+
+    return `<div class="empresa-card" id="atrib-card-${lead.id}" style="${cardBorder}">
+      <!-- checkbox de seleção -->
+      <div style="flex-shrink:0;margin-right:4px">
+        <div onclick="toggleAtribSel('${lead.id}')"
+          style="width:18px;height:18px;border-radius:4px;border:2px solid ${sel?'var(--accent)':'var(--border2)'};
+          background:${sel?'var(--accent)':'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;
+          transition:all 0.15s;flex-shrink:0">
+          ${sel?`<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="#0a0a0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`:''}
+        </div>
+      </div>
+      <div class="empresa-info">
+        <div class="empresa-nome">
+          ${lead.googleUrl
+            ? `<a href="${escHtml(lead.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(lead.nome)}</a>`
+            : escHtml(lead.nome)}
+        </div>
+        <div class="empresa-meta">
+          ${lead.site ? `<div class="empresa-site"><a href="${escHtml(lead.site)}" target="_blank">${escHtml(lead.site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></div>` : ''}
+          ${lead.whatsapp ? `<div class="empresa-phone">📱 ${escHtml(lead.whatsapp)}</div>` : ''}
+          ${ageBadge}
+          ${voltouBadge}
+        </div>
+      </div>
+      <div class="empresa-actions" style="flex-direction:column;gap:5px;align-items:flex-end">
+        <!-- Atribuição individual: dropdown de dias -->
+        <div style="position:relative">
+          <button onclick="toggleAtribDropdown('${lead.id}')"
+            style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;padding:5px 10px;cursor:pointer;white-space:nowrap;transition:all 0.18s"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">
+            Atribuir ↓
+          </button>
+          <div id="atrib-dd-${lead.id}" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px;z-index:50;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
+            ${weekDays.map(day => {
+              const data = ensureWeekData();
+              const count = (data.days[day]||[]).length;
+              return `<div onclick="atribuirIndividual('${lead.id}','${day}')"
+                style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px"
+                onmouseover="this.style.background='var(--accent-dim)';this.style.color='var(--accent)'"
+                onmouseout="this.style.background='transparent';this.style.color='var(--text2)'">
+                <span>${dayLabel(day)}${day===today?' ●':''}</span>
+                <span style="color:var(--muted);font-size:8px">${count}/60</span>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+        <button class="del-btn" onclick="removerDaAtribuicao('${lead.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function toggleAtribSel(id) {
+  if (atribSelecionados.has(id)) atribSelecionados.delete(id);
+  else atribSelecionados.add(id);
+  renderAtribuicao();
+}
+
+function selecionarTodos() {
+  const leads = getAtribuicaoData();
+  leads.forEach(l => atribSelecionados.add(l.id));
+  renderAtribuicao();
+}
+
+function deselecionarTodos() {
+  atribSelecionados.clear();
+  renderAtribuicao();
+}
+
+function setAtribDiaLote(day) {
+  atribDiaLote = day;
+  renderAtribuicao();
+}
+
+function toggleAtribDropdown(id) {
+  const dd = document.getElementById(`atrib-dd-${id}`);
+  if (!dd) return;
+  // fecha todos os outros
+  document.querySelectorAll('[id^="atrib-dd-"]').forEach(el => { if (el.id !== `atrib-dd-${id}`) el.style.display = 'none'; });
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+// Fecha dropdowns ao clicar fora
+document.addEventListener('click', e => {
+  if (!e.target.closest('[id^="atrib-dd-"]') && !e.target.closest('[onclick*="toggleAtribDropdown"]')) {
+    document.querySelectorAll('[id^="atrib-dd-"]').forEach(el => el.style.display = 'none');
+  }
+});
+
+function atribuirParaDia(ids, day) {
+  const data = ensureWeekData();
+  if (!data.days[day]) data.days[day] = [];
+  const atrib = getAtribuicaoData();
+  const diasSemana = currentWeekDays();
+  let atribuidos = 0;
+
+  ids.forEach(id => {
+    const lead = atrib.find(a => a.id === id);
+    if (!lead) return;
+
+    // encontra dia com vaga (máx 60)
+    let diaFinal = day;
+    let idx = diasSemana.indexOf(day);
+    while ((data.days[diaFinal]||[]).length >= 60) {
+      idx++;
+      if (idx >= diasSemana.length) { notify(`// semana cheia — ${lead.nome} não atribuído`,'warn'); return; }
+      diaFinal = diasSemana[idx];
+      if (!data.days[diaFinal]) data.days[diaFinal] = [];
+    }
+
+    if (!data.days[diaFinal]) data.days[diaFinal] = [];
+    data.days[diaFinal].push({
+      id: lead.id, nome: lead.nome, site: lead.site || '',
+      whatsapp: lead.whatsapp || '', instagram: lead.instagram || '',
+      googleUrl: lead.googleUrl || '',
+      status: 'Não enviada', criadoEm: lead.criadoEm || todayStr(),
+    });
+    atribuidos++;
+  });
+
+  saveWeekData(data);
+  const novaAtrib = atrib.filter(a => !ids.includes(a.id));
+  saveAtribuicaoData(novaAtrib);
+  atribSelecionados.clear();
+  renderAtribuicao(); updateBadges();
+  return atribuidos;
+}
+
+function atribuirIndividual(id, day) {
+  document.querySelectorAll('[id^="atrib-dd-"]').forEach(el => el.style.display = 'none');
+  const atrib = getAtribuicaoData();
+  const lead = atrib.find(a => a.id === id);
+  const n = atribuirParaDia([id], day);
+  if (n > 0) notify(`✓ ${lead?.nome} → ${dayLabel(day)}`);
+}
+
+function atribuirLote() {
+  if (!atribSelecionados.size) { notify('// selecione ao menos 1 lead','warn'); return; }
+  if (!atribDiaLote) { notify('// selecione um dia','warn'); return; }
+  const ids = [...atribSelecionados];
+  const n = atribuirParaDia(ids, atribDiaLote);
+  if (n > 0) notify(`✓ ${n} lead${n!==1?'s':''} → ${dayLabel(atribDiaLote)}`);
+}
+
+function removerDaAtribuicao(id) {
+  saveAtribuicaoData(getAtribuicaoData().filter(a => a.id !== id));
+  atribSelecionados.delete(id);
+  renderAtribuicao(); updateBadges();
+  notify('Lead removido');
+}
+
+
+let nlDia = null;
+
+function abrirModalNovoLead() {
+  nlDia = todayStr();
+  const weekDays = currentWeekDays();
+  const today = todayStr();
+  document.getElementById('nlDayTabs').innerHTML = weekDays.map(day => {
+    const active = day === nlDia;
+    return `<div class="day-tab${active?' active':''}" onclick="setNlDia('${day}')" style="font-size:9px;padding:4px 10px">
+      ${dayLabel(day)}${day===today?' <span style="color:var(--accent);font-size:8px">●</span>':''}
+    </div>`;
+  }).join('');
+  document.getElementById('nlNome').value = '';
+  document.getElementById('nlSite').value = '';
+  document.getElementById('nlWhatsapp').value = '';
+  document.getElementById('novoLeadModal').classList.add('open');
+  setTimeout(() => document.getElementById('nlNome').focus(), 80);
+}
+
+function setNlDia(day) {
+  nlDia = day;
+  document.querySelectorAll('#nlDayTabs .day-tab').forEach(el => {
+    el.classList.toggle('active', el.getAttribute('onclick').includes(`'${day}'`));
+  });
+}
+
+function fecharModalNovoLead() {
+  document.getElementById('novoLeadModal').classList.remove('open');
+}
+
+function salvarNovoLead() {
+  const nome = document.getElementById('nlNome').value.trim();
+  const site = document.getElementById('nlSite').value.trim();
+  const whatsapp = document.getElementById('nlWhatsapp').value.trim();
+  if (!nome) { notify('// nome da empresa é obrigatório','err'); return; }
+  const day = nlDia || todayStr();
+  const data = ensureWeekData();
+  if (!data.days[day]) data.days[day] = [];
+  data.days[day].push({
+    id: genId(), nome: capitalizeName(nome),
+    site: site || '', whatsapp: whatsapp || '',
+    instagram: '', googleUrl: '',
+    status: 'Não enviada', criadoEm: todayStr()
+  });
+  saveWeekData(data);
+  fecharModalNovoLead();
+  selectedDay = day;
+  renderInicio(); updateBadges();
+  notify(`✓ ${capitalizeName(nome)} adicionado para ${dayLabel(day)}`);
+}
+
+/* ════════════════════════════
+   MODAL LIMPAR EXCLUÍDOS
+════════════════════════════ */
+function abrirModalLimparExcluidos() {
+  document.getElementById('limparExcluidosModal').classList.add('open');
+}
+function confirmarLimparExcluidos() {
+  saveExcludedDomains([]);
+  document.getElementById('limparExcluidosModal').classList.remove('open');
+  renderExcluidos(); notify('Lista limpa');
+}
+
+/* mantém compatibilidade com chamadas antigas */
+function limparExcluidos() { abrirModalLimparExcluidos(); }
+
+
 function notify(msg, type) {
   const el = document.getElementById('notify');
   el.textContent = msg;
@@ -1072,17 +1438,18 @@ function toggleSidebar() {
   s.classList.toggle('collapsed', open);
   localStorage.setItem(SIDEBAR_KEY, open ? '0' : '1');
 }
-const PANELS = ['inicio','importar','validacao','fila-zap','redirecionamentos','configuracoes'];
+const PANELS = ['inicio','importar','validacao','atribuicao','fila-zap','redirecionamentos','configuracoes'];
 function switchPanel(name) {
   PANELS.forEach(p => document.getElementById('panel-'+p).classList.toggle('active', p===name));
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
-    const panelMap = {'Início':'inicio','Importar':'importar','Validação':'validacao','Fila WhatsApp':'fila-zap','Redirecionamentos':'redirecionamentos','Configurações':'configuracoes'};
+    const panelMap = {'Início':'inicio','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','Fila WhatsApp':'fila-zap','Redirecionamentos':'redirecionamentos','Configurações':'configuracoes'};
     el.classList.toggle('active', panelMap[label] === name);
   });
   if (name==='inicio')         renderInicio();
   if (name==='importar')       renderImportarPanel();
   if (name==='validacao')      renderValidacao();
+  if (name==='atribuicao')     renderAtribuicao();
   if (name==='fila-zap')       renderFilaZap();
   if (name==='configuracoes')  renderConfiguracoes();
   updateBadges();
@@ -1091,10 +1458,12 @@ function switchPanel(name) {
 function updateBadges() {
   const data = ensureWeekData();
   const flat = flattenWeekData(data);
-  document.getElementById('badge-inicio').textContent = flat.length;
+  document.getElementById('badge-inicio').textContent = flat.filter(e => (e.status||'Não enviada')==='Não enviada').length;
   document.getElementById('badge-importar').textContent = flat.filter(e => e.status === 'Não enviada').length;
   const val = getValData();
   document.getElementById('badge-validacao').textContent = val.length;
+  const atribuicaoEl = document.getElementById('badge-atribuicao');
+  if (atribuicaoEl) atribuicaoEl.textContent = getAtribuicaoData().length;
   const naoEnv = flat.filter(e => (e.status||'Não enviada')==='Não enviada' && e.whatsapp).length;
   document.getElementById('badge-fila-zap').textContent = naoEnv;
 }
@@ -1125,8 +1494,12 @@ function getValData()  { try { return JSON.parse(localStorage.getItem(VAL_KEY)||
 function saveValData(d){ localStorage.setItem(VAL_KEY, JSON.stringify(d)); }
 
 /* ════════════════════════════
-   STORAGE — INSTA FILA
+   STORAGE — BASE DE ATRIBUIÇÃO
 ════════════════════════════ */
+function getAtribuicaoData()  { try { return JSON.parse(localStorage.getItem(ATRIBUICAO_KEY)||'[]'); } catch { return []; } }
+function saveAtribuicaoData(d){ localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(d)); }
+
+
 function getInstaFila()  { try { return JSON.parse(localStorage.getItem(INSTA_KEY)||'[]'); } catch { return []; } }
 function saveInstaFila(d){ localStorage.setItem(INSTA_KEY, JSON.stringify(d)); }
 
@@ -1294,8 +1667,11 @@ function renderInicio() {
       const nomeDisplay = googleUrl
         ? `<a href="${escHtml(googleUrl)}" target="_blank" title="Ver perfil Google">${escHtml(e.nome)}</a>`
         : escHtml(e.nome);
-      return `<tr>
-        <td class="td-name">${nomeDisplay}</td>
+      const siteVisitado = e.site && isExcludedDomain(e.site);
+      const rowStyle = siteVisitado ? 'background:rgba(240,164,41,0.04);border-left:2px solid rgba(240,164,41,0.4);' : '';
+      const siteVisitadoBadge = siteVisitado ? `<span title="Site já visitado" style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--warning);background:rgba(240,164,41,0.1);border:1px solid rgba(240,164,41,0.25);border-radius:4px;padding:1px 5px;margin-left:4px">👁 visto</span>` : '';
+      return `<tr style="${rowStyle}">
+        <td class="td-name">${nomeDisplay}${siteVisitadoBadge}</td>
         <td>${e.instagram?`<a href="${escHtml(e.instagram)}" target="_blank" class="q-badge insta" style="text-decoration:none">📸</a>`:'<span class="td-missing">—</span>'}</td>
         <td class="td-link">${e.site?`<a href="${escHtml(e.site)}" target="_blank">${escHtml(e.site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a>`:'<span class="td-missing">—</span>'}</td>
         <td>${e.whatsapp
@@ -1316,7 +1692,7 @@ function renderInicio() {
   }
 
   const sel = document.getElementById('exportDaySelect');
-  sel.innerHTML = '<option value="">Selecionar dia...</option>' + weekDays.map(d => `<option value="${d}">${dayLabel(d)}</option>`).join('');
+  if (sel) sel.innerHTML = '<option value="">Exportar dia...</option>' + weekDays.map(d => `<option value="${d}">${dayLabel(d)}</option>`).join('');
   renderHistory();
   renderExcluidos();
 }
@@ -1331,9 +1707,14 @@ function showMsg(id, day) {
   msgEmpresaId = id;
   const { text, idx } = pickTemplate(emp.nome);
   msgTemplateIdx = idx;
+  document.getElementById('msgPanelEmpresaTitle').textContent = emp.nome;
   document.getElementById('msgPanelEmpresa').innerHTML = `empresa: <span>${escHtml(emp.nome)}</span>`;
   document.getElementById('msgBody').textContent = text;
   document.getElementById('msgCopyBtn').disabled = false;
+  document.getElementById('msgModal').classList.add('open');
+}
+function fecharMsgModal() {
+  document.getElementById('msgModal').classList.remove('open');
 }
 function copyMsg() {
   const text = document.getElementById('msgBody').textContent;
@@ -1397,9 +1778,29 @@ function deleteEmpresa(id, day) {
 }
 function clearAll() { document.getElementById('clearModal').classList.add('open'); }
 function confirmClear() {
-  const data = ensureWeekData(); data.days = {}; saveWeekData(data);
+  const data = ensureWeekData();
+  const flat = flattenWeekData(data);
+
+  // Leads sem status (Não enviada) voltam para a Base de Atribuição
+  const semStatus = flat.filter(e => !e.status || e.status === 'Não enviada');
+  if (semStatus.length) {
+    const atrib = getAtribuicaoData();
+    const atribIds = new Set(atrib.map(a => a.id));
+    const novosNaAtrib = semStatus
+      .filter(e => !atribIds.has(e.id))
+      .map(e => ({ ...e, voltouDaSemana: todayStr(), diaDestino: null }));
+    saveAtribuicaoData([...atrib, ...novosNaAtrib]);
+  }
+
+  // Zera os dias da semana
+  data.days = {};
+  saveWeekData(data);
   document.getElementById('clearModal').classList.remove('open');
-  renderInicio(); updateBadges(); notify('Semana limpa');
+  renderInicio(); updateBadges();
+  const msg = semStatus.length
+    ? `Semana limpa · ${semStatus.length} lead${semStatus.length!==1?'s':''} voltaram para Atribuição`
+    : 'Semana limpa';
+  notify(msg);
 }
 
 /* ════════════════════════════
@@ -1451,28 +1852,15 @@ function removerExcluido(domain) {
   saveExcludedDomains(getExcludedDomains().filter(d => d !== domain));
   renderExcluidos(); notify(`✓ ${domain} removido`);
 }
-function limparExcluidos() {
-  if (!confirm('Limpar todos os domínios excluídos?')) return;
-  saveExcludedDomains([]); renderExcluidos(); notify('Lista limpa');
-}
+/* limparExcluidos: delegated to abrirModalLimparExcluidos() */
 
 /* ════════════════════════════
    IMPORTAR
 ════════════════════════════ */
 function renderImportarPanel() {
   renderRamoSelect();
-  const weekDays = currentWeekDays();
-  const today    = todayStr();
-  if (!importTargetDay) importTargetDay = today;
-  document.getElementById('importDayTabs').innerHTML = weekDays.map(day => {
-    const active  = day === importTargetDay;
-    return `<div class="day-tab${active?' active':''}" onclick="setImportDay('${day}')">
-      ${dayLabel(day)}${day===today?' <span style="color:var(--accent);font-size:8px">●</span>':''}
-    </div>`;
-  }).join('');
   importPreview();
 }
-function setImportDay(day) { importTargetDay = day; renderImportarPanel(); }
 
 function parseApifyJson(raw) {
   let arr;
@@ -1609,14 +1997,16 @@ function importarLeads() {
 ════════════════════════════ */
 function setValTab(tab) {
   valTab = tab;
-  document.getElementById('valTabComSite').classList.toggle('active', tab==='com-site');
+  const el = document.getElementById('valTabComSite');
+  if (el) el.classList.toggle('active', tab==='com-site');
 }
 
 function renderValidacao() {
   const val = getValData();
   const comSite = val.filter(v => v.tipo === 'com-site');
 
-  document.getElementById('valCountComSite').textContent = `(${comSite.length})`;
+  const countEl = document.getElementById('valCountComSite');
+  if (countEl) countEl.textContent = `(${comSite.length})`;
 
   // chip tabs para validação — prioridade chip 2 (final 8457)
   const chips = getChips();
@@ -1654,14 +2044,13 @@ function renderValidacao() {
             ${chipNome?`<span class="q-badge ok" style="font-size:7px">📱 ${escHtml(chipNome)}</span>`:''}
           </div>
           <div class="empresa-meta" style="margin-top:4px">
-            <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">dia destino:</span>
-            <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text2)">${v.diaDestino ? dayLabel(v.diaDestino) : '—'}</span>
-            <button onclick="passarProximoDia('${v.id}')" style="background:none;border:1px solid var(--border2);color:var(--muted);border-radius:5px;font-family:'DM Mono',monospace;font-size:8px;padding:2px 7px;cursor:pointer;transition:all 0.18s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">→ próx. dia</button>
+            <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">importado em:</span>
+            <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--text2)">${v.importadoEm || '—'}</span>
           </div>
         </div>
         <div class="empresa-actions">
           ${v.numStatus==='valido'
-            ?`<button class="add-btn added" onclick="aprovarParaFila('${v.id}')">→ Fila Zap</button>`
+            ?`<button class="add-btn added" onclick="aprovarParaFila('${v.id}')">→ Atribuir</button>`
             :`<button class="add-btn" onclick="validarNumeroUnico('${v.id}')">Validar</button>`
           }
           <button class="del-btn" onclick="removerDaValidacao('${v.id}')">✕</button>
@@ -1884,33 +2273,21 @@ function aprovarParaFila(id) {
   const v = val.find(x => x.id === id);
   if (!v || v.numStatus !== 'valido') { notify('// valide o número primeiro','warn'); return; }
 
-  // Adiciona ao início (empresas da semana)
-  const data = ensureWeekData();
-  const day = v.diaDestino || todayStr();
-  if (!data.days[day]) data.days[day] = [];
-
-  // Verifica limite de 60 por dia
-  const diasSemana = currentWeekDays();
-  let diaDestino = day;
-  let idx = diasSemana.indexOf(day);
-  while ((data.days[diaDestino]||[]).length >= 60) {
-    idx++;
-    if (idx >= diasSemana.length) { notify('// semana cheia, empresa não adicionada','warn'); return; }
-    diaDestino = diasSemana[idx];
-    if (!data.days[diaDestino]) data.days[diaDestino] = [];
-  }
-
-  data.days[diaDestino].push({
+  // Manda para a Base de Atribuição (sem dia ainda)
+  const atrib = getAtribuicaoData();
+  if (atrib.find(a => a.id === v.id)) { notify('// já está na Base de Atribuição','warn'); return; }
+  atrib.push({
     id: v.id, nome: v.nome, site: v.site, whatsapp: v.whatsapp,
     instagram: v.instagram, googleUrl: v.googleUrl,
-    status: 'Não enviada', criadoEm: todayStr(),
+    status: 'Não enviada', criadoEm: v.importadoEm || todayStr(),
+    validadoEm: todayStr(), diaDestino: null,
   });
-  saveWeekData(data);
+  saveAtribuicaoData(atrib);
 
   // Remove da fila de validação
   saveValData(getValData().filter(x => x.id !== id));
   renderValidacao(); updateBadges();
-  notify(`✓ ${v.nome} → ${dayLabel(diaDestino)}`);
+  notify(`✓ ${v.nome} → Base de Atribuição`);
 }
 
 function aprovarParaInsta(id) {
