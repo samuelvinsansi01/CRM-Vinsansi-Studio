@@ -162,6 +162,23 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 .q-badge.warn{color:var(--warning);border-color:rgba(240,164,41,0.3);background:rgba(240,164,41,0.06);}
 .q-badge.err{color:var(--error);border-color:rgba(255,92,92,0.3);background:rgba(255,92,92,0.06);}
 .q-badge.insta{color:var(--insta);border-color:rgba(225,48,108,0.3);background:rgba(225,48,108,0.06);}
+.q-badge.info{color:#5bb8f5;border-color:rgba(91,184,245,0.35);background:rgba(91,184,245,0.07);}
+
+/* ══ INDICADOR MANTIDOS ══ */
+#valMantidosBadge{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:'DM Mono',monospace;font-size:8px;
+  padding:3px 9px;border-radius:100px;
+  border:1px solid rgba(91,184,245,0.35);
+  background:rgba(91,184,245,0.07);
+  color:#5bb8f5;
+  opacity:0;transform:scale(0.9);
+  transition:opacity 0.22s,transform 0.22s;
+  white-space:nowrap;
+  pointer-events:none;
+}
+#valMantidosBadge.visible{opacity:1;transform:scale(1);}
+#valMantidosBadge .mantidos-dot{width:5px;height:5px;border-radius:50%;background:#5bb8f5;flex-shrink:0;}
 
 /* ══ STATS ROW ══ */
 .stats-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
@@ -583,6 +600,10 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;flex-shrink:0">
           <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Chip para validação:</div>
           <div id="valChipTabs" class="chip-tabs"></div>
+          <div id="valMantidosBadge" title="Empresas que serão mantidas após 'Manter apenas estes' ou 'Limpar página'">
+            <span class="mantidos-dot"></span>
+            <span id="valMantidosCount">0</span> mantidos
+          </div>
           <button class="btn btn-primary" style="font-size:10px;padding:7px 14px" onclick="validarTodosNumeros()">
             <div class="spinner" id="valSpinner" style="border-top-color:#0a0a0d"></div>
             Validar todos os números
@@ -617,7 +638,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         <div class="btn-row">
           <button class="btn btn-primary" style="flex:1" onclick="confirmarValidadorLinks()">✓ Manter apenas estes</button>
           <button class="btn btn-ghost" onclick="limparPaginaValidador()" title="Remove da página atual apenas os itens que não estão nos links colados">🗑 Limpar página</button>
-          <button class="btn btn-ghost" onclick="document.getElementById('validadorLinksInput').value='';previewValidadorLinks()">Limpar</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('validadorLinksInput').value='';previewValidadorLinks();updateMantidosBadge(0,false)">Limpar</button>
         </div>
       </div>
     </div>
@@ -2354,6 +2375,8 @@ function setValidadorAba(aba) {
     const abaLabel = aba === 'pendentes' ? '<strong style="color:var(--accent)">Aguardando / Inválidos</strong>' : '<strong style="color:var(--ok)">Número Validado</strong>';
     info.innerHTML = `Cole os links que achar bons. Os sites <strong style="color:var(--text2)">não colados</strong> serão removidos apenas da aba ${abaLabel}.`;
   }
+  // Recalcula badge ao trocar aba
+  previewValidadorLinks();
 }
 
 function renderValidacao() {
@@ -2606,9 +2629,37 @@ function previewValidadorLinks() {
   const links = raw.split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
   const el = document.getElementById('validadorLinksPreview');
   if (!el) return;
-  if (!links.length) { el.innerHTML = ''; return; }
+  if (!links.length) { el.innerHTML = ''; updateMantidosBadge(0, false); return; }
   el.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px">${links.length} link${links.length!==1?'s':''} colado${links.length!==1?'s':''}:</div>` +
     links.map(l => `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;margin-bottom:4px;font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(l)}</div>`).join('');
+
+  // Calcula quantos serão mantidos na aba atual
+  const normLink = (url) => {
+    try { return new URL(url).hostname.replace(/^www\./,'').toLowerCase(); } catch { return url.toLowerCase().trim(); }
+  };
+  const linkDomains = new Set(links.map(normLink));
+  const val = getValData();
+  const isAbaValidados = validadorAba === 'validados';
+  const mantidos = val.filter(v => {
+    if (v.tipo !== 'com-site') return false;
+    const isValidado = v.numStatus === 'valido';
+    if (isAbaValidados && !isValidado) return false;
+    if (!isAbaValidados && isValidado) return false;
+    return linkDomains.has(normLink(v.site || ''));
+  }).length;
+  updateMantidosBadge(mantidos, true);
+}
+
+function updateMantidosBadge(count, visible) {
+  const badge = document.getElementById('valMantidosBadge');
+  const countEl = document.getElementById('valMantidosCount');
+  if (!badge || !countEl) return;
+  countEl.textContent = count;
+  if (visible && count > 0) {
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
 }
 
 function renderValidadorLinks() {
@@ -2659,6 +2710,7 @@ function confirmarValidadorLinks() {
 
   saveValData(novaVal);
   document.getElementById('validadorLinksInput').value = '';
+  updateMantidosBadge(0, false);
   renderValidacao(); updateBadges();
   const abaLabel = isAbaValidados ? 'Validados' : 'Pendentes/Inválidos';
   notify(`✓ ${links.length} mantidos · ${removidos} removidos → sites já vistos (${abaLabel})`);
@@ -2718,6 +2770,8 @@ function limparPaginaValidador() {
   if (valPage > novasPages) valPage = novasPages;
 
   renderValidacao(); updateBadges();
+  updateMantidosBadge(0, false);
+  document.getElementById('validadorLinksInput').value = '';
   const abaLabel = isAbaValidados ? 'Validados' : 'Pendentes/Inválidos';
   notify(`✓ ${removidos} removidos da página ${currentPageIdx} → sites já vistos (${abaLabel})`);
 }
