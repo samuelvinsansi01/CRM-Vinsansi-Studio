@@ -543,6 +543,21 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="page-title">Validação <span>de Leads.</span></div>
     <div class="page-sub">// valide números · aprovados vão para Base de Atribuição</div>
   </div>
+
+  <!-- ABAS DE RESULTADO -->
+  <div style="display:flex;gap:5px;margin-bottom:16px;flex-shrink:0;border-bottom:1px solid var(--border);padding-bottom:12px">
+    <button id="valResultTabPendentes" class="val-result-tab active" onclick="setValResultTab('pendentes')"
+      style="padding:6px 14px;border:1px solid var(--accent-border);border-radius:8px;background:var(--accent-dim);color:var(--accent);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
+      📋 Aguardando / Inválidos
+      <span id="valCountSemZap" style="background:rgba(255,92,92,0.15);border:1px solid rgba(255,92,92,0.3);color:var(--error);padding:1px 6px;border-radius:100px;font-size:8px">0</span>
+    </button>
+    <button id="valResultTabValidados" class="val-result-tab" onclick="setValResultTab('validados')"
+      style="padding:6px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
+      ✅ Número Validado
+      <span id="valCountComZap" style="background:rgba(78,203,113,0.1);border:1px solid rgba(78,203,113,0.3);color:var(--ok);padding:1px 6px;border-radius:100px;font-size:8px">0</span>
+    </button>
+  </div>
+
   <!-- COM SITE -->
   <div class="val-sub-panel active stretch-container" id="valPanelComSite">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;width:100%">
@@ -562,7 +577,21 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <!-- CARD VALIDADOR DE LINKS -->
       <div class="card" id="cardValidadorLinks">
         <div class="card-title">Validador de links — selecionar sites</div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:14px">Cole os links que achar bons. Após confirmar, os sites não selecionados serão excluídos da lista.</div>
+        <!-- SELETOR DE ABA ALVO -->
+        <div style="display:flex;gap:6px;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px">
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:flex;align-items:center;padding:0 4px;white-space:nowrap">Limpar da aba:</div>
+          <button id="validadorAbaBtn0" onclick="setValidadorAba('pendentes')"
+            style="flex:1;padding:5px 8px;border:1px solid var(--accent-border);border-radius:6px;background:var(--accent-dim);color:var(--accent);font-family:'DM Mono',monospace;font-size:8px;cursor:pointer;transition:all 0.18s;white-space:nowrap">
+            📋 Aguardando / Inválidos
+          </button>
+          <button id="validadorAbaBtn1" onclick="setValidadorAba('validados')"
+            style="flex:1;padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:8px;cursor:pointer;transition:all 0.18s;white-space:nowrap">
+            ✅ Número Validado
+          </button>
+        </div>
+        <div id="validadorAbaInfo" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:14px">
+          Cole os links que achar bons. Os sites <strong style="color:var(--text2)">não colados</strong> serão removidos apenas da aba <strong style="color:var(--accent)">Aguardando / Inválidos</strong>.
+        </div>
         <div style="margin-bottom:10px">
           <label>Colar links (um por linha)</label>
           <textarea id="validadorLinksInput" placeholder="https://empresa1.com.br&#10;https://empresa2.com.br&#10;..." style="min-height:120px;font-size:10px" oninput="previewValidadorLinks()"></textarea>
@@ -2166,9 +2195,60 @@ function setValTab(tab) {
   if (el) el.classList.toggle('active', tab==='com-site');
 }
 
+/* ── aba de resultado de validação (pendentes / validados) ── */
+let valResultTab = 'pendentes'; // 'pendentes' | 'validados'
+let validadorAba = 'pendentes'; // qual aba o validador de links vai operar
+
+function setValResultTab(tab) {
+  valResultTab = tab;
+  valPage = 1;
+  // estilo dos botões
+  const btnP = document.getElementById('valResultTabPendentes');
+  const btnV = document.getElementById('valResultTabValidados');
+  if (btnP && btnV) {
+    if (tab === 'pendentes') {
+      btnP.style.cssText = 'padding:6px 14px;border:1px solid var(--accent-border);border-radius:8px;background:var(--accent-dim);color:var(--accent);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px';
+      btnV.style.cssText = 'padding:6px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px';
+    } else {
+      btnV.style.cssText = 'padding:6px 14px;border:1px solid var(--accent-border);border-radius:8px;background:var(--accent-dim);color:var(--accent);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px';
+      btnP.style.cssText = 'padding:6px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:\'DM Mono\',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px';
+    }
+  }
+  renderValidacao();
+}
+
+function setValidadorAba(aba) {
+  validadorAba = aba;
+  const btn0 = document.getElementById('validadorAbaBtn0');
+  const btn1 = document.getElementById('validadorAbaBtn1');
+  const info = document.getElementById('validadorAbaInfo');
+  if (btn0 && btn1) {
+    if (aba === 'pendentes') {
+      btn0.style.cssText = 'flex:1;padding:5px 8px;border:1px solid var(--accent-border);border-radius:6px;background:var(--accent-dim);color:var(--accent);font-family:\'DM Mono\',monospace;font-size:8px;cursor:pointer;transition:all 0.18s;white-space:nowrap';
+      btn1.style.cssText = 'flex:1;padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--muted);font-family:\'DM Mono\',monospace;font-size:8px;cursor:pointer;transition:all 0.18s;white-space:nowrap';
+    } else {
+      btn1.style.cssText = 'flex:1;padding:5px 8px;border:1px solid var(--accent-border);border-radius:6px;background:var(--accent-dim);color:var(--accent);font-family:\'DM Mono\',monospace;font-size:8px;cursor:pointer;transition:all 0.18s;white-space:nowrap';
+      btn0.style.cssText = 'flex:1;padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--muted);font-family:\'DM Mono\',monospace;font-size:8px;cursor:pointer;transition:all 0.18s;white-space:nowrap';
+    }
+  }
+  if (info) {
+    const abaLabel = aba === 'pendentes' ? '<strong style="color:var(--accent)">Aguardando / Inválidos</strong>' : '<strong style="color:var(--ok)">Número Validado</strong>';
+    info.innerHTML = `Cole os links que achar bons. Os sites <strong style="color:var(--text2)">não colados</strong> serão removidos apenas da aba ${abaLabel}.`;
+  }
+}
+
 function renderValidacao() {
   const val = getValData();
   const comSite = val.filter(v => v.tipo === 'com-site');
+
+  const semZap = comSite.filter(v => v.numStatus !== 'valido');
+  const comZap = comSite.filter(v => v.numStatus === 'valido');
+
+  // atualiza contadores nas abas
+  const countSem = document.getElementById('valCountSemZap');
+  const countCom = document.getElementById('valCountComZap');
+  if (countSem) countSem.textContent = semZap.length;
+  if (countCom) countCom.textContent = comZap.length;
 
   const countEl = document.getElementById('valCountComSite');
   if (countEl) countEl.textContent = `(${comSite.length})`;
@@ -2182,14 +2262,26 @@ function renderValidacao() {
     ? chips.map(c => `<div class="chip-tab${activeChipId===c.id?' active':''}" onclick="setValChip('${c.id}')">${escHtml(c.nome)}</div>`).join('')
     : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">Nenhum chip configurado</span>';
 
-  // com site list — inválidos/sem zap no topo, válidos abaixo
   const comSiteEl = document.getElementById('valComSiteList');
+
+  // seleciona qual grupo mostrar baseado na aba ativa
+  const activeGroup = valResultTab === 'validados' ? comZap : semZap;
+  const groupLabel = valResultTab === 'validados'
+    ? `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok);letter-spacing:0.1em;text-transform:uppercase;padding:8px 4px 6px;border-bottom:1px solid var(--border);margin-bottom:6px">
+        ✅ Número Validado <span style="background:rgba(78,203,113,0.1);border:1px solid rgba(78,203,113,0.3);color:var(--ok);padding:1px 6px;border-radius:100px;margin-left:4px">${comZap.length}</span>
+       </div>`
+    : `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;padding:8px 4px 6px;border-bottom:1px solid var(--border);margin-bottom:6px">
+        📋 Aguardando / Sem WhatsApp <span style="background:rgba(255,92,92,0.1);border:1px solid rgba(255,92,92,0.3);color:var(--error);padding:1px 6px;border-radius:100px;margin-left:4px">${semZap.length}</span>
+       </div>`;
+
   if (!comSite.length) {
     comSiteEl.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);padding:20px;text-align:center">// nenhuma empresa aguardando validação</div>';
+  } else if (!activeGroup.length) {
+    const emptyMsg = valResultTab === 'validados'
+      ? '// nenhum número validado ainda'
+      : '// nenhuma empresa pendente ou inválida';
+    comSiteEl.innerHTML = `${groupLabel}<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:20px;text-align:center">${emptyMsg}</div>`;
   } else {
-    const semZap   = comSite.filter(v => v.numStatus !== 'valido');
-    const comZap   = comSite.filter(v => v.numStatus === 'valido');
-
     const renderCard = (v) => {
       const statusColor = v.numStatus==='valido'?'var(--ok)':v.numStatus==='invalido'?'var(--error)':'var(--muted)';
       const statusLabel = v.numStatus==='valido'?'✓ número válido':v.numStatus==='invalido'?'✗ sem WhatsApp':'pendente';
@@ -2223,40 +2315,12 @@ function renderValidacao() {
       </div>`;
     };
 
-    let html = '';
-    if (semZap.length) {
-      html += `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;padding:8px 4px 6px;border-bottom:1px solid var(--border);margin-bottom:6px">
-        ⬆ Sem WhatsApp validado <span style="background:rgba(255,92,92,0.1);border:1px solid rgba(255,92,92,0.3);color:var(--error);padding:1px 6px;border-radius:100px;margin-left:4px">${semZap.length}</span>
-      </div>`;
-      html += semZap.map(renderCard).join('');
-    }
-    if (comZap.length) {
-      html += `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;padding:${semZap.length?'14px':'8px'} 4px 6px;border-bottom:1px solid var(--border);margin-bottom:6px">
-        ⬇ Com WhatsApp válido <span style="background:rgba(78,203,113,0.1);border:1px solid rgba(78,203,113,0.3);color:var(--ok);padding:1px 6px;border-radius:100px;margin-left:4px">${comZap.length}</span>
-      </div>`;
-      html += comZap.map(renderCard).join('');
-    }
-
-    const allCards = [...semZap, ...comZap];
-    const totalVal = allCards.length;
+    const totalVal = activeGroup.length;
     const totalValPages = Math.max(1, Math.ceil(totalVal / VAL_PG));
     if (valPage > totalValPages) valPage = totalValPages;
-    const pageCards = allCards.slice((valPage-1)*VAL_PG, valPage*VAL_PG);
+    const pageCards = activeGroup.slice((valPage-1)*VAL_PG, valPage*VAL_PG);
 
-    let pagedHtml = '';
-    const semZapPage = pageCards.filter(v => v.numStatus !== 'valido');
-    const comZapPage = pageCards.filter(v => v.numStatus === 'valido');
-    if (semZapPage.length) {
-      pagedHtml += `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;padding:8px 4px 6px;border-bottom:1px solid var(--border);margin-bottom:6px">
-        ⬆ Sem WhatsApp validado <span style="background:rgba(255,92,92,0.1);border:1px solid rgba(255,92,92,0.3);color:var(--error);padding:1px 6px;border-radius:100px;margin-left:4px">${semZap.length}</span>
-      </div>` + semZapPage.map(renderCard).join('');
-    }
-    if (comZapPage.length) {
-      pagedHtml += `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;padding:${semZapPage.length?'14px':'8px'} 4px 6px;border-bottom:1px solid var(--border);margin-bottom:6px">
-        ⬇ Com WhatsApp válido <span style="background:rgba(78,203,113,0.1);border:1px solid rgba(78,203,113,0.3);color:var(--ok);padding:1px 6px;border-radius:100px;margin-left:4px">${comZap.length}</span>
-      </div>` + comZapPage.map(renderCard).join('');
-    }
-    comSiteEl.innerHTML = '<div class="ext-list">' + pagedHtml + '</div>';
+    comSiteEl.innerHTML = groupLabel + '<div class="ext-list">' + pageCards.map(renderCard).join('') + '</div>';
     renderPagination('valPagination', valPage, totalValPages, totalVal, VAL_PG, 'goValPage', 'changeValPgSize');
   }
   renderValidadorLinks();
@@ -2440,18 +2504,27 @@ function confirmarValidadorLinks() {
   const linkDomains = new Set(links.map(normLink));
 
   const val = getValData();
-  const antes = val.filter(v => v.tipo === 'com-site').length;
-  // Mantém apenas empresas cujo site está na lista colada
+  // filtra apenas as empresas da aba selecionada (validadorAba)
+  const isAbaValidados = validadorAba === 'validados';
+  const antes = val.filter(v => v.tipo === 'com-site' && (isAbaValidados ? v.numStatus === 'valido' : v.numStatus !== 'valido')).length;
+
   const novaVal = val.filter(v => {
     if (v.tipo !== 'com-site') return true; // preserva outros tipos
+    const isValidado = v.numStatus === 'valido';
+    // se não pertence à aba selecionada, preserva sem tocar
+    if (isAbaValidados && !isValidado) return true;
+    if (!isAbaValidados && isValidado) return true;
+    // pertence à aba: só mantém se o site está na lista
     const empDomain = normLink(v.site || '');
     return linkDomains.has(empDomain);
   });
-  const removidos = antes - novaVal.filter(v => v.tipo === 'com-site').length;
+
+  const removidos = antes - novaVal.filter(v => v.tipo === 'com-site' && (isAbaValidados ? v.numStatus === 'valido' : v.numStatus !== 'valido')).length;
   saveValData(novaVal);
   document.getElementById('validadorLinksInput').value = '';
   renderValidacao(); updateBadges();
-  notify(`✓ ${links.length} mantidos · ${removidos} removidos`);
+  const abaLabel = isAbaValidados ? 'Validados' : 'Pendentes/Inválidos';
+  notify(`✓ ${links.length} mantidos · ${removidos} removidos (${abaLabel})`);
 }
 
 function aprovarParaFila(id) {
@@ -2666,15 +2739,34 @@ function renderFila() {
           <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">② LINK DO SITE</div>
           <div class="fila-msg-area">${escHtml(LINK_BICHOP)}</div>
         </div>
-        <!-- MSG 3: Imagem -->
+        <!-- MSG 3: Imagens -->
         <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">③ IMAGEM PERSONALIZADA</div>
-          <div class="fila-img-area${item.imagemBase64?' has-img':''}" onclick="document.getElementById('img-input-${item.id}').click()">
-            ${item.imagemBase64?`<img src="${item.imagemBase64}" alt="preview"/>`:''}
-            <span class="fila-img-label">${item.imagemBase64?'':'📎 clique para anexar imagem'}</span>
-            ${item.imagemBase64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagem('${item.id}')">×</button>`:''}
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">③ IMAGENS — ANTES & DEPOIS</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <!-- Imagem 1: Site atual do cliente -->
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-bottom:4px;letter-spacing:0.08em">SITE ATUAL</div>
+              <div class="fila-img-area${item.imagemBase64?' has-img':''}" onclick="document.getElementById('img-input-${item.id}').click()" style="min-height:70px">
+                ${item.imagemBase64?`<img src="${item.imagemBase64}" alt="preview"/>`:''}
+                <span class="fila-img-label">${item.imagemBase64?'':'📎 antes'}</span>
+                ${item.imagemBase64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagem('${item.id}','1')">×</button>`:''}
+              </div>
+              <input type="file" accept="image/*" class="fila-img-input" id="img-input-${item.id}" onchange="onImgChange('${item.id}',this,'1')"/>
+            </div>
+            <!-- Imagem 2: Redesign -->
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--accent);margin-bottom:4px;letter-spacing:0.08em">REDESIGN</div>
+              <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-input-${item.id}').click()" style="min-height:70px;border-color:${item.imagem2Base64?'var(--accent-border)':''}">
+                ${item.imagem2Base64?`<img src="${item.imagem2Base64}" alt="preview redesign"/>`:''}
+                <span class="fila-img-label">${item.imagem2Base64?'':'📎 depois'}</span>
+                ${item.imagem2Base64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagem('${item.id}','2')">×</button>`:''}
+              </div>
+              <input type="file" accept="image/*" class="fila-img-input" id="img2-input-${item.id}" onchange="onImgChange('${item.id}',this,'2')"/>
+            </div>
           </div>
-          <input type="file" accept="image/*" class="fila-img-input" id="img-input-${item.id}" onchange="onImgChange('${item.id}',this)"/>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px">
+            As 2 imagens são enviadas em sequência após a mensagem de texto.
+          </div>
         </div>
       </div>
     </div>`;
@@ -2704,23 +2796,31 @@ function shuffleFilaMsg(id) {
   const el = document.getElementById(`fila-msg-${id}`);
   if (el) el.value = item.mensagem;
 }
-function onImgChange(id, input) {
+function onImgChange(id, input, slot) {
   const file = input.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
     const fila = getFilaChip(disparoChipId);
     const item = fila.find(f => f.id === id);
     if (!item) return;
-    item.imagemBase64 = e.target.result; item.imagemNome = file.name;
+    if (slot === '2') {
+      item.imagem2Base64 = e.target.result; item.imagem2Nome = file.name;
+    } else {
+      item.imagemBase64 = e.target.result; item.imagemNome = file.name;
+    }
     renderFila();
   };
   reader.readAsDataURL(file);
 }
-function removerImagem(id) {
+function removerImagem(id, slot) {
   const fila = getFilaChip(disparoChipId);
   const item = fila.find(f => f.id === id);
   if (!item) return;
-  delete item.imagemBase64; delete item.imagemNome;
+  if (slot === '2') {
+    delete item.imagem2Base64; delete item.imagem2Nome;
+  } else {
+    delete item.imagemBase64; delete item.imagemNome;
+  }
   renderFila();
 }
 function removerFila(id) {
@@ -2884,15 +2984,31 @@ async function dispararLote() {
       log(`  ② link enviado`);
       await new Promise(r => setTimeout(r, MSG_DELAY));
 
-      // MSG 3 — Imagem (se houver)
+      // MSG 3 — Imagem 1: site atual (se houver)
       if (item.imagemBase64) {
         const base64data = item.imagemBase64.split(',')[1];
         const mimeType = item.imagemBase64.split(';')[0].split(':')[1] || 'image/jpeg';
         const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: base64data, mimetype: mimeType, caption: '' } };
         await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
-        log(`  ③ imagem enviada`);
+        log(`  ③ imagem (site atual) enviada`);
+        // MSG 4 — Imagem 2: redesign (se houver) — enviada logo após, mesma sequência
+        if (item.imagem2Base64) {
+          await new Promise(r => setTimeout(r, 4000)); // 4s entre as 2 imagens
+          const base64data2 = item.imagem2Base64.split(',')[1];
+          const mimeType2 = item.imagem2Base64.split(';')[0].split(':')[1] || 'image/jpeg';
+          const payload4 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: base64data2, mimetype: mimeType2, caption: '' } };
+          await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload4) });
+          log(`  ④ imagem (redesign) enviada`);
+        }
+      } else if (item.imagem2Base64) {
+        // só tem redesign, sem site atual
+        const base64data2 = item.imagem2Base64.split(',')[1];
+        const mimeType2 = item.imagem2Base64.split(';')[0].split(':')[1] || 'image/jpeg';
+        const payload4 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: base64data2, mimetype: mimeType2, caption: '' } };
+        await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload4) });
+        log(`  ③ imagem (redesign) enviada`);
       } else {
-        log(`  ③ <span style="color:var(--warning)">sem imagem anexada</span>`);
+        log(`  ③ <span style="color:var(--warning)">sem imagens anexadas</span>`);
       }
 
       item.status='enviado'; atualizarStatusFila(item.id,'enviado');
