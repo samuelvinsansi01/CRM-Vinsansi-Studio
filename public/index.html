@@ -76,7 +76,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
 /* ══ MAIN ══ */
 .main{flex:1;height:100vh;overflow-y:auto;overflow-x:hidden;position:relative;z-index:1;min-width:0;}
-.panel{display:none;padding:24px;height:100vh;width:100%;box-sizing:border-box;flex-direction:column;overflow:hidden;}
+.panel{display:none;padding:24px;height:100vh;width:100%;box-sizing:border-box;flex-direction:column;overflow-y:auto;overflow-x:hidden;}
 .panel.active{display:flex;}
 .page-header{margin-bottom:24px;}
 .page-title{font-size:24px;font-weight:800;letter-spacing:-0.04em;line-height:1.1;}
@@ -292,8 +292,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 .val-tabs{display:flex;gap:5px;margin-bottom:16px;}
 .val-tab{padding:6px 14px;border:1px solid var(--border2);border-radius:7px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;}
 .val-tab.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
-.val-sub-panel{display:none;flex:1;min-height:0;}
-.val-sub-panel.active{display:flex;flex-direction:column;flex:1;min-height:0;}
+.val-sub-panel{display:none;}
+.val-sub-panel.active{display:flex;flex-direction:column;}
 
 /* validação número */
 .val-num-status{display:inline-flex;align-items:center;gap:6px;font-family:'DM Mono',monospace;font-size:9px;padding:3px 9px;border-radius:100px;border:1px solid;}
@@ -332,12 +332,10 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 
 
 /* ══ STRETCH LAYOUT — fills remaining height ══ */
-.stretch-container{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
-.stretch-card{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;}
-.stretch-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:0;}
+.stretch-container{display:flex;flex-direction:column;min-height:0;}
+.stretch-card{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;}
+.stretch-list{display:flex;flex-direction:column;gap:6px;max-height:600px;overflow-y:auto;}
 .stretch-list .empresa-card{flex-shrink:0;}
-/* When list is short, last card stretches */
-.stretch-list.stretch-items .empresa-card:last-child{flex:1;}
 /* ══ RESPONSIVE CARDS ══ */
 @media(max-width:700px){
   .empresa-card{flex-direction:column;align-items:flex-start;}
@@ -362,86 +360,17 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 .td-link a:visited { color: #8888aa; }
 
 /* ══ PAGINAÇÃO ESTILO APIFY ══ */
-.pagination-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-top: 1px solid var(--border);
-  background: var(--surface2);
-  border-radius: 0 0 var(--radius) var(--radius);
-  flex-shrink: 0;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.pagination-info {
-  font-family: 'DM Mono', monospace;
-  font-size: 9px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.pagination-info strong {
-  color: var(--text2);
-}
-.pagination-controls {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-.pg-btn {
-  min-width: 28px;
-  height: 28px;
-  padding: 0 7px;
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text2);
-  font-family: 'DM Mono', monospace;
-  font-size: 10px;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-.pg-btn:hover:not(:disabled):not(.active) {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.pg-btn.active {
-  background: var(--accent-dim);
-  border-color: var(--accent-border);
-  color: var(--accent);
-  font-weight: 700;
-}
-.pg-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-.pg-btn.pg-prev, .pg-btn.pg-next {
-  font-size: 12px;
-  padding: 0 9px;
-}
-.pg-ellipsis {
-  font-family: 'DM Mono', monospace;
-  font-size: 10px;
-  color: var(--muted);
-  padding: 0 4px;
-}
-.pg-size-select {
-  background: var(--bg);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  color: var(--text2);
-  font-family: 'DM Mono', monospace;
-  font-size: 9px;
-  padding: 4px 8px;
-  cursor: pointer;
-  outline: none;
-  width: auto;
-}
-.pg-size-select:focus { border-color: var(--accent); }
+.pagination-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);border-radius:0 0 var(--radius) var(--radius);flex-shrink:0;gap:12px;flex-wrap:wrap;}
+.pagination-info{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);white-space:nowrap;}
+.pagination-info strong{color:var(--text2);}
+.pagination-controls{display:flex;align-items:center;gap:3px;}
+.pg-btn{min-width:28px;height:28px;padding:0 7px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text2);font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;}
+.pg-btn:hover:not(:disabled):not(.active){border-color:var(--accent);color:var(--accent);}
+.pg-btn.active{background:var(--accent-dim);border-color:var(--accent-border);color:var(--accent);font-weight:700;}
+.pg-btn:disabled{opacity:0.3;cursor:not-allowed;}
+.pg-ellipsis{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:0 4px;}
+.pg-size-select{background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:4px 8px;cursor:pointer;outline:none;width:auto;}
+.pg-size-select:focus{border-color:var(--accent);}
 </style>
 </head>
 <body>
@@ -525,7 +454,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="card-title" style="flex-shrink:0">Leads ativos</div>
     <div class="day-tabs" id="inicioDayTabs"></div>
     <div class="status-tabs" id="inicioStatusTabs"></div>
-    <div class="table-wrap" id="inicioTableWrap" style="flex-shrink:0">
+    <div class="table-wrap" id="inicioTableWrap">
       <table>
         <thead>
           <tr><th>Empresa</th><th>Instagram</th><th>Site</th><th>WhatsApp</th><th>Status</th><th>Msg</th><th></th></tr>
@@ -571,8 +500,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="page-title">Importar <span>Leads.</span></div>
     <div class="page-sub">// cole o JSON da Apify · filtra automaticamente por site + telefone</div>
   </div>
-  <div class="import-grid" style="flex:1;min-height:0;align-items:stretch">
-    <div style="display:flex;flex-direction:column;min-height:0">
+  <div class="import-grid" style="align-items:start">
+    <div style="display:flex;flex-direction:column">
       <div class="card" style="flex-shrink:0">
         <div class="card-title">JSON da Apify</div>
         <div style="margin-bottom:10px">
@@ -598,10 +527,11 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         </div>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;min-height:0">
+    <div style="display:flex;flex-direction:column">
       <div class="stretch-card">
         <div class="card-title" style="flex-shrink:0">Prévia <span id="previewCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
-        <div id="importPreviewList" class="stretch-list stretch-items" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// aguardando JSON...</div>
+        <div id="importPreviewList" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// aguardando JSON...</div>
+        <div id="importPreviewPagination"></div>
       </div>
     </div>
   </div>
@@ -615,7 +545,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   </div>
   <!-- COM SITE -->
   <div class="val-sub-panel active stretch-container" id="valPanelComSite">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:stretch;width:100%;flex:1;min-height:0;height:100%">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;width:100%">
       <div class="stretch-card">
         <div class="card-title" style="flex-shrink:0">Empresas com site — validar número WhatsApp</div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;flex-shrink:0">
@@ -626,7 +556,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
             Validar todos os números
           </button>
         </div>
-        <div id="valComSiteList" class="stretch-list stretch-items" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// nenhuma empresa aguardando validação</div>
+        <div id="valComSiteList" class="stretch-list" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// nenhuma empresa aguardando validação</div>
+        <div id="valPagination"></div>
       </div>
       <!-- CARD VALIDADOR DE LINKS -->
       <div class="card" id="cardValidadorLinks">
@@ -672,9 +603,10 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <span id="atribTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
       <button onclick="selecionarTodos()" style="margin-left:8px;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer;transition:all 0.18s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Selecionar todos</button>
     </div>
-    <div id="atribList" class="stretch-list stretch-items">
+    <div id="atribList" class="stretch-list">
       <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição</div>
     </div>
+    <div id="atribPagination"></div>
   </div>
 </div>
 
@@ -684,8 +616,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="page-title">Fila <span>WhatsApp.</span></div>
     <div class="page-sub">// 2 chips · 60 por chip por dia · seg a sáb</div>
   </div>
-  <div class="disparo-grid" style="flex:1;min-height:0;align-items:stretch">
-    <div style="display:flex;flex-direction:column;min-height:0">
+  <div class="disparo-grid" style="align-items:start">
+    <div style="display:flex;flex-direction:column">
       <div class="stretch-card" style="margin-bottom:0">
         <div class="card-title" style="flex-shrink:0">Chip ativo</div>
         <div id="filaZapChipTabs" class="chip-tabs" style="margin-bottom:14px;flex-shrink:0"></div>
@@ -693,10 +625,11 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         <div class="day-tabs" id="disparoDayTabs" style="flex-shrink:0"></div>
         <div class="status-tabs" id="disparoStatusTabs" style="flex-shrink:0"></div>
         <div class="stats-row" id="disparoStats" style="flex-shrink:0"></div>
-        <div id="disparoEmpresasList" class="stretch-list stretch-items"></div>
+        <div id="disparoEmpresasList" class="stretch-list"></div>
+        <div id="disparoPagination"></div>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;min-height:0;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:12px">
       <!-- Controles de disparo: fixos no topo -->
       <div class="card" style="flex-shrink:0">
         <div class="card-title">Disparar</div>
@@ -734,7 +667,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <div class="stretch-card" style="min-height:0">
         <div class="card-title" style="flex-shrink:0">Fila <span id="filaCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(0 empresas)</span></div>
         <div class="fila-empty" id="filaVazia" style="flex-shrink:0">Nenhuma empresa na fila.</div>
-        <div class="fila-items" id="filaItens" style="display:none;flex:1;max-height:none;overflow-y:auto"></div>
+        <div class="fila-items" id="filaItens" style="display:none;max-height:500px;overflow-y:auto"></div>
       </div>
       <div class="disparo-log" id="disparoLog" style="flex-shrink:0"></div>
     </div>
@@ -846,11 +779,11 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       </div>
       <div>
         <label>Lotes <span class="tag">ANTI-BAN</span></label>
-        <div style="display:flex;align-items:center;gap:8px">
-          <input type="checkbox" id="loteAtivo" style="width:auto;padding:0;accent-color:var(--accent)" onchange="toggleLoteConfig()"/>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="checkbox" id="loteAtivo" checked style="width:auto;padding:0;accent-color:var(--accent)" onchange="toggleLoteConfig()"/>
           <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">Ativar</span>
-          <div id="loteConfigFields" style="display:none;gap:6px;align-items:center">
-            <input type="number" id="loteTamanho" value="15" min="1" max="60" style="width:55px" oninput="saveEvoConfig()"/>
+          <div id="loteConfigFields" style="display:flex;gap:6px;align-items:center">
+            <input type="number" id="loteTamanho" value="25" min="1" max="60" style="width:55px" oninput="saveEvoConfig()"/>
             <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">por lote ·</span>
             <input type="number" id="loteEsperaMin" value="60" min="1" style="width:50px" oninput="saveEvoConfig()"/>
             <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">min</span>
@@ -1161,9 +1094,14 @@ const LINK_BICHOP = 'https://samuelvinsansi.com.br';
 ════════════════════════════ */
 let selectedDay      = todayStr();
 let selectedStatus   = 'Não enviada';
-let inicioPage       = 1;
-let INICIO_PAGE_SIZE = 20;
 let importTargetDay  = todayStr();
+
+/* ── paginação ── */
+let inicioPage     = 1; let INICIO_PG    = 20;
+let importPage     = 1; let IMPORT_PG    = 20;
+let valPage        = 1; let VAL_PG       = 20;
+let atribPage      = 1; let ATRIB_PG     = 20;
+let disparoPage    = 1; let DISPARO_PG   = 20;
 let disparoDay       = todayStr();
 let disparoStatus    = 'Não enviada';
 let msgEmpresaId     = null;
@@ -1309,11 +1247,17 @@ function renderAtribuicao() {
   if (!listEl) return;
 
   if (!leads.length) {
-    listEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;flex:1;height:100%;font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted)">// nenhum lead aguardando atribuição</div>';
+    listEl.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição</div>';
+    document.getElementById('atribPagination').innerHTML = '';
     return;
   }
 
-  listEl.innerHTML = '<div class="ext-list">' + leads.map(lead => {
+  const totalAtrib = leads.length;
+  const totalAtribPages = Math.max(1, Math.ceil(totalAtrib / ATRIB_PG));
+  if (atribPage > totalAtribPages) atribPage = totalAtribPages;
+  const pageLeads = leads.slice((atribPage-1)*ATRIB_PG, atribPage*ATRIB_PG);
+
+  listEl.innerHTML = '<div class="ext-list">' + pageLeads.map(lead => {
     const sel = atribSelecionados.has(lead.id);
     const dias = diasEmEspera(lead.validadoEm || lead.criadoEm);
     const voltou = lead.voltouDaSemana;
@@ -1384,6 +1328,7 @@ function renderAtribuicao() {
       </div>
     </div>`;
   }).join('') + '</div>';
+  renderPagination('atribPagination', atribPage, totalAtribPages, totalAtrib, ATRIB_PG, 'goAtribPage', 'changeAtribPgSize');
 }
 
 function toggleAtribSel(id) {
@@ -1814,11 +1759,9 @@ function renderInicio() {
 
   const filtered = emps.filter(e => (e.status||'Não enviada') === selectedStatus);
   const totalItems = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / INICIO_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalItems / INICIO_PG));
   if (inicioPage > totalPages) inicioPage = totalPages;
-  const pageStart = (inicioPage - 1) * INICIO_PAGE_SIZE;
-  const pageEnd   = Math.min(pageStart + INICIO_PAGE_SIZE, totalItems);
-  const pageItems = filtered.slice(pageStart, pageEnd);
+  const pageItems = filtered.slice((inicioPage-1)*INICIO_PG, inicioPage*INICIO_PG);
 
   const tbody = document.getElementById('inicioTbody');
   if (!totalItems) {
@@ -1852,30 +1795,7 @@ function renderInicio() {
       </tr>`;
     }).join('');
   }
-
-  // Render pagination bar
-  const pgEl = document.getElementById('inicioPagination');
-  if (totalPages <= 1 && totalItems <= INICIO_PAGE_SIZE) {
-    pgEl.innerHTML = '';
-  } else {
-    const pgNums = buildPageNumbers(inicioPage, totalPages);
-    pgEl.innerHTML = `<div class="pagination-bar">
-      <div class="pagination-info">
-        Exibindo <strong>${totalItems ? pageStart+1 : 0}–${pageEnd}</strong> de <strong>${totalItems}</strong> empresas
-      </div>
-      <div class="pagination-controls">
-        <button class="pg-btn pg-prev" onclick="goPage(${inicioPage-1})" ${inicioPage===1?'disabled':''}>‹</button>
-        ${pgNums.map(p => p === '…'
-          ? `<span class="pg-ellipsis">…</span>`
-          : `<button class="pg-btn${p===inicioPage?' active':''}" onclick="goPage(${p})">${p}</button>`
-        ).join('')}
-        <button class="pg-btn pg-next" onclick="goPage(${inicioPage+1})" ${inicioPage===totalPages?'disabled':''}>›</button>
-      </div>
-      <select class="pg-size-select" onchange="changePageSize(+this.value)" title="Itens por página">
-        ${[10,20,50,100].map(n=>`<option value="${n}"${INICIO_PAGE_SIZE===n?' selected':''}>${n} / pág</option>`).join('')}
-      </select>
-    </div>`;
-  }
+  renderPagination('inicioPagination', inicioPage, totalPages, totalItems, INICIO_PG, 'goInicioPage', 'changeInicioPgSize');
 
   const sel = document.getElementById('exportDaySelect');
   if (sel) sel.innerHTML = '<option value="">Exportar dia...</option>' + weekDays.map(d => `<option value="${d}">${dayLabel(d)}</option>`).join('');
@@ -1885,27 +1805,52 @@ function renderInicio() {
 
 function setDay(day)    { selectedDay = day; selectedStatus = 'Não enviada'; inicioPage = 1; renderInicio(); }
 function setStatus(st)  { selectedStatus = st; inicioPage = 1; renderInicio(); }
-function goPage(p)      { inicioPage = p; renderInicio(); document.getElementById('inicioTableWrap').scrollIntoView({behavior:'smooth',block:'nearest'}); }
-function changePageSize(n) {
-  INICIO_PAGE_SIZE = n;
-  inicioPage = 1;
-  renderInicio();
-}
 
-// Build compact page number list like Apify: [1, 2, …, 7, 8, 9, …, 20]
-function buildPageNumbers(current, total) {
-  if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
-  const pages = [];
-  const delta = 2;
-  const left  = Math.max(2, current - delta);
-  const right = Math.min(total - 1, current + delta);
+/* ════════════════════════════
+   PAGINAÇÃO — HELPERS
+════════════════════════════ */
+function buildPageNumbers(cur, total) {
+  if (total <= 7) return Array.from({length:total},(_,i)=>i+1);
+  const pages=[], delta=2;
+  const left=Math.max(2,cur-delta), right=Math.min(total-1,cur+delta);
   pages.push(1);
-  if (left > 2) pages.push('…');
-  for (let i = left; i <= right; i++) pages.push(i);
-  if (right < total - 1) pages.push('…');
+  if (left>2) pages.push('…');
+  for(let i=left;i<=right;i++) pages.push(i);
+  if(right<total-1) pages.push('…');
   pages.push(total);
   return pages;
 }
+function renderPagination(containerId, cur, total, totalItems, pgSize, onPage, onSize, anchor) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (totalItems === 0) { el.innerHTML=''; return; }
+  const start = (cur-1)*pgSize+1;
+  const end   = Math.min(cur*pgSize, totalItems);
+  const pgNums = buildPageNumbers(cur, total);
+  el.innerHTML = `<div class="pagination-bar">
+    <div class="pagination-info">Exibindo <strong>${start}–${end}</strong> de <strong>${totalItems}</strong></div>
+    <div class="pagination-controls">
+      <button class="pg-btn" onclick="${onPage}(${cur-1})" ${cur===1?'disabled':''}>‹</button>
+      ${pgNums.map(p=>p==='…'?`<span class="pg-ellipsis">…</span>`:`<button class="pg-btn${p===cur?' active':''}" onclick="${onPage}(${p})">${p}</button>`).join('')}
+      <button class="pg-btn" onclick="${onPage}(${cur+1})" ${cur===total?'disabled':''}>›</button>
+    </div>
+    <select class="pg-size-select" onchange="${onSize}(+this.value)" title="Itens por página">
+      ${[10,20,50,100].map(n=>`<option value="${n}"${pgSize===n?' selected':''}>${n}/pág</option>`).join('')}
+    </select>
+  </div>`;
+}
+
+/* goPage functions per panel */
+function goInicioPage(p)   { inicioPage=p;  renderInicio(); }
+function changeInicioPgSize(n){ INICIO_PG=n; inicioPage=1; renderInicio(); }
+function goImportPage(p)   { importPage=p;  importPreview(); }
+function changeImportPgSize(n){ IMPORT_PG=n; importPage=1; importPreview(); }
+function goValPage(p)      { valPage=p;     renderValidacao(); }
+function changeValPgSize(n){ VAL_PG=n; valPage=1; renderValidacao(); }
+function goAtribPage(p)    { atribPage=p;   renderAtribuicao(); }
+function changeAtribPgSize(n){ ATRIB_PG=n; atribPage=1; renderAtribuicao(); }
+function goDisparoPage(p)  { disparoPage=p; renderDisparoEmpresas(); }
+function changeDisparoPgSize(n){ DISPARO_PG=n; disparoPage=1; renderDisparoEmpresas(); }
 
 function showMsg(id, day) {
   const data = ensureWeekData();
@@ -2125,9 +2070,14 @@ function importPreview() {
   `;
   countEl.textContent = `· ${validos.length} válidos`;
 
-  if (!validos.length && !semSiteRamo.length) { listEl.innerHTML='<span style="color:var(--muted)">// nenhuma empresa válida encontrada</span>'; return; }
+  if (!validos.length && !semSiteRamo.length) { listEl.innerHTML='<span style="color:var(--muted)">// nenhuma empresa válida encontrada</span>'; document.getElementById('importPreviewPagination').innerHTML=''; return; }
 
-  listEl.innerHTML = '<div class="ext-list">' + validos.slice(0,50).map(item => {
+  const totalPrev = validos.length;
+  const totalPrevPages = Math.max(1, Math.ceil(totalPrev / IMPORT_PG));
+  if (importPage > totalPrevPages) importPage = totalPrevPages;
+  const previewItems = validos.slice((importPage-1)*IMPORT_PG, importPage*IMPORT_PG);
+
+  listEl.innerHTML = '<div class="ext-list">' + previewItems.map(item => {
     const nome  = extractName(item);
     const site  = extractSite(item);
     const phone = extractPhone(item);
@@ -2147,6 +2097,7 @@ function importPreview() {
       ${isDup?'<span class="q-badge warn">duplicada</span>':'<span class="q-badge ok">✓ válida</span>'}
     </div>`;
   }).join('') + '</div>';
+  renderPagination('importPreviewPagination', importPage, totalPrevPages, totalPrev, IMPORT_PG, 'goImportPage', 'changeImportPgSize');
 }
 
 function importarLeads() {
@@ -2285,12 +2236,33 @@ function renderValidacao() {
       </div>`;
       html += comZap.map(renderCard).join('');
     }
-    comSiteEl.innerHTML = '<div class="ext-list">' + html + '</div>';
+
+    const allCards = [...semZap, ...comZap];
+    const totalVal = allCards.length;
+    const totalValPages = Math.max(1, Math.ceil(totalVal / VAL_PG));
+    if (valPage > totalValPages) valPage = totalValPages;
+    const pageCards = allCards.slice((valPage-1)*VAL_PG, valPage*VAL_PG);
+
+    let pagedHtml = '';
+    const semZapPage = pageCards.filter(v => v.numStatus !== 'valido');
+    const comZapPage = pageCards.filter(v => v.numStatus === 'valido');
+    if (semZapPage.length) {
+      pagedHtml += `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;padding:8px 4px 6px;border-bottom:1px solid var(--border);margin-bottom:6px">
+        ⬆ Sem WhatsApp validado <span style="background:rgba(255,92,92,0.1);border:1px solid rgba(255,92,92,0.3);color:var(--error);padding:1px 6px;border-radius:100px;margin-left:4px">${semZap.length}</span>
+      </div>` + semZapPage.map(renderCard).join('');
+    }
+    if (comZapPage.length) {
+      pagedHtml += `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;padding:${semZapPage.length?'14px':'8px'} 4px 6px;border-bottom:1px solid var(--border);margin-bottom:6px">
+        ⬇ Com WhatsApp válido <span style="background:rgba(78,203,113,0.1);border:1px solid rgba(78,203,113,0.3);color:var(--ok);padding:1px 6px;border-radius:100px;margin-left:4px">${comZap.length}</span>
+      </div>` + comZapPage.map(renderCard).join('');
+    }
+    comSiteEl.innerHTML = '<div class="ext-list">' + pagedHtml + '</div>';
+    renderPagination('valPagination', valPage, totalValPages, totalVal, VAL_PG, 'goValPage', 'changeValPgSize');
   }
   renderValidadorLinks();
 }
 
-function setValChip(id) { activeChipId = id; renderValidacao(); }
+function setValChip(id) { activeChipId = id; valPage = 1; renderValidacao(); }
 
 function editValPhone(id) {
   const val = getValData();
@@ -2566,8 +2538,8 @@ function setDisparoChip(id) {
   renderFilaZap();
 }
 
-function setDisparoDay(day) { disparoDay = day; disparoStatus = 'Não enviada'; renderFilaZap(); }
-function setDisparoStatus(st) { disparoStatus = st; renderDisparoEmpresas(); }
+function setDisparoDay(day) { disparoDay = day; disparoStatus = 'Não enviada'; disparoPage = 1; renderFilaZap(); }
+function setDisparoStatus(st) { disparoStatus = st; disparoPage = 1; renderDisparoEmpresas(); }
 
 function renderDisparoEmpresas() {
   const data = ensureWeekData();
@@ -2595,10 +2567,15 @@ function renderDisparoEmpresas() {
   `;
 
   const emps = todasComWa.filter(e => (e.status||'Não enviada') === disparoStatus);
-  if (!emps.length) { listEl.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:20px">Nenhuma empresa neste status</div>`; return; }
+  if (!emps.length) { listEl.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:20px">Nenhuma empresa neste status</div>`; document.getElementById('disparoPagination').innerHTML=''; return; }
+
+  const totalDisp = emps.length;
+  const totalDispPages = Math.max(1, Math.ceil(totalDisp / DISPARO_PG));
+  if (disparoPage > totalDispPages) disparoPage = totalDispPages;
+  const pageEmps = emps.slice((disparoPage-1)*DISPARO_PG, disparoPage*DISPARO_PG);
 
   const filaAtual = getFilaChip(disparoChipId);
-  listEl.innerHTML = '<div class="ext-list">' + emps.map(e => {
+  listEl.innerHTML = '<div class="ext-list">' + pageEmps.map(e => {
     const naFila  = filaAtual.some(f => f.id === e.id);
     const enviada = e.status === 'Enviada';
     return `<div class="empresa-card">
@@ -2615,6 +2592,7 @@ function renderDisparoEmpresas() {
       </div>
     </div>`;
   }).join('') + '</div>';
+  renderPagination('disparoPagination', disparoPage, totalDispPages, totalDisp, DISPARO_PG, 'goDisparoPage', 'changeDisparoPgSize');
 }
 
 function getFilaChip(chipId) {
@@ -2820,7 +2798,8 @@ function saveEvoConfig() {
   localStorage.setItem(EVO_KEY, JSON.stringify(cfg));
 }
 function toggleLoteConfig() {
-  document.getElementById('loteConfigFields').style.display = document.getElementById('loteAtivo').checked ? 'flex' : 'none';
+  const fields = document.getElementById('loteConfigFields');
+  if (fields) fields.style.display = document.getElementById('loteAtivo').checked ? 'flex' : 'none';
 }
 
 /* ════════════════════════════
