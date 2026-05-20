@@ -360,6 +360,88 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   opacity: 0.7;
 }
 .td-link a:visited { color: #8888aa; }
+
+/* ══ PAGINAÇÃO ESTILO APIFY ══ */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface2);
+  border-radius: 0 0 var(--radius) var(--radius);
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pagination-info {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pagination-info strong {
+  color: var(--text2);
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.pg-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text2);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.pg-btn:hover:not(:disabled):not(.active) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pg-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  font-weight: 700;
+}
+.pg-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.pg-btn.pg-prev, .pg-btn.pg-next {
+  font-size: 12px;
+  padding: 0 9px;
+}
+.pg-ellipsis {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.pg-size-select {
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text2);
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+  width: auto;
+}
+.pg-size-select:focus { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -443,7 +525,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="card-title" style="flex-shrink:0">Leads ativos</div>
     <div class="day-tabs" id="inicioDayTabs"></div>
     <div class="status-tabs" id="inicioStatusTabs"></div>
-    <div class="table-wrap" style="flex:1;overflow-y:auto;min-height:0">
+    <div class="table-wrap" id="inicioTableWrap" style="flex-shrink:0">
       <table>
         <thead>
           <tr><th>Empresa</th><th>Instagram</th><th>Site</th><th>WhatsApp</th><th>Status</th><th>Msg</th><th></th></tr>
@@ -452,6 +534,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
           <tr><td colspan="7" class="table-empty">Nenhuma empresa neste dia</td></tr>
         </tbody>
       </table>
+      <div id="inicioPagination"></div>
     </div>
     <div class="history-section" id="historySection">
       <div class="history-header">
@@ -1078,6 +1161,8 @@ const LINK_BICHOP = 'https://samuelvinsansi.com.br';
 ════════════════════════════ */
 let selectedDay      = todayStr();
 let selectedStatus   = 'Não enviada';
+let inicioPage       = 1;
+let INICIO_PAGE_SIZE = 20;
 let importTargetDay  = todayStr();
 let disparoDay       = todayStr();
 let disparoStatus    = 'Não enviada';
@@ -1728,11 +1813,18 @@ function renderInicio() {
   ).join('');
 
   const filtered = emps.filter(e => (e.status||'Não enviada') === selectedStatus);
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / INICIO_PAGE_SIZE));
+  if (inicioPage > totalPages) inicioPage = totalPages;
+  const pageStart = (inicioPage - 1) * INICIO_PAGE_SIZE;
+  const pageEnd   = Math.min(pageStart + INICIO_PAGE_SIZE, totalItems);
+  const pageItems = filtered.slice(pageStart, pageEnd);
+
   const tbody = document.getElementById('inicioTbody');
-  if (!filtered.length) {
+  if (!totalItems) {
     tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Nenhuma empresa com status "${selectedStatus}" neste dia</td></tr>`;
   } else {
-    tbody.innerHTML = filtered.map(e => {
+    tbody.innerHTML = pageItems.map(e => {
       const googleUrl = e.googleUrl || '';
       const nomeDisplay = googleUrl
         ? `<a href="${escHtml(googleUrl)}" target="_blank" title="Ver perfil Google">${escHtml(e.nome)}</a>`
@@ -1761,14 +1853,59 @@ function renderInicio() {
     }).join('');
   }
 
+  // Render pagination bar
+  const pgEl = document.getElementById('inicioPagination');
+  if (totalPages <= 1 && totalItems <= INICIO_PAGE_SIZE) {
+    pgEl.innerHTML = '';
+  } else {
+    const pgNums = buildPageNumbers(inicioPage, totalPages);
+    pgEl.innerHTML = `<div class="pagination-bar">
+      <div class="pagination-info">
+        Exibindo <strong>${totalItems ? pageStart+1 : 0}–${pageEnd}</strong> de <strong>${totalItems}</strong> empresas
+      </div>
+      <div class="pagination-controls">
+        <button class="pg-btn pg-prev" onclick="goPage(${inicioPage-1})" ${inicioPage===1?'disabled':''}>‹</button>
+        ${pgNums.map(p => p === '…'
+          ? `<span class="pg-ellipsis">…</span>`
+          : `<button class="pg-btn${p===inicioPage?' active':''}" onclick="goPage(${p})">${p}</button>`
+        ).join('')}
+        <button class="pg-btn pg-next" onclick="goPage(${inicioPage+1})" ${inicioPage===totalPages?'disabled':''}>›</button>
+      </div>
+      <select class="pg-size-select" onchange="changePageSize(+this.value)" title="Itens por página">
+        ${[10,20,50,100].map(n=>`<option value="${n}"${INICIO_PAGE_SIZE===n?' selected':''}>${n} / pág</option>`).join('')}
+      </select>
+    </div>`;
+  }
+
   const sel = document.getElementById('exportDaySelect');
   if (sel) sel.innerHTML = '<option value="">Exportar dia...</option>' + weekDays.map(d => `<option value="${d}">${dayLabel(d)}</option>`).join('');
   renderHistory();
   renderExcluidos();
 }
 
-function setDay(day)    { selectedDay = day; selectedStatus = 'Não enviada'; renderInicio(); }
-function setStatus(st)  { selectedStatus = st; renderInicio(); }
+function setDay(day)    { selectedDay = day; selectedStatus = 'Não enviada'; inicioPage = 1; renderInicio(); }
+function setStatus(st)  { selectedStatus = st; inicioPage = 1; renderInicio(); }
+function goPage(p)      { inicioPage = p; renderInicio(); document.getElementById('inicioTableWrap').scrollIntoView({behavior:'smooth',block:'nearest'}); }
+function changePageSize(n) {
+  INICIO_PAGE_SIZE = n;
+  inicioPage = 1;
+  renderInicio();
+}
+
+// Build compact page number list like Apify: [1, 2, …, 7, 8, 9, …, 20]
+function buildPageNumbers(current, total) {
+  if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+  const pages = [];
+  const delta = 2;
+  const left  = Math.max(2, current - delta);
+  const right = Math.min(total - 1, current + delta);
+  pages.push(1);
+  if (left > 2) pages.push('…');
+  for (let i = left; i <= right; i++) pages.push(i);
+  if (right < total - 1) pages.push('…');
+  pages.push(total);
+  return pages;
+}
 
 function showMsg(id, day) {
   const data = ensureWeekData();
