@@ -616,6 +616,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         <div id="validadorLinksPreview" style="margin-bottom:12px"></div>
         <div class="btn-row">
           <button class="btn btn-primary" style="flex:1" onclick="confirmarValidadorLinks()">✓ Manter apenas estes</button>
+          <button class="btn btn-ghost" onclick="limparPaginaValidador()" title="Remove da página atual apenas os itens que não estão nos links colados">🗑 Limpar página</button>
           <button class="btn btn-ghost" onclick="document.getElementById('validadorLinksInput').value='';previewValidadorLinks()">Limpar</button>
         </div>
       </div>
@@ -2632,6 +2633,57 @@ function confirmarValidadorLinks() {
   renderValidacao(); updateBadges();
   const abaLabel = isAbaValidados ? 'Validados' : 'Pendentes/Inválidos';
   notify(`✓ ${links.length} mantidos · ${removidos} removidos (${abaLabel})`);
+}
+
+/* Remove da página atual apenas os itens que NÃO estão nos links colados,
+   preservando todas as outras páginas intocadas. */
+function limparPaginaValidador() {
+  const raw = document.getElementById('validadorLinksInput')?.value || '';
+  const links = raw.split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
+
+  const normLink = (url) => {
+    try { return new URL(url).hostname.replace(/^www\./,'').toLowerCase(); } catch { return url.toLowerCase().trim(); }
+  };
+  const linkDomains = new Set(links.map(normLink));
+
+  const val = getValData();
+  const isAbaValidados = validadorAba === 'validados';
+
+  // Identifica quais empresas estão na página atual (mesma lógica do renderValidacao)
+  const comSite = val.filter(v => v.tipo === 'com-site');
+  const activeGroup = isAbaValidados
+    ? comSite.filter(v => v.numStatus === 'valido')
+    : comSite.filter(v => v.numStatus !== 'valido');
+
+  const totalValPages = Math.max(1, Math.ceil(activeGroup.length / VAL_PG));
+  const currentPageIdx = Math.min(valPage, totalValPages);
+  const pageItems = activeGroup.slice((currentPageIdx - 1) * VAL_PG, currentPageIdx * VAL_PG);
+  const pageIds = new Set(pageItems.map(v => v.id));
+
+  // Remove apenas os itens da página atual que não estão nos links
+  let removidos = 0;
+  const novaVal = val.filter(v => {
+    if (!pageIds.has(v.id)) return true; // fora da página: preserva
+    const empDomain = normLink(v.site || '');
+    if (linkDomains.has(empDomain)) return true; // está nos links: preserva
+    removidos++;
+    return false;
+  });
+
+  if (!removidos) { notify('// nenhum item removido nesta página', 'warn'); return; }
+
+  saveValData(novaVal);
+  // Ajusta a página se necessário (se a página ficou vazia e havia mais)
+  const novaGroup = novaVal.filter(v => {
+    if (v.tipo !== 'com-site') return false;
+    return isAbaValidados ? v.numStatus === 'valido' : v.numStatus !== 'valido';
+  });
+  const novasPages = Math.max(1, Math.ceil(novaGroup.length / VAL_PG));
+  if (valPage > novasPages) valPage = novasPages;
+
+  renderValidacao(); updateBadges();
+  const abaLabel = isAbaValidados ? 'Validados' : 'Pendentes/Inválidos';
+  notify(`✓ ${removidos} removidos da página ${currentPageIdx} (${abaLabel}) · restantes preservados`);
 }
 
 function aprovarParaFila(id) {
