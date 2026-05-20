@@ -1737,6 +1737,17 @@ function isExcludedDomain(site) {
   if (!domain) return false;
   return getExcludedDomains().includes(domain);
 }
+function addExcludedDomains(sites) {
+  // sites: array de URLs para adicionar à lista de já vistos
+  const current = new Set(getExcludedDomains());
+  let added = 0;
+  sites.forEach(site => {
+    const d = extractDomain(site) || site.toLowerCase().trim();
+    if (d && !current.has(d)) { current.add(d); added++; }
+  });
+  if (added) { saveExcludedDomains([...current]); renderExcluidos(); }
+  return added;
+}
 
 /* ════════════════════════════
    SITE BLOCKLIST
@@ -2567,8 +2578,12 @@ function aprovarSemSiteParaZap(id) {
 }
 
 function removerDaValidacao(id) {
-  saveValData(getValData().filter(v => v.id !== id));
+  const val = getValData();
+  const v = val.find(x => x.id === id);
+  if (v && v.site) addExcludedDomains([v.site]);
+  saveValData(val.filter(x => x.id !== id));
   renderValidacao(); updateBadges();
+  if (v && v.site) notify('\u2715 removido · ' + (extractDomain(v.site)||v.site) + ' → sites já vistos');
 }
 
 /* Passa lead para o dia seguinte (antes de entrar na fila) */
@@ -2628,11 +2643,25 @@ function confirmarValidadorLinks() {
   });
 
   const removidos = antes - novaVal.filter(v => v.tipo === 'com-site' && (isAbaValidados ? v.numStatus === 'valido' : v.numStatus !== 'valido')).length;
+
+  // Registra os sites removidos como "já vistos"
+  const removedSites = val
+    .filter(v => {
+      if (v.tipo !== 'com-site') return false;
+      const isValidado = v.numStatus === 'valido';
+      if (isAbaValidados && !isValidado) return false;
+      if (!isAbaValidados && isValidado) return false;
+      return !linkDomains.has(normLink(v.site || ''));
+    })
+    .map(v => v.site)
+    .filter(Boolean);
+  if (removedSites.length) addExcludedDomains(removedSites);
+
   saveValData(novaVal);
   document.getElementById('validadorLinksInput').value = '';
   renderValidacao(); updateBadges();
   const abaLabel = isAbaValidados ? 'Validados' : 'Pendentes/Inválidos';
-  notify(`✓ ${links.length} mantidos · ${removidos} removidos (${abaLabel})`);
+  notify(`✓ ${links.length} mantidos · ${removidos} removidos → sites já vistos (${abaLabel})`);
 }
 
 /* Remove da página atual apenas os itens que NÃO estão nos links colados,
@@ -2672,6 +2701,13 @@ function limparPaginaValidador() {
 
   if (!removidos) { notify('// nenhum item removido nesta página', 'warn'); return; }
 
+  // Registra os sites removidos como "já vistos"
+  const removedSites = pageItems
+    .filter(v => !linkDomains.has(normLink(v.site || '')))
+    .map(v => v.site)
+    .filter(Boolean);
+  addExcludedDomains(removedSites);
+
   saveValData(novaVal);
   // Ajusta a página se necessário (se a página ficou vazia e havia mais)
   const novaGroup = novaVal.filter(v => {
@@ -2683,7 +2719,7 @@ function limparPaginaValidador() {
 
   renderValidacao(); updateBadges();
   const abaLabel = isAbaValidados ? 'Validados' : 'Pendentes/Inválidos';
-  notify(`✓ ${removidos} removidos da página ${currentPageIdx} (${abaLabel}) · restantes preservados`);
+  notify(`✓ ${removidos} removidos da página ${currentPageIdx} → sites já vistos (${abaLabel})`);
 }
 
 function aprovarParaFila(id) {
