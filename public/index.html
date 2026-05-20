@@ -2424,11 +2424,20 @@ function renderValidacao() {
       : '// nenhuma empresa pendente ou inválida';
     comSiteEl.innerHTML = `${groupLabel}<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:20px;text-align:center">${emptyMsg}</div>`;
   } else {
+    // Pré-calcula os domínios dos links colados para mostrar indicador por card
+    const _rawLinks = document.getElementById('validadorLinksInput')?.value || '';
+    const _normLink = (url) => { try { return new URL(url).hostname.replace(/^www\./,'').toLowerCase(); } catch { return url.toLowerCase().trim(); } };
+    const _linkDomains = new Set(_rawLinks.split('\n').map(l=>l.trim()).filter(l=>l.startsWith('http')).map(_normLink));
+
     const renderCard = (v) => {
       const statusColor = v.numStatus==='valido'?'var(--ok)':v.numStatus==='invalido'?'var(--error)':'var(--muted)';
       const statusLabel = v.numStatus==='valido'?'✓ número válido':v.numStatus==='invalido'?'✗ sem WhatsApp':'pendente';
       const chipId = v.chipValidacaoId || activeChipId;
       const chipNome = getChipById(chipId) ? getChipById(chipId).nome : '';
+      const isMantido = v.site && _linkDomains.size > 0 && _linkDomains.has(_normLink(v.site));
+      const mantidoBadge = isMantido
+        ? `<span style="display:inline-flex;align-items:center;gap:4px;font-family:'DM Mono',monospace;font-size:7px;padding:2px 7px;border-radius:100px;border:1px solid rgba(91,184,245,0.35);background:rgba(91,184,245,0.07);color:#5bb8f5;white-space:nowrap"><span style="width:4px;height:4px;border-radius:50%;background:#5bb8f5;display:inline-block;flex-shrink:0"></span>mantido</span>`
+        : '';
       return `<div class="empresa-card" id="val-card-${v.id}">
         <div class="empresa-info">
           <div class="empresa-nome">
@@ -2441,6 +2450,7 @@ function renderValidacao() {
             </div>
             <span style="font-family:'DM Mono',monospace;font-size:8px;color:${statusColor}">${statusLabel}</span>
             ${chipNome?`<span class="q-badge ok" style="font-size:7px">📱 ${escHtml(chipNome)}</span>`:''}
+            ${mantidoBadge}
           </div>
           <div class="empresa-meta" style="margin-top:4px">
             <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">importado em:</span>
@@ -2629,9 +2639,12 @@ function previewValidadorLinks() {
   const links = raw.split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
   const el = document.getElementById('validadorLinksPreview');
   if (!el) return;
-  if (!links.length) { el.innerHTML = ''; updateMantidosBadge(0, false); return; }
+  if (!links.length) { el.innerHTML = ''; updateMantidosBadge(0, false); renderValidacao(); return; }
   el.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px">${links.length} link${links.length!==1?'s':''} colado${links.length!==1?'s':''}:</div>` +
     links.map(l => `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:6px;padding:5px 10px;margin-bottom:4px;font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(l)}</div>`).join('');
+
+  // Re-renderiza os cards para atualizar os indicadores de "mantido"
+  renderValidacao();
 
   // Calcula quantos serão mantidos na aba atual
   const normLink = (url) => {
