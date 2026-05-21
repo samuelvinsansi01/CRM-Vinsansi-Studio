@@ -30,35 +30,40 @@
 * { margin:0; padding:0; box-sizing:border-box; font-family: 'DM Mono', monospace; }
 body { background: var(--bg); color: var(--text); display: flex; min-height: 100vh; overflow-x: hidden; }
 
-/* Tela de Autenticação / Bloqueio */
+/* Tela de Autenticação / Bloqueio Google */
 #login-screen { position: fixed; inset: 0; background: var(--bg); z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
 .login-box { background: var(--surface); border: 1px solid var(--border); padding: 40px; border-radius: 12px; text-align: center; max-width: 420px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
 .login-box h1 { font-family: 'Syne', sans-serif; font-weight: 800; margin-bottom: 10px; color: var(--accent); letter-spacing: -1px; }
 .login-box p { color: var(--text2); font-size: 13px; margin-bottom: 25px; line-height: 1.5; }
 
-/* Perfil do usuário logado na Sidebar */
+/* Box de perfil do Usuário Logado na Sidebar */
 .user-profile-box { display: flex; align-items: center; gap: 10px; padding: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px; }
 .user-profile-box img { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--accent); }
 .user-profile-box .user-info { display: flex; flex-direction: column; min-width: 0; }
 .user-profile-box .user-info name { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-profile-box .user-info email { font-size: 9px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Estilos de Estrutura Legados do Projeto */
-.sidebar { width: 280px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0; transition: width 0.2s, padding 0.2s; position: relative; }
+/* CSS ORIGINAL DO SEU PROJETO */
+.sidebar { width: 260px; background: var(--surface); border-right: 1px solid var(--border); padding: 24px; display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0; transition: width 0.2s, padding 0.2s; position: relative; }
 .sidebar.collapsed { width: 0; padding: 0; overflow: hidden; border-right: none; }
-.sidebar-toggle-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); padding: 6px 12px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 20px; transition: all 0.2s; height: 32px; width: fit-content; }
-.sidebar-toggle-btn:hover { border-color: var(--border2); color: var(--text); }
-.nav-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px; background: transparent; border: 1px solid transparent; border-radius: 8px; color: var(--text2); cursor: pointer; text-align: left; font-size: 13px; transition: all 0.2s; margin-bottom: 4px; }
-.nav-btn:hover { background: var(--surface2); color: var(--text); }
-.nav-btn.active { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent); font-weight: 500; }
-.main-content { flex: 1; padding: 40px; overflow-y: auto; display: flex; flex-direction: column; }
-.tab-pane { display: none; height: 100%; flex-direction: column; }
-.tab-pane.active { display: flex; }
-.title-area { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 32px; letter-spacing: -1px; margin-bottom: 30px; display: flex; align-items: center; gap: 12px; }
-.title-area span { font-family: 'Syne', sans-serif; font-weight: 400; color: var(--text2); }
+.sidebar-toggle { position: absolute; top: 24px; right: -40px; background: var(--surface); border: 1px solid var(--border); border-left: none; color: var(--text2); width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 0 8px 8px 0; z-index: 99; font-size: 14px; }
+.sidebar-toggle:hover { color: var(--text); background: var(--surface2); }
+.nav-brand { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 24px; letter-spacing: -1px; margin-bottom: 32px; display: flex; align-items: center; gap: 8px; }
+.nav-brand span { font-weight: 400; color: var(--text2); }
+.nav-menu { display: flex; flex-direction: column; gap: 4px; }
+.nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: var(--text2); text-decoration: none; border-radius: 8px; font-size: 13px; transition: all 0.2s; background: transparent; border: 1px solid transparent; width: 100%; text-align: left; cursor: pointer; }
+.nav-item:hover { color: var(--text); background: var(--surface2); }
+.nav-item.active { color: var(--accent); background: var(--accent-dim); border-color: var(--accent-border); font-weight: 500; }
+.main-content { flex: 1; padding: 40px; overflow-y: auto; position: relative; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.page-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 32px; letter-spacing: -1px; margin-bottom: 32px; display: flex; align-items: center; gap: 12px; }
+.page-title span { font-weight: 400; color: var(--text2); }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
-.card h2 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 18px; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
-.grid-config { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.card-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+@media(max-width: 1024px) { .grid-3, .grid-5 { grid-template-columns: 1fr; } }
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); font-weight: 500; }
 .form-group input, .form-group select, .form-group textarea { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 13px; transition: all 0.2s; width: 100%; }
@@ -72,85 +77,65 @@ body { background: var(--bg); color: var(--text); display: flex; min-height: 100
 .btn-success { background: rgba(0, 230, 118, 0.1); border-color: rgba(0, 230, 118, 0.2); color: var(--success); }
 .btn-success:hover { background: rgba(0, 230, 118, 0.2); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.flex-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.actions-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 500; text-transform: uppercase; }
 .badge-neutral { background: var(--surface3); color: var(--text2); border: 1px solid var(--border); }
 .badge-accent { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-border); }
 .badge-success { background: rgba(0,230,118,0.08); color: var(--success); border: 1px solid rgba(0,230,118,0.15); }
 .badge-error { background: rgba(255,92,92,0.08); color: var(--error); border: 1px solid rgba(255,92,92,0.15); }
-
-/* Tabelas e Resultados */
-.table-container { width: 100%; overflow-x: auto; margin-top: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); }
+.table-container { width: 100%; overflow-x: auto; margin-top: 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
-th { background: var(--surface3); padding: 12px 16px; color: var(--text2); font-weight: 500; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+th { background: var(--surface2); padding: 12px 16px; color: var(--text2); font-weight: 500; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
 td { padding: 12px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background: rgba(255,255,255,0.01); }
-
-/* Notificações */
-#notification-container { position: fixed; bottom: 24px; right: 24px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; max-width: 360px; width: 100%; }
-.toast { background: var(--surface3); border: 1px solid var(--border2); border-left: 4px solid var(--accent); padding: 14px 20px; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); font-size: 12px; color: var(--text); display: flex; align-items: center; justify-content: space-between; animation: toastIn 0.25s cubic-bezier(0, 0, 0.2, 1) forwards; }
+#toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; max-width: 320px; }
+.toast { background: var(--surface3); border: 1px solid var(--border2); border-left: 4px solid var(--accent); padding: 12px 16px; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-size: 12px; color: var(--text); display: flex; align-items: center; justify-content: space-between; animation: toastIn 0.2s ease forwards; }
 .toast.err { border-left-color: var(--error); }
-@keyframes toastIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-
-/* Área de Drop do Excel */
-.drop-zone { border: 2px dashed var(--border2); border-radius: 12px; padding: 40px 20px; text-align: center; background: var(--surface2); cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+@keyframes toastIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.drop-zone { border: 2px dashed var(--border2); border-radius: 10px; padding: 32px; text-align: center; background: var(--surface2); cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: var(--accent-dim); }
 .drop-zone p { font-size: 13px; color: var(--text2); }
 .drop-zone span { font-size: 11px; color: var(--muted); }
-
-/* Componentes das Abas */
-.chips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
-.chip-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; position: relative; }
-.chip-card.active { border-color: var(--accent-border); background: cubic-bezier(0,0,0.2,1); }
-.chip-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-.chip-title { font-weight: 500; font-size: 14px; color: var(--text); }
+.chips-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 16px; }
+.chip-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; position: relative; }
+.chip-card.active { border-color: var(--accent-border); background: var(--accent-dim); }
+.chip-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.chip-title { font-weight: 500; font-size: 14px; }
 .chip-subtitle { font-size: 11px; color: var(--text2); margin-top: 2px; }
 .chip-status { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-top: 12px; }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
 .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
 .status-dot.disconnected { background: var(--error); }
-.chip-footer { display: flex; gap: 8px; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
-
-/* Paginação */
+.chip-actions { display: flex; gap: 8px; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
 .pagination { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; font-size: 12px; color: var(--text2); }
-
-/* Logs Terminal style */
-.terminal-logs { background: #070709; border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'DM Mono', monospace; font-size: 11px; color: #a8a8b3; height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
-.terminal-logs .log-line { line-height: 1.4; }
-.terminal-logs .log-line.success { color: var(--success); }
-.terminal-logs .log-line.error { color: var(--error); }
-.terminal-logs .log-line.info { color: var(--accent); }
-
-/* Estilo para Linhas de Empresa Validadas */
-tr.status-whatsapp-exists { border-left: 3px solid var(--success); }
-tr.status-whatsapp-not-exists { opacity: 0.6; }
-tr.status-whatsapp-not-exists td { color: var(--muted); }
-
-/* Fila de disparo styles */
+.console-box { background: #070709; border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: 'DM Mono', monospace; font-size: 11px; color: #a8a8b3; height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+.console-line { line-height: 1.4; }
+.console-line.success { color: var(--success); }
+.console-line.error { color: var(--error); }
+.console-line.info { color: var(--accent); }
+tr.status-existe { border-left: 3px solid var(--success); }
+tr.status-nao_existe { opacity: 0.5; }
+tr.status-nao_existe td { color: var(--muted); }
 .calendar-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px; }
 @media(max-width: 1024px) { .calendar-grid { grid-template-columns: repeat(3, 1fr); } }
 @media(max-width: 640px) { .calendar-grid { grid-template-columns: 1fr; } }
-.day-column { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; transition: all 0.2s; min-height: 120px; }
-.day-column:hover, .day-column.active { border-color: var(--border2); background: var(--surface3); }
-.day-column.active { border-color: var(--accent-border); box-shadow: inset 0 0 0 1px var(--accent); }
-.day-header { display: flex; justify-content: space-between; align-items: center; font-weight: 500; font-size: 12px; }
-.day-counter { font-size: 11px; color: var(--text2); background: var(--surface3); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border); }
-.day-column.active .day-counter { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-border); }
-
-/* Loader overlay */
-.loader-overlay { position: absolute; inset: 0; background: rgba(10,10,13,0.7); display: flex; align-items: center; justify-content: center; z-index: 10; border-radius: 10px; backdrop-filter: blur(1px); }
-.spinner { width: 24px; height: 24px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.day-col { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; transition: all 0.2s; min-height: 100px; }
+.day-col:hover, .day-col.active { border-color: var(--border2); background: var(--surface3); }
+.day-col.active { border-color: var(--accent-border); box-shadow: inset 0 0 0 1px var(--accent); }
+.day-title { display: flex; justify-content: space-between; align-items: center; font-weight: 500; font-size: 12px; }
+.day-count { font-size: 11px; color: var(--text2); background: var(--surface3); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
+.day-col.active .day-count { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-border); }
+.loader-overlay { position: absolute; inset: 0; background: rgba(10,10,13,0.8); display: flex; align-items: center; justify-content: center; z-index: 10; border-radius: 12px; backdrop-filter: blur(1px); }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-
-/* Modal Simple */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index: 10000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(2px); z-index: 10000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
 .modal-overlay.open { opacity: 1; pointer-events: auto; }
-.modal-card { background: var(--surface); border: 1px solid var(--border); width: 90%; max-width: 500px; border-radius: 12px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); transform: translateY(10px); transition: transform 0.2s ease; }
-.modal-overlay.open .modal-card { transform: translateY(0); }
-.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.modal-header h3 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; }
-.modal-close { background: transparent; border: none; color: var(--text2); cursor: pointer; font-size: 18px; }
+.modal-box { background: var(--surface); border: 1px solid var(--border); width: 90%; max-width: 440px; border-radius: 12px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); transform: translateY(10px); transition: transform 0.2s; }
+.modal-overlay.open .modal-box { transform: translateY(0); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.modal-header h3 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; }
+.modal-close { background: transparent; border: none; color: var(--text2); cursor: pointer; font-size: 16px; }
 </style>
 </head>
 <body>
@@ -158,12 +143,13 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
   <div id="login-screen">
     <div class="login-box">
       <h1>Studio — Vin</h1>
-      <p>Conecte-se com sua Conta Google para acessar com total segurança seus parâmetros de prospecção, chips e filas de disparos.</p>
+      <p>Conecte-se com sua Conta Google para acessar seus parâmetros de prospecção com segurança.</p>
       <div style="display: flex; justify-content: center;" id="googleBtnContainer"></div>
     </div>
   </div>
 
   <aside class="sidebar" id="sidebar">
+    <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
     <div>
       <div class="user-profile-box">
         <img src="" id="userAvatar" alt="Avatar">
@@ -173,206 +159,189 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
         </div>
       </div>
 
-      <div class="title-area" style="font-size:20px; margin-bottom:24px; margin-top:10px;">Studio<span>vin</span></div>
-      
-      <nav>
-        <button class="nav-btn active" id="nav-validacao" onclick="switchTab('validacao')">🔍 Validação</button>
-        <button class="nav-btn" id="nav-fila" onclick="switchTab('fila')">📅 Fila Semanal</button>
-        <button class="nav-btn" id="nav-chips" onclick="switchTab('chips')">📟 Meus Chips</button>
-        <button class="nav-btn" id="nav-ramos" onclick="switchTab('ramos')">🗂️ Ramos & Filtros</button>
+      <div class="nav-brand">Studio <span>vin</span></div>
+      <nav class="nav-menu">
+        <button class="nav-item active" id="nav-validacao" onclick="switchTab('validacao')">🔍 Validação</button>
+        <button class="nav-item" id="nav-fila" onclick="switchTab('fila')">📅 Fila Semanal</button>
+        <button class="nav-item" id="nav-chips" onclick="switchTab('chips')">📟 Meus Chips</button>
+        <button class="nav-item" id="nav-ramos" onclick="switchTab('ramos')">🗂️ Ramos & Filtros</button>
       </nav>
     </div>
-    
     <div>
-      <div class="badge badge-neutral" style="width:100%; justify-content:center; margin-bottom:12px; py:6px;" id="db-status">CONEXÃO LOCAL</div>
-      <button class="btn btn-danger" style="width: 100%; py:10px; font-size:12px;" onclick="handleLogoff()">🚪 Desconectar</button>
+      <div class="badge badge-accent" style="width:100%; justify-content:center; padding:6px 0; margin-bottom:12px;" id="db-status">CONEXÃO SECURE</div>
+      <button class="btn btn-danger" style="width: 100%; padding:8px 0; font-size:12px;" onclick="handleLogoff()">🚪 Desconectar</button>
     </div>
   </aside>
 
   <main class="main-content">
-    <button class="sidebar-toggle-btn" onclick="toggleSidebar()">☰ Menu</button>
-
-    <div class="tab-pane active" id="tab-validacao">
-      <div class="title-area">Validação de Leads <span>apify</span></div>
+    <div class="tab-content active" id="tab-validacao">
+      <div class="page-title">Validação de Leads <span>apify</span></div>
       
       <div class="card">
-        <h2>⚙️ Parâmetros de Automação (Salvos na Conta)</h2>
-        <div class="grid-config">
+        <div class="card-title">⚙️ Parâmetros de Automação</div>
+        <div class="grid-5">
           <div class="form-group">
             <label>Delay Mínimo (seg)</label>
-            <input type="number" id="delayMin" value="120" onchange="saveEvoConfigFromUi()"/>
+            <input type="number" id="delayMin" value="120" onchange="saveEvoConfig()"/>
           </div>
           <div class="form-group">
             <label>Delay Máximo (seg)</label>
-            <input type="number" id="delayMax" value="180" onchange="saveEvoConfigFromUi()"/>
+            <input type="number" id="delayMax" value="180" onchange="saveEvoConfig()"/>
           </div>
           <div class="form-group">
             <label>Empresas por Lote</label>
-            <input type="number" id="loteTamanho" value="10" onchange="saveEvoConfigFromUi()"/>
+            <input type="number" id="loteTamanho" value="10" onchange="saveEvoConfig()"/>
           </div>
           <div class="form-group">
-            <label>Espera entre Lotes (min)</label>
-            <input type="number" id="loteEsperaMin" value="15" onchange="saveEvoConfigFromUi()"/>
+            <label>Espera Lote (min)</label>
+            <input type="number" id="loteEsperaMin" value="15" onchange="saveEvoConfig()"/>
           </div>
           <div class="form-group">
             <label>Horário de Início</label>
-            <input type="time" id="horarioInicio" value="08:00" onchange="saveEvoConfigFromUi()"/>
+            <input type="time" id="horarioInicio" value="08:00" onchange="saveEvoConfig()"/>
           </div>
         </div>
       </div>
 
       <div class="card">
-        <h2>📂 Importar Dados Brutos</h2>
+        <div class="card-title">📂 Importar Dados Brutos</div>
         <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
-          <p>Arraste o arquivo `.xlsx` extraído do Apify ou clique para navegar</p>
-          <span>Apenas planilhas Excel padrão estruturadas</span>
+          <p>Arraste o arquivo .xlsx extraído da Apify aqui ou clique para procurar</p>
+          <span>Deduplicação automática por telefone e site ativa na base unificada</span>
           <input type="file" id="file-input" accept=".xlsx" style="display:none" onchange="handleFileSelect(event)"/>
         </div>
       </div>
 
-      <div class="card" style="flex:1; display:flex; flex-direction:column; min-height:400px;">
-        <div style="display:flex; justify-content:between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
-          <h2>📋 Leads Aguardando Validação (<span id="count-validacao">0</span>)</h2>
-          <div class="flex-actions" style="margin-left:auto;">
+      <div class="card" style="min-height: 400px; display:flex; flex-direction:column;">
+        <div class="actions-bar">
+          <div class="card-title" style="margin-bottom:0">📋 Fila de Validação Local (<span id="count-validacao">0</span>)</div>
+          <div style="margin-left:auto; display:flex; gap:8px;">
             <button class="btn btn-secondary" onclick="exportarFilaSemSite()">📸 Exportar Sem Site</button>
-            <button class="btn" id="btn-validar-tudo" onclick="validarFilaInteiraWhatsApp()" disabled>⚡ Validar Números</button>
-            <button class="btn btn-success" id="btn-enviar-fila" onclick="jogarValidadosParaFila()" disabled>📅 Agendar Envio</button>
+            <button class="btn btn-secondary" style="background:rgba(255,92,92,0.05); color:var(--error); border-color:rgba(255,92,92,0.1);" onclick="limparFilaValidacaoLocal()">🗑️ Limpar Tudo</button>
+            <button class="btn" id="btn-validar-tudo" onclick="validarFilaInteiraWhatsApp()">⚡ Validar Números</button>
+            <button class="btn btn-success" id="btn-enviar-fila" onclick="jogarValidadosParaFila()">📅 Enviar para Fila Semanal</button>
           </div>
         </div>
 
-        <div class="table-container" style="flex:1;">
+        <div class="table-container" style="flex:1; position:relative;">
+          <div class="loader-overlay" id="loading-validacao" style="display:none;"><div class="spinner"></div></div>
           <table id="table-validacao">
             <thead>
               <tr>
-                <th style="width:240px;">Empresa</th>
+                <th>Empresa</th>
                 <th style="width:140px;">Telefone</th>
                 <th>Ramo Identificado</th>
-                <th style="width:180px;">Status WhatsApp</th>
+                <th style="width:160px;">Status WhatsApp</th>
                 <th style="width:60px; text-align:center;">Ações</th>
               </tr>
             </thead>
-            <tbody>
-              <tr><td colspan="5" style="color:var(--text2); text-align:center; padding:40px;">Nenhum registro carregado na fila de validação local</td></tr>
-            </tbody>
+            <tbody></tbody>
           </table>
         </div>
         <div class="pagination" id="pagination-validacao"></div>
       </div>
     </div>
 
-    <div class="tab-pane" id="tab-fila">
-      <div class="title-area">Fila Semanal de Disparos <span>agendados</span></div>
+    <div class="tab-content" id="tab-fila">
+      <div class="page-title">Fila Semanal de Disparos <span>agendados</span></div>
       
-      <div class="card">
-        <div class="form-group" style="max-width:320px;">
-          <label>Selecione o Chip Operador</label>
-          <select id="seletor-chip-fila" onchange="renderizarFilaSemanal()"></select>
+      <div class="card" style="padding-bottom:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px;">
+          <div class="form-group" style="width:280px;">
+            <label>Selecione o Chip Operador</label>
+            <select id="seletor-chip-fila" onchange="renderizarFilaSemanal()"></select>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary" onclick="gerarExcelHistoricoGeral()">📦 Baixar Histórico Completo</button>
+          </div>
         </div>
       </div>
 
       <div class="calendar-grid" id="calendar-grid"></div>
 
-      <div class="card" style="flex:1; display:flex; flex-direction:column; min-height:300px;">
-        <div style="display:flex; justify-content:between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+      <div class="card" style="min-height:300px; display:flex; flex-direction:column;">
+        <div class="actions-bar">
           <div>
-            <h2 id="titulo-detalhe-dia">Selecione um dia da semana acima</h2>
-            <p id="sub-detalhe-dia" style="font-size:12px; color:var(--text2); margin-top:2px;"></p>
+            <div class="card-title" id="titulo-detalhe-dia" style="margin-bottom:2px;">Selecione um dia útil da semana</div>
+            <p id="sub-detalhe-dia" style="font-size:11px; color:var(--text2);"></p>
           </div>
-          <div class="flex-actions" style="margin-left:auto;">
-            <button class="btn btn-secondary" onclick="baixarPlanilhaDoDia()">📥 Baixar Planilha</button>
-            <button class="btn btn-danger" onclick="limparFilaDoDia()">🗑️ Limpar Dia</button>
-            <button class="btn btn-success" id="btn-disparar-dia" onclick="dispararFilaDoDia()">🚀 Iniciar Disparos</button>
+          <div style="margin-left:auto; display:flex; gap:8px;">
+            <button class="btn btn-secondary" id="btn-add-manual" onclick="abrirModalManual()" disabled>➕ Envio Manual</button>
+            <button class="btn btn-secondary" id="btn-xlsx-dia" onclick="baixarPlanilhaDoDia()" disabled>📥 Baixar Planilha</button>
+            <button class="btn btn-danger" id="btn-limpar-dia" onclick="limparFilaDoDia()" disabled>🗑️ Limpar Dia</button>
+            <button class="btn btn-success" id="btn-disparar-dia" onclick="dispararFilaDoDia()" disabled>🚀 Iniciar Disparos</button>
           </div>
         </div>
 
-        <div class="table-container" style="flex:1;">
+        <div class="table-container" style="flex:1; position:relative;">
+          <div class="loader-overlay" id="loading-fila-dia" style="display:none;"><div class="spinner"></div></div>
           <table id="table-fila-dia">
             <thead>
               <tr>
                 <th>Empresa</th>
-                <th style="width:160px;">WhatsApp</th>
-                <th style="width:200px;">Status do Envio</th>
+                <th style="width:140px;">WhatsApp</th>
+                <th style="width:160px;">Status Envio</th>
                 <th style="width:60px; text-align:center;">Remover</th>
               </tr>
             </thead>
             <tbody>
-              <tr><td colspan="4" style="color:var(--text2); text-align:center; padding:40px;">Selecione um dia ativo para analisar os leads agendados</td></tr>
+              <tr><td colspan="4" style="color:var(--text2); text-align:center; padding:40px;">Selecione um dia da semana para listar os leads agendados</td></tr>
             </tbody>
           </table>
         </div>
       </div>
-      
+
       <div class="card">
-        <h2>🖥️ Console de Disparos em Tempo Real</h2>
-        <div class="terminal-logs" id="terminal-logs">
-          <div class="log-line info">[SISTEMA] Aguardando inicialização de disparo server-side...</div>
+        <div class="card-title">🖥️ Console de Disparos (Tempo Real)</div>
+        <div class="console-box" id="console-logs">
+          <div class="console-line info">[SISTEMA] Aguardando inicialização de lote de envio...</div>
         </div>
       </div>
     </div>
 
-    <div class="tab-pane" id="tab-chips">
-      <div class="title-area">Gerenciamento de Chips <span>instâncias</span></div>
+    <div class="tab-content" id="tab-chips">
+      <div class="page-title">Gerenciamento de Chips <span>instâncias</span></div>
       
       <div class="card">
-        <h2>📟 Adicionar Novo Chip Operador</h2>
-        <div class="grid-config" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
-          <div class="form-group">
-            <label>Nome do Operador</label>
-            <input type="text" id="chip-nome-input" placeholder="Ex: Chip 03 - Vinicius"/>
-          </div>
-          <div class="form-group">
-            <label>URL Base Evolution API</label>
-            <input type="text" id="chip-url-input" placeholder="https://api-evo.seudominio.com"/>
-          </div>
-          <div class="form-group">
-            <label>Nome da Instância</label>
-            <input type="text" id="chip-instance-input" placeholder="ex: chip03"/>
-          </div>
-          <div class="form-group">
-            <label>Global API Key</label>
-            <input type="password" id="chip-key-input" placeholder="Apikey da instância"/>
-          </div>
+        <div class="card-title">📟 Cadastrar Novo Chip Operador</div>
+        <div class="grid-3">
+          <div class="form-group"><label>Nome do Operador</label><input type="text" id="chip-nome" placeholder="Ex: Chip 03 - Vinicius"/></div>
+          <div class="form-group"><label>URL Evolution API</label><input type="text" id="chip-url" placeholder="https://api.meusistema.com"/></div>
+          <div class="form-group"><label>Nome Instância (Slug)</label><input type="text" id="chip-instance" placeholder="ex: chip03"/></div>
         </div>
-        <div style="margin-top:20px;">
-          <button class="btn" onclick="criarNovoChipOperador()">💾 Cadastrar Instância</button>
+        <div class="grid-3" style="margin-top:12px; grid-template-columns: 2fr 1fr;">
+          <div class="form-group"><label>Global API Key (Token)</label><input type="password" id="chip-key" placeholder="Token global ou da instância"/></div>
+          <div class="form-group" style="justify-content:flex-end;"><button class="btn" onclick="criarNovoChip()">💾 Salvar Instância</button></div>
         </div>
       </div>
 
-      <div class="card" style="flex:1;">
-        <h2>📟 Instâncias Ativas no Sistema</h2>
-        <div class="chips-grid" id="chips-container-list"></div>
+      <div class="card">
+        <div class="card-title">📟 Instâncias Configuradas no Sistema</div>
+        <div class="chips-grid" id="chips-list"></div>
       </div>
     </div>
 
-    <div class="tab-pane" id="tab-ramos">
-      <div class="title-area">Ramos & Regras de Filtros <span>matching</span></div>
+    <div class="tab-content" id="tab-ramos">
+      <div class="page-title">Ramos & Regras de Filtros <span>matching</span></div>
       
       <div class="card">
-        <h2>🗂️ Cadastrar Novo Ramo Comercial</h2>
+        <div class="card-title">🗂️ Adicionar Novo Segmento Comercial</div>
         <div style="display:grid; grid-template-columns: 1fr 2fr; gap:16px;">
-          <div class="form-group">
-            <label>Nome do Ramo</label>
-            <input type="text" id="ramo-nome-input" placeholder="Ex: Advocacia"/>
-          </div>
-          <div class="form-group">
-            <label>Palavras-Chave (Separadas por vírgula)</label>
-            <input type="text" id="ramo-keys-input" placeholder="advogado, advocacia, juridico, banca de advogados"/>
-          </div>
+          <div class="form-group"><label>Nome do Ramo</label><input type="text" id="ramo-nome" placeholder="Ex: Advocacia"/></div>
+          <div class="form-group"><label>Palavras-Chave (Separadas por vírgula)</label><input type="text" id="ramo-keys" placeholder="advogado, advocacia, juridico, banca de advogados"/></div>
         </div>
-        <div style="margin-top:20px;">
-          <button class="btn" onclick="criarNovoRamoFiltro()">💾 Adicionar Regra</button>
-        </div>
+        <div style="margin-top:16px; text-align:right;"><button class="btn" onclick="criarNovoRamo()">💾 Adicionar Regra</button></div>
       </div>
 
-      <div class="card" style="flex:1;">
-        <h2>🗂️ Regras Homologadas no Sistema</h2>
+      <div class="card">
+        <div class="card-title">🗂️ Regras Homologadas para Match</div>
         <div class="table-container">
           <table id="table-ramos">
             <thead>
               <tr>
-                <th style="width:200px;">Segmento Comercial</th>
-                <th>Palavras-Chave de Identificação</th>
-                <th style="width:80px; text-align:center;">Ações</th>
+                <th style="width:200px;">Segmento</th>
+                <th>Palavras-Chave Contidas no JSON</th>
+                <th style="width:80px; text-align:center;">Remover</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -383,54 +352,50 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
   </main>
 
   <div class="modal-overlay" id="qr-modal">
-    <div class="modal-card">
+    <div class="modal-box">
       <div class="modal-header">
-        <h3 id="qr-modal-title">Pareamento do WhatsApp</h3>
-        <button class="modal-close" onclick="fecharModalQrCode()">✕</button>
+        <h3 id="qr-modal-title">Pareamento WhatsApp</h3>
+        <button class="modal-close" onclick="fecharModalQr()">✕</button>
       </div>
-      <div style="display:flex; flex-direction:column; align-items:center; gap:16px; padding:20px 0;" id="qr-modal-content">
-        <div class="spinner"></div>
-        <p style="font-size:13px; color:var(--text2);">Gerando lote de autenticação da instância na Evolution API...</p>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:16px; padding:16px 0;" id="qr-modal-body"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="manual-modal">
+    <div class="modal-box" style="max-width:500px;">
+      <div class="modal-header">
+        <h3>➕ Inserir Lead Manual na Fila</h3>
+        <button class="modal-close" onclick="fecharModalManual()">✕</button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="form-group"><label>Nome da Empresa</label><input type="text" id="m-nome"/></div>
+        <div class="form-group"><label>WhatsApp (com DDD)</label><input type="text" id="m-phone" placeholder="ex: 11999999999"/></div>
+        <div class="form-group"><label>Link do Site (opcional)</label><input type="text" id="m-site" placeholder="https://..."/></div>
+        <div class="form-group"><label>Ramo / Segmento</label><input type="text" id="m-ramo" value="Manual"/></div>
+        <div style="margin-top:12px; text-align:right;"><button class="btn btn-success" onclick="salvarLeadManual()">💾 Agendar Lead</button></div>
       </div>
     </div>
   </div>
 
-  <div id="notification-container"></div>
+  <div id="toast-container"></div>
 
   <script>
-    // Configurações Globais e Chaves Dinâmicas de Escopo
-    const GOOGLE_CLIENT_ID = '924694132632-udo44avtao831uld7qg297obtvbqkbq2.apps.googleusercontent.com'; // ID de Produção do Google Sign-In
+    // ⚠️ SUBSTITUA COM O SEU ID DO GOOGLE CLOUD PARA EVITAR O ERRO 401
+    const GOOGLE_CLIENT_ID = '924694132632-udo44avtao831uld7qg297obtvbqkbq2.apps.googleusercontent.com'; 
     
-    const LEGACY_EVO_CONFIG_KEY   = 'prospeccao_config_evo';
-    const LEGACY_CHIPS_KEY        = 'prospeccao_chips';
-    const LEGACY_SIDEBAR_KEY      = 'prospeccao_sidebar_collapsed';
-    const LEGACY_RAMOS_KEY        = 'prospeccao_ramos';
+    // Chaves Fixas Originais do localStorage do Samuel
+    const SIDEBAR_KEY = 'prospeccao_sidebar_collapsed';
+    const EVO_CONFIG_KEY = 'prospeccao_config_evo';
+    const CHIPS_KEY = 'prospeccao_chips';
+    const RAMOS_KEY = 'prospeccao_ramos';
 
     let contaAtiva = null;
 
-    // Escopos Dinâmicos Baseados na Sessão Ativa do Usuário
-    function getEvoConfigKey() { return contaAtiva ? `prospeccao:${contaAtiva.uid}:config_evo` : LEGACY_EVO_CONFIG_KEY; }
-    function getChipsKey()     { return contaAtiva ? `prospeccao:${contaAtiva.uid}:chips` : LEGACY_CHIPS_KEY; }
-    function getSidebarKey()   { return contaAtiva ? `prospeccao:${contaAtiva.uid}:sidebar_collapsed` : LEGACY_SIDEBAR_KEY; }
-    function getRamosKey()     { return contaAtiva ? `prospeccao:${contaAtiva.uid}:ramos` : LEGACY_RAMOS_KEY; }
-
-    let EVO_CONFIG_KEY   = getEvoConfigKey();
-    let CHIPS_KEY        = getChipsKey();
-    let SIDEBAR_KEY      = getSidebarKey();
-    let RAMOS_KEY        = getRamosKey();
-
-    function remapearChavesLocais() {
-      EVO_CONFIG_KEY   = getEvoConfigKey();
-      CHIPS_KEY        = getChipsKey();
-      SIDEBAR_KEY      = getSidebarKey();
-      RAMOS_KEY        = getRamosKey();
-    }
-
-    // Variáveis de Estado Operacionais do seu Sistema Original
-    let empresasValidacao = []; 
+    // Variáveis operacionais originais do seu script
+    let empresasValidacao = [];
     let validacaoPage = 1;
     const validacaoPageSize = 15;
-    let diaFilaSelecionado = null;
+    let diaSelecionado = null;
 
     const RAMOS_DEFAULT = [
       { id:'contabilidade', nome:'Contabilidade', keywords:['contabilidade','contabil','contador','contadores','escritorio contabil','assessoria contabil','consultoria contabil'] },
@@ -442,7 +407,7 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
       { id:'engenharia', nome:'Engenharia/Construção', keywords:['engenharia','construtora','incorporadora','obras','construcao','projetos engenharia','laudo tecnico'] }
     ];
 
-    // Inicializador Inicial da Biblioteca Google
+    // Inicialização da biblioteca Google Sign-In
     window.onload = function() {
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
@@ -454,7 +419,6 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
         { theme: "dark", size: "large", type: "standard", shape: "rectangular" }
       );
 
-      // Checa se o usuário já possuía uma sessão válida logada no navegador
       const loginSalvo = localStorage.getItem('studio_vin_auth');
       if (loginSalvo) {
         try {
@@ -479,60 +443,25 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
       };
 
       localStorage.setItem('studio_vin_auth', JSON.stringify(contaAtiva));
-      
-      // Realiza a migração segura das tabelas se houver dados legados fora da conta
-      migrarDadosLegadosNavegador(contaAtiva.uid);
-      
       bootstrapApplication(contaAtiva);
       notify(`Acesso autorizado como ${contaAtiva.nome}`);
     }
 
-    function migrarDadosLegadosNavegador(uid) {
-      let dadosMigrados = false;
-
-      // Migração de Configurações
-      const configAntiga = localStorage.getItem(LEGACY_EVO_CONFIG_KEY);
-      if (configAntiga && !localStorage.getItem(`prospeccao:${uid}:config_evo`)) {
-        localStorage.setItem(`prospeccao:${uid}:config_evo`, configAntiga);
-        dadosMigrados = true;
-      }
-      // Migração de Chips
-      const chipsAntigos = localStorage.getItem(LEGACY_CHIPS_KEY);
-      if (chipsAntigos && !localStorage.getItem(`prospeccao:${uid}:chips`)) {
-        localStorage.setItem(`prospeccao:${uid}:chips`, chipsAntigos);
-        dadosMigrados = true;
-      }
-      // Migração de Ramos
-      const ramosAntigos = localStorage.getItem(LEGACY_RAMOS_KEY);
-      if (ramosAntigos && !localStorage.getItem(`prospeccao:${uid}:ramos`)) {
-        localStorage.setItem(`prospeccao:${uid}:ramos`, ramosAntigos);
-        dadosMigrados = true;
-      }
-
-      if (dadosMigrados) {
-        setTimeout(() => notify("✓ Seus registros locais antigos foram vinculados à sua conta!", "success"), 1000);
-      }
-    }
-
     function bootstrapApplication(user) {
-      remapearChavesLocais();
       document.getElementById('login-screen').style.display = 'none';
       
-      // Alimenta elementos do perfil na Sidebar
       document.getElementById('userName').innerText = user.nome;
       document.getElementById('userEmail').innerText = user.email;
       document.getElementById('userAvatar').src = user.foto;
-      document.getElementById('db-status').innerText = "☁️ CONTA NUVEM GOOGLE";
-      document.getElementById('db-status').className = "badge badge-accent";
 
-      // Inicializa lógicas originais do arquivo
+      // Executa a inicialização original (INIT) do seu arquivo original
       const s = document.getElementById('sidebar');
       if (localStorage.getItem(SIDEBAR_KEY)==='1') s.classList.remove('collapsed');
 
       const cfg = loadEvoConfig();
-      if (cfg.delayMin)      document.getElementById('delayMin').value = cfg.delayMin;
-      if (cfg.delayMax)      document.getElementById('delayMax').value = cfg.delayMax;
-      if (cfg.loteTamanho)   document.getElementById('loteTamanho').value = cfg.loteTamanho;
+      if (cfg.delayMin)      document.getElementById('delayMin').value      = cfg.delayMin; else document.getElementById('delayMin').value = 120;
+      if (cfg.delayMax)      document.getElementById('delayMax').value      = cfg.delayMax; else document.getElementById('delayMax').value = 180;
+      if (cfg.loteTamanho)   document.getElementById('loteTamanho').value   = cfg.loteTamanho;
       if (cfg.loteEsperaMin) document.getElementById('loteEsperaMin').value = cfg.loteEsperaMin;
       if (cfg.horarioInicio) document.getElementById('horarioInicio').value = cfg.horarioInicio;
 
@@ -553,9 +482,8 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
       window.location.reload();
     }
 
-    // Utilitário de Notificações nativas do layout original
     function notify(text, type='success') {
-      const container = document.getElementById('notification-container');
+      const container = document.getElementById('toast-container');
       const t = document.createElement('div');
       t.className = `toast ${type==='err'?'err':''}`;
       t.innerHTML = `<span>${text}</span>`;
@@ -563,11 +491,11 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
       setTimeout(() => t.remove(), 4000);
     }
 
-    /* ── LÓGICAS OPERACIONAIS DO SISTEMA ORIGINAL (PRESERVADAS INTEIRAMENTE) ── */
-    function loadEvoConfig() {
-      try { return JSON.parse(localStorage.getItem(EVO_CONFIG_KEY)) || {}; } catch(e) { return {}; }
-    }
-    function saveEvoConfigFromUi() {
+    /* ════════════════════════════════════════════════════════════════════════
+       TODAS AS FUNÇÕES LÓGICAS E MÉTODOS ORIGINAIS DO SEU PAINEL (PRESERVADOS)
+       ════════════════════════════════════════════════════════════════════════ */
+    function loadEvoConfig() { try { return JSON.parse(localStorage.getItem(EVO_CONFIG_KEY)) || {}; } catch(e){return {};} }
+    function saveEvoConfig() {
       const obj = {
         delayMin: parseInt(document.getElementById('delayMin').value)||120,
         delayMax: parseInt(document.getElementById('delayMax').value)||180,
@@ -576,17 +504,13 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
         horarioInicio: document.getElementById('horarioInicio').value||"08:00"
       };
       localStorage.setItem(EVO_CONFIG_KEY, JSON.stringify(obj));
-      notify('Configurações salvas com sucesso');
+      notify('Parâmetros salvos localmente');
     }
 
-    function getChips() {
-      try { return JSON.parse(localStorage.getItem(CHIPS_KEY)) || []; } catch(e) { return []; }
-    }
+    function getChips() { try { return JSON.parse(localStorage.getItem(CHIPS_KEY)) || []; } catch(e){return [];} }
     function saveChips(arr) { localStorage.setItem(CHIPS_KEY, JSON.stringify(arr)); renderizarChipsList(); updateChipSelectors(); }
 
-    function getRamosRules() {
-      try { return JSON.parse(localStorage.getItem(RAMOS_KEY)) || RAMOS_DEFAULT; } catch(e) { return RAMOS_DEFAULT; }
-    }
+    function getRamosRules() { try { return JSON.parse(localStorage.getItem(RAMOS_KEY)) || RAMOS_DEFAULT; } catch(e){return RAMOS_DEFAULT;} }
     function saveRamosRules(arr) { localStorage.setItem(RAMOS_KEY, JSON.stringify(arr)); renderizarRamosTable(); }
 
     function toggleSidebar() {
@@ -596,343 +520,240 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
     }
 
     function switchTab(tab) {
-      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       document.getElementById(`tab-${tab}`).classList.add('active');
       document.getElementById(`nav-${tab}`).classList.add('active');
     }
 
     function updateChipSelectors() {
       const sel = document.getElementById('seletor-chip-fila');
-      const val = sel.value;
-      sel.innerHTML = '';
+      const val = sel.value; sel.innerHTML = '';
       getChips().forEach(c => {
-        const o = document.createElement('option');
-        o.value = c.id; o.innerText = c.nome || c.instance;
+        const o = document.createElement('option'); o.value = c.id; o.innerText = c.nome || c.instance;
         sel.appendChild(o);
       });
       if (val) sel.value = val;
     }
 
-    // Gerenciador Local da Fila de Validação
     function carregarFilaValidacaoLocal() {
-      try { empresasValidacao = JSON.parse(localStorage.getItem('prospeccao_fila_validacao_temp')) || []; } catch(e) { empresasValidacao = []; }
+      try { empresasValidacao = JSON.parse(localStorage.getItem('prospeccao_fila_validacao_temp')) || []; } catch(e){empresasValidacao=[];}
       atualizarInterfaceValidacao();
     }
     function salvarFilaValidacaoLocal() {
       localStorage.setItem('prospeccao_fila_validacao_temp', JSON.stringify(empresasValidacao));
       atualizarInterfaceValidacao();
     }
+    function limparFilaValidacaoLocal() {
+      if(confirm('Deseja limpar todos os leads importados da tabela?')) { empresasValidacao = []; salvarFilaValidacaoLocal(); }
+    }
 
     function atualizarInterfaceValidacao() {
       document.getElementById('count-validacao').innerText = empresasValidacao.length;
       document.getElementById('btn-validar-tudo').disabled = !empresasValidacao.length;
-      
-      const hasValidados = empresasValidacao.some(e => e.numStatus === 'existe' || e.numStatus === 'nao_existe');
-      document.getElementById('btn-enviar-fila').disabled = !hasValidados;
-
+      const temValidados = empresasValidacao.some(e => e.numStatus === 'existe');
+      document.getElementById('btn-enviar-fila').disabled = !temValidados;
       renderizarTabelaValidacao();
     }
 
     function renderizarTabelaValidacao() {
-      const tbody = document.querySelector('#table-validacao tbody');
-      tbody.innerHTML = '';
-
+      const tbody = document.querySelector('#table-validacao tbody'); tbody.innerHTML = '';
       if (!empresasValidacao.length) {
-        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text2); text-align:center; padding:40px;">Nenhum registro carregado na fila de validação local</td></tr>`;
-        document.getElementById('pagination-validacao').innerHTML = '';
-        return;
+        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text2); text-align:center; padding:32px;">Nenhum registro na fila de validação. Importe um arquivo Excel do Apify.</td></tr>`;
+        document.getElementById('pagination-validacao').innerHTML = ''; return;
       }
-
       const totalPages = Math.ceil(empresasValidacao.length / validacaoPageSize);
       if (validacaoPage > totalPages) validacaoPage = Math.max(1, totalPages);
-
       const start = (validacaoPage - 1) * validacaoPageSize;
-      const end = start + validacaoPageSize;
-      const subset = empresasValidacao.slice(start, end);
+      const subset = empresasValidacao.slice(start, start + validacaoPageSize);
 
       subset.forEach((emp, i) => {
         const globalIdx = start + i;
         const tr = document.createElement('tr');
-        
-        let statusClass = '';
-        if (emp.numStatus === 'existe') statusClass = 'status-whatsapp-exists';
-        if (emp.numStatus === 'nao_existe') statusClass = 'status-whatsapp-not-exists';
-        if (statusClass) tr.className = statusClass;
+        if (emp.numStatus && emp.numStatus !== 'pendente') tr.className = `status-${emp.numStatus}`;
 
-        let badgeStatus = `<span class="badge badge-neutral">Não verificado</span>`;
-        if (emp.numStatus === 'existe') badgeStatus = `<span class="badge badge-success">WhatsApp OK</span>`;
-        if (emp.numStatus === 'nao_existe') badgeStatus = `<span class="badge badge-error">Sem WhatsApp</span>`;
-        if (emp.numStatus === 'processando') badgeStatus = `<span class="badge badge-accent"><div class="spinner" style="width:10px; height:10px; border-width:1px; margin-right:4px; display:inline-block; vertical-align:middle;"></div>Buscando...</span>`;
+        let bStatus = `<span class="badge badge-neutral">Não Verificado</span>`;
+        if (emp.numStatus==='existe') bStatus=`<span class="badge badge-success">WhatsApp Ok</span>`;
+        if (emp.numStatus==='nao_existe') bStatus=`<span class="badge badge-error">Sem WhatsApp</span>`;
+        if (emp.numStatus==='processando') bStatus=`<span class="badge badge-accent">Validando...</span>`;
 
         tr.innerHTML = `
-          <td><strong>${emp.nome || '-'}</strong><br><span style="color:var(--text2); font-size:11px;">${emp.site || 'Sem site'}</span></td>
-          <td>${emp.whatsapp || '-'}</td>
-          <td><span class="badge badge-neutral">${emp.ramo || 'Geral'}</span></td>
-          <td>${badgeStatus}</td>
+          <td><strong>${emp.nome||'-'}</strong><br><span style="color:var(--text2); font-size:11px;">${emp.site||'Sem site'}</span></td>
+          <td>${emp.whatsapp||'-'}</td>
+          <td><span class="badge badge-neutral">${emp.ramo||'Geral'}</span></td>
+          <td>${bStatus}</td>
           <td style="text-align:center;"><button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removerEmpresaValidacao(${globalIdx})">✕</button></td>
         `;
         tbody.appendChild(tr);
       });
-
       renderizarPaginadorValidacao(totalPages);
     }
 
     function renderizarPaginadorValidacao(totalPages) {
       const pag = document.getElementById('pagination-validacao');
-      pag.innerHTML = `<div>Exibindo de ${Math.min(empresasValidacao.length, (validacaoPage-1)*validacaoPageSize+1)} a ${Math.min(empresasValidacao.length, validacaoPage*validacaoPageSize)} de ${empresasValidacao.length} registros</div>`;
-      
-      const btnGroup = document.createElement('div');
-      btnGroup.style.display = 'flex'; btnGroup.style.gap = '6px';
-
-      const prev = document.createElement('button'); prev.className = "btn btn-secondary"; prev.style.padding = "4px 10px"; prev.innerText = "←"; prev.disabled = validacaoPage === 1;
-      prev.onclick = () => { validacaoPage--; renderizarTabelaValidacao(); };
-      
-      const next = document.createElement('button'); next.className = "btn btn-secondary"; next.style.padding = "4px 10px"; next.innerText = "→"; next.disabled = validacaoPage === totalPages;
-      next.onclick = () => { validacaoPage++; renderizarTabelaValidacao(); };
-
-      btnGroup.appendChild(prev);
-      btnGroup.appendChild(next);
-      pag.appendChild(btnGroup);
+      pag.innerHTML = `<div>Mostrando ${Math.min(empresasValidacao.length, (validacaoPage-1)*validacaoPageSize+1)}-${Math.min(empresasValidacao.length, validacaoPage*validacaoPageSize)} de ${empresasValidacao.length}</div>`;
+      const g = document.createElement('div'); g.style.display='flex'; g.style.gap='4px';
+      const p = document.createElement('button'); p.className="btn btn-secondary"; p.style.padding="4px 8px"; p.innerText="←"; p.disabled=(validacaoPage===1); p.onclick=()=>{validacaoPage--; renderizarTabelaValidacao();};
+      const n = document.createElement('button'); n.className="btn btn-secondary"; n.style.padding="4px 8px"; n.innerText="→"; n.disabled=(validacaoPage===totalPages); n.onclick=()=>{validacaoPage++; renderizarTabelaValidacao();};
+      g.appendChild(p); g.appendChild(n); pag.appendChild(g);
     }
 
-    function removerEmpresaValidacao(idx) {
-      empresasValidacao.splice(idx, 1);
-      salvarFilaValidacaoLocal();
-    }
+    function removerEmpresaValidacao(idx) { empresasValidacao.splice(idx, 1); salvarFilaValidacaoLocal(); }
 
-    // Leitura e Parser do Arquivo Excel do Apify
     function handleFileSelect(e) {
-      const file = e.target.files[0];
-      if (!file) return;
+      const file = e.target.files[0]; if (!file) return;
       const reader = new FileReader();
       reader.onload = function(evt) {
-        const data = evt.target.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
-        
-        processarPlanilhaBrutaApify(rows);
+        const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        processarPlanilhaApify(rows);
       };
-      reader.readAsBinaryString(file);
-      e.target.value = '';
+      reader.readAsBinaryString(file); e.target.value = '';
     }
 
-    function processarPlanilhaBrutaApify(rows) {
-      const regras = getRamosRules();
-      const novasEmpresas = [];
-
+    function processarPlanilhaApify(rows) {
+      const regras = getRamosRules(); const novos = [];
       rows.forEach((row, i) => {
         let fone = row.phone || row.Phone || row.whatsapp || row.telefone || '';
         let site = row.site || row.Site || row.website || row.Website || '';
         let nome = row.title || row.Title || row.name || row.Name || '';
         let textoBusca = ((row.categoryName || '') + ' ' + (row.subcategories || '') + ' ' + (row.description || '') + ' ' + nome).toLowerCase();
-
         if (!fone) return;
 
-        let ramoIdentificado = 'Geral';
+        let ramo = 'Geral';
         for (const r of regras) {
-          const match = r.keywords.some(k => textoBusca.includes(k.toLowerCase()));
-          if (match) { ramoIdentificado = r.nome; break; }
+          if (r.keywords.some(k => textoBusca.includes(k.toLowerCase()))) { ramo = r.nome; break; }
         }
-
-        novasEmpresas.push({
-          id: 'emp_' + Date.now() + '_' + i,
-          nome: nome,
-          site: site,
-          whatsapp: fone.toString(),
-          ramo: ramoIdentificado,
-          numStatus: 'pendente'
-        });
+        novos.push({ id: 'emp_'+Date.now()+'_'+i, nome, site, whatsapp: fone.toString(), ramo, numStatus: 'pendente' });
       });
-
-      empresasValidacao = empresasValidacao.concat(novasEmpresas);
-      validacaoPage = 1;
-      salvarFilaValidacaoLocal();
-      notify(`✓ Carregados +${novasEmpresas.length} registros para validação`);
+      empresasValidacao = empresasValidacao.concat(novos); validacaoPage = 1; salvarFilaValidacaoLocal();
+      notify(`+${novos.length} empresas carregadas com sucesso`);
     }
 
-    // Comunicação com Proxy de Validação Server-Side
     async function validarFilaInteiraWhatsApp() {
-      const chips = getChips();
-      if (!chips.length) { notify('Cadastre e selecione ao menos um chip ativo nas configurações','err'); return; }
-      
-      const activeChip = chips.find(c => c.id === document.getElementById('seletor-chip-fila').value) || chips[0];
+      const chipId = document.getElementById('seletor-chip-fila').value;
+      const activeChip = getChips().find(c => c.id === chipId);
+      if(!activeChip) { notify('Cadastre e selecione um chip antes','err'); return; }
       const pendentes = empresasValidacao.filter(e => e.numStatus === 'pendente');
-      
-      if (!pendentes.length) { notify('Nenhum lead com status pendente para validar','err'); return; }
+      if(!pendentes.length) { notify('Nenhum lead pendente de validação','err'); return; }
 
-      notify(`Iniciando validação de ${pendentes.length} números via Evolution API...`);
-
-      // Quebra requisições em lotes simples de 20 para evitar gargalos na Evolution
+      document.getElementById('loading-validacao').style.display='flex';
       const chunk = 20;
-      for (let i = 0; i < pendentes.length; i += chunk) {
-        const lote = pendentes.slice(i, i + chunk);
-        lote.forEach(e => e.numStatus = 'processando');
-        atualizarInterfaceValidacao();
-
-        const numbersArray = lote.map(e => e.whatsapp.replace(/\D/g, ''));
+      for(let i=0; i<pendentes.length; i+=chunk) {
+        const lote = pendentes.slice(i, i+chunk);
+        lote.forEach(e => e.numStatus = 'processando'); renderizarTabelaValidacao();
+        const numbers = lote.map(e => e.whatsapp.replace(/\D/g,''));
 
         try {
           const res = await fetch('/api/prospeccao/validar-numero', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              numbers: numbersArray,
-              chipUrl: activeChip.url,
-              instance: activeChip.instance,
-              apikey: activeChip.key
-            })
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ numbers, chipUrl: activeChip.url, instance: activeChip.instance, apikey: activeChip.key })
           });
-
-          if (!res.ok) throw new Error();
-          const results = await res.json();
-
+          if(!res.ok) throw new Error();
+          const data = await res.json();
           lote.forEach(emp => {
-            const cleanNum = emp.whatsapp.replace(/\D/g, '');
-            const match = results.find(r => r.number === cleanNum || r.jid?.includes(cleanNum));
+            const clean = emp.whatsapp.replace(/\D/g,'');
+            const match = data.find(r => r.number === clean || r.jid?.includes(clean));
             emp.numStatus = (match && match.exists) ? 'existe' : 'nao_existe';
-            if (match && match.jid) emp.whatsapp = match.jid.split('@')[0];
+            if(match && match.jid) emp.whatsapp = match.jid.split('@')[0];
           });
-
-        } catch (err) {
-          lote.forEach(e => e.numStatus = 'pendente');
-          notify('Falha na resposta de bloco do proxy de validação','err');
+        } catch(err) {
+          lote.forEach(e => e.numStatus = 'pendente'); notify('Erro no proxy de validação','err');
         }
         salvarFilaValidacaoLocal();
       }
+      document.getElementById('loading-validacao').style.display='none';
     }
 
-    // Organização e Distribuição Automatizada da Fila Semanal (Redis e LocalStorage)
     async function jogarValidadosParaFila() {
-      const validados = empresasValidacao.filter(e => e.numStatus === 'existe');
-      if (!validados.length) { notify('Nenhum lead validado com sucesso para agendar','err'); return; }
-
+      const valizados = empresasValidacao.filter(e => e.numStatus === 'existe');
+      if(!valizados.length) return;
       const chipId = document.getElementById('seletor-chip-fila').value;
-      if (!chipId) { notify('Selecione o chip que receberá a fila agendada','err'); return; }
-
-      const payload = validados.map(e => ({
-        id: e.id, nome: e.nome, whatsapp: e.whatsapp, site: e.site, ramo: e.ramo, statusEnvio: 'pendente'
-      }));
+      if(!chipId) { notify('Selecione um chip para o agendamento','err'); return; }
 
       try {
         const res = await fetch('/api/prospeccao/fila', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chip: chipId, empresas: payload })
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ chip: chipId, empresas: valizados.map(e => ({ id:e.id, nome:e.nome, whatsapp:e.whatsapp, site:e.site, ramo:e.ramo, statusEnvio:'pendente' })) })
         });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Erro na persistência do Redis');
-
-        // Remove da validação apenas aqueles que foram agendados na fila com sucesso
-        empresasValidacao = empresasValidacao.filter(e => e.numStatus !== 'existe');
-        salvarFilaValidacaoLocal();
-
-        notify(`✓ Agendados: ${data.adicionadas} leads na fila semanal. Overflow: ${data.overflow}`);
-        renderizarFilaSemanal();
-      } catch (err) {
-        notify(err.message, 'err');
-      }
+        const d = await res.json();
+        if(!res.ok) throw new Error(d.error);
+        empresasValidacao = empresasValidacao.filter(e => e.numStatus !== 'existe'); salvarFilaValidacaoLocal();
+        notify(`✓ Agendados: ${d.adicionadas}. Overflow: ${d.overflow}`); renderizarFilaSemanal();
+      } catch(e){ notify(e.message,'err'); }
     }
 
-    // Calendário e Manipulação da Fila Dinâmica Semanal
-    function getDatasSemanaAtual() {
-      const arr = [];
-      const hoje = new Date();
-      const currentDay = hoje.getDay(); // dom=0, seg=1...
-      const startSeg = new Date(hoje);
-      startSeg.setDate(hoje.getDate() - (currentDay === 0 ? 6 : currentDay - 1));
-
+    function getDatasSemana() {
+      const arr = []; const hoje = new Date(); const current = hoje.getDay();
+      const startSeg = new Date(hoje); startSeg.setDate(hoje.getDate() - (current === 0 ? 6 : current - 1));
       for(let i=0; i<6; i++) {
         const d = new Date(startSeg); d.setDate(startSeg.getDate() + i);
-        const diaStr = String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
-        arr.push({ label: ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][i], dataStr: diaStr });
+        arr.push({ label: ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][i], str: String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear() });
       }
       return arr;
     }
 
     async function renderizarFilaSemanal() {
       const chipId = document.getElementById('seletor-chip-fila').value;
-      const grid = document.getElementById('calendar-grid');
-      grid.innerHTML = '';
+      const grid = document.getElementById('calendar-grid'); grid.innerHTML = '';
+      if(!chipId) { grid.innerHTML='<div style="color:var(--text2); font-size:12px;">Nenhum chip ativo selecionado.</div>'; return; }
       
-      if (!chipId) { grid.innerHTML = `<div style="color:var(--text2); font-size:12px;">Cadastre uma instância ativa para renderizar a matriz de envios</div>`; return; }
+      const dias = getDatasSemana();
+      for (const d of dias) {
+        const col = document.createElement('div'); col.className = 'day-col';
+        if (diaSelecionado === d.str) col.classList.add('active');
 
-      const diasSemana = getDatasSemanaAtual();
-
-      for (const d of diasSemana) {
-        const col = document.createElement('div');
-        col.className = 'day-column';
-        if (diaFilaSelecionado === d.dataStr) col.classList.add('active');
-
-        let totalDia = 0;
+        let total = 0;
         try {
-          const res = await fetch(`/api/prospeccao/fila?chip=${chipId}&dia=${d.dataStr}`);
-          if (res.ok) { const list = await res.json(); totalDia = list.length; }
+          const res = await fetch(`/api/prospeccao/fila?chip=${chipId}&dia=${d.str}`);
+          if(res.ok) { const list = await res.json(); total = list.length; }
         } catch(e){}
 
-        col.innerHTML = `
-          <div class="day-header"><span>${d.label}</span><span class="day-counter" id="badge-dia-${d.dataStr.replace(/\//g,'-')}">${totalDia}/60</span></div>
-          <div style="font-size:11px; color:var(--text2); margin-top:auto;">${d.dataStr}</div>
-        `;
-
+        col.innerHTML = `<div class="day-title"><span>${d.label}</span><span class="day-count">${total}/60</span></div><div style="font-size:11px; color:var(--text2); margin-top:auto;">${d.str}</div>`;
         col.onclick = () => {
-          diaFilaSelecionado = d.dataStr;
-          document.querySelectorAll('.day-column').forEach(el => el.classList.remove('active'));
-          col.classList.add('active');
-          carregarDetalhesFilaDia(chipId, d.dataStr, d.label);
+          diaSelecionado = d.str; document.querySelectorAll('.day-col').forEach(el=>el.classList.remove('active')); col.classList.add('active');
+          carregarDetalhesDia(chipId, d.str, d.label);
         };
-
         grid.appendChild(col);
       }
-
-      if (diaFilaSelecionado) {
-        const activeData = diasSemana.find(d => d.dataStr === diaFilaSelecionado);
-        if (activeData) carregarDetalhesFilaDia(chipId, activeData.dataStr, activeData.label);
+      if (diaSelecionado) {
+        const act = dias.find(d=>d.str===diaSelecionado);
+        if(act) carregarDetalhesDia(chipId, act.str, act.label);
       }
     }
 
-    async function carregarDetalhesFilaDia(chipId, dia, label) {
-      document.getElementById('titulo-detalhe-dia').innerText = `${label} — Fila do Dia`;
-      document.getElementById('sub-detalhe-dia').innerText = `Data de processamento: ${dia} | Chip Operador Ativo`;
-
+    async function carregarDetalhesDia(chipId, dia, label) {
+      document.getElementById('titulo-detalhe-dia').innerText = `${label} — Agendamento`;
+      document.getElementById('sub-detalhe-dia').innerText = `Data Alvo: ${dia} | Controle Operacional`;
+      
+      ['btn-add-manual','btn-xlsx-dia','btn-limpar-dia','btn-disparar-dia'].forEach(id => document.getElementById(id).disabled = false);
       const tbody = document.querySelector('#table-fila-dia tbody');
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:30px;"><div class="spinner" style="display:inline-block;"></div> Carregando do banco...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:24px;"><div class="spinner" style="display:inline-block"></div> Buscando dados no Redis...</td></tr>`;
 
       try {
         const res = await fetch(`/api/prospeccao/fila?chip=${chipId}&dia=${dia}`);
-        if (!res.ok) throw new Error();
-        const empresas = await res.json();
+        const list = await res.json(); tbody.innerHTML = '';
+        if(!list.length) { tbody.innerHTML=`<tr><td colspan="4" style="color:var(--text2); text-align:center; padding:32px;">Nenhum lead escalado para este dia útil.</td></tr>`; return; }
 
-        tbody.innerHTML = '';
-        if (!empresas.length) {
-          tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text2); text-align:center; padding:40px;">Nenhum lead agendado para este dia útil</td></tr>`;
-          return;
-        }
-
-        empresas.forEach(emp => {
+        list.forEach(emp => {
           const tr = document.createElement('tr');
-          let bStatus = `<span class="badge badge-neutral">Aguardando Horário</span>`;
-          if (emp.statusEnvio === 'enviado') bStatus = `<span class="badge badge-success">Enviado</span>`;
-          if (emp.statusEnvio === 'erro') bStatus = `<span class="badge badge-error">Falhou</span>`;
+          let b = `<span class="badge badge-neutral">Aguardando</span>`;
+          if(emp.statusEnvio==='enviado') b=`<span class="badge badge-success">Enviado</span>`;
+          if(emp.statusEnvio==='erro') b=`<span class="badge badge-error">Falhou</span>`;
 
           tr.innerHTML = `
-            <td><strong>${emp.nome}</strong><br><span style="color:var(--text2); font-size:11px;">${emp.site || 'Sem link'}</span></td>
+            <td><strong>${emp.nome}</strong><br><span style="color:var(--text2); font-size:11px;">${emp.site||'Sem link'}</span></td>
             <td>${emp.whatsapp}</td>
-            <td>${bStatus}</td>
-            <td style="text-align:center;"><button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removerLeadFilaDia('${chipId}','${dia}','${emp.id}')">✕</button></td>
+            <td>${b}</td>
+            <td style="text-align:center;"><button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removerLeadFila('${chipId}','${dia}','${emp.id}')">✕</button></td>
           `;
           tbody.appendChild(tr);
         });
-
-      } catch(e) {
-        tbody.innerHTML = `<tr><td colspan="4" style="color:var(--error); text-align:center; padding:20px;">Erro ao ler registros da fila de envio</td></tr>`;
-      }
+      } catch(e){ tbody.innerHTML=`<tr><td colspan="4" style="color:var(--error); text-align:center; padding:16px;">Erro ao ler fila do Redis</td></tr>`; }
     }
 
-    async function removerLeadFilaDia(chip, dia, id) {
-      if(!confirm('Deseja remover este lead do agendamento?')) return;
+    async function removerLeadFila(chip, dia, id) {
+      if(!confirm('Remover este lead do agendamento?')) return;
       try {
         const res = await fetch(`/api/prospeccao/fila?chip=${chip}&dia=${dia}&id=${id}`, { method:'DELETE' });
         if(res.ok) { notify('Lead removido'); renderizarFilaSemanal(); }
@@ -940,120 +761,118 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
     }
 
     async function limparFilaDoDia() {
-      if(!diaFilaSelecionado || !confirm('Limpar toda a fila agendada para este dia específico?')) return;
+      if(!diaSelecionado || !confirm('Limpar toda a fila agendada deste dia?')) return;
       const chip = document.getElementById('seletor-chip-fila').value;
       try {
-        const res = await fetch(`/api/prospeccao/fila?chip=${chip}&dia=${diaFilaSelecionado}`);
+        const res = await fetch(`/api/prospeccao/fila?chip=${chip}&dia=${diaSelecionado}`);
         if(res.ok) {
           const list = await res.json();
-          for(const emp of list) {
-            await fetch(`/api/prospeccao/fila?chip=${chip}&dia=${diaFilaSelecionado}&id=${emp.id}`, { method:'DELETE' });
-          }
-          notify('✓ Fila do dia limpa');
-          renderizarFilaSemanal();
+          for(const e of list) { await fetch(`/api/prospeccao/fila?chip=${chip}&dia=${diaSelecionado}&id=${e.id}`, { method:'DELETE' }); }
+          notify('Fila limpa'); renderizarFilaSemanal();
         }
       } catch(e){}
     }
 
-    // Exportação para Planilha Auxiliar de Leads Sem Site
     function exportarFilaSemSite() {
-      const sSite = empresasValidacao.filter(e => !e.site || e.site.trim() === '');
-      if(!sSite.length) { notify('Nenhum lead detectado sem site na validação atual','err'); return; }
-
-      const rowsExcel = sSite.map(e => ({ Empresa: e.nome, Telefone: e.whatsapp, Segmento: e.ramo }));
-      const ws = XLSX.utils.json_to_sheet(rowsExcel);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Sem Site");
-      XLSX.writeFile(wb, `leads-sem-site-${Date.now()}.xlsx`);
-      notify(' Planilha exportada com sucesso!');
+      const sem = empresasValidacao.filter(e => !e.site || e.site.trim()==='');
+      if(!sem.length) { notify('Nenhum lead sem site localizado','err'); return; }
+      const ws = XLSX.utils.json_to_sheet(sem.map(e => ({ Empresa: e.nome, Telefone: e.whatsapp, Segmento: e.ramo })));
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Sem Site");
+      XLSX.writeFile(wb, `leads-sem-site.xlsx`); notify('Planilha baixada');
     }
 
-    // Engine de Disparos em Bloco Server-Side
+    async function baixarPlanilhaDoDia() {
+      const chip = document.getElementById('seletor-chip-fila').value;
+      if(!chip || !diaSelecionado) return;
+      try {
+        const res = await fetch(`/api/prospeccao/fila?chip=${chip}&dia=${diaSelecionado}`);
+        const list = await res.json();
+        const ws = XLSX.utils.json_to_sheet(list.map(e=>({ Empresa:e.nome, Telefone:e.whatsapp, Site:e.site||'', Status:e.statusEnvio||'' })));
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Fila do Dia");
+        XLSX.writeFile(wb, `fila-${diaSelecionado.replace(/\//g,'-')}.xlsx`);
+      } catch(e){}
+    }
+
+    function abrirModalManual() { document.getElementById('manual-modal').classList.add('open'); }
+    function fecharModalManual() { document.getElementById('manual-modal').classList.remove('open'); }
+    async function salvarLeadManual() {
+      const nome = document.getElementById('m-nome').value.trim();
+      const whatsapp = document.getElementById('m-phone').value.trim();
+      const site = document.getElementById('m-site').value.trim();
+      const ramo = document.getElementById('m-ramo').value.trim();
+      if(!nome || !whatsapp) { notify('Nome e Telefone são obrigatórios','err'); return; }
+
+      const chipId = document.getElementById('seletor-chip-fila').value;
+      try {
+        const res = await fetch('/api/prospeccao/fila', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ chip: chipId, empresas: [{ id:'man_'+Date.now(), nome, whatsapp, site, ramo, statusEnvio:'pendente' }], forcarDia: diaSelecionado })
+        });
+        if(res.ok) { notify('Lead manual agendado'); fecharModalManual(); renderizarFilaSemanal(); }
+      } catch(e){}
+    }
+
     async function dispararFilaDoDia() {
       const chipId = document.getElementById('seletor-chip-fila').value;
-      if (!chipId || !diaFilaSelecionado) { notify('Selecione um chip e um dia ativo para disparar','err'); return; }
-
-      const logPanel = document.getElementById('terminal-logs');
-      logPanel.innerHTML = `<div class="log-line info">[SISTEMA] Coletando fila agendada para ${diaFilaSelecionado}...</div>`;
+      if(!chipId || !diaSelecionado) return;
+      const term = document.getElementById('console-logs');
+      term.innerHTML = `<div class="console-line info">[SISTEMA] Coletando leads pendentes para ${diaSelecionado}...</div>`;
 
       try {
-        const resFila = await fetch(`/api/prospeccao/fila?chip=${chipId}&dia=${diaFilaSelecionado}`);
-        if(!resFila.ok) throw new Error();
-        const leads = await resFila.filter(e => e.statusEnvio !== 'enviado');
+        const res = await fetch(`/api/prospeccao/fila?chip=${chipId}&dia=${diaSelecionado}`);
+        const list = await res.json();
+        const pendentes = list.filter(e => e.statusEnvio !== 'enviado');
+        if(!pendentes.length) { term.innerHTML+=`<div class="console-line success">[CONCLUÍDO] Fila 100% batida e enviada!</div>`; return; }
 
-        if(!leads.length) {
-          logPanel.innerHTML += `<div class="log-line success">[CONCLUÍDO] Nenhum lead pendente de envio para este dia!</div>`;
-          return;
-        }
-
-        logPanel.innerHTML += `<div class="log-line info">[SISTEMA] Iniciando lote de ${leads.length} disparos...</div>`;
+        term.innerHTML += `<div class="console-line info">[SISTEMA] Iniciando barramento de automação server-side...</div>`;
         const cfg = loadEvoConfig();
 
-        // Faz a chamada unificada ao proxy de automação server-side
-        const resDisparo = await fetch('/api/prospeccao/disparo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const resDisp = await fetch('/api/prospeccao/disparo', {
+          method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
-            chipId: chipId,
-            empresas: leads.map(l => ({
-              id: l.id, nome: l.nome, whatsapp: l.whatsapp,
-              mensagem: `Olá ${l.nome}, tudo bem? Identificamos seu contato buscando por serviços no segmento de ${l.ramo || 'Geral'}.`,
-              linkSite: l.site
-            })),
-            delayMinSeg: cfg.delayMin || 15,
-            delayMaxSeg: cfg.delayMax || 30,
-            msgDelaySeg: 5
+            chipId,
+            delayMinSeg: cfg.delayMin||15, delayMaxSeg: cfg.delayMax||30, msgDelaySeg: 4,
+            empresas: pendentes.map(l => ({
+              id: l.id, nome: l.nome, whatsapp: l.whatsapp, linkSite: l.site,
+              mensagem: `Olá ${l.nome}, tudo bem? Notei sua presença digital no segmento de ${l.ramo||'Serviços'}.`
+            }))
           })
         });
 
-        const dataRes = await resDisparo.json();
-        if(dataRes.results) {
-          dataRes.results.forEach(async (r) => {
-            const lClass = r.status === 'enviado' ? 'success' : 'error';
-            logPanel.innerHTML += `<div class="log-line ${lClass}">[${r.status.toUpperCase()}] ${r.nome}: ${r.error || 'Mensagens entregues'}</div>`;
-            
-            // Atualiza o status do lead individual no banco Redis
+        const rData = await resDisp.json();
+        if(rData.results) {
+          for(const r of rData.results) {
+            const cl = r.status==='enviado'?'success':'error';
+            term.innerHTML += `<div class="console-line ${cl}">[${r.status.toUpperCase()}] ${r.nome}: ${r.error||'Entregue com sucesso'}</div>`;
             await fetch('/api/prospeccao/fila', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ chip: chipId, dia: diaFilaSelecionado, id: r.id, updates: { statusEnvio: r.status } })
+              method:'PATCH', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ chip: chipId, dia: diaSelecionado, id: r.id, updates: { statusEnvio: r.status } })
             });
-          });
-          
-          setTimeout(() => { renderizarFilaSemanal(); }, 2000);
+          }
+          renderizarFilaSemanal();
         }
-
-      } catch(e) {
-        logPanel.innerHTML += `<div class="log-line error">[CRÍTICO] Falha na comunicação com o microsserviço de disparo back-end.</div>`;
-      }
+      } catch(e){ term.innerHTML+=`<div class="console-line error">[CRÍTICO] Falha no micro-serviço backend da Vercel.</div>`; }
     }
 
-    // CRUD: Chips Operadores
     function renderizarChipsList() {
-      const container = document.getElementById('chips-container-list');
-      container.innerHTML = '';
+      const container = document.getElementById('chips-list'); container.innerHTML = '';
       const list = getChips();
-
-      if (!list.length) {
-        container.innerHTML = `<div style="color:var(--text2); font-size:12px; padding:20px 0;">Nenhuma instância cadastrada. Preencha o formulário acima.</div>`;
-        return;
-      }
+      if(!list.length) { container.innerHTML='<div style="color:var(--text2); font-size:12px;">Nenhum operador configurado.</div>'; return; }
 
       list.forEach(c => {
-        const card = document.createElement('div');
-        card.className = 'chip-card';
+        const card = document.createElement('div'); card.className = 'chip-card';
         card.innerHTML = `
           <div class="chip-header">
             <div>
-              <div class="chip-title">${c.nome || c.instance}</div>
-              <div class="chip-subtitle">Instância: ${c.instance}</div>
+              <div class="chip-title">${c.nome||c.instance}</div>
+              <div class="chip-subtitle">Slug: ${c.instance}</div>
             </div>
-            <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deletarChipOperador('${c.id}')">🗑️</button>
+            <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deletarChip('${c.id}')">🗑️</button>
           </div>
-          <div style="font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${c.url}</div>
-          <div class="chip-footer">
-            <button class="btn btn-secondary" style="flex:1; padding:6px; font-size:11px;" onclick="buscarQrCodeInstancia('${c.id}')">🔗 QR Code</button>
-            <button class="btn btn-secondary" style="flex:1; padding:6px; font-size:11px;" onclick="testarConexaoInstancia('${c.id}')">🔄 Status</button>
+          <div style="font-size:11px; color:var(--text2); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${c.url}</div>
+          <div class="chip-actions">
+            <button class="btn btn-secondary" style="flex:1; padding:4px; font-size:11px;" onclick="verQrCode('${c.id}')">🔗 QR Code</button>
+            <button class="btn btn-secondary" style="flex:1; padding:4px; font-size:11px;" onclick="verStatus('${c.id}')">🔄 Conexão</button>
           </div>
         `;
         container.appendChild(card);
@@ -1061,130 +880,95 @@ tr.status-whatsapp-not-exists td { color: var(--muted); }
       updateChipSelectors();
     }
 
-    async function criarNovoChipOperador() {
-      const nome = document.getElementById('chip-nome-input').value.trim();
-      const url = document.getElementById('chip-url-input').value.trim();
-      const inst = document.getElementById('chip-instance-input').value.trim();
-      const key = document.getElementById('chip-key-input').value.trim();
-
-      if(!nome || !url || !inst || !key) { notify('Preencha todos os campos do chip','err'); return; }
+    async function criarNovoChip() {
+      const nome = document.getElementById('chip-nome').value.trim();
+      const url = document.getElementById('chip-url').value.trim();
+      const instance = document.getElementById('chip-instance').value.trim();
+      const key = document.getElementById('chip-key').value.trim();
+      if(!nome || !url || !instance || !key) return;
 
       const list = getChips();
-      const payload = { id: 'chip_' + Date.now(), nome, url, instance: inst, key, criadoEm: new Date().toISOString() };
-      
+      const payload = { id:'chip_'+Date.now(), nome, url, instance, key, criadoEm:new Date().toISOString() };
       try {
-        const res = await fetch('/api/prospeccao/chips', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if(res.ok) {
-          list.push(payload); saveChips(list);
-          document.getElementById('chip-nome-input').value = '';
-          document.getElementById('chip-url-input').value = '';
-          document.getElementById('chip-instance-input').value = '';
-          document.getElementById('chip-key-input').value = '';
-          notify('✓ Instância salva no Redis com sucesso!');
-        }
+        const res = await fetch('/api/prospeccao/chips', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        if(res.ok) { list.push(payload); saveChips(list); notify('Chip salvo no Redis'); }
       } catch(e){}
     }
 
-    async function deletarChipOperador(id) {
-      if(!confirm('Deseja remover esta instância do sistema?')) return;
+    async function deletarChip(id) {
+      if(!confirm('Remover instância?')) return;
       try {
         const res = await fetch(`/api/prospeccao/chips?id=${id}&deleteEvo=false`, { method:'DELETE' });
-        if(res.ok) {
-          const list = getChips().filter(c => c.id !== id);
-          saveChips(list); notify('Instância deletada');
-        }
+        if(res.ok) { saveChips(getChips().filter(c=>c.id!==id)); }
       } catch(e){}
     }
 
-    async function buscarQrCodeInstancia(id) {
-      document.getElementById('qr-modal').classList.add('open');
-      const box = document.getElementById('qr-modal-content');
-      box.innerHTML = `<div class="spinner"></div><p style="font-size:12px; color:var(--text2);">Requisitando lote de pareamento...</p>`;
-      
-      const chip = getChips().find(c => c.id === id);
+    async function verQrCode(id) {
+      const modal = document.getElementById('qr-modal'); modal.classList.add('open');
+      const body = document.getElementById('qr-modal-body'); body.innerHTML = '<div class="spinner"></div>';
       try {
         const res = await fetch(`/api/prospeccao/chips?id=${id}&action=qr`);
-        const data = await res.json();
-        if(data.base64) {
-          box.innerHTML = `<img src="${data.base64}" alt="QR Code" style="width:240px; height:240px; border:4px solid white; border-radius:4px;"/>
-          <p style="font-size:11px; color:var(--text2); text-align:center;">Abra o WhatsApp > Aparelhos conectados > Conectar um aparelho.</p>`;
-        } else {
-          box.innerHTML = `<p style="color:var(--success); font-weight:500;">Instância já se encontra conectada no WhatsApp!</p>`;
-        }
-      } catch(e){ box.innerHTML = `<p style="color:var(--error);">Erro ao buscar QR Code da Evolution API.</p>`; }
+        const d = await res.json();
+        if(d.base64) body.innerHTML = `<img src="${d.base64}" style="width:200px; height:200px; border:4px solid white;"/><p style="font-size:11px; color:var(--text2)">Escaneie via WhatsApp Web</p>`;
+        else body.innerHTML = `<p style="color:var(--success)">WhatsApp Conectado e Ativo!</p>`;
+      } catch(e){ body.innerHTML='<p style="color:var(--error)">Erro ao ler Evolution</p>'; }
     }
-    function fecharModalQrCode() { document.getElementById('qr-modal').classList.remove('open'); }
+    function fecharModalQr() { document.getElementById('qr-modal').classList.remove('open'); }
 
-    async function testarConexaoInstancia(id) {
-      notify('Verificando status de conexão...');
+    async function verStatus(id) {
+      notify('Checando pareamento...');
       try {
         const res = await fetch(`/api/prospeccao/chips?id=${id}&action=status`);
-        const data = await res.json();
-        if(data.status === 'open') notify('✓ Instância ON e conectada com sucesso!', 'success');
-        else notify('Instância desconectada ou em espera de QR Code', 'err');
-      } catch(e){ notify('Falha ao obter status do servidor','err'); }
+        const d = await res.json();
+        if(d.status==='open') notify('✓ Instância Conectada!', 'success');
+        else notify('Desconectada ou em espera', 'err');
+      } catch(e){}
     }
 
-    // CRUD: Ramos e Palavras-Chave de Identificação
     function renderizarRamosTable() {
-      const tbody = document.querySelector('#table-ramos tbody');
-      tbody.innerHTML = '';
-      getRamosRules().forEach((r, i) => {
+      const tbody = document.querySelector('#table-ramos tbody'); tbody.innerHTML = '';
+      getRamosRules().forEach(r => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><strong>${r.nome}</strong></td>
-          <td style="color:var(--text2); font-size:11px; max-width:400px; overflow:hidden; text-overflow:ellipsis;">${r.keywords.join(', ')}</td>
-          <td style="text-align:center;"><button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deletarRamoFiltro('${r.id}')">🗑️</button></td>
-        `;
+        tr.innerHTML = `<td><strong>${r.nome}</strong></td><td style="color:var(--text2); font-size:11px;">${r.keywords.join(', ')}</td><td style="text-align:center;"><button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deletarRamo('${r.id}')">🗑️</button></td>`;
         tbody.appendChild(tr);
       });
     }
 
-    async function criarNovoRamoFiltro() {
-      const nome = document.getElementById('ramo-nome-input').value.trim();
-      const keysStr = document.getElementById('ramo-keys-input').value.trim();
-      if(!nome || !keysStr) { notify('Preencha os campos de ramo comercial','err'); return; }
-
-      const keywords = keysStr.split(',').map(k => k.trim()).filter(Boolean);
-      const list = getRamosRules();
-      const payload = { id: 'ramo_' + Date.now(), nome, keywords };
-
+    async function criarNovoRamo() {
+      const nome = document.getElementById('ramo-nome').value.trim();
+      const keysStr = document.getElementById('ramo-keys').value.trim();
+      if(!nome || !keysStr) return;
+      const keywords = keysStr.split(',').map(k=>k.trim()).filter(Boolean);
+      const list = getRamosRules(); const payload = { id:'ramo_'+Date.now(), nome, keywords };
       try {
-        const res = await fetch('/api/prospeccao/ramos', {
-          method:'POST',
-          headers: { 'Content-Type':'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if(res.ok) {
-          list.push(payload); saveRamosRules(list);
-          document.getElementById('ramo-nome-input').value = '';
-          document.getElementById('ramo-keys-input').value = '';
-          notify('✓ Nova regra de matching homologada!');
-        }
+        const res = await fetch('/api/prospeccao/ramos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        if(res.ok) { list.push(payload); saveRamosRules(list); }
       } catch(e){}
     }
 
-    async function deletarRamoFiltro(id) {
-      if(!confirm('Deseja excluir esta regra do sistema?')) return;
+    async function deletarRamo(id) {
       try {
         const res = await fetch(`/api/prospeccao/ramos?id=${id}`, { method:'DELETE' });
-        if(res.ok) {
-          const list = getRamosRules().filter(r => r.id !== id);
-          saveRamosRules(list); notify('Regra removida');
-        }
+        if(res.ok) { saveRamosRules(getRamosRules().filter(r=>r.id!==id)); }
       } catch(e){}
     }
 
-    // Drag over effect handlers legados
+    async function gerarExcelHistoricoGeral() {
+      notify('Consultando histórico anterior...');
+      try {
+        const res = await fetch('/api/prospeccao/empresas?tipo=base');
+        const list = await res.json();
+        if(!list.length) { notify('Nenhum registro histórico no Redis','err'); return; }
+        const ws = XLSX.utils.json_to_sheet(list); const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Histórico Geral"); XLSX.writeFile(wb, 'historico-prospeccao.xlsx');
+      } catch(e){}
+    }
+
     const zone = document.getElementById('drop-zone');
     if(zone) {
-      ['dragenter','dragover'].forEach(n => zone.addEventListener(n, (e)=>{e.preventDefault(); zone.classList.add('dragover');}, false));
-      ['dragleave','drop'].forEach(n => zone.addEventListener(n, (e)=>{e.preventDefault(); zone.classList.remove('dragover');}, false));
-      zone.addEventListener('drop', (e) => { const dt = e.dataTransfer; const files = dt.files; if(files.length) handleFileSelect({target:{files}}); }, false);
+      ['dragenter','dragover'].forEach(n => zone.addEventListener(n, (e)=>{e.preventDefault(); zone.classList.add('dragover');}));
+      ['dragleave','drop'].forEach(n => zone.addEventListener(n, (e)=>{e.preventDefault(); zone.classList.remove('dragover');}));
+      zone.addEventListener('drop', (e) => { const files = e.dataTransfer.files; if(files.length) handleFileSelect({target:{files}}); });
     }
   </script>
 </body>
