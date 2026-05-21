@@ -244,6 +244,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 /* ══ DISPARO ══ */
 .disparo-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 @media(max-width:900px){.disparo-grid{grid-template-columns:1fr;}}
+@media(max-width:900px){#dualChipGrid{grid-template-columns:1fr !important;}}
 .evo-cfg-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end;}
 .evo-cfg-row .field-group{flex:1;min-width:160px;}
 .field-group{display:flex;flex-direction:column;}
@@ -734,63 +735,120 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 <div class="panel" id="panel-fila-zap">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Fila <span>WhatsApp.</span></div>
-    <div class="page-sub">// 2 chips · 60 por chip por dia · seg a sáb</div>
+    <div class="page-sub">// 2 chips · disparo paralelo · 20 por lote · 1h de delay</div>
   </div>
-  <div class="disparo-grid" style="align-items:start">
-    <div style="display:flex;flex-direction:column">
-      <div class="stretch-card" style="margin-bottom:0">
-        <div class="card-title" style="flex-shrink:0">Chip ativo</div>
-        <div id="filaZapChipTabs" class="chip-tabs" style="margin-bottom:14px;flex-shrink:0"></div>
-        <div class="card-title" style="margin-top:0;flex-shrink:0">Selecionar empresas</div>
-        <div class="day-tabs" id="disparoDayTabs" style="flex-shrink:0"></div>
-        <div class="status-tabs" id="disparoStatusTabs" style="flex-shrink:0"></div>
-        <div class="stats-row" id="disparoStats" style="flex-shrink:0"></div>
-        <div id="disparoEmpresasList" class="stretch-list"></div>
-        <div id="disparoPagination"></div>
-      </div>
+
+  <!-- SELETOR DE EMPRESAS — largura total -->
+  <div class="card" style="flex-shrink:0;margin-bottom:16px">
+    <div class="card-title" style="flex-shrink:0">
+      Selecionar empresas
+      <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">— adicione à fila do chip desejado</span>
     </div>
+    <div class="day-tabs" id="disparoDayTabs" style="flex-shrink:0"></div>
+    <div class="status-tabs" id="disparoStatusTabs" style="flex-shrink:0"></div>
+    <div class="stats-row" id="disparoStats" style="flex-shrink:0"></div>
+    <div id="disparoEmpresasList" class="stretch-list"></div>
+    <div id="disparoPagination"></div>
+  </div>
+
+  <!-- DOIS CHIPS LADO A LADO -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start" id="dualChipGrid">
+
+    <!-- ══ CHIP 1 ══ -->
     <div style="display:flex;flex-direction:column;gap:12px">
-      <!-- Controles de disparo: fixos no topo -->
-      <div class="card" style="flex-shrink:0">
-        <div class="card-title">Disparar</div>
-        <div style="margin-bottom:10px">
-          <label>Chip ativo</label>
-          <div id="disparoChipInfo" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2)">Nenhum chip configurado</div>
+      <div class="card" style="flex-shrink:0;border-color:rgba(184,240,89,0.15)">
+        <div class="card-title" style="color:var(--accent)">
+          Chip 1
+          <span id="chip1Label" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:2px">—</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <label>Chip</label>
+          <div id="chip1Info" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2)">Nenhum chip configurado</div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:10px">
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);padding:7px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);flex:1">
-            Horário: <span id="horarioStatusInline" style="color:var(--accent)">--:--</span>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-danger" onclick="limparFila()">Limpar fila</button>
-          <button class="btn btn-primary" style="flex:1" id="btnDisparar" onclick="iniciarDisparo()">
-            <div class="spinner" id="disparoSpinner"></div>
-            <span id="disparoBtn">🟢 Disparar fila</span>
+          <button class="btn btn-danger" style="font-size:11px" onclick="limparFilaChip(0)">Limpar fila</button>
+          <button class="btn btn-primary" style="flex:1" id="btnDisparar0" onclick="iniciarDisparoChip(0)">
+            <div class="spinner" id="spinner0"></div>
+            <span id="disparoBtn0">🟢 Disparar</span>
           </button>
         </div>
-        <div class="lote-espera-panel" id="loteEsperaPanel">
+        <div class="lote-espera-panel" id="loteEsperaPanel0" style="display:none;margin-top:0">
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <div style="flex:1">
-              <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);margin-bottom:4px" id="loteEsperaTitle">⏱ Aguardando lote...</div>
-              <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">Próximo lote em <span id="loteCountdown" style="color:var(--text2)">--:--</span></div>
+              <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:4px" id="loteEsperaTitle0">⏱ Aguardando lote...</div>
+              <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Próximo lote em <span id="loteCountdown0" style="color:var(--text2)">--:--</span></div>
             </div>
-            <button class="btn btn-ghost" style="font-size:10px;border-color:var(--warning);color:var(--warning)" onclick="cancelarLotes()">✕ Cancelar</button>
-            <button class="btn btn-primary" style="width:auto;font-size:11px" id="btnProximoLote" onclick="confirmarProximoLote()" disabled>Disparar lote →</button>
+            <button class="btn btn-ghost" style="font-size:10px;border-color:var(--warning);color:var(--warning)" onclick="cancelarLotesChip(0)">✕</button>
+            <button class="btn btn-primary" style="width:auto;font-size:11px" id="btnProximoLote0" onclick="confirmarProximoLoteChip(0)" disabled>Próximo →</button>
           </div>
-          <div style="margin-top:10px;background:var(--surface2);border-radius:6px;height:4px;overflow:hidden">
-            <div id="loteProgressBar" style="height:100%;background:var(--accent);width:0%;transition:width 0.5s linear"></div>
+          <div style="margin-top:8px;background:var(--surface2);border-radius:6px;height:3px;overflow:hidden">
+            <div id="loteProgressBar0" style="height:100%;background:var(--accent);width:0%;transition:width 0.5s linear"></div>
           </div>
         </div>
       </div>
-      <!-- Fila: cresce e rola livremente -->
-      <div class="stretch-card" style="min-height:0">
-        <div class="card-title" style="flex-shrink:0">Fila <span id="filaCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(0 empresas)</span></div>
-        <div class="fila-empty" id="filaVazia" style="flex-shrink:0">Nenhuma empresa na fila.</div>
-        <div class="fila-items" id="filaItens" style="display:none;max-height:500px;overflow-y:auto"></div>
+      <div class="card" style="flex-shrink:0;min-height:0">
+        <div class="card-title" style="flex-shrink:0">Fila Chip 1 <span id="filaCount0" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(0 empresas)</span></div>
+        <div id="chip1FilaButtons" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;flex-shrink:0"></div>
+        <div class="fila-empty" id="filaVazia0" style="flex-shrink:0">Nenhuma empresa na fila.</div>
+        <div class="fila-items" id="filaItens0" style="display:none;max-height:420px;overflow-y:auto"></div>
       </div>
-      <div class="disparo-log" id="disparoLog" style="flex-shrink:0"></div>
+      <div class="disparo-log" id="disparoLog0" style="flex-shrink:0"></div>
     </div>
+
+    <!-- ══ CHIP 2 ══ -->
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="card" style="flex-shrink:0;border-color:rgba(91,184,245,0.15)">
+        <div class="card-title" style="color:#5bb8f5">
+          Chip 2
+          <span id="chip2Label" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:2px">—</span>
+        </div>
+        <div style="margin-bottom:12px">
+          <label>Chip</label>
+          <div id="chip2Info" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2)">Nenhum chip configurado</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button class="btn btn-danger" style="font-size:11px" onclick="limparFilaChip(1)">Limpar fila</button>
+          <button class="btn btn-primary" style="flex:1;background:#5bb8f5;color:#0a0a0d" id="btnDisparar1" onclick="iniciarDisparoChip(1)">
+            <div class="spinner" id="spinner1" style="border-top-color:#0a0a0d"></div>
+            <span id="disparoBtn1">🔵 Disparar</span>
+          </button>
+        </div>
+        <div class="lote-espera-panel" id="loteEsperaPanel1" style="display:none;margin-top:0">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div style="flex:1">
+              <div style="font-family:'DM Mono',monospace;font-size:10px;color:#5bb8f5;margin-bottom:4px" id="loteEsperaTitle1">⏱ Aguardando lote...</div>
+              <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Próximo lote em <span id="loteCountdown1" style="color:var(--text2)">--:--</span></div>
+            </div>
+            <button class="btn btn-ghost" style="font-size:10px;border-color:var(--warning);color:var(--warning)" onclick="cancelarLotesChip(1)">✕</button>
+            <button class="btn btn-primary" style="width:auto;font-size:11px;background:#5bb8f5;color:#0a0a0d" id="btnProximoLote1" onclick="confirmarProximoLoteChip(1)" disabled>Próximo →</button>
+          </div>
+          <div style="margin-top:8px;background:var(--surface2);border-radius:6px;height:3px;overflow:hidden">
+            <div id="loteProgressBar1" style="height:100%;background:#5bb8f5;width:0%;transition:width 0.5s linear"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="flex-shrink:0;min-height:0">
+        <div class="card-title" style="flex-shrink:0;color:#5bb8f5">Fila Chip 2 <span id="filaCount1" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(0 empresas)</span></div>
+        <div id="chip2FilaButtons" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;flex-shrink:0"></div>
+        <div class="fila-empty" id="filaVazia1" style="flex-shrink:0">Nenhuma empresa na fila.</div>
+        <div class="fila-items" id="filaItens1" style="display:none;max-height:420px;overflow-y:auto"></div>
+      </div>
+      <div class="disparo-log" id="disparoLog1" style="flex-shrink:0"></div>
+    </div>
+
+  </div>
+
+  <!-- hidden — mantido para compatibilidade com código legado que referencia esses IDs -->
+  <div style="display:none">
+    <div id="filaZapChipTabs"></div>
+    <div id="disparoChipInfo"></div>
+    <div id="horarioStatusInline"></div>
+    <div id="filaCount"></div>
+    <div id="filaVazia"></div>
+    <div id="filaItens"></div>
+    <div id="disparoLog"></div>
+    <div id="loteEsperaPanel"><div id="loteEsperaTitle"></div><span id="loteCountdown"></span><div id="loteProgressBar"></div><button id="btnProximoLote"></button></div>
+    <button id="btnDisparar"><div id="disparoSpinner"></div><span id="disparoBtn"></span></button>
   </div>
 </div>
 
@@ -2870,25 +2928,30 @@ function aprovarParaInsta(id) {
 /* ════════════════════════════
    FILA WHATSAPP — RENDER
 ════════════════════════════ */
+
+
+/* ─── Per-chip state (indexed 0 = Chip1, 1 = Chip2) ─── */
+const chipSlotState = [
+  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null },
+  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null }
+];
+
 function renderFilaZap() {
   const chips = getChips();
   const weekDays = currentWeekDays();
   const today = todayStr();
 
-  // chip tabs
-  document.getElementById('filaZapChipTabs').innerHTML = chips.length
-    ? chips.map(c => `<div class="chip-tab${disparoChipId===c.id?' active':''}" onclick="setDisparoChip('${c.id}')">${escHtml(c.nome)}</div>`).join('')
-    : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">Configure chips em Configurações</span>';
+  // Populate chip panels
+  [0, 1].forEach(slot => {
+    const chip = chips[slot] || null;
+    const infoEl = document.getElementById(`chip${slot+1}Info`);
+    const labelEl = document.getElementById(`chip${slot+1}Label`);
+    if (infoEl) infoEl.textContent = chip ? `${chip.nome} · ${chip.instance}` : 'Nenhum chip configurado';
+    if (labelEl) labelEl.textContent = chip ? `· ${chip.nome}` : '';
+  });
 
-  if (!disparoChipId && chips.length) {
-    // Prioridade: chip com 8457 (Ativação) ou chip 2
-    const chipPriority = chips.find(c => c.nome && c.nome.includes('8457')) || chips.find(c => c.nome && c.nome.toLowerCase().includes('ativação')) || chips[1] || chips[0];
-    disparoChipId = chipPriority.id;
-  }
-
-  const chip = getChipById(disparoChipId);
-  document.getElementById('disparoChipInfo').textContent = chip
-    ? `${chip.nome} · ${chip.instance}` : 'Nenhum chip configurado';
+  // Set disparoChipId for empresa listing (use chip[0] by default)
+  if (!disparoChipId && chips.length) disparoChipId = chips[0].id;
 
   if (!weekDays.includes(disparoDay)) disparoDay = today;
   document.getElementById('disparoDayTabs').innerHTML = weekDays.map(day => {
@@ -2901,18 +2964,328 @@ function renderFilaZap() {
     </div>`;
   }).join('');
   renderDisparoEmpresas();
-  renderFila();
+  renderFila0(); renderFila1();
 }
 
 function setDisparoChip(id) {
   disparoChipId = id;
-  const chip = getChipById(id);
-  document.getElementById('disparoChipInfo').textContent = chip ? `${chip.nome} · ${chip.instance}` : '—';
   renderFilaZap();
 }
 
 function setDisparoDay(day) { disparoDay = day; disparoStatus = 'Não enviada'; disparoPage = 1; renderFilaZap(); }
 function setDisparoStatus(st) { disparoStatus = st; disparoPage = 1; renderDisparoEmpresas(); }
+
+/* ─── Render fila for each slot ─── */
+function renderFila0() { renderFilaSlot(0); }
+function renderFila1() { renderFilaSlot(1); }
+
+function renderFilaSlot(slot) {
+  const chips = getChips();
+  const chip = chips[slot] || null;
+  const chipId = chip ? chip.id : null;
+  const filaAtual = chipId ? getFilaChip(chipId) : [];
+  const countEl = document.getElementById(`filaCount${slot}`);
+  const vaziEl  = document.getElementById(`filaVazia${slot}`);
+  const itensEl = document.getElementById(`filaItens${slot}`);
+  if (!countEl) return;
+  countEl.textContent = `(${filaAtual.length} empresa${filaAtual.length!==1?'s':''})`;
+  const vazia = filaAtual.length === 0;
+  vaziEl.style.display  = vazia ? 'block' : 'none';
+  itensEl.style.display = vazia ? 'none'  : 'flex';
+  if (vazia) { itensEl.innerHTML = ''; return; }
+  itensEl.innerHTML = filaAtual.map((item, i) => {
+    const waNum = item.whatsapp.replace(/\D/g,'');
+    const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
+    const aberto = item.aberto || false;
+    return `<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}">
+      <div class="fila-item-header" onclick="toggleFilaItemSlot(${slot},'${item.id}')" style="cursor:pointer;user-select:none">
+        <div class="fila-item-num">${i+1}</div>
+        <div class="fila-item-nome">${escHtml(item.nome)}</div>
+        <div class="fila-item-wa">+${waNum}</div>
+        <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
+        <div style="color:var(--muted);font-size:12px;margin-left:4px;transition:transform 0.2s;transform:rotate(${aberto?'90':'0'}deg)">▶</div>
+        <button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFilaSlot(${slot},'${item.id}')">×</button>
+      </div>
+      <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
+          <textarea class="fila-msg-area" id="fila-msg-${slot}-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFilaSlot(${slot},'${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
+          <button class="fila-msg-shuffle" onclick="shuffleFilaMsgSlot(${slot},'${item.id}')">↻ sortear</button>
+        </div>
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">② LINK DO SITE</div>
+          <div class="fila-msg-area">${escHtml(LINK_BICHOP)}</div>
+        </div>
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">③ IMAGENS — ANTES &amp; DEPOIS</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-bottom:4px;letter-spacing:0.08em">SITE ATUAL</div>
+              <div class="fila-img-area${item.imagemBase64?' has-img':''}" onclick="document.getElementById('img-s${slot}-${item.id}').click()" style="min-height:80px">
+                ${item.imagemBase64?`<img src="${item.imagemBase64}" alt="preview"/>`:''}
+                <span class="fila-img-label">${item.imagemBase64?'':'📎 antes'}</span>
+                ${item.imagemBase64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagemSlot(${slot},'${item.id}','1')">×</button>`:''}
+              </div>
+              <input type="file" accept="image/*" class="fila-img-input" id="img-s${slot}-${item.id}" onchange="onImgChangeSlot(${slot},'${item.id}',this,'1')"/>
+            </div>
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--accent);margin-bottom:4px;letter-spacing:0.08em">REDESIGN</div>
+              <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-s${slot}-${item.id}').click()" style="min-height:80px;border-color:${item.imagem2Base64?'var(--accent-border)':''}">
+                ${item.imagem2Base64?`<img src="${item.imagem2Base64}" alt="preview redesign"/>`:''}
+                <span class="fila-img-label">${item.imagem2Base64?'':'📎 depois'}</span>
+                ${item.imagem2Base64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagemSlot(${slot},'${item.id}','2')">×</button>`:''}
+              </div>
+              <input type="file" accept="image/*" class="fila-img-input" id="img2-s${slot}-${item.id}" onchange="onImgChangeSlot(${slot},'${item.id}',this,'2')"/>
+            </div>
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px">As 2 imagens são enviadas em sequência após o texto.</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getChipBySlot(slot) {
+  const chips = getChips(); return chips[slot] || null;
+}
+
+function toggleFilaItemSlot(slot, id) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  if (!item) return;
+  item.aberto = !item.aberto;
+  renderFilaSlot(slot);
+}
+
+function atualizarMsgFilaSlot(slot, id, val) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  if (item) item.mensagem = val;
+}
+
+function shuffleFilaMsgSlot(slot, id) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  if (!item) return;
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx);
+  item.mensagem = text; item.templateIdx = idx;
+  const el = document.getElementById(`fila-msg-${slot}-${id}`);
+  if (el) el.value = item.mensagem;
+}
+
+function onImgChangeSlot(slot, id, input, imgSlot) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const chip = getChipBySlot(slot); if (!chip) return;
+    const fila = getFilaChip(chip.id);
+    const item = fila.find(f => f.id === id);
+    if (!item) return;
+    if (imgSlot === '2') { item.imagem2Base64 = e.target.result; item.imagem2Nome = file.name; }
+    else { item.imagemBase64 = e.target.result; item.imagemNome = file.name; }
+    renderFilaSlot(slot);
+  };
+  reader.readAsDataURL(file);
+}
+
+function removerImagemSlot(slot, id, imgSlot) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  if (!item) return;
+  if (imgSlot === '2') { delete item.imagem2Base64; delete item.imagem2Nome; }
+  else { delete item.imagemBase64; delete item.imagemNome; }
+  renderFilaSlot(slot);
+}
+
+function removerFilaSlot(slot, id) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const chipId = chip.id;
+  if (!filaDisparo[chipId]) return;
+  const item = filaDisparo[chipId].find(f => f.id === id);
+  abrirModalConfirm(
+    `Remover <strong>${item ? escHtml(item.nome) : 'esta empresa'}</strong> da fila?`,
+    () => {
+      if (!filaDisparo[chipId]) return;
+      filaDisparo[chipId] = filaDisparo[chipId].filter(f => f.id !== id);
+      const data = ensureWeekData();
+      Object.keys(data.days).forEach(day => {
+        const emp = (data.days[day]||[]).find(e => e.id === id);
+        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+      });
+      saveWeekData(data); updateBadges(); renderDisparoEmpresas(); renderFilaSlot(slot);
+    }
+  );
+}
+
+function limparFilaChip(slot) {
+  const st = chipSlotState[slot];
+  if (st.disparoEmAndamento) { notify('// disparo em andamento','warn'); return; }
+  if (st.aguardandoLote) cancelarLotesChip(slot);
+  const chip = getChipBySlot(slot);
+  if (chip && filaDisparo[chip.id]) {
+    const data = ensureWeekData();
+    filaDisparo[chip.id].forEach(item => {
+      Object.keys(data.days).forEach(day => {
+        const emp = (data.days[day]||[]).find(e => e.id === item.id);
+        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+      });
+    });
+    saveWeekData(data);
+    filaDisparo[chip.id] = [];
+  }
+  renderDisparoEmpresas(); renderFilaSlot(slot); updateBadges();
+}
+
+function cancelarLotesChip(slot) {
+  const st = chipSlotState[slot];
+  if (st.loteEsperaTimer) { clearTimeout(st.loteEsperaTimer); st.loteEsperaTimer = null; }
+  if (st.loteCountdownInt) { clearInterval(st.loteCountdownInt); st.loteCountdownInt = null; }
+  st.filaLotes=[]; st.loteAtual=0; st.lotesTotal=0; st.aguardandoLote=false; st.loteEsperaFim=null;
+  document.getElementById(`loteEsperaPanel${slot}`).style.display='none';
+  document.getElementById(`btnDisparar${slot}`).disabled=false;
+  document.getElementById(`disparoBtn${slot}`).textContent= slot===0 ? '🟢 Disparar' : '🔵 Disparar';
+}
+
+async function confirmarProximoLoteChip(slot) {
+  const st = chipSlotState[slot];
+  if (!st.filaLotes.length) return;
+  document.getElementById(`btnProximoLote${slot}`).disabled=true;
+  document.getElementById(`loteEsperaPanel${slot}`).style.display='none';
+  if (st.loteCountdownInt) { clearInterval(st.loteCountdownInt); st.loteCountdownInt=null; }
+  if (st.loteEsperaTimer)  { clearTimeout(st.loteEsperaTimer); st.loteEsperaTimer=null; }
+  await dispararLoteChip(slot);
+}
+
+async function iniciarDisparoChip(slot) {
+  const st = chipSlotState[slot];
+  if (st.disparoEmAndamento || st.aguardandoLote) return;
+  const chip = getChipBySlot(slot);
+  if (!chip) { notify(`// configure o Chip ${slot+1} em Configurações`,'err'); return; }
+  const filaAtual = getFilaChip(chip.id);
+  if (!filaAtual.length) { notify('// fila vazia','warn'); return; }
+  document.getElementById(`disparoLog${slot}`).innerHTML='';
+  const loteConf = getLoteConfig();
+  st.filaLotes=[]; st.loteAtual=0;
+  for (let i=0; i<filaAtual.length; i+=loteConf.tamanho) st.filaLotes.push(filaAtual.slice(i,i+loteConf.tamanho));
+  st.lotesTotal=st.filaLotes.length;
+  await dispararLoteChip(slot);
+}
+
+async function dispararLoteChip(slot) {
+  const st = chipSlotState[slot];
+  st.loteAtual++;
+  const lote = st.filaLotes.shift();
+  const loteConf = getLoteConfig();
+  const chip = getChipBySlot(slot);
+  if (!chip) { notify('// configure um chip primeiro','err'); return; }
+  const delayMin = parseInt(document.getElementById('delayMin')?.value)||120;
+  const delayMax = parseInt(document.getElementById('delayMax')?.value)||150;
+  const MSG_DELAY = 15000;
+  const logEl = document.getElementById(`disparoLog${slot}`);
+  logEl.style.display='block';
+  st.disparoEmAndamento=true;
+  document.getElementById(`btnDisparar${slot}`).disabled=true;
+  document.getElementById(`spinner${slot}`).style.display='block';
+  document.getElementById(`disparoBtn${slot}`).textContent=`Lote ${st.loteAtual}/${st.lotesTotal}...`;
+
+  function log(msg) { const l=document.createElement('div'); l.style.marginBottom='3px'; l.innerHTML=`<span style="color:var(--muted)">[${timeStr()}]</span> ${msg}`; logEl.appendChild(l); logEl.scrollTop=logEl.scrollHeight; }
+  const cor = slot===0 ? 'var(--accent)' : '#5bb8f5';
+  log(`<span style="color:${cor}">━━ CHIP ${slot+1} · LOTE ${st.loteAtual}/${st.lotesTotal} · ${lote.length} empresa${lote.length>1?'s':''} ━━</span>`);
+
+  for (let i=0; i<lote.length; i++) {
+    const item = lote[i];
+    if (item.status==='enviado') continue;
+    item.status='enviando'; atualizarStatusFilaSlot(slot, item.id, 'enviando');
+    log(`Enviando para <span style="color:var(--text)">${escHtml(item.nome)}</span>...`);
+    try {
+      const waNum = item.whatsapp.replace(/\D/g,'');
+      const numero = waNum.startsWith('55') ? waNum : '55'+waNum;
+      const h = {'Content-Type':'application/json','apikey':chip.key};
+      const res1 = await fetch(`${chip.url}/message/sendText/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},textMessage:{text:item.mensagem}})});
+      if (!res1.ok) throw new Error(`HTTP ${res1.status}`);
+      log(`  ① apresentação enviada`);
+      await new Promise(r=>setTimeout(r,MSG_DELAY));
+      await fetch(`${chip.url}/message/sendText/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},textMessage:{text:LINK_BICHOP}})});
+      log(`  ② link enviado`);
+      await new Promise(r=>setTimeout(r,MSG_DELAY));
+      if (item.imagemBase64) {
+        const b1=item.imagemBase64.split(',')[1], m1=item.imagemBase64.split(';')[0].split(':')[1]||'image/jpeg';
+        await fetch(`${chip.url}/message/sendMedia/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},mediaMessage:{mediatype:'image',media:b1,mimetype:m1,caption:''}})});
+        log(`  ③ imagem (site atual) enviada`);
+        if (item.imagem2Base64) {
+          await new Promise(r=>setTimeout(r,4000));
+          const b2=item.imagem2Base64.split(',')[1], m2=item.imagem2Base64.split(';')[0].split(':')[1]||'image/jpeg';
+          await fetch(`${chip.url}/message/sendMedia/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},mediaMessage:{mediatype:'image',media:b2,mimetype:m2,caption:''}})});
+          log(`  ④ imagem (redesign) enviada`);
+        }
+      } else if (item.imagem2Base64) {
+        const b2=item.imagem2Base64.split(',')[1], m2=item.imagem2Base64.split(';')[0].split(':')[1]||'image/jpeg';
+        await fetch(`${chip.url}/message/sendMedia/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},mediaMessage:{mediatype:'image',media:b2,mimetype:m2,caption:''}})});
+        log(`  ③ imagem (redesign) enviada`);
+      } else {
+        log(`  ③ <span style="color:var(--warning)">sem imagens anexadas</span>`);
+      }
+      item.status='enviado'; atualizarStatusFilaSlot(slot,item.id,'enviado');
+      log(`<span style="color:${cor}">✓ ${escHtml(item.nome)}</span>`);
+      atualizarStatusEmpresa(item.id,'Enviada');
+    } catch(e) {
+      item.status='erro'; atualizarStatusFilaSlot(slot,item.id,'erro');
+      log(`<span style="color:var(--error)">✗ Erro — ${e.message}</span>`);
+    }
+    if (i<lote.length-1) {
+      const delay=(delayMin+Math.random()*(delayMax-delayMin))*1000;
+      log(`Aguardando ${Math.round(delay/1000)}s...`);
+      await new Promise(r=>setTimeout(r,delay));
+    }
+  }
+
+  const env=lote.filter(f=>f.status==='enviado').length, erros=lote.filter(f=>f.status==='erro').length;
+  log(`<span style="color:${cor}">✓ Lote ${st.loteAtual} concluído! ${env} enviado${env>1?'s':''} · ${erros} erro${erros!==1?'s':''}</span>`);
+  st.disparoEmAndamento=false;
+  document.getElementById(`spinner${slot}`).style.display='none';
+  renderFilaSlot(slot); renderInicio();
+
+  if (st.filaLotes.length>0) {
+    const esperaMs=loteConf.esperaMin*60*1000; st.loteEsperaFim=Date.now()+esperaMs; st.aguardandoLote=true;
+    document.getElementById(`btnDisparar${slot}`).disabled=true;
+    document.getElementById(`disparoBtn${slot}`).textContent=`🟡 Lote ${st.loteAtual+1}/${st.lotesTotal}`;
+    const panel=document.getElementById(`loteEsperaPanel${slot}`); panel.style.display='block';
+    document.getElementById(`loteEsperaTitle${slot}`).textContent=`⏱ Aguardando lote ${st.loteAtual+1}/${st.lotesTotal}...`;
+    document.getElementById(`btnProximoLote${slot}`).disabled=true;
+    document.getElementById(`loteProgressBar${slot}`).style.width='0%';
+    notify(`✓ Chip ${slot+1} · Lote ${st.loteAtual} concluído · próximo em ${loteConf.esperaMin}min`);
+    // Countdown
+    st.loteCountdownInt = setInterval(() => {
+      const r = st.loteEsperaFim - Date.now();
+      if (r<=0) { clearInterval(st.loteCountdownInt); st.loteCountdownInt=null; document.getElementById(`loteCountdown${slot}`).textContent='00:00'; document.getElementById(`btnProximoLote${slot}`).disabled=false; document.getElementById(`loteProgressBar${slot}`).style.width='100%'; return; }
+      const m=Math.floor(r/60000), s=Math.floor((r%60000)/1000);
+      document.getElementById(`loteCountdown${slot}`).textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      document.getElementById(`loteProgressBar${slot}`).style.width=`${100-(r/(esperaMs)*100)}%`;
+    }, 1000);
+    st.loteEsperaTimer = setTimeout(async () => { st.loteEsperaTimer=null; if (st.aguardandoLote) { clearInterval(st.loteCountdownInt); st.loteCountdownInt=null; st.aguardandoLote=false; panel.style.display='none'; await dispararLoteChip(slot); } }, esperaMs);
+  } else {
+    st.aguardandoLote=false;
+    document.getElementById(`btnDisparar${slot}`).disabled=false;
+    document.getElementById(`disparoBtn${slot}`).textContent= slot===0 ? '🟢 Disparar' : '🔵 Disparar';
+    const filaAtual=getFilaChip(chip.id);
+    const totalEnv=filaAtual.filter(f=>f.status==='enviado').length;
+    const totalErr=filaAtual.filter(f=>f.status==='erro').length;
+    log(`<span style="color:${cor}">━━ CHIP ${slot+1} CONCLUÍDO · ${totalEnv} enviados · ${totalErr} erros ━━</span>`);
+    notify(`✓ Chip ${slot+1} concluído · ${totalEnv} enviados`);
+  }
+}
+
+function atualizarStatusFilaSlot(slot, id, status) {
+  const el = document.getElementById(`fila-item-${slot}-${id}`); if (!el) return;
+  el.className=`fila-item ${status}`;
+  const st=el.querySelector('.fila-item-status'); if (!st) return;
+  const labels={aguardando:'aguardando',enviando:'enviando...',enviado:'✓ enviado',erro:'✗ erro'};
+  st.className=`fila-item-status ${status}`; st.textContent=labels[status]||status;
+}
 
 function renderDisparoEmpresas() {
   const data = ensureWeekData();
