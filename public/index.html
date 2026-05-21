@@ -3329,6 +3329,42 @@ function getFilaChip(chipId) {
   return filaDisparo[chipId];
 }
 
+function toggleFilaSlotEmpresa(slot, empId) {
+  const chip = getChipBySlot(slot);
+  if (!chip) { notify(`// configure o Chip ${slot+1} em Configurações`, 'err'); return; }
+  const chipId = chip.id;
+  const fila = getFilaChip(chipId);
+  const idx = fila.findIndex(f => f.id === empId);
+  const data = ensureWeekData();
+  if (idx >= 0) {
+    fila.splice(idx, 1);
+    // Só muda status de "Em fila" se não estiver em nenhuma outra fila
+    const chips = getChips();
+    const emOutraFila = chips.some((c, i) => i !== slot && c && filaDisparo[c.id] && filaDisparo[c.id].some(f => f.id === empId));
+    if (!emOutraFila) {
+      Object.keys(data.days).forEach(day => {
+        const emp = (data.days[day]||[]).find(e => e.id === empId);
+        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+      });
+      saveWeekData(data);
+    }
+  } else {
+    const all = Object.values(data.days).flat();
+    const emp = all.find(e => e.id === empId);
+    if (!emp || !emp.whatsapp) { notify('// empresa sem WhatsApp', 'warn'); return; }
+    const { text, idx: tIdx } = pickTemplate(emp.nome);
+    fila.push({ id: emp.id, nome: emp.nome, whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, status: 'aguardando', aberto: false });
+    Object.keys(data.days).forEach(day => {
+      const e = (data.days[day]||[]).find(e => e.id === empId);
+      if (e) e.status = 'Em fila';
+    });
+    saveWeekData(data);
+  }
+  renderDisparoEmpresas();
+  if (slot === 0) renderFila0(); else renderFila1();
+  updateBadges();
+}
+
 function toggleFila(empId) {
   const chipId = disparoChipId;
   if (!chipId) { notify('// selecione um chip primeiro','warn'); return; }
@@ -3358,75 +3394,7 @@ function toggleFila(empId) {
 }
 
 function renderFila() {
-  const countEl = document.getElementById('filaCount');
-  const vaziEl  = document.getElementById('filaVazia');
-  const itensEl = document.getElementById('filaItens');
-  const filaAtual = getFilaChip(disparoChipId);
-  countEl.textContent = `(${filaAtual.length} empresa${filaAtual.length!==1?'s':''})`;
-  const vazia = filaAtual.length === 0;
-  vaziEl.style.display  = vazia ? 'block' : 'none';
-  itensEl.style.display = vazia ? 'none'  : 'flex';
-  if (vazia) { itensEl.innerHTML = ''; return; }
-
-  itensEl.innerHTML = filaAtual.map((item, i) => {
-    const waNum = item.whatsapp.replace(/\D/g,'');
-    const chip = getChipById(disparoChipId);
-    const chipBadge = chip ? `<span class="q-badge ok" style="font-size:7px;margin-left:4px">📱 ${escHtml(chip.nome)}</span>` : '';
-    const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
-    const aberto = item.aberto || false;
-    return `<div class="fila-item ${item.status}" id="fila-item-${item.id}">
-      <div class="fila-item-header" onclick="toggleFilaItem('${item.id}')" style="cursor:pointer;user-select:none">
-        <div class="fila-item-num">${i+1}</div>
-        <div class="fila-item-nome">${escHtml(item.nome)}</div>
-        <div class="fila-item-wa">+${waNum}${chipBadge}</div>
-        <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
-        <div style="color:var(--muted);font-size:12px;margin-left:4px;transition:transform 0.2s;transform:rotate(${aberto?'90':'0'}deg)">▶</div>
-        <button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFila('${item.id}')">×</button>
-      </div>
-      <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
-        <!-- MSG 1: Apresentação -->
-        <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
-          <textarea class="fila-msg-area" id="fila-msg-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFila('${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
-          <button class="fila-msg-shuffle" onclick="shuffleFilaMsg('${item.id}')">↻ sortear</button>
-        </div>
-        <!-- MSG 2: Link site -->
-        <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">② LINK DO SITE</div>
-          <div class="fila-msg-area">${escHtml(LINK_BICHOP)}</div>
-        </div>
-        <!-- MSG 3: Imagens -->
-        <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">③ IMAGENS — ANTES & DEPOIS</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <!-- Imagem 1: Site atual do cliente -->
-            <div>
-              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-bottom:4px;letter-spacing:0.08em">SITE ATUAL</div>
-              <div class="fila-img-area${item.imagemBase64?' has-img':''}" onclick="document.getElementById('img-input-${item.id}').click()" style="min-height:70px">
-                ${item.imagemBase64?`<img src="${item.imagemBase64}" alt="preview"/>`:''}
-                <span class="fila-img-label">${item.imagemBase64?'':'📎 antes'}</span>
-                ${item.imagemBase64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagem('${item.id}','1')">×</button>`:''}
-              </div>
-              <input type="file" accept="image/*" class="fila-img-input" id="img-input-${item.id}" onchange="onImgChange('${item.id}',this,'1')"/>
-            </div>
-            <!-- Imagem 2: Redesign -->
-            <div>
-              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--accent);margin-bottom:4px;letter-spacing:0.08em">REDESIGN</div>
-              <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-input-${item.id}').click()" style="min-height:70px;border-color:${item.imagem2Base64?'var(--accent-border)':''}">
-                ${item.imagem2Base64?`<img src="${item.imagem2Base64}" alt="preview redesign"/>`:''}
-                <span class="fila-img-label">${item.imagem2Base64?'':'📎 depois'}</span>
-                ${item.imagem2Base64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagem('${item.id}','2')">×</button>`:''}
-              </div>
-              <input type="file" accept="image/*" class="fila-img-input" id="img2-input-${item.id}" onchange="onImgChange('${item.id}',this,'2')"/>
-            </div>
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px">
-            As 2 imagens são enviadas em sequência após a mensagem de texto.
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  renderFila0(); renderFila1();
 }
 
 function toggleFilaItem(id) {
