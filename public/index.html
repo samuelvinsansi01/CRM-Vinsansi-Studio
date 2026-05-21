@@ -1148,13 +1148,6 @@ const WEEKDAY_NAMES  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 ════════════════════════════ */
 const RAMOS_DEFAULT = [
   {
-    id: 'contabilidade',
-    nome: 'Contabilidade',
-    keywords: ['contabilidade','contabil','contador','contadores','escritorio contabil',
-      'assessoria contabil','consultoria contabil','auditoria','fiscal',
-      'tributario','tributaria','contabilista','contabilistas','accounting','bookkeeping','tax']
-  },
-  {
     id: 'marcenaria',
     nome: 'Marcenaria / Móveis',
     keywords: ['marcenaria','marceneiro','moveis planejados','móveis planejados',
@@ -1177,25 +1170,6 @@ const TEMPLATES_DEFAULT = [
    TEMPLATES POR RAMO E TIPO
 ════════════════════════════ */
 const RAMO_TEMPLATES_DEFAULT = {
-  contabilidade: {
-    'com-site': [
-      `Olá, me chamo Samuel. Tudo bem?\n\nVi o site da {EMPRESA} e acredito que ele pode estar afastando clientes sem vocês perceberem. Muitos sites de contabilidades não foram pensados para converter e acabam não transmitindo a credibilidade que o escritório realmente tem.\n\nTrabalho desenvolvendo sites personalizados para contabilidades que querem ser vistas de forma profissional e atrair mais clientes no digital.\n\nFaz sentido conversarmos?`,
-      `Olá, me chamo Samuel. Tudo bem?\n\nPassei pelo site da {EMPRESA} e sinto que ele não está representando bem o que vocês entregam. O cliente decide pela confiança, e essa confiança começa pelo digital.\n\nTrabalho criando sites personalizados para escritórios contábeis que querem se destacar e converter mais visitantes em clientes.\n\nFaz sentido pra vocês?`,
-      `Olá, me chamo Samuel. Tudo bem?\n\nVi o site da {EMPRESA} e percebi que ele pode estar passando uma imagem mais genérica do que o escritório merece. Clientes em potencial descartam pelo que veem online antes mesmo de entrar em contato.\n\nDesenvolvo sites personalizados para contabilidades que querem ser levadas a sério no digital.\n\nFaz sentido conversarmos?`,
-      `Olá! Me chamo Samuel.\n\nDei uma olhada no site da {EMPRESA} e acredito que existe espaço para ele gerar mais resultados. Um site bem construído é o principal vendedor silencioso de um escritório contábil.\n\nTrabalho com desenvolvimento de sites para contabilidades que querem crescer no digital de forma profissional.\n\nPodemos conversar?`,
-      `Oi! Sou o Samuel.\n\nVi o site da {EMPRESA} e fiquei pensando: será que ele está transmitindo a confiança que os clientes precisam sentir antes de fechar com um escritório contábil?\n\nCrio sites que comunicam expertise e geram credibilidade desde o primeiro acesso.\n\nFaz sentido uma conversa rápida?`,
-      `Olá, me chamo Samuel. Tudo bem?\n\nAnalysei o site da {EMPRESA} e notei que alguns elementos importantes para conversão podem estar em falta. Sites de contabilidade precisam transmitir segurança, organização e expertise logo de cara.\n\nEspecializo-me em sites para escritórios contábeis que querem impressionar e converter mais.\n\nFaz sentido conversarmos?`,
-      `Olá! Sou o Samuel.\n\nPassei pelo site da {EMPRESA} e vejo uma oportunidade de torná-lo muito mais eficiente para atrair novos clientes. Muitos escritórios contábeis perdem leads simplesmente por não terem uma presença digital à altura.\n\nTrabalho com sites personalizados para contabilidades. Posso te mostrar alguns exemplos?\n\nFaz sentido?`,
-      `Oi, me chamo Samuel!\n\nVi o site da {EMPRESA} e acredito que ele pode estar te custando clientes sem que vocês percebam. No mercado contábil, a primeira impressão online é decisiva.\n\nDesenvolvo sites que posicionam escritórios como referência em suas regiões.\n\nPodemos conversar rápido sobre isso?`,
-      `Olá! Sou o Samuel.\n\nAnalisei o site da {EMPRESA} e vi que há potencial para melhorar bastante a forma como vocês se apresentam online. Um bom site de contabilidade precisa passar credibilidade, clareza e profissionalismo.\n\nTrabalho exatamente com isso — sites para escritórios que querem crescer.\n\nFaz sentido uma conversa?`,
-      `Olá, me chamo Samuel. Tudo bem?\n\nSoube da {EMPRESA} e fui conferir o site. Acredito que existe uma oportunidade real de tornar a presença digital de vocês muito mais forte e capaz de atrair mais clientes.\n\nTrabalho com sites personalizados para contabilidades. O resultado que entrego é um site que trabalha por vocês 24h.\n\nFaz sentido conversarmos?`,
-    ],
-    'sem-site': [
-      `Olá, me chamo Samuel. Tudo bem?\n\nEncontrei a {EMPRESA} mas percebi que vocês ainda não têm um site. No mercado contábil, isso pode estar fazendo clientes em potencial descartarem vocês antes mesmo de entrar em contato.\n\nTrabalho criando sites profissionais para escritórios contábeis. Posso mostrar como isso mudaria a percepção de novos clientes sobre vocês.\n\nFaz sentido conversar?`,
-      `Olá! Me chamo Samuel.\n\nVi a {EMPRESA} e não encontrei um site de vocês. Muitos clientes pesquisam online antes de contratar um escritório contábil — sem site, vocês podem estar perdendo essas oportunidades.\n\nDesenvolvo sites para contabilidades que querem crescer digitalmente. O investimento se paga com o primeiro cliente novo.\n\nFaz sentido conversarmos?`,
-      `Oi, sou o Samuel!\n\nEncontrei a {EMPRESA} e percebi que vocês ainda não têm presença digital própria. Num mercado onde a confiança é tudo, um site bem feito faz toda a diferença na hora do cliente escolher.\n\nCrio sites personalizados para escritórios contábeis. Posso te mostrar alguns exemplos rápidos?\n\nFaz sentido?`,
-    ],
-  },
   marcenaria: {
     'com-site': [
       `Olá, me chamo Samuel. Tudo bem?\n\nVi o site da {EMPRESA} e acredito que ele pode estar deixando clientes na dúvida em vez de convencê-los a entrar em contato. Para móveis planejados, o site precisa vender visualmente antes de qualquer conversa.\n\nTrabalho desenvolvendo sites para marcenarias e móveis planejados que querem mostrar seu trabalho com mais impacto.\n\nFaz sentido conversarmos?`,
@@ -3320,9 +3294,15 @@ function renderDisparoEmpresas() {
   if (disparoPage > totalDispPages) disparoPage = totalDispPages;
   const pageEmps = emps.slice((disparoPage-1)*DISPARO_PG, disparoPage*DISPARO_PG);
 
-  const filaAtual = getFilaChip(disparoChipId);
+  const chips = getChips();
+  const chip0 = chips[0] || null;
+  const chip1 = chips[1] || null;
+  const fila0 = chip0 ? getFilaChip(chip0.id) : [];
+  const fila1 = chip1 ? getFilaChip(chip1.id) : [];
+
   listEl.innerHTML = '<div class="ext-list">' + pageEmps.map(e => {
-    const naFila  = filaAtual.some(f => f.id === e.id);
+    const naFila0 = chip0 && fila0.some(f => f.id === e.id);
+    const naFila1 = chip1 && fila1.some(f => f.id === e.id);
     const enviada = e.status === 'Enviada';
     return `<div class="empresa-card">
       <div class="empresa-info">
@@ -3330,11 +3310,14 @@ function renderDisparoEmpresas() {
         <div class="empresa-meta">
           ${e.site?`<div class="empresa-site"><a href="${escHtml(e.site)}" target="_blank">${escHtml(e.site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></div>`:''}
           <div class="empresa-phone">📱 ${escHtml(e.whatsapp)}</div>
+          ${naFila0?`<span style="font-family:'DM Mono',monospace;font-size:8px;padding:2px 7px;border-radius:100px;border:1px solid rgba(184,240,89,0.35);background:rgba(184,240,89,0.08);color:var(--accent)">✓ Chip 1</span>`:''}
+          ${naFila1?`<span style="font-family:'DM Mono',monospace;font-size:8px;padding:2px 7px;border-radius:100px;border:1px solid rgba(91,184,245,0.35);background:rgba(91,184,245,0.08);color:#5bb8f5">✓ Chip 2</span>`:''}
         </div>
       </div>
       ${enviada?'<span class="q-badge ok">✓ enviada</span>':''}
-      <div class="empresa-actions">
-        ${!enviada?`<button class="add-btn${naFila?' added':''}" onclick="toggleFila('${e.id}')">${naFila?'✓ na fila':'+ Fila'}</button>`:''}
+      <div class="empresa-actions" style="gap:5px">
+        ${!enviada && chip0 ? `<button class="add-btn${naFila0?' added':''}" style="${naFila0?'':'border-color:rgba(184,240,89,0.5);color:var(--accent)'}" onclick="toggleFilaSlotEmpresa(0,'${e.id}')">${naFila0?'✓ C1':'+ C1'}</button>` : ''}
+        ${!enviada && chip1 ? `<button class="add-btn${naFila1?' added':''}" style="${naFila1?'background:#5bb8f5;border-color:#5bb8f5;color:#0a0a0d':'border-color:rgba(91,184,245,0.5);color:#5bb8f5'}" onclick="toggleFilaSlotEmpresa(1,'${e.id}')">${naFila1?'✓ C2':'+ C2'}</button>` : ''}
       </div>
     </div>`;
   }).join('') + '</div>';
@@ -3622,8 +3605,8 @@ async function dispararLote() {
   const loteConf = getLoteConfig();
   const chip     = getChipById(disparoChipId);
   if (!chip) { notify('// configure um chip primeiro','err'); return; }
-  const delayMin = parseInt(document.getElementById('delayMin').value)||15;
-  const delayMax = parseInt(document.getElementById('delayMax').value)||30;
+  const delayMin = parseInt(document.getElementById('delayMin').value)||120;
+  const delayMax = parseInt(document.getElementById('delayMax').value)||180;
   const MSG_DELAY = 15000; // 15s entre mensagens da mesma empresa
   const logEl    = document.getElementById('disparoLog');
   logEl.style.display = 'block';
@@ -4544,8 +4527,8 @@ function exportExcelHistory() {
   if (localStorage.getItem(SIDEBAR_KEY)==='1') s.classList.remove('collapsed');
 
   const cfg = loadEvoConfig();
-  if (cfg.delayMin)      document.getElementById('delayMin').value      = cfg.delayMin;
-  if (cfg.delayMax)      document.getElementById('delayMax').value      = cfg.delayMax;
+  if (cfg.delayMin)      document.getElementById('delayMin').value      = cfg.delayMin; else document.getElementById('delayMin').value = 120;
+  if (cfg.delayMax)      document.getElementById('delayMax').value      = cfg.delayMax; else document.getElementById('delayMax').value = 180;
   if (cfg.loteTamanho)   document.getElementById('loteTamanho').value   = cfg.loteTamanho;
   if (cfg.loteEsperaMin) document.getElementById('loteEsperaMin').value = cfg.loteEsperaMin;
   if (cfg.horarioInicio) document.getElementById('horarioInicio').value = cfg.horarioInicio;
