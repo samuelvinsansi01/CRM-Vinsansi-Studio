@@ -3227,7 +3227,7 @@ function toggleFilaItemSlot(slot, id) {
   const item = fila.find(f => f.id === id);
   if (!item) return;
   item.aberto = !item.aberto;
-  renderFilaSlot(slot);
+  renderFilaSlot(slot, disparoDay);
 }
 
 function atualizarMsgFilaSlot(slot, id, val) {
@@ -3252,7 +3252,7 @@ function removerFilaSlot(slot, id) {
         if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
       });
       saveWeekData(data); saveFilaDisparo(); updateBadges();
-      renderDisparoEmpresas(); renderFilaSlot(slot);
+      renderDisparoEmpresas(); renderFilaSlot(slot, disparoDay);
     }
   );
 }
@@ -3276,7 +3276,7 @@ function limparFilaChip(slot) {
   st.retryDisparado = false;
   st.ultimoLoteFimTs = null;
   saveFilaDisparo();
-  updateBadges(); renderDisparoEmpresas(); renderFilaSlot(slot);
+  updateBadges(); renderDisparoEmpresas(); renderFilaSlot(slot, disparoDay);
 }
 
 /* ─── Iniciar disparo por slot ─── */
@@ -3433,7 +3433,7 @@ async function dispararLoteChip(slot) {
   st.ultimoLoteFimTs = Date.now();
   st.disparoEmAndamento = false;
   if (spinEl) spinEl.style.display = 'none';
-  renderFilaSlot(slot);
+  renderFilaSlot(slot, disparoDay);
   renderInicio();
 
   if (st.filaLotes.length > 0) {
@@ -3612,7 +3612,7 @@ function renderFilaZap() {
     </div>`;
   }).join('');
   renderDisparoEmpresas();
-  renderFila0(); renderFila1();
+  renderFilaSlot(0, disparoDay); renderFilaSlot(1, disparoDay);
 }
 
 /* ════════════════════════════
@@ -3739,24 +3739,45 @@ function toggleChipAccordion(slot) {
 function setDisparoDay(day) { disparoDay = day; disparoStatus = 'Não enviada'; disparoPage = 1; renderFilaZap(); }
 function setDisparoStatus(st) { disparoStatus = st; disparoPage = 1; renderDisparoEmpresas(); }
 
-function renderFila0() { renderFilaSlot(0); }
-function renderFila1() { renderFilaSlot(1); }
+function renderFila0() { renderFilaSlot(0, disparoDay); }
+function renderFila1() { renderFilaSlot(1, disparoDay); }
 
-function renderFilaSlot(slot) {
+function renderFilaSlot(slot, filterDay) {
+  const today = todayStr();
+  const dayFiltro = filterDay || disparoDay || today;
+  const isToday = dayFiltro === today;
   const chips = getChips();
   const chip = chips[slot] || null;
   const chipId = chip ? chip.id : null;
   const st = chipSlotState[slot];
-  const filaCompleta = chipId ? getFilaChip(chipId) : [];
-  // Para a fila ativa: inclui aguardando e erro (os "enviados" já foram arquivados no histórico ou são empresas já enviadas previamente)
-  const filaAtual = filaCompleta.filter(f => f.status !== 'enviado');
-  const filaComEnviados = filaCompleta; // para cálculo de numeração de lotes
+
+  // Filtrar fila pelo dia selecionado: cruzar IDs da fila com empresas do dia
+  const filaGlobal = chipId ? getFilaChip(chipId) : [];
+  const data = ensureWeekData();
+  const idsNoDia = new Set((data.days[dayFiltro]||[]).map(e => e.id));
+  const filaCompleta = filaGlobal.filter(f => idsNoDia.has(f.id));
+
   const countEl = document.getElementById(`filaCount${slot}`);
   const vaziEl  = document.getElementById(`filaVazia${slot}`);
   const itensEl = document.getElementById(`filaItens${slot}`);
   if (!countEl) return;
 
-  // Contagem: aguardando/erro ativos
+  // Botao Disparar: desativado se o dia selecionado nao for hoje
+  const btnDisparar = document.getElementById(`btnDisparar${slot}`);
+  const btnTxt = document.getElementById(`disparoBtn${slot}`);
+  if (btnDisparar && !st.disparoEmAndamento && !st.aguardandoLote) {
+    if (!isToday) {
+      btnDisparar.disabled = true;
+      btnDisparar.title = 'Disparo disponivel apenas no dia de hoje';
+      if (btnTxt) btnTxt.textContent = slot === 0 ? '🟢 Disponivel em ' + dayLabelShort(dayFiltro) : '🔵 Disponivel em ' + dayLabelShort(dayFiltro);
+    } else {
+      btnDisparar.disabled = false;
+      btnDisparar.title = '';
+      if (btnTxt) btnTxt.textContent = slot === 0 ? '🟢 Disparar' : '🔵 Disparar';
+    }
+  }
+
+  // Contagem: aguardando/erro ativos (do dia filtrado)
   const aguardando = filaCompleta.filter(f => f.status === 'aguardando').length;
   const erros = filaCompleta.filter(f => f.status === 'erro').length;
   const enviados = filaCompleta.filter(f => f.status === 'enviado').length;
@@ -4100,7 +4121,7 @@ function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
     item.mensagem = text; item.templateIdx = idx;
   }
   saveFilaDisparo();
-  if (isSlot) renderFilaSlot(slot); else renderFila();
+  if (isSlot) renderFilaSlot(slot, disparoDay); else renderFila();
 }
 
 function onLoteImgChange(chipId, loteNum, input, isSlot, slot) {
@@ -4115,12 +4136,12 @@ function onLoteImgChange(chipId, loteNum, input, isSlot, slot) {
     setLoteImagem(chipId, loteNum, e.target.result, file.name)
       .then(() => {
         notify('✓ Imagem do lote salva');
-        if (isSlot) renderFilaSlot(slot); else renderFila();
+        if (isSlot) renderFilaSlot(slot, disparoDay); else renderFila();
       })
       .catch(err => {
         notify('// erro ao salvar imagem: ' + (err && err.message ? err.message : err), 'err');
         // mesmo com erro tenta mostrar preview em memória
-        if (isSlot) renderFilaSlot(slot); else renderFila();
+        if (isSlot) renderFilaSlot(slot, disparoDay); else renderFila();
       });
   };
   reader.onerror = () => notify('// erro ao ler arquivo', 'err');
@@ -4129,9 +4150,9 @@ function onLoteImgChange(chipId, loteNum, input, isSlot, slot) {
 
 function onLoteImgRemove(chipId, loteNum, isSlot, slot) {
   removerLoteImagem(chipId, loteNum).then(() => {
-    if (isSlot) renderFilaSlot(slot); else renderFila();
+    if (isSlot) renderFilaSlot(slot, disparoDay); else renderFila();
   }).catch(() => {
-    if (isSlot) renderFilaSlot(slot); else renderFila();
+    if (isSlot) renderFilaSlot(slot, disparoDay); else renderFila();
   });
 }
 
@@ -4215,8 +4236,8 @@ function toggleFilaSlotEmpresa(slot, empId) {
     }
   }
   renderDisparoEmpresas();
-  renderFilaSlot(0);
-  renderFilaSlot(1);
+  renderFilaSlot(0, disparoDay);
+  renderFilaSlot(1, disparoDay);
   saveFilaDisparo();
   updateBadges();
 }
