@@ -3053,6 +3053,13 @@ function renderFilaSlot(slot) {
       <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
         <div>
           <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
+          <div style="margin-bottom:6px">
+            <label style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.12em;color:var(--muted);margin-bottom:3px;display:block">RAMO DO TEMPLATE</label>
+            <select id="fila-ramo-${slot}-${item.id}" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onRamoFilaSlotChange(${slot},'${item.id}',this.value)">
+              <option value="">— sem ramo (geral) —</option>
+              ${getRamos().map(r=>`<option value="${r.id}"${(item.ramoId===r.id)?' selected':''}>${escHtml(r.nome)}</option>`).join('')}
+            </select>
+          </div>
           <textarea class="fila-msg-area" id="fila-msg-${slot}-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFilaSlot(${slot},'${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
           <button class="fila-msg-shuffle" onclick="shuffleFilaMsgSlot(${slot},'${item.id}')">↻ sortear</button>
         </div>
@@ -3111,8 +3118,24 @@ function shuffleFilaMsgSlot(slot, id) {
   const fila = getFilaChip(chip.id);
   const item = fila.find(f => f.id === id);
   if (!item) return;
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null);
+  const ramoSel = document.getElementById(`fila-ramo-${slot}-${id}`);
+  const ramoId = ramoSel ? (ramoSel.value || null) : (item.ramoId || null);
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
   item.mensagem = text; item.templateIdx = idx;
+  const el = document.getElementById(`fila-msg-${slot}-${id}`);
+  if (el) el.value = item.mensagem;
+}
+function onRamoFilaSlotChange(slot, id, ramoId) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  if (!item) return;
+  item.ramoId = ramoId || null;
+  saveFilaDisparo();
+  // Sortear automaticamente com o novo ramo
+  const { text, idx } = pickTemplate(item.nome, item.ramoId);
+  item.mensagem = text; item.templateIdx = idx;
+  saveFilaDisparo();
   const el = document.getElementById(`fila-msg-${slot}-${id}`);
   if (el) el.value = item.mensagem;
 }
@@ -3499,6 +3522,13 @@ function renderFila() {
         <!-- MSG 1: Apresentação -->
         <div>
           <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
+          <div style="margin-bottom:6px">
+            <label style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.12em;color:var(--muted);margin-bottom:3px;display:block">RAMO DO TEMPLATE</label>
+            <select id="fila-ramo-${item.id}" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onRamoFilaChange('${item.id}',this.value)">
+              <option value="">— sem ramo (geral) —</option>
+              ${getRamos().map(r=>`<option value="${r.id}"${(item.ramoId===r.id)?' selected':''}>${escHtml(r.nome)}</option>`).join('')}
+            </select>
+          </div>
           <textarea class="fila-msg-area" id="fila-msg-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFila('${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
           <button class="fila-msg-shuffle" onclick="shuffleFilaMsg('${item.id}')">↻ sortear</button>
         </div>
@@ -3554,8 +3584,23 @@ function shuffleFilaMsg(id) {
   const fila = getFilaChip(disparoChipId);
   const item = fila.find(f => f.id === id);
   if (!item) return;
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null);
+  const ramoSel = document.getElementById(`fila-ramo-${id}`);
+  const ramoId = ramoSel ? (ramoSel.value || null) : (item.ramoId || null);
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
   item.mensagem = text; item.templateIdx = idx;
+  const el = document.getElementById(`fila-msg-${id}`);
+  if (el) el.value = item.mensagem;
+}
+function onRamoFilaChange(id, ramoId) {
+  const fila = getFilaChip(disparoChipId);
+  const item = fila.find(f => f.id === id);
+  if (!item) return;
+  item.ramoId = ramoId || null;
+  saveFilaDisparo();
+  // Sortear automaticamente com o novo ramo
+  const { text, idx } = pickTemplate(item.nome, item.ramoId);
+  item.mensagem = text; item.templateIdx = idx;
+  saveFilaDisparo();
   const el = document.getElementById(`fila-msg-${id}`);
   if (el) el.value = item.mensagem;
 }
