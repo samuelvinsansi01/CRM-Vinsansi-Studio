@@ -1388,14 +1388,14 @@ function pickTemplate(nome, ramoId) {
   }
   if (!tpl || !tpl.length) tpl = getTemplates();
   const idx = Math.floor(Math.random() * tpl.length);
-  return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome), idx };
+  return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
 }
 function pickOtherTemplate(nome, cur, ramoId) {
   let tpl;
   if (ramoId) tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
   if (!tpl || !tpl.length) tpl = getTemplates();
   let idx; do { idx = Math.floor(Math.random() * tpl.length); } while (idx === cur && tpl.length > 1);
-  return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome), idx };
+  return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
 }
 
 /* ════════════════════════════
