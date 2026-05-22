@@ -792,6 +792,12 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <span id="atribTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
       <button onclick="selecionarTodos()" style="margin-left:8px;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer;transition:all 0.18s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Selecionar todos</button>
     </div>
+    <div style="margin-bottom:12px;flex-shrink:0">
+      <input id="atribBusca" type="text" placeholder="🔍 Buscar por nome, site ou WhatsApp..."
+        oninput="atribPage=1;renderAtribuicao()"
+        style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"/>
+    </div>
     <div id="atribList" class="stretch-list">
       <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição</div>
     </div>
@@ -1618,16 +1624,35 @@ function renderAtribuicao() {
   const listEl = document.getElementById('atribList');
   if (!listEl) return;
 
+  const buscaElChk = document.getElementById('atribBusca');
+  const buscaQChk = buscaElChk ? buscaElChk.value.trim() : '';
   if (!leads.length) {
     listEl.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição</div>';
     document.getElementById('atribPagination').innerHTML = '';
     return;
   }
 
-  const totalAtrib = leads.length;
+  // Filtro de busca
+  const buscaEl = document.getElementById('atribBusca');
+  const buscaQ = buscaEl ? buscaEl.value.trim().toLowerCase() : '';
+  const leadsFiltrados = buscaQ
+    ? leads.filter(l =>
+        (l.nome||''      ).toLowerCase().includes(buscaQ) ||
+        (l.site||''      ).toLowerCase().includes(buscaQ) ||
+        (l.whatsapp||''  ).toLowerCase().includes(buscaQ)
+      )
+    : leads;
+
+  const totalAtrib = leadsFiltrados.length;
   const totalAtribPages = Math.max(1, Math.ceil(totalAtrib / ATRIB_PG));
   if (atribPage > totalAtribPages) atribPage = totalAtribPages;
-  const pageLeads = leads.slice((atribPage-1)*ATRIB_PG, atribPage*ATRIB_PG);
+  const pageLeads = leadsFiltrados.slice((atribPage-1)*ATRIB_PG, atribPage*ATRIB_PG);
+
+  if (!leadsFiltrados.length) {
+    listEl.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum resultado para "<span style="color:var(--text2)">${escHtml(buscaQ)}</span>"</div>`;
+    document.getElementById('atribPagination').innerHTML = '';
+    return;
+  }
 
   listEl.innerHTML = '<div class="ext-list">' + pageLeads.map(lead => {
     const sel = atribSelecionados.has(lead.id);
