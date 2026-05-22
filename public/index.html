@@ -1673,7 +1673,7 @@ function renderAtribuicao() {
                 onmouseover="this.style.background='var(--accent-dim)';this.style.color='var(--accent)'"
                 onmouseout="this.style.background='transparent';this.style.color='var(--text2)'">
                 <span>${dayLabel(day)}${day===today?' ●':''}</span>
-                <span style="color:var(--muted);font-size:8px">${count}/60</span>
+                <span style="color:var(--muted);font-size:8px">${count}/${getDailyLimit()}</span>
               </div>`;
             }).join('')}
           </div>
@@ -1733,10 +1733,11 @@ function atribuirParaDia(ids, day) {
     const lead = atrib.find(a => a.id === id);
     if (!lead) return;
 
-    // encontra dia com vaga (máx 60)
+    // encontra dia com vaga (máx = 60 × nº de chips)
+    const dailyLimit = getDailyLimit();
     let diaFinal = day;
     let idx = diasSemana.indexOf(day);
-    while ((data.days[diaFinal]||[]).length >= 60) {
+    while ((data.days[diaFinal]||[]).length >= dailyLimit) {
       idx++;
       if (idx >= diasSemana.length) { notify(`// semana cheia — ${lead.nome} não atribuído`,'warn'); return; }
       diaFinal = diasSemana[idx];
@@ -2159,7 +2160,7 @@ function renderInicio() {
               <button onclick="editWhatsapp('${e.id}','${selectedDay}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 4px;border-radius:4px" title="Adicionar">✏️</button>
             </div>`
         }</td>
-        <td><select class="status-select" onchange="updateStatus('${e.id}','${selectedDay}',this.value)">${STATUS_OPTIONS.map(s=>`<option value="${s}"${(e.status||'Não enviada')===s?' selected':''}>${s}</option>`).join('')}</select></td>
+        <td><select class="status-select" onchange="updateStatus('${e.id}','${selectedDay}',this.value)">${getStatusOptions(e.status||'Não enviada').map(s=>`<option value="${s}"${(e.status||'Não enviada')===s?' selected':''}>${s}</option>`).join('')}</select></td>
         <td><button class="btn btn-ghost" style="font-size:9px;padding:4px 9px" onclick="showMsg('${e.id}','${selectedDay}')">Msg</button></td>
         <td><button class="del-btn" onclick="deleteEmpresa('${e.id}','${selectedDay}')">✕</button></td>
       </tr>`;
@@ -2249,13 +2250,32 @@ function shuffleMsg() {
   msgTemplateIdx = idx;
   document.getElementById('msgBody').textContent = text;
 }
+// Opções de status disponíveis dependendo do status atual
+const STATUS_FORWARD_ONLY = ['Respondida','Não respondida','Recusada','Fechada'];
+function getStatusOptions(currentStatus) {
+  if (currentStatus === 'Enviada' || STATUS_FORWARD_ONLY.includes(currentStatus)) {
+    // Não pode voltar — só status à frente + o atual
+    return ['Enviada', ...STATUS_FORWARD_ONLY];
+  }
+  return STATUS_OPTIONS;
+}
+
 function updateStatus(id, day, status) {
   const data = ensureWeekData();
   const emp  = (data.days[day]||[]).find(e => e.id === id);
   if (!emp) return;
+  // Bloquear retroação a partir de Enviada
+  const curr = emp.status || 'Não enviada';
+  const lockedForward = curr === 'Enviada' || STATUS_FORWARD_ONLY.includes(curr);
+  if (lockedForward && !STATUS_FORWARD_ONLY.includes(status) && status !== 'Enviada') {
+    notify('// não é possível retroceder após Enviada','warn');
+    return;
+  }
   emp.status = status;
   if (status === 'Enviada') emp.enviadoEm = todayStr();
-  saveWeekData(data); updateBadges();
+  saveWeekData(data);
+  updateBadges();
+  renderInicio(); // re-render para atualizar o select corretamente
 }
 function editWhatsapp(id, day) {
   const data = ensureWeekData();
@@ -2827,7 +2847,7 @@ function aprovarSemSiteParaZap(id) {
   const diasSemana = currentWeekDays();
   let diaDestino = day;
   let idx = diasSemana.indexOf(day);
-  while ((data.days[diaDestino]||[]).length >= 60) {
+  while ((data.days[diaDestino]||[]).length >= getDailyLimit()) {
     idx++;
     if (idx >= diasSemana.length) { notify('// semana cheia','warn'); return; }
     diaDestino = diasSemana[idx];
@@ -3107,11 +3127,360 @@ function aprovarParaInsta(id) {
 ════════════════════════════ */
 
 
+
 /* ─── Per-chip state (indexed 0 = Chip1, 1 = Chip2) ─── */
 const chipSlotState = [
-  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null },
-  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null }
+  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null },
+  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null }
 ];
+
+/* ─── Limit por dia = 60 × nº de chips ─── */
+function getDailyLimit() { return Math.max(1, getChips().length) * 60; }
+
+/* ─── Helpers por slot ─── */
+function getChipBySlot(slot) { return getChips()[slot] || null; }
+
+function toggleFilaItemSlot(slot, id) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  if (!item) return;
+  item.aberto = !item.aberto;
+  renderFilaSlot(slot);
+}
+
+function atualizarMsgFilaSlot(slot, id, val) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  if (item) { item.mensagem = val; saveFilaDisparo(); }
+}
+
+function removerFilaSlot(slot, id) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  abrirModalConfirm(
+    `Remover <strong>${item ? escHtml(item.nome) : 'esta empresa'}</strong> da fila?`,
+    () => {
+      const f2 = getFilaChip(chip.id).filter(f => f.id !== id);
+      filaDisparo[chip.id] = f2;
+      const data = ensureWeekData();
+      Object.keys(data.days).forEach(day => {
+        const emp = (data.days[day]||[]).find(e => e.id === id);
+        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+      });
+      saveWeekData(data); saveFilaDisparo(); updateBadges();
+      renderDisparoEmpresas(); renderFilaSlot(slot);
+    }
+  );
+}
+
+function limparFilaChip(slot) {
+  const st = chipSlotState[slot];
+  if (st.disparoEmAndamento || st.aguardandoLote) { notify('// disparo em andamento','warn'); return; }
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const data = ensureWeekData();
+  fila.forEach(f => {
+    Object.keys(data.days).forEach(day => {
+      const emp = (data.days[day]||[]).find(e => e.id === f.id);
+      if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+    });
+  });
+  saveWeekData(data);
+  filaDisparo[chip.id] = [];
+  st.loteHistorico = [];
+  st.retryItems = [];
+  st.retryDisparado = false;
+  st.ultimoLoteFimTs = null;
+  saveFilaDisparo();
+  updateBadges(); renderDisparoEmpresas(); renderFilaSlot(slot);
+}
+
+/* ─── Iniciar disparo por slot ─── */
+async function iniciarDisparoChip(slot) {
+  const st = chipSlotState[slot];
+  if (st.disparoEmAndamento || st.aguardandoLote) return;
+  const chip = getChipBySlot(slot);
+  if (!chip) { notify('// chip ' + (slot+1) + ' não configurado','err'); return; }
+  const fila = getFilaChip(chip.id).filter(f => f.status !== 'enviado');
+  if (!fila.length) { notify('// fila vazia','warn'); return; }
+
+  // Congela o lote — snapshot dos itens aguardando
+  const LOTE_SIZE = 20;
+  st.filaLotes = [];
+  st.loteAtual = 0;
+  st.loteHistorico = st.loteHistorico || [];
+  // Pega apenas aguardando (não enviados, não erro-definitivo)
+  const pendentes = getFilaChip(chip.id).filter(f => f.status === 'aguardando');
+  for (let i = 0; i < pendentes.length; i += LOTE_SIZE) {
+    st.filaLotes.push(pendentes.slice(i, i + LOTE_SIZE));
+  }
+  st.lotesTotal = st.filaLotes.length;
+  const logEl = document.getElementById(`disparoLog${slot}`);
+  if (logEl) { logEl.innerHTML = ''; logEl.style.display = 'block'; }
+  await dispararLoteChip(slot);
+}
+
+/* ─── Disparo de um lote por slot ─── */
+async function dispararLoteChip(slot) {
+  const st = chipSlotState[slot];
+  const chip = getChipBySlot(slot);
+  if (!chip) return;
+  st.loteAtual++;
+  const lote = st.filaLotes.shift();
+  const esperaMin = parseInt(document.getElementById('loteEsperaMin')?.value)||60;
+  const delayMin  = parseInt(document.getElementById('delayMin')?.value)||120;
+  const delayMax  = parseInt(document.getElementById('delayMax')?.value)||180;
+  const MSG_DELAY = 15000;
+  const chipCor   = slot === 0 ? 'var(--accent)' : '#5bb8f5';
+
+  st.disparoEmAndamento = true;
+  const btnEl  = document.getElementById(`btnDisparar${slot}`);
+  const spinEl = document.getElementById(`spinner${slot}`);
+  const btnTxt = document.getElementById(`disparoBtn${slot}`);
+  if (btnEl)  btnEl.disabled = true;
+  if (spinEl) spinEl.style.display = 'block';
+  if (btnTxt) btnTxt.textContent = `Lote ${st.loteAtual}/${st.lotesTotal}...`;
+
+  const logEl = document.getElementById(`disparoLog${slot}`);
+  if (logEl) logEl.style.display = 'block';
+  function log(msg) {
+    if (!logEl) return;
+    const l = document.createElement('div');
+    l.style.marginBottom = '3px';
+    l.innerHTML = `<span style="color:var(--muted)">[${timeStr()}]</span> ${msg}`;
+    logEl.appendChild(l); logEl.scrollTop = logEl.scrollHeight;
+  }
+  log(`<span style="color:${chipCor}">━━ LOTE ${st.loteAtual}/${st.lotesTotal} · ${lote.length} empresa${lote.length>1?'s':''} ━━</span>`);
+
+  // Atualiza status visual de cada item do lote
+  const loteSnapshot = lote.map(i => ({ ...i }));
+
+  for (let i = 0; i < lote.length; i++) {
+    const item = lote[i];
+    if (item.status === 'enviado') continue;
+    item.status = 'enviando';
+    atualizarStatusFilaSlot(slot, item.id, 'enviando');
+    log(`Enviando para <span style="color:var(--text)">${escHtml(item.nome)}</span>...`);
+    try {
+      const waNum  = item.whatsapp.replace(/\D/g,'');
+      const numero = waNum.startsWith('55') ? waNum : '55' + waNum;
+
+      // MSG 1 — Apresentação
+      const payload1 = { number: numero, options: { delay: 1000 }, textMessage: { text: item.mensagem } };
+      const res1 = await fetch(`${chip.url}/message/sendText/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload1) });
+      if (!res1.ok) throw new Error(`HTTP ${res1.status}`);
+      log(`  ① apresentação enviada`);
+      await new Promise(r => setTimeout(r, MSG_DELAY));
+
+      // MSG 2 — Link
+      const payload2 = { number: numero, options: { delay: 1000 }, textMessage: { text: LINK_BICHOP } };
+      await fetch(`${chip.url}/message/sendText/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload2) });
+      log(`  ② link enviado`);
+      await new Promise(r => setTimeout(r, MSG_DELAY));
+
+      // MSG 3 — Imagem do lote
+      const loteNum = Math.ceil(st.loteAtual);
+      const imgRedesign = getLoteImagem(chip.id, loteNum);
+      if (imgRedesign) {
+        await new Promise(r => setTimeout(r, MSG_DELAY));
+        const b2 = imgRedesign.split(',')[1], m2 = imgRedesign.split(';')[0].split(':')[1] || 'image/jpeg';
+        const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: b2, mimetype: m2, caption: '' } };
+        await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
+        log(`  ③ imagem enviada`);
+      }
+
+      item.status = 'enviado';
+      atualizarStatusFilaSlot(slot, item.id, 'enviado');
+      atualizarStatusEmpresa(item.id, 'Enviada');
+      log(`<span style="color:${chipCor}">✓ ${escHtml(item.nome)}</span>`);
+    } catch(e) {
+      item.status = 'erro';
+      atualizarStatusFilaSlot(slot, item.id, 'erro');
+      log(`<span style="color:var(--error)">✗ Erro — ${e.message}</span>`);
+    }
+    if (i < lote.length - 1) {
+      const delay = (delayMin + Math.random()*(delayMax-delayMin))*1000;
+      log(`Aguardando ${Math.round(delay/1000)}s...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+
+  // Finalizar lote: mover enviados para histórico compacto, manter erros na fila
+  const env   = lote.filter(f => f.status === 'enviado').length;
+  const erros = lote.filter(f => f.status === 'erro').length;
+  log(`<span style="color:${chipCor}">✓ Lote ${st.loteAtual} concluído! ${env} enviado${env>1?'s':''} · ${erros} erro${erros>1?'s':''}</span>`);
+
+  // Adiciona lote ao histórico
+  st.loteHistorico.push({
+    num: st.loteAtual,
+    total: st.lotesTotal,
+    items: lote.map(f => ({ id: f.id, nome: f.nome, whatsapp: f.whatsapp, status: f.status })),
+    env, erros,
+    fimTs: Date.now()
+  });
+
+  // Remove enviados da fila ativa (mantém erros para retry)
+  const enviados = lote.filter(f => f.status === 'enviado').map(f => f.id);
+  if (enviados.length) {
+    filaDisparo[chip.id] = filaDisparo[chip.id].filter(f => !enviados.includes(f.id));
+    saveFilaDisparo();
+  }
+
+  st.ultimoLoteFimTs = Date.now();
+  st.disparoEmAndamento = false;
+  if (spinEl) spinEl.style.display = 'none';
+  renderFilaSlot(slot);
+  renderInicio();
+
+  if (st.filaLotes.length > 0) {
+    // Ainda tem lotes — aguardar delay
+    const esperaMs = esperaMin * 60 * 1000;
+    st.loteEsperaFim = Date.now() + esperaMs;
+    st.aguardandoLote = true;
+    if (btnEl)  btnEl.disabled = true;
+    if (btnTxt) btnTxt.textContent = `🟡 Aguardando lote ${st.loteAtual+1}/${st.lotesTotal}`;
+    const panel = document.getElementById(`loteEsperaPanel${slot}`);
+    if (panel) panel.style.display = 'block';
+    const titleEl = document.getElementById(`loteEsperaTitle${slot}`);
+    if (titleEl) titleEl.textContent = `⏱ Aguardando lote ${st.loteAtual+1}/${st.lotesTotal}...`;
+    const proxBtn = document.getElementById(`btnProximoLote${slot}`);
+    if (proxBtn) { proxBtn.disabled = true; proxBtn.style.background = 'var(--surface3)'; }
+    const barEl = document.getElementById(`loteProgressBar${slot}`);
+    if (barEl) barEl.style.width = '0%';
+    notify(`✓ Lote ${st.loteAtual} concluído · próximo em ${esperaMin}min`);
+    iniciarCountdownLoteChip(slot, esperaMs);
+  } else {
+    // Todos os lotes concluídos
+    st.aguardandoLote = false;
+    if (btnEl)  btnEl.disabled = false;
+    if (btnTxt) btnTxt.textContent = slot === 0 ? '🟢 Disparar' : '🔵 Disparar';
+
+    // Coletar erros para retry
+    const erroItems = getFilaChip(chip.id).filter(f => f.status === 'erro');
+    if (erroItems.length && !st.retryDisparado) {
+      st.retryItems = erroItems;
+      // Calcular horário sugerido: ultimoLoteFimTs + esperaMin + 30min de margem
+      const retryTs = st.ultimoLoteFimTs + (esperaMin + 30) * 60 * 1000;
+      const retryDate = new Date(retryTs);
+      const hh = String(retryDate.getHours()).padStart(2,'0');
+      const mm = String(retryDate.getMinutes()).padStart(2,'0');
+      const horarioSugerido = `${hh}:${mm}`;
+      // Exibir painel de retry
+      exibirRetryPanel(slot, erroItems.length, horarioSugerido);
+      notify(`⚠ ${erroItems.length} erro${erroItems.length>1?'s':''} — Lote Retry disponível`, 'warn');
+    } else {
+      const totalEnv = st.loteHistorico.reduce((s,l)=>s+l.env,0);
+      const totalErr = st.loteHistorico.reduce((s,l)=>s+l.erros,0);
+      notify(`✓ ${st.lotesTotal} lote${st.lotesTotal>1?'s':''} concluído${st.lotesTotal>1?'s':''} · ${totalEnv} enviados · ${totalErr} erros`);
+    }
+  }
+}
+
+function exibirRetryPanel(slot, count, horario) {
+  const itensEl = document.getElementById(`filaItens${slot}`);
+  if (!itensEl) return;
+  const cor = 'var(--warning)';
+  const retryHtml = `<div id="retryPanel${slot}" style="margin:8px 0;padding:12px 14px;border-radius:10px;background:rgba(240,164,41,0.06);border:1px solid rgba(240,164,41,0.3)">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="flex:1">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.1em;color:var(--warning);margin-bottom:3px">⚠ LOTE RETRY — ${count} empresa${count>1?'s':''} com erro</div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">Horário sugerido: <span style="color:var(--text2)">${horario}</span> · disparo manual</div>
+      </div>
+      <button onclick="iniciarRetryChip(${slot})" style="background:var(--warning);color:#0a0a0d;border:none;border-radius:7px;font-family:'Syne',sans-serif;font-weight:700;font-size:10px;padding:7px 14px;cursor:pointer;white-space:nowrap">↻ Disparar Retry</button>
+    </div>
+  </div>`;
+  // Inserir antes dos itens da fila
+  const existing = document.getElementById(`retryPanel${slot}`);
+  if (existing) existing.outerHTML = retryHtml;
+  else itensEl.insertAdjacentHTML('beforebegin', retryHtml);
+}
+
+async function iniciarRetryChip(slot) {
+  const st = chipSlotState[slot];
+  if (st.disparoEmAndamento || st.aguardandoLote) return;
+  if (!st.retryItems || !st.retryItems.length) { notify('// nenhum item para retry','warn'); return; }
+  const chip = getChipBySlot(slot); if (!chip) return;
+
+  st.retryDisparado = true;
+  // Remove painel de retry
+  const rp = document.getElementById(`retryPanel${slot}`);
+  if (rp) rp.remove();
+
+  // Marcar retry items como aguardando novamente
+  st.retryItems.forEach(item => { item.status = 'aguardando'; item._isRetry = true; });
+
+  // Dispara como lote único
+  st.filaLotes = [[...st.retryItems]];
+  st.loteAtual = st.lotesTotal; // continua numeração
+  st.lotesTotal = st.lotesTotal + 1;
+  const logEl = document.getElementById(`disparoLog${slot}`);
+  if (logEl) { logEl.style.display = 'block'; }
+  await dispararLoteChip(slot);
+}
+
+function iniciarCountdownLoteChip(slot, duracaoMs) {
+  const st = chipSlotState[slot];
+  const proxBtn = document.getElementById(`btnProximoLote${slot}`);
+  const countEl = document.getElementById(`loteCountdown${slot}`);
+  const barEl   = document.getElementById(`loteProgressBar${slot}`);
+  if (st.loteCountdownInt) clearInterval(st.loteCountdownInt);
+  function tick() {
+    const restante = st.loteEsperaFim - Date.now();
+    if (restante <= 0) {
+      clearInterval(st.loteCountdownInt); st.loteCountdownInt = null;
+      if (countEl) countEl.textContent = '00:00';
+      if (barEl)   barEl.style.width = '100%';
+      if (proxBtn) { proxBtn.disabled = false; proxBtn.style.background = slot===0?'var(--accent)':'#5bb8f5'; }
+      notify('✓ Lote liberado!');
+      return;
+    }
+    const min = Math.floor(restante/60000), seg = Math.floor((restante%60000)/1000);
+    if (countEl) countEl.textContent = `${String(min).padStart(2,'0')}:${String(seg).padStart(2,'0')}`;
+    if (barEl)   barEl.style.width = Math.min(100, ((duracaoMs-restante)/duracaoMs)*100) + '%';
+  }
+  tick(); st.loteCountdownInt = setInterval(tick, 500);
+}
+
+function cancelarLotesChip(slot) {
+  const st = chipSlotState[slot];
+  if (st.loteEsperaTimer)  { clearTimeout(st.loteEsperaTimer);  st.loteEsperaTimer = null; }
+  if (st.loteCountdownInt) { clearInterval(st.loteCountdownInt); st.loteCountdownInt = null; }
+  st.filaLotes = []; st.loteAtual = 0; st.lotesTotal = 0;
+  st.aguardandoLote = false; st.loteEsperaFim = null;
+  const panel = document.getElementById(`loteEsperaPanel${slot}`);
+  if (panel) panel.style.display = 'none';
+  const btnEl  = document.getElementById(`btnDisparar${slot}`);
+  const btnTxt = document.getElementById(`disparoBtn${slot}`);
+  if (btnEl)  btnEl.disabled = false;
+  if (btnTxt) btnTxt.textContent = slot===0 ? '🟢 Disparar' : '🔵 Disparar';
+  notify('// fila cancelada','warn');
+}
+
+async function confirmarProximoLoteChip(slot) {
+  const st = chipSlotState[slot];
+  if (!st.filaLotes.length) return;
+  const proxBtn = document.getElementById(`btnProximoLote${slot}`);
+  if (proxBtn) proxBtn.disabled = true;
+  const panel = document.getElementById(`loteEsperaPanel${slot}`);
+  if (panel) panel.style.display = 'none';
+  if (st.loteCountdownInt) { clearInterval(st.loteCountdownInt); st.loteCountdownInt = null; }
+  if (st.loteEsperaTimer)  { clearTimeout(st.loteEsperaTimer);   st.loteEsperaTimer = null; }
+  st.aguardandoLote = false;
+  await dispararLoteChip(slot);
+}
+
+function atualizarStatusFilaSlot(slot, id, status) {
+  const el = document.getElementById(`fila-item-${slot}-${id}`); if (!el) return;
+  el.className = `fila-item ${status}`;
+  const st = el.querySelector('.fila-item-status'); if (!st) return;
+  const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
+  st.className = `fila-item-status ${status}`; st.textContent = labels[status]||status;
+}
+
+
 
 function renderFilaZap() {
   const chips = getChips();
@@ -3221,6 +3590,7 @@ function renderDisparoEmpresas() {
     }).join('');
 
     const semChip = chips.length === 0;
+    const isEnviada = STATUS_FORWARD_ONLY.includes(e.status||'') || (e.status||'') === 'Enviada';
 
     return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px">
       <div style="flex:1;min-width:0">
@@ -3231,9 +3601,11 @@ function renderDisparoEmpresas() {
         </div>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0">
-        ${semChip
-          ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">configure chips primeiro</span>`
-          : (e.whatsapp ? botoes : `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--error)">sem WhatsApp</span>`)
+        ${isEnviada
+          ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">✓ enviado</span>`
+          : semChip
+            ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">configure chips primeiro</span>`
+            : (e.whatsapp ? botoes : `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--error)">sem WhatsApp</span>`)
         }
       </div>
     </div>`;
@@ -3265,7 +3637,6 @@ function toggleChipAccordion(slot) {
 function setDisparoDay(day) { disparoDay = day; disparoStatus = 'Não enviada'; disparoPage = 1; renderFilaZap(); }
 function setDisparoStatus(st) { disparoStatus = st; disparoPage = 1; renderDisparoEmpresas(); }
 
-/* ─── Render fila for each slot ─── */
 function renderFila0() { renderFilaSlot(0); }
 function renderFila1() { renderFilaSlot(1); }
 
@@ -3273,33 +3644,71 @@ function renderFilaSlot(slot) {
   const chips = getChips();
   const chip = chips[slot] || null;
   const chipId = chip ? chip.id : null;
-  const filaAtual = chipId ? getFilaChip(chipId) : [];
+  const st = chipSlotState[slot];
+  const filaCompleta = chipId ? getFilaChip(chipId) : [];
+  // Apenas pendentes/erro para contagem e exibição ativa
+  const filaAtual = filaCompleta.filter(f => f.status !== 'enviado');
   const countEl = document.getElementById(`filaCount${slot}`);
   const vaziEl  = document.getElementById(`filaVazia${slot}`);
   const itensEl = document.getElementById(`filaItens${slot}`);
   if (!countEl) return;
-  countEl.textContent = `(${filaAtual.length} empresa${filaAtual.length!==1?'s':''})`;
-  const vazia = filaAtual.length === 0;
+
+  // Contagem: apenas aguardando/erro (enviados foram arquivados)
+  const aguardando = filaAtual.filter(f => f.status === 'aguardando').length;
+  countEl.textContent = `(${aguardando} aguardando · ${filaAtual.filter(f=>f.status==='erro').length} erro)`;
+
+  const vazia = filaAtual.length === 0 && (!st.loteHistorico || !st.loteHistorico.length);
   vaziEl.style.display  = vazia ? 'block' : 'none';
   itensEl.style.display = vazia ? 'none'  : 'flex';
   if (vazia) { itensEl.innerHTML = ''; return; }
+
   const LOTE_SIZE = 20;
   let html = '';
+
+  // ── Histórico de lotes já disparados ──
+  (st.loteHistorico || []).forEach(lhist => {
+    const todosEnviados = lhist.items.every(i => i.status === 'enviado');
+    const cor    = todosEnviados ? 'var(--ok)' : 'var(--warning)';
+    const border = todosEnviados ? 'rgba(78,203,113,0.25)' : 'rgba(240,164,41,0.25)';
+    const bg     = todosEnviados ? 'rgba(78,203,113,0.04)' : 'rgba(240,164,41,0.04)';
+    const label  = `LOTE ${lhist.num} — ${lhist.env}/${lhist.items.length} enviados`;
+    const histId = `lote-hist-${slot}-${lhist.num}`;
+    html += `<div style="margin-bottom:6px;border-radius:8px;background:${bg};border:1px solid ${border};overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 12px;cursor:pointer" onclick="toggleLoteHist('${histId}')">
+        <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.1em;color:${cor}">${label}</span>
+        <span style="flex:1;height:1px;background:${border}"></span>
+        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${todosEnviados?'✓ concluído':'parcial'}</span>
+        <span id="${histId}-chev" style="font-size:9px;color:var(--muted);transition:transform 0.2s">▶</span>
+      </div>
+      <div id="${histId}" style="display:none;border-top:1px solid ${border}">
+        ${lhist.items.map(item => {
+          const ok = item.status === 'enviado';
+          return `<div style="display:flex;align-items:center;gap:10px;padding:5px 12px;border-bottom:1px solid ${border};font-size:10px">
+            <span style="font-family:'DM Mono',monospace;font-size:9px;color:${ok?'var(--ok)':'var(--error)'};flex-shrink:0">${ok?'✓':'✗'}</span>
+            <span style="flex:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(item.nome)}</span>
+            <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${item.whatsapp||''}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+
+  // ── Itens ativos (aguardando/erro) ──
+  let loteNumAtual = (st.loteHistorico||[]).length;
   filaAtual.forEach((item, i) => {
-    // Separador de lote a cada 20
     if (i % LOTE_SIZE === 0) {
-      const loteNum = Math.floor(i / LOTE_SIZE) + 1;
+      loteNumAtual++;
       const inicio = i + 1;
       const fim = Math.min(i + LOTE_SIZE, filaAtual.length);
       const completo = (fim - inicio + 1) === LOTE_SIZE;
       const cor = completo ? 'var(--accent)' : 'var(--warning)';
       const borderCor = completo ? 'rgba(184,240,89,0.25)' : 'rgba(240,164,41,0.25)';
       const bgCor = completo ? 'rgba(184,240,89,0.05)' : 'rgba(240,164,41,0.05)';
-      const label = completo ? `LOTE ${loteNum} — #${inicio}–${fim}` : `LOTE ${loteNum} — #${inicio}–${fim} (${fim-inicio+1}/20)`;
-      const loteRamoId = getLoteRamo(chipId, loteNum);
-      const loteImg = getLoteImagem(chipId, loteNum);
+      const label = completo ? `LOTE ${loteNumAtual} — #${inicio}–${fim}` : `LOTE ${loteNumAtual} — #${inicio}–${fim} (${fim-inicio+1}/20)`;
+      const loteRamoId = getLoteRamo(chipId, loteNumAtual);
+      const loteImg = getLoteImagem(chipId, loteNumAtual);
       const ramosOptsSlot = getRamos().map(r=>`<option value="${r.id}"${loteRamoId===r.id?' selected':''} style="background:var(--surface3)">${escHtml(r.nome)}</option>`).join('');
-      html += `<div style="margin:${i===0?'0':'10px'} 0 6px;border-radius:8px;background:${bgCor};border:1px solid ${borderCor};overflow:hidden">
+      html += `<div style="margin:${i===0&&!st.loteHistorico?.length?'0':'10px'} 0 6px;border-radius:8px;background:${bgCor};border:1px solid ${borderCor};overflow:hidden">
         <div style="display:flex;align-items:center;gap:10px;padding:7px 12px">
           <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.12em;color:${cor}">${label}</span>
           <span style="flex:1;height:1px;background:${borderCor}"></span>
@@ -3308,19 +3717,19 @@ function renderFilaSlot(slot) {
         <div style="display:flex;align-items:flex-start;gap:10px;padding:0 12px 10px;border-top:1px solid ${borderCor}">
           <div style="flex:1">
             <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--muted);margin-bottom:4px;padding-top:8px">RAMO DO TEMPLATE</div>
-            <select style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onLoteRamoChange('${chipId}',${loteNum},this.value,true,${slot})">
+            <select style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onLoteRamoChange('${chipId}',${loteNumAtual},this.value,true,${slot})">
               <option value="" style="background:var(--surface3)">— sem ramo (geral) —</option>
               ${ramosOptsSlot}
             </select>
           </div>
           <div style="flex-shrink:0;min-width:120px">
             <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--accent);margin-bottom:4px;padding-top:8px">IMAGEM DO LOTE</div>
-            <div class="fila-img-area${loteImg?' has-img':''}" onclick="document.getElementById('lote-img-s${slot}-${loteNum}').click()" style="min-height:60px;border-color:${loteImg?'var(--accent-border)':''}">
+            <div class="fila-img-area${loteImg?' has-img':''}" onclick="document.getElementById('lote-img-s${slot}-${loteNumAtual}').click()" style="min-height:60px;border-color:${loteImg?'var(--accent-border)':''}">
               ${loteImg?`<img src="${loteImg}" alt="imagem lote"/>`:''}
               <span class="fila-img-label">${loteImg?'':'📎 imagem'}</span>
-              ${loteImg?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();onLoteImgRemove('${chipId}',${loteNum},true,${slot})">×</button>`:''}
+              ${loteImg?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();onLoteImgRemove('${chipId}',${loteNumAtual},true,${slot})">×</button>`:''}
             </div>
-            <input type="file" accept="image/*" class="fila-img-input" id="lote-img-s${slot}-${loteNum}" onchange="onLoteImgChange('${chipId}',${loteNum},this,true,${slot})"/>
+            <input type="file" accept="image/*" class="fila-img-input" id="lote-img-s${slot}-${loteNumAtual}" onchange="onLoteImgChange('${chipId}',${loteNumAtual},this,true,${slot})"/>
           </div>
         </div>
       </div>`;
@@ -3328,6 +3737,7 @@ function renderFilaSlot(slot) {
     const waNum = item.whatsapp.replace(/\D/g,'');
     const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
     const aberto = item.aberto || false;
+    const isErro = item.status === 'erro';
     html += `<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}">
       <div class="fila-item-header" onclick="toggleFilaItemSlot(${slot},'${item.id}')" style="cursor:pointer;user-select:none">
         <div class="fila-item-num">${i+1}</div>
@@ -3335,11 +3745,10 @@ function renderFilaSlot(slot) {
         <div class="fila-item-wa">+${waNum}</div>
         <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
         <div style="color:var(--muted);font-size:12px;margin-left:4px;transition:transform 0.2s;transform:rotate(${aberto?'90':'0'}deg)">▶</div>
-        <button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFilaSlot(${slot},'${item.id}')">×</button>
+        ${!isErro?`<button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFilaSlot(${slot},'${item.id}')">×</button>`:''}
       </div>
       <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
         <div style="width:100%">
-          <!-- MSG 1: Apresentação -->
           <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
           <textarea class="fila-msg-area" id="fila-msg-${slot}-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFilaSlot(${slot},'${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
           <button class="fila-msg-shuffle" onclick="shuffleFilaMsgSlot(${slot},'${item.id}')">↻ sortear</button>
@@ -3347,8 +3756,19 @@ function renderFilaSlot(slot) {
       </div>
     </div>`;
   });
+
   itensEl.innerHTML = html;
 }
+
+function toggleLoteHist(id) {
+  const el = document.getElementById(id);
+  const chev = document.getElementById(id + '-chev');
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
 
 
 // ── Configuração por lote (ramo + imagem padrão) ────────────────
