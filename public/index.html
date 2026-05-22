@@ -1182,6 +1182,7 @@ const VAL_KEY        = 'vs_validacao_v2';   // fila de validação
 const ATRIBUICAO_KEY = 'vs_atribuicao_v1';  // base de atribuição (leads validados sem dia)
 const INSTA_KEY      = 'vs_insta_fila_v2';  // fila instagram
 const INSTA_SCHED_KEY = 'vs_insta_sched_v1'; // cronograma instagram
+const FILA_DISPARO_KEY = 'vs_fila_disparo_v1'; // fila de disparo WhatsApp
 
 const STATUS_OPTIONS = ['Não enviada','Em fila','Enviada','Respondida','Não respondida','Recusada','Fechada'];
 const WEEKDAY_NAMES  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -1302,7 +1303,7 @@ let disparoStatus    = 'Não enviada';
 let msgEmpresaId     = null;
 let msgTemplateIdx   = -1;
 let historyOpen      = false;
-let filaDisparo      = {}; // { chipId: [...items] }
+let filaDisparo      = (() => { try { return JSON.parse(localStorage.getItem('vs_fila_disparo_v1')||'null') || {}; } catch { return {}; } })(); // { chipId: [...items] }
 let disparoEmAndamento = false;
 let aguardandoLote   = false;
 let filaLotes = [], loteAtual = 0, lotesTotal = 0;
@@ -3105,7 +3106,7 @@ function atualizarMsgFilaSlot(slot, id, val) {
   const chip = getChipBySlot(slot); if (!chip) return;
   const fila = getFilaChip(chip.id);
   const item = fila.find(f => f.id === id);
-  if (item) item.mensagem = val;
+  if (item) { item.mensagem = val; saveFilaDisparo(); }
 }
 
 function shuffleFilaMsgSlot(slot, id) {
@@ -3129,6 +3130,7 @@ function onImgChangeSlot(slot, id, input, imgSlot) {
     if (!item) return;
     if (imgSlot === '2') { item.imagem2Base64 = e.target.result; item.imagem2Nome = file.name; }
     else { item.imagemBase64 = e.target.result; item.imagemNome = file.name; }
+    saveFilaDisparo();
     renderFilaSlot(slot);
   };
   reader.readAsDataURL(file);
@@ -3141,6 +3143,7 @@ function removerImagemSlot(slot, id, imgSlot) {
   if (!item) return;
   if (imgSlot === '2') { delete item.imagem2Base64; delete item.imagem2Nome; }
   else { delete item.imagemBase64; delete item.imagemNome; }
+  saveFilaDisparo();
   renderFilaSlot(slot);
 }
 
@@ -3159,7 +3162,7 @@ function removerFilaSlot(slot, id) {
         const emp = (data.days[day]||[]).find(e => e.id === id);
         if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
       });
-      saveWeekData(data); updateBadges(); renderDisparoEmpresas(); renderFilaSlot(slot);
+      saveWeekData(data); saveFilaDisparo(); updateBadges(); renderDisparoEmpresas(); renderFilaSlot(slot);
     }
   );
 }
@@ -3180,6 +3183,7 @@ function limparFilaChip(slot) {
     saveWeekData(data);
     filaDisparo[chip.id] = [];
   }
+  saveFilaDisparo();
   renderDisparoEmpresas(); renderFilaSlot(slot); updateBadges();
 }
 
@@ -3290,6 +3294,7 @@ async function dispararLoteChip(slot) {
   log(`<span style="color:${cor}">✓ Lote ${st.loteAtual} concluído! ${env} enviado${env>1?'s':''} · ${erros} erro${erros!==1?'s':''}</span>`);
   st.disparoEmAndamento=false;
   document.getElementById(`spinner${slot}`).style.display='none';
+  saveFilaDisparo();
   renderFilaSlot(slot); renderInicio();
 
   if (st.filaLotes.length>0) {
@@ -3398,6 +3403,10 @@ function getFilaChip(chipId) {
   return filaDisparo[chipId];
 }
 
+function saveFilaDisparo() {
+  try { localStorage.setItem('vs_fila_disparo_v1', JSON.stringify(filaDisparo)); } catch(e) { console.warn('saveFilaDisparo error', e); }
+}
+
 function toggleFilaSlotEmpresa(slot, empId) {
   const chips = getChips();
   const chip = chips[slot] || null;
@@ -3434,6 +3443,7 @@ function toggleFilaSlotEmpresa(slot, empId) {
   renderDisparoEmpresas();
   renderFilaSlot(0);
   renderFilaSlot(1);
+  saveFilaDisparo();
   updateBadges();
 }
 
