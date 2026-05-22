@@ -3012,47 +3012,30 @@ function renderFilaSlot(slot) {
   const vaziEl  = document.getElementById(`filaVazia${slot}`);
   const itensEl = document.getElementById(`filaItens${slot}`);
   if (!countEl) return;
-
-  const LOTE_SIZE = 20;
-  const totalLotes = Math.ceil(filaAtual.length / LOTE_SIZE) || 0;
-  countEl.textContent = `(${filaAtual.length} empresa${filaAtual.length!==1?'s':''} · ${totalLotes} lote${totalLotes!==1?'s':''})`;
-
+  countEl.textContent = `(${filaAtual.length} empresa${filaAtual.length!==1?'s':''})`;
   const vazia = filaAtual.length === 0;
   vaziEl.style.display  = vazia ? 'block' : 'none';
   itensEl.style.display = vazia ? 'none'  : 'flex';
   if (vazia) { itensEl.innerHTML = ''; return; }
-
-  const cor = slot === 0 ? 'var(--accent)' : '#5bb8f5';
-  const corBorder = slot === 0 ? 'rgba(184,240,89,0.18)' : 'rgba(91,184,245,0.18)';
-  const corBg = slot === 0 ? 'rgba(184,240,89,0.05)' : 'rgba(91,184,245,0.05)';
-
+  const LOTE_SIZE = 20;
   let html = '';
   filaAtual.forEach((item, i) => {
-    // Separador de lote a cada 20 itens
+    // Separador de lote a cada 20
     if (i % LOTE_SIZE === 0) {
       const loteNum = Math.floor(i / LOTE_SIZE) + 1;
       const inicio = i + 1;
       const fim = Math.min(i + LOTE_SIZE, filaAtual.length);
       const completo = (fim - inicio + 1) === LOTE_SIZE;
-      html += `<div style="
-        display:flex;align-items:center;gap:10px;
-        padding:8px 12px;
-        background:${corBg};
-        border:1px solid ${corBorder};
-        border-radius:8px;
-        margin-top:${i===0?'0':'6px'};
-        margin-bottom:4px;
-        flex-shrink:0;
-      ">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:${cor};letter-spacing:0.1em">LOTE ${loteNum}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">#${inicio}–${fim}</div>
-        <div style="flex:1;height:1px;background:${corBorder}"></div>
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:${completo?cor:'var(--warning)'}">
-          ${fim-inicio+1}/20${!completo?' (incompleto)':''}
-        </div>
+      const cor = completo ? 'var(--accent)' : 'var(--warning)';
+      const borderCor = completo ? 'rgba(184,240,89,0.25)' : 'rgba(240,164,41,0.25)';
+      const bgCor = completo ? 'rgba(184,240,89,0.05)' : 'rgba(240,164,41,0.05)';
+      const label = completo ? `LOTE ${loteNum} — #${inicio}–${fim}` : `LOTE ${loteNum} — #${inicio}–${fim} (${fim-inicio+1}/20)`;
+      html += `<div style="display:flex;align-items:center;gap:10px;margin:${i===0?'0':'10px'} 0 6px;padding:7px 12px;border-radius:8px;background:${bgCor};border:1px solid ${borderCor}">
+        <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.12em;color:${cor}">${label}</span>
+        <span style="flex:1;height:1px;background:${borderCor}"></span>
+        ${!completo?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--warning)">${LOTE_SIZE-(fim-inicio+1)} restantes</span>`:'<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--accent)">✓ completo</span>'}
       </div>`;
     }
-
     const waNum = item.whatsapp.replace(/\D/g,'');
     const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
     const aberto = item.aberto || false;
@@ -3088,8 +3071,8 @@ function renderFilaSlot(slot) {
               <input type="file" accept="image/*" class="fila-img-input" id="img-s${slot}-${item.id}" onchange="onImgChangeSlot(${slot},'${item.id}',this,'1')"/>
             </div>
             <div>
-              <div style="font-family:'DM Mono',monospace;font-size:7px;color:${cor};margin-bottom:4px;letter-spacing:0.08em">REDESIGN</div>
-              <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-s${slot}-${item.id}').click()" style="min-height:80px;border-color:${item.imagem2Base64?corBorder:''}">
+              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--accent);margin-bottom:4px;letter-spacing:0.08em">REDESIGN</div>
+              <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-s${slot}-${item.id}').click()" style="min-height:80px;border-color:${item.imagem2Base64?'var(--accent-border)':''}">
                 ${item.imagem2Base64?`<img src="${item.imagem2Base64}" alt="preview redesign"/>`:''}
                 <span class="fila-img-label">${item.imagem2Base64?'':'📎 depois'}</span>
                 ${item.imagem2Base64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagemSlot(${slot},'${item.id}','2')">×</button>`:''}
@@ -3415,26 +3398,28 @@ function getFilaChip(chipId) {
   return filaDisparo[chipId];
 }
 
-/* Adiciona / remove empresa da fila do chip pelo slot (0=C1, 1=C2) */
 function toggleFilaSlotEmpresa(slot, empId) {
   const chips = getChips();
   const chip = chips[slot] || null;
-  if (!chip) { notify(`// Chip ${slot+1} não configurado — acesse Configurações`,'err'); return; }
-  const chipId = chip.id;
-  const fila = getFilaChip(chipId);
+  if (!chip) { notify('// chip ' + (slot+1) + ' não configurado','warn'); return; }
+  const fila = getFilaChip(chip.id);
   const idx = fila.findIndex(f => f.id === empId);
   const data = ensureWeekData();
   if (idx >= 0) {
-    // Remove da fila
+    // Remover da fila
     fila.splice(idx, 1);
-    Object.keys(data.days).forEach(day => {
-      const emp = (data.days[day]||[]).find(e => e.id === empId);
-      if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
-    });
-    saveWeekData(data);
-    notify(`✓ Removida do Chip ${slot+1}`);
+    // Se não está em nenhuma outra fila, volta para "Não enviada"
+    const chips2 = getChips();
+    const emOutraFila = chips2.some((c,s) => s !== slot && getFilaChip(c.id).some(f => f.id === empId));
+    if (!emOutraFila) {
+      Object.keys(data.days).forEach(day => {
+        const emp = (data.days[day]||[]).find(e => e.id === empId);
+        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+      });
+      saveWeekData(data);
+    }
   } else {
-    // Adiciona à fila
+    // Adicionar à fila
     const all = Object.values(data.days).flat();
     const emp = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) { notify('// empresa sem WhatsApp','warn'); return; }
@@ -3445,10 +3430,10 @@ function toggleFilaSlotEmpresa(slot, empId) {
       if (e) e.status = 'Em fila';
     });
     saveWeekData(data);
-    notify(`✓ ${emp.nome} → fila do Chip ${slot+1}`);
   }
   renderDisparoEmpresas();
-  renderFilaSlot(slot);
+  renderFilaSlot(0);
+  renderFilaSlot(1);
   updateBadges();
 }
 
