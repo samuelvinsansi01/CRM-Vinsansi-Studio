@@ -3017,13 +3017,73 @@ function renderFilaSlot(slot) {
   vaziEl.style.display  = vazia ? 'block' : 'none';
   itensEl.style.display = vazia ? 'none'  : 'flex';
   if (vazia) { itensEl.innerHTML = ''; return; }
-  itensEl.innerHTML = filaAtual.map((item, i) => {
+  const LOTE_SIZE = 20;
+  const loteColors = ['var(--accent)', '#5bb8f5', '#f0a429'];
+  const loteBg     = ['rgba(184,240,89,0.06)', 'rgba(91,184,245,0.06)', 'rgba(240,164,41,0.06)'];
+
+  const rows = [];
+  filaAtual.forEach((item, i) => {
+    const loteIdx  = Math.floor(i / LOTE_SIZE);          // 0, 1, 2…
+    const posLote  = i % LOTE_SIZE;                       // posição dentro do lote
+    const cor      = loteColors[loteIdx % loteColors.length];
+    const bg       = loteBg[loteIdx % loteBg.length];
+
+    // Separador de lote
+    if (posLote === 0) {
+      const restantes = filaAtual.length - i;
+      const nLote     = Math.min(LOTE_SIZE, restantes);
+      const loteNum   = loteIdx + 1;
+      const atingiuLimite = loteIdx >= 3; // 3 lotes × 20 = 60
+      rows.push(`<div style="display:flex;align-items:center;gap:10px;margin:${i===0?'0':'12px'} 0 6px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:${cor};letter-spacing:0.12em;white-space:nowrap">
+          ${atingiuLimite ? '⚠ LOTE '+ loteNum +' — acima do limite diário' : '── LOTE '+ loteNum +' ──────'}
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${nLote} empresa${nLote!==1?'s':''}</div>
+        <div style="flex:1;height:1px;background:${cor};opacity:0.2"></div>
+        ${loteIdx < 3 ? `<div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted)">${loteIdx===0?'início':'+'+(loteIdx)+'h de espera'}</div>` : ''}
+      </div>`);
+    }
+
     const waNum = item.whatsapp.replace(/\D/g,'');
     const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
     const aberto = item.aberto || false;
-    return `<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}">
+    rows.push(`<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}" style="border-left:2px solid ${cor}">
       <div class="fila-item-header" onclick="toggleFilaItemSlot(${slot},'${item.id}')" style="cursor:pointer;user-select:none">
-        <div class="fila-item-num">${i+1}</div>
+        <div class="fila-item-num" style="color:${cor}">${posLote+1}</div>`);
+  });
+
+  // fallback — nunca deve chegar aqui, mas evita erro
+  itensEl.innerHTML = '';
+
+  // rebuild real com estrutura correta
+  itensEl.innerHTML = filaAtual.map((item, i) => {
+    const loteIdx  = Math.floor(i / LOTE_SIZE);
+    const posLote  = i % LOTE_SIZE;
+    const cor      = loteColors[loteIdx % loteColors.length];
+    const waNum    = item.whatsapp.replace(/\D/g,'');
+    const labels   = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
+    const aberto   = item.aberto || false;
+    const atingiuLimite = loteIdx >= 3;
+
+    const separador = posLote === 0 ? (() => {
+      const restantes = filaAtual.length - i;
+      const nLote = Math.min(LOTE_SIZE, restantes);
+      const loteNum = loteIdx + 1;
+      return `<div style="display:flex;align-items:center;gap:10px;margin:${i===0?'0':'14px'} 0 6px;padding:0 2px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:${cor};letter-spacing:0.1em;white-space:nowrap">
+          ${atingiuLimite ? '⚠ LOTE '+loteNum+' · acima do limite' : 'LOTE '+loteNum}
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${nLote} empresa${nLote!==1?'s':''}</div>
+        <div style="flex:1;height:1px;background:${cor};opacity:0.25;min-width:12px"></div>
+        <div style="font-family:'DM Mono',monospace;font-size:7px;color:${atingiuLimite?'var(--error)':'var(--muted)'}">
+          ${atingiuLimite ? '⚠ acima de 60/dia' : loteIdx===0 ? 'disparo imediato' : 'após '+(loteIdx)+'h de pausa'}
+        </div>
+      </div>`;
+    })() : '';
+
+    return separador + `<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}" style="border-left:2px solid ${cor}40">
+      <div class="fila-item-header" onclick="toggleFilaItemSlot(${slot},'${item.id}')" style="cursor:pointer;user-select:none">
+        <div class="fila-item-num" style="color:${cor};min-width:28px">${i+1}</div>
         <div class="fila-item-nome">${escHtml(item.nome)}</div>
         <div class="fila-item-wa">+${waNum}</div>
         <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
