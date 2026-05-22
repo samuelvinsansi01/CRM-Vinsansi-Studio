@@ -599,7 +599,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     </button>
     <select id="exportDaySelect" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:7px 10px;width:auto;cursor:pointer"><option value="">Exportar dia...</option></select>
     <button class="btn btn-excel" onclick="exportExcelDay()">Dia específico</button>
-    <button class="btn btn-danger" style="margin-left:auto" onclick="clearAll()">Limpar semana</button>
+    <button class="btn btn-danger" style="margin-left:auto" onclick="clearDayModal()">Limpar dia</button>
+    <button class="btn btn-danger" onclick="clearAll()">Limpar semana</button>
   </div>
 
   <div class="stretch-card">
@@ -1163,6 +1164,21 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="modal-btns">
       <button class="modal-btn-ok" style="background:var(--error);color:#fff" onclick="confirmClear()">Limpar mesmo assim</button>
       <button class="modal-btn-cancel" onclick="document.getElementById('clearModal').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="clearDayModalOverlay">
+  <div class="modal">
+    <div class="modal-title">Limpar <span style="color:var(--error)">dia?</span></div>
+    <div class="modal-sub">// leads <strong style="color:var(--text)">Não enviados</strong> do dia selecionado voltarão para a Base de Atribuição. Leads com status já definido serão mantidos.</div>
+    <div class="field-group" style="margin-bottom:16px">
+      <label>Selecione o dia</label>
+      <select id="clearDaySelect" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:8px 12px;width:100%;cursor:pointer"></select>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn-ok" style="background:var(--error);color:#fff" onclick="confirmClearDay()">Limpar dia</button>
+      <button class="modal-btn-cancel" onclick="document.getElementById('clearDayModalOverlay').classList.remove('open')">Cancelar</button>
     </div>
   </div>
 </div>
@@ -2347,6 +2363,42 @@ function confirmClear() {
   const msg = semStatus.length
     ? `Semana limpa · ${semStatus.length} lead${semStatus.length!==1?'s':''} voltaram para Atribuição`
     : 'Semana limpa';
+  notify(msg);
+}
+
+function clearDayModal() {
+  const weekDays = currentWeekDays();
+  const data = ensureWeekData();
+  const sel = document.getElementById('clearDaySelect');
+  sel.innerHTML = weekDays.map(day => {
+    const count = (data.days[day]||[]).length;
+    return `<option value="${day}"${day===selectedDay?' selected':''}>${dayLabel(day)} — ${count} empresa${count!==1?'s':''}</option>`;
+  }).join('');
+  document.getElementById('clearDayModalOverlay').classList.add('open');
+}
+
+function confirmClearDay() {
+  const day = document.getElementById('clearDaySelect').value;
+  if (!day) return;
+  const data = ensureWeekData();
+  const emps = data.days[day] || [];
+
+  // Leads "Não enviados" voltam para a Base de Atribuição
+  const semStatus = emps.filter(e => !e.status || e.status === 'Não enviada');
+  if (semStatus.length) {
+    const atrib = getAtribuicaoData();
+    const atribIds = new Set(atrib.map(a => a.id));
+    const novos = semStatus.filter(e => !atribIds.has(e.id)).map(e => ({ ...e, voltouDaSemana: todayStr(), diaDestino: null }));
+    saveAtribuicaoData([...atrib, ...novos]);
+  }
+
+  data.days[day] = [];
+  saveWeekData(data);
+  document.getElementById('clearDayModalOverlay').classList.remove('open');
+  renderInicio(); updateBadges();
+  const msg = semStatus.length
+    ? `${dayLabel(day)} limpo · ${semStatus.length} lead${semStatus.length!==1?'s':''} voltaram para Atribuição`
+    : `${dayLabel(day)} limpo`;
   notify(msg);
 }
 
@@ -3646,8 +3698,9 @@ function renderFilaSlot(slot) {
   const chipId = chip ? chip.id : null;
   const st = chipSlotState[slot];
   const filaCompleta = chipId ? getFilaChip(chipId) : [];
-  // Apenas pendentes/erro para contagem e exibição ativa
+  // Para a fila ativa: inclui aguardando e erro (os "enviados" já foram arquivados no histórico ou são empresas já enviadas previamente)
   const filaAtual = filaCompleta.filter(f => f.status !== 'enviado');
+  const filaComEnviados = filaCompleta; // para cálculo de numeração de lotes
   const countEl = document.getElementById(`filaCount${slot}`);
   const vaziEl  = document.getElementById(`filaVazia${slot}`);
   const itensEl = document.getElementById(`filaItens${slot}`);
@@ -3694,7 +3747,9 @@ function renderFilaSlot(slot) {
   });
 
   // ── Itens ativos (aguardando/erro) ──
+  // Usamos filaCompleta para calcular o número do lote corretamente (enviados já ocupam posições nos lotes)
   let loteNumAtual = (st.loteHistorico||[]).length;
+  let activeIdx = 0; // índice dentro dos itens não-enviados para contagem de lote visual
   filaAtual.forEach((item, i) => {
     if (i % LOTE_SIZE === 0) {
       loteNumAtual++;
@@ -3725,7 +3780,7 @@ function renderFilaSlot(slot) {
           <div style="flex-shrink:0;min-width:120px">
             <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--accent);margin-bottom:4px;padding-top:8px">IMAGEM DO LOTE</div>
             <div class="fila-img-area${loteImg?' has-img':''}" onclick="document.getElementById('lote-img-s${slot}-${loteNumAtual}').click()" style="min-height:60px;border-color:${loteImg?'var(--accent-border)':''}">
-              ${loteImg?`<img src="${loteImg}" alt="imagem lote"/>`:''}
+              ${loteImg?`<img id="lote-img-preview-${slot}-${loteNumAtual}" alt="imagem lote"/>`:''}
               <span class="fila-img-label">${loteImg?'':'📎 imagem'}</span>
               ${loteImg?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();onLoteImgRemove('${chipId}',${loteNumAtual},true,${slot})">×</button>`:''}
             </div>
@@ -3758,6 +3813,19 @@ function renderFilaSlot(slot) {
   });
 
   itensEl.innerHTML = html;
+
+  // Atribuir src das imagens de lote via JS (evita truncamento de base64 em atributo HTML)
+  if (chipId) {
+    let loteN = (st.loteHistorico||[]).length;
+    for (let i = 0; i < filaAtual.length; i += LOTE_SIZE) {
+      loteN++;
+      const img = getLoteImagem(chipId, loteN);
+      if (img) {
+        const imgEl = document.getElementById(`lote-img-preview-${slot}-${loteN}`);
+        if (imgEl) imgEl.src = img;
+      }
+    }
+  }
 }
 
 function toggleLoteHist(id) {
@@ -3874,12 +3942,17 @@ function toggleFilaSlotEmpresa(slot, empId) {
     const emp = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) { notify('// empresa sem WhatsApp','warn'); return; }
     const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
-    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: 'aguardando', aberto: false });
-    Object.keys(data.days).forEach(day => {
-      const e = (data.days[day]||[]).find(e => e.id === empId);
-      if (e) e.status = 'Em fila';
-    });
-    saveWeekData(data);
+    // Se já foi enviada, entra na fila com status "enviado" para não ser disparada novamente
+    const jaEnviado = emp.status === 'Enviada' || emp.status === 'Respondida' || emp.status === 'Não respondida' || emp.status === 'Recusada' || emp.status === 'Fechada';
+    const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
+    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
+    if (!jaEnviado) {
+      Object.keys(data.days).forEach(day => {
+        const e = (data.days[day]||[]).find(e => e.id === empId);
+        if (e) e.status = 'Em fila';
+      });
+      saveWeekData(data);
+    }
   }
   renderDisparoEmpresas();
   renderFilaSlot(0);
@@ -3906,12 +3979,16 @@ function toggleFila(empId) {
     const emp  = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) return;
     const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
-    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: 'aguardando', aberto: false });
-    Object.keys(data.days).forEach(day => {
-      const e = (data.days[day]||[]).find(e => e.id === empId);
-      if (e) e.status = 'Em fila';
-    });
-    saveWeekData(data);
+    const jaEnviado = emp.status === 'Enviada' || emp.status === 'Respondida' || emp.status === 'Não respondida' || emp.status === 'Recusada' || emp.status === 'Fechada';
+    const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
+    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
+    if (!jaEnviado) {
+      Object.keys(data.days).forEach(day => {
+        const e = (data.days[day]||[]).find(e => e.id === empId);
+        if (e) e.status = 'Em fila';
+      });
+      saveWeekData(data);
+    }
   }
   renderDisparoEmpresas(); renderFila(); updateBadges();
 }
