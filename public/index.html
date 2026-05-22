@@ -1716,8 +1716,9 @@ function abrirModalConfirm(msg, callback) {
   _confirmCallback = callback;
   document.getElementById('confirmModal').classList.add('open');
   document.getElementById('confirmModalOk').onclick = () => {
+    const cb = _confirmCallback;
     fecharConfirmModal();
-    if (_confirmCallback) _confirmCallback();
+    if (cb) cb();
   };
 }
 function fecharConfirmModal() {
@@ -3610,7 +3611,7 @@ function removerFila(id) {
         const emp = (data.days[day]||[]).find(e => e.id === id);
         if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
       });
-      saveWeekData(data); updateBadges(); renderDisparoEmpresas(); renderFila();
+      saveWeekData(data); saveFilaDisparo(); updateBadges(); renderDisparoEmpresas(); renderFila();
     }
   );
 }
