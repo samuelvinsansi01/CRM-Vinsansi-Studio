@@ -3044,12 +3044,11 @@ function renderFilaSlot(slot) {
     html += `<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}">
       <div class="fila-item-header" onclick="toggleFilaItemSlot(${slot},'${item.id}')" style="cursor:pointer;user-select:none">
         <div class="fila-item-num">${i+1}</div>
-        <div class="fila-item-nome">${escHtml(item.nome)}</div>
+        <div class="fila-item-nome">${escHtml(item.nome)}${item.site ? `<a href="${escHtml(item.site)}" target="_blank" rel="noopener" style="display:block;font-family:'DM Mono',monospace;font-size:8px;font-weight:400;color:var(--accent);text-decoration:none;opacity:0.8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px" title="${escHtml(item.site)}" onclick="event.stopPropagation()">↗ ${escHtml(item.site.replace(/^https?:\/\/(www\.)?/,''))}</a>` : ''}</div>
         <div class="fila-item-wa">+${waNum}</div>
         <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
         <div style="color:var(--muted);font-size:12px;margin-left:4px;transition:transform 0.2s;transform:rotate(${aberto?'90':'0'}deg)">▶</div>
         <button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFilaSlot(${slot},'${item.id}')">×</button>
-      </div>
       <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
         <div>
           <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
@@ -3450,7 +3449,7 @@ function toggleFilaSlotEmpresa(slot, empId) {
     const emp = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) { notify('// empresa sem WhatsApp','warn'); return; }
     const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
-    fila.push({ id: emp.id, nome: emp.nome, whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: 'aguardando', aberto: false });
+    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: 'aguardando', aberto: false });
     Object.keys(data.days).forEach(day => {
       const e = (data.days[day]||[]).find(e => e.id === empId);
       if (e) e.status = 'Em fila';
@@ -3482,7 +3481,7 @@ function toggleFila(empId) {
     const emp  = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) return;
     const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
-    fila.push({ id: emp.id, nome: emp.nome, whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: 'aguardando', aberto: false });
+    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: 'aguardando', aberto: false });
     Object.keys(data.days).forEach(day => {
       const e = (data.days[day]||[]).find(e => e.id === empId);
       if (e) e.status = 'Em fila';
@@ -3512,9 +3511,8 @@ function renderFila() {
     return `<div class="fila-item ${item.status}" id="fila-item-${item.id}">
       <div class="fila-item-header" onclick="toggleFilaItem('${item.id}')" style="cursor:pointer;user-select:none">
         <div class="fila-item-num">${i+1}</div>
-        <div class="fila-item-nome">${escHtml(item.nome)}</div>
+        <div class="fila-item-nome">${escHtml(item.nome)}${item.site ? `<a href="${escHtml(item.site)}" target="_blank" rel="noopener" style="display:block;font-family:'DM Mono',monospace;font-size:8px;font-weight:400;color:var(--accent);text-decoration:none;opacity:0.8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px" title="${escHtml(item.site)}" onclick="event.stopPropagation()">↗ ${escHtml(item.site.replace(/^https?:\/\/(www\.)?/,''))}</a>` : ''}</div>
         <div class="fila-item-wa">+${waNum}${chipBadge}</div>
-        <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
         <div style="color:var(--muted);font-size:12px;margin-left:4px;transition:transform 0.2s;transform:rotate(${aberto?'90':'0'}deg)">▶</div>
         <button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFila('${item.id}')">×</button>
       </div>
