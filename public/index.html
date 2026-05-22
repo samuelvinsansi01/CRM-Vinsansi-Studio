@@ -3032,10 +3032,33 @@ function renderFilaSlot(slot) {
       const borderCor = completo ? 'rgba(184,240,89,0.25)' : 'rgba(240,164,41,0.25)';
       const bgCor = completo ? 'rgba(184,240,89,0.05)' : 'rgba(240,164,41,0.05)';
       const label = completo ? `LOTE ${loteNum} — #${inicio}–${fim}` : `LOTE ${loteNum} — #${inicio}–${fim} (${fim-inicio+1}/20)`;
-      html += `<div style="display:flex;align-items:center;gap:10px;margin:${i===0?'0':'10px'} 0 6px;padding:7px 12px;border-radius:8px;background:${bgCor};border:1px solid ${borderCor}">
-        <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.12em;color:${cor}">${label}</span>
-        <span style="flex:1;height:1px;background:${borderCor}"></span>
-        ${!completo?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--warning)">${LOTE_SIZE-(fim-inicio+1)} restantes</span>`:'<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--accent)">✓ completo</span>'}
+      const loteRamoId = getLoteRamo(chipId, loteNum);
+      const loteImg = getLoteImagem(chipId, loteNum);
+      const ramosOptsSlot = getRamos().map(r=>`<option value="${r.id}"${loteRamoId===r.id?' selected':''} style="background:var(--surface3)">${escHtml(r.nome)}</option>`).join('');
+      html += `<div style="margin:${i===0?'0':'10px'} 0 6px;border-radius:8px;background:${bgCor};border:1px solid ${borderCor};overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 12px">
+          <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.12em;color:${cor}">${label}</span>
+          <span style="flex:1;height:1px;background:${borderCor}"></span>
+          ${!completo?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--warning)">${LOTE_SIZE-(fim-inicio+1)} restantes</span>`:'<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--accent)">✓ completo</span>'}
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:0 12px 10px;border-top:1px solid ${borderCor}">
+          <div style="flex:1">
+            <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--muted);margin-bottom:4px;padding-top:8px">RAMO DO TEMPLATE</div>
+            <select style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onLoteRamoChange('${chipId}',${loteNum},this.value,true,${slot})">
+              <option value="" style="background:var(--surface3)">— sem ramo (geral) —</option>
+              ${ramosOptsSlot}
+            </select>
+          </div>
+          <div style="flex-shrink:0;min-width:120px">
+            <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--accent);margin-bottom:4px;padding-top:8px">IMAGEM DO LOTE</div>
+            <div class="fila-img-area${loteImg?' has-img':''}" onclick="document.getElementById('lote-img-s${slot}-${loteNum}').click()" style="min-height:60px;border-color:${loteImg?'var(--accent-border)':''}">
+              ${loteImg?`<img src="${loteImg}" alt="imagem lote"/>`:''}
+              <span class="fila-img-label">${loteImg?'':'📎 imagem'}</span>
+              ${loteImg?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();onLoteImgRemove('${chipId}',${loteNum},true,${slot})">×</button>`:''}
+            </div>
+            <input type="file" accept="image/*" class="fila-img-input" id="lote-img-s${slot}-${loteNum}" onchange="onLoteImgChange('${chipId}',${loteNum},this,true,${slot})"/>
+          </div>
+        </div>
       </div>`;
     }
     const waNum = item.whatsapp.replace(/\D/g,'');
@@ -3051,356 +3074,85 @@ function renderFilaSlot(slot) {
         <button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFilaSlot(${slot},'${item.id}')">×</button>
       </div>
       <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
-        <div>
+        <div style="width:100%">
+          <!-- MSG 1: Apresentação -->
           <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
-          <div style="margin-bottom:6px">
-            <label style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.12em;color:var(--muted);margin-bottom:3px;display:block">RAMO DO TEMPLATE</label>
-            <select id="fila-ramo-${slot}-${item.id}" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onRamoFilaSlotChange(${slot},'${item.id}',this.value)">
-              <option value="">— sem ramo (geral) —</option>
-              ${getRamos().map(r=>`<option value="${r.id}"${(item.ramoId===r.id)?' selected':''}>${escHtml(r.nome)}</option>`).join('')}
-            </select>
-          </div>
           <textarea class="fila-msg-area" id="fila-msg-${slot}-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFilaSlot(${slot},'${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
           <button class="fila-msg-shuffle" onclick="shuffleFilaMsgSlot(${slot},'${item.id}')">↻ sortear</button>
         </div>
-        <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">② REDESIGN</div>
-          <div>
-              <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-s${slot}-${item.id}').click()" style="min-height:80px;border-color:${item.imagem2Base64?'var(--accent-border)':''}">
-                ${item.imagem2Base64?`<img src="${item.imagem2Base64}" alt="preview redesign"/>`:''}
-                <span class="fila-img-label">${item.imagem2Base64?'':'📎 redesign'}</span>
-                ${item.imagem2Base64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagemSlot(${slot},'${item.id}','2')">×</button>`:''}
-              </div>
-              <input type="file" accept="image/*" class="fila-img-input" id="img2-s${slot}-${item.id}" onchange="onImgChangeSlot(${slot},'${item.id}',this,'2')"/>
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px">A imagem do redesign é enviada após o texto.</div>
-        </div>
-      </div>
-    </div>`;
-  });
-  itensEl.innerHTML = html;
-}
-
-function getChipBySlot(slot) {
-  const chips = getChips(); return chips[slot] || null;
-}
-
-function toggleFilaItemSlot(slot, id) {
-  const chip = getChipBySlot(slot); if (!chip) return;
-  const fila = getFilaChip(chip.id);
-  const item = fila.find(f => f.id === id);
-  if (!item) return;
-  item.aberto = !item.aberto;
-  renderFilaSlot(slot);
-}
-
-function atualizarMsgFilaSlot(slot, id, val) {
-  const chip = getChipBySlot(slot); if (!chip) return;
-  const fila = getFilaChip(chip.id);
-  const item = fila.find(f => f.id === id);
-  if (item) { item.mensagem = val; saveFilaDisparo(); }
-}
-
-function shuffleFilaMsgSlot(slot, id) {
-  const chip = getChipBySlot(slot); if (!chip) return;
-  const fila = getFilaChip(chip.id);
-  const item = fila.find(f => f.id === id);
-  if (!item) return;
-  const ramoSel = document.getElementById(`fila-ramo-${slot}-${id}`);
-  const ramoId = ramoSel ? (ramoSel.value || null) : (item.ramoId || null);
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
-  item.mensagem = text; item.templateIdx = idx;
-  const el = document.getElementById(`fila-msg-${slot}-${id}`);
-  if (el) el.value = item.mensagem;
-}
-function onRamoFilaSlotChange(slot, id, ramoId) {
-  const chip = getChipBySlot(slot); if (!chip) return;
-  const fila = getFilaChip(chip.id);
-  const item = fila.find(f => f.id === id);
-  if (!item) return;
-  item.ramoId = ramoId || null;
-  saveFilaDisparo();
-  // Sortear automaticamente com o novo ramo
-  const { text, idx } = pickTemplate(item.nome, item.ramoId);
-  item.mensagem = text; item.templateIdx = idx;
-  saveFilaDisparo();
-  const el = document.getElementById(`fila-msg-${slot}-${id}`);
-  if (el) el.value = item.mensagem;
-}
-
-function onImgChangeSlot(slot, id, input, imgSlot) {
-  const file = input.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    const chip = getChipBySlot(slot); if (!chip) return;
-    const fila = getFilaChip(chip.id);
-    const item = fila.find(f => f.id === id);
-    if (!item) return;
-    if (imgSlot === '2') { item.imagem2Base64 = e.target.result; item.imagem2Nome = file.name; }
-    else { item.imagemBase64 = e.target.result; item.imagemNome = file.name; }
-    saveFilaDisparo();
-    renderFilaSlot(slot);
-  };
-  reader.readAsDataURL(file);
-}
-
-function removerImagemSlot(slot, id, imgSlot) {
-  const chip = getChipBySlot(slot); if (!chip) return;
-  const fila = getFilaChip(chip.id);
-  const item = fila.find(f => f.id === id);
-  if (!item) return;
-  if (imgSlot === '2') { delete item.imagem2Base64; delete item.imagem2Nome; }
-  else { delete item.imagemBase64; delete item.imagemNome; }
-  saveFilaDisparo();
-  renderFilaSlot(slot);
-}
-
-function removerFilaSlot(slot, id) {
-  const chip = getChipBySlot(slot); if (!chip) return;
-  const chipId = chip.id;
-  if (!filaDisparo[chipId]) return;
-  const item = filaDisparo[chipId].find(f => f.id === id);
-  abrirModalConfirm(
-    `Remover <strong>${item ? escHtml(item.nome) : 'esta empresa'}</strong> da fila?`,
-    () => {
-      if (!filaDisparo[chipId]) return;
-      filaDisparo[chipId] = filaDisparo[chipId].filter(f => f.id !== id);
-      const data = ensureWeekData();
-      Object.keys(data.days).forEach(day => {
-        const emp = (data.days[day]||[]).find(e => e.id === id);
-        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
-      });
-      saveWeekData(data); saveFilaDisparo(); updateBadges(); renderDisparoEmpresas(); renderFilaSlot(slot);
-    }
-  );
-}
-
-function limparFilaChip(slot) {
-  const st = chipSlotState[slot];
-  if (st.disparoEmAndamento) { notify('// disparo em andamento','warn'); return; }
-  if (st.aguardandoLote) cancelarLotesChip(slot);
-  const chip = getChipBySlot(slot);
-  if (chip && filaDisparo[chip.id]) {
-    const data = ensureWeekData();
-    filaDisparo[chip.id].forEach(item => {
-      Object.keys(data.days).forEach(day => {
-        const emp = (data.days[day]||[]).find(e => e.id === item.id);
-        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
-      });
-    });
-    saveWeekData(data);
-    filaDisparo[chip.id] = [];
-  }
-  saveFilaDisparo();
-  renderDisparoEmpresas(); renderFilaSlot(slot); updateBadges();
-}
-
-function cancelarLotesChip(slot) {
-  const st = chipSlotState[slot];
-  if (st.loteEsperaTimer) { clearTimeout(st.loteEsperaTimer); st.loteEsperaTimer = null; }
-  if (st.loteCountdownInt) { clearInterval(st.loteCountdownInt); st.loteCountdownInt = null; }
-  st.filaLotes=[]; st.loteAtual=0; st.lotesTotal=0; st.aguardandoLote=false; st.loteEsperaFim=null;
-  document.getElementById(`loteEsperaPanel${slot}`).style.display='none';
-  document.getElementById(`btnDisparar${slot}`).disabled=false;
-  document.getElementById(`disparoBtn${slot}`).textContent= slot===0 ? '🟢 Disparar' : '🔵 Disparar';
-}
-
-async function confirmarProximoLoteChip(slot) {
-  const st = chipSlotState[slot];
-  if (!st.filaLotes.length) return;
-  document.getElementById(`btnProximoLote${slot}`).disabled=true;
-  document.getElementById(`loteEsperaPanel${slot}`).style.display='none';
-  if (st.loteCountdownInt) { clearInterval(st.loteCountdownInt); st.loteCountdownInt=null; }
-  if (st.loteEsperaTimer)  { clearTimeout(st.loteEsperaTimer); st.loteEsperaTimer=null; }
-  await dispararLoteChip(slot);
-}
-
-async function iniciarDisparoChip(slot) {
-  const st = chipSlotState[slot];
-  if (st.disparoEmAndamento || st.aguardandoLote) return;
-  const chip = getChipBySlot(slot);
-  if (!chip) { notify(`// configure o Chip ${slot+1} em Configurações`,'err'); return; }
-  const filaAtual = getFilaChip(chip.id);
-  if (!filaAtual.length) { notify('// fila vazia','warn'); return; }
-  document.getElementById(`disparoLog${slot}`).innerHTML='';
-  const loteConf = getLoteConfig();
-  st.filaLotes=[]; st.loteAtual=0;
-  for (let i=0; i<filaAtual.length; i+=loteConf.tamanho) st.filaLotes.push(filaAtual.slice(i,i+loteConf.tamanho));
-  st.lotesTotal=st.filaLotes.length;
-  await dispararLoteChip(slot);
-}
-
-async function dispararLoteChip(slot) {
-  const st = chipSlotState[slot];
-  st.loteAtual++;
-  const lote = st.filaLotes.shift();
-  const loteConf = getLoteConfig();
-  const chip = getChipBySlot(slot);
-  if (!chip) { notify('// configure um chip primeiro','err'); return; }
-  const delayMin = parseInt(document.getElementById('delayMin')?.value)||120;
-  const delayMax = parseInt(document.getElementById('delayMax')?.value)||150;
-  const MSG_DELAY = 15000;
-  const logEl = document.getElementById(`disparoLog${slot}`);
-  logEl.style.display='block';
-  st.disparoEmAndamento=true;
-  document.getElementById(`btnDisparar${slot}`).disabled=true;
-  document.getElementById(`spinner${slot}`).style.display='block';
-  document.getElementById(`disparoBtn${slot}`).textContent=`Lote ${st.loteAtual}/${st.lotesTotal}...`;
-
-  function log(msg) { const l=document.createElement('div'); l.style.marginBottom='3px'; l.innerHTML=`<span style="color:var(--muted)">[${timeStr()}]</span> ${msg}`; logEl.appendChild(l); logEl.scrollTop=logEl.scrollHeight; }
-  const cor = slot===0 ? 'var(--accent)' : '#5bb8f5';
-  log(`<span style="color:${cor}">━━ CHIP ${slot+1} · LOTE ${st.loteAtual}/${st.lotesTotal} · ${lote.length} empresa${lote.length>1?'s':''} ━━</span>`);
-
-  for (let i=0; i<lote.length; i++) {
-    const item = lote[i];
-    if (item.status==='enviado') continue;
-    item.status='enviando'; atualizarStatusFilaSlot(slot, item.id, 'enviando');
-    log(`Enviando para <span style="color:var(--text)">${escHtml(item.nome)}</span>...`);
-    try {
-      const waNum = item.whatsapp.replace(/\D/g,'');
-      const numero = waNum.startsWith('55') ? waNum : '55'+waNum;
-      const h = {'Content-Type':'application/json','apikey':chip.key};
-      const res1 = await fetch(`${chip.url}/message/sendText/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},textMessage:{text:item.mensagem}})});
-      if (!res1.ok) throw new Error(`HTTP ${res1.status}`);
-      log(`  ① apresentação enviada`);
-      await new Promise(r=>setTimeout(r,MSG_DELAY));
-      if (item.imagemBase64) {
-        const b1=item.imagemBase64.split(',')[1], m1=item.imagemBase64.split(';')[0].split(':')[1]||'image/jpeg';
-        await fetch(`${chip.url}/message/sendMedia/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},mediaMessage:{mediatype:'image',media:b1,mimetype:m1,caption:''}})});
-        log(`  ③ imagem (site atual) enviada`);
-        if (item.imagem2Base64) {
-          await new Promise(r=>setTimeout(r,4000));
-          const b2=item.imagem2Base64.split(',')[1], m2=item.imagem2Base64.split(';')[0].split(':')[1]||'image/jpeg';
-          await fetch(`${chip.url}/message/sendMedia/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},mediaMessage:{mediatype:'image',media:b2,mimetype:m2,caption:''}})});
-          log(`  ④ imagem (redesign) enviada`);
-        }
-      } else if (item.imagem2Base64) {
-        const b2=item.imagem2Base64.split(',')[1], m2=item.imagem2Base64.split(';')[0].split(':')[1]||'image/jpeg';
-        await fetch(`${chip.url}/message/sendMedia/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},mediaMessage:{mediatype:'image',media:b2,mimetype:m2,caption:''}})});
-        log(`  ③ imagem (redesign) enviada`);
-      } else {
-        log(`  ③ <span style="color:var(--warning)">sem imagens anexadas</span>`);
-      }
-      item.status='enviado'; atualizarStatusFilaSlot(slot,item.id,'enviado');
-      log(`<span style="color:${cor}">✓ ${escHtml(item.nome)}</span>`);
-      atualizarStatusEmpresa(item.id,'Enviada');
-    } catch(e) {
-      item.status='erro'; atualizarStatusFilaSlot(slot,item.id,'erro');
-      log(`<span style="color:var(--error)">✗ Erro — ${e.message}</span>`);
-    }
-    if (i<lote.length-1) {
-      const delay=(delayMin+Math.random()*(delayMax-delayMin))*1000;
-      log(`Aguardando ${Math.round(delay/1000)}s...`);
-      await new Promise(r=>setTimeout(r,delay));
-    }
-  }
-
-  const env=lote.filter(f=>f.status==='enviado').length, erros=lote.filter(f=>f.status==='erro').length;
-  log(`<span style="color:${cor}">✓ Lote ${st.loteAtual} concluído! ${env} enviado${env>1?'s':''} · ${erros} erro${erros!==1?'s':''}</span>`);
-  st.disparoEmAndamento=false;
-  document.getElementById(`spinner${slot}`).style.display='none';
-  saveFilaDisparo();
-  renderFilaSlot(slot); renderInicio();
-
-  if (st.filaLotes.length>0) {
-    const esperaMs=loteConf.esperaMin*60*1000; st.loteEsperaFim=Date.now()+esperaMs; st.aguardandoLote=true;
-    document.getElementById(`btnDisparar${slot}`).disabled=true;
-    document.getElementById(`disparoBtn${slot}`).textContent=`🟡 Lote ${st.loteAtual+1}/${st.lotesTotal}`;
-    const panel=document.getElementById(`loteEsperaPanel${slot}`); panel.style.display='block';
-    document.getElementById(`loteEsperaTitle${slot}`).textContent=`⏱ Aguardando lote ${st.loteAtual+1}/${st.lotesTotal}...`;
-    document.getElementById(`btnProximoLote${slot}`).disabled=true;
-    document.getElementById(`loteProgressBar${slot}`).style.width='0%';
-    notify(`✓ Chip ${slot+1} · Lote ${st.loteAtual} concluído · próximo em ${loteConf.esperaMin}min`);
-    // Countdown
-    st.loteCountdownInt = setInterval(() => {
-      const r = st.loteEsperaFim - Date.now();
-      if (r<=0) { clearInterval(st.loteCountdownInt); st.loteCountdownInt=null; document.getElementById(`loteCountdown${slot}`).textContent='00:00'; document.getElementById(`btnProximoLote${slot}`).disabled=false; document.getElementById(`loteProgressBar${slot}`).style.width='100%'; return; }
-      const m=Math.floor(r/60000), s=Math.floor((r%60000)/1000);
-      document.getElementById(`loteCountdown${slot}`).textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-      document.getElementById(`loteProgressBar${slot}`).style.width=`${100-(r/(esperaMs)*100)}%`;
-    }, 1000);
-    st.loteEsperaTimer = setTimeout(async () => { st.loteEsperaTimer=null; if (st.aguardandoLote) { clearInterval(st.loteCountdownInt); st.loteCountdownInt=null; st.aguardandoLote=false; panel.style.display='none'; await dispararLoteChip(slot); } }, esperaMs);
-  } else {
-    st.aguardandoLote=false;
-    document.getElementById(`btnDisparar${slot}`).disabled=false;
-    document.getElementById(`disparoBtn${slot}`).textContent= slot===0 ? '🟢 Disparar' : '🔵 Disparar';
-    const filaAtual=getFilaChip(chip.id);
-    const totalEnv=filaAtual.filter(f=>f.status==='enviado').length;
-    const totalErr=filaAtual.filter(f=>f.status==='erro').length;
-    log(`<span style="color:${cor}">━━ CHIP ${slot+1} CONCLUÍDO · ${totalEnv} enviados · ${totalErr} erros ━━</span>`);
-    notify(`✓ Chip ${slot+1} concluído · ${totalEnv} enviados`);
-  }
-}
-
-function atualizarStatusFilaSlot(slot, id, status) {
-  const el = document.getElementById(`fila-item-${slot}-${id}`); if (!el) return;
-  el.className=`fila-item ${status}`;
-  const st=el.querySelector('.fila-item-status'); if (!st) return;
-  const labels={aguardando:'aguardando',enviando:'enviando...',enviado:'✓ enviado',erro:'✗ erro'};
-  st.className=`fila-item-status ${status}`; st.textContent=labels[status]||status;
-}
-
-function renderDisparoEmpresas() {
-  const data = ensureWeekData();
-  const todasComWa = (data.days[disparoDay]||[]).filter(e => e.whatsapp);
-  const semWa  = (data.days[disparoDay]||[]).filter(e => !e.whatsapp).length;
-  const listEl = document.getElementById('disparoEmpresasList');
-  const statsEl= document.getElementById('disparoStats');
-  const naoEnv  = todasComWa.filter(e => (e.status||'Não enviada')==='Não enviada').length;
-  const emFila  = todasComWa.filter(e => e.status==='Em fila').length;
-  const env     = todasComWa.filter(e => e.status==='Enviada').length;
-
-  document.getElementById('disparoStatusTabs').innerHTML = [
-    {key:'Não enviada',label:'Não enviada',count:naoEnv},
-    {key:'Em fila',label:'Em fila',count:emFila},
-    {key:'Enviada',label:'Enviada',count:env},
-  ].map(tab => `<div class="status-tab${disparoStatus===tab.key?' active':''}" onclick="setDisparoStatus('${tab.key}')">
-    ${tab.label} <span class="st-count">${tab.count}</span>
-  </div>`).join('');
-
-  statsEl.innerHTML = `
-    <div class="stat-chip"><div class="stat-chip-val acc">${naoEnv}</div><div class="stat-chip-label">para enviar</div></div>
-    <div class="stat-chip"><div class="stat-chip-val warn">${emFila}</div><div class="stat-chip-label">em fila</div></div>
-    <div class="stat-chip"><div class="stat-chip-val">${env}</div><div class="stat-chip-label">enviadas</div></div>
-    <div class="stat-chip"><div class="stat-chip-val warn">${semWa}</div><div class="stat-chip-label">sem WhatsApp</div></div>
-  `;
-
-  const emps = todasComWa.filter(e => (e.status||'Não enviada') === disparoStatus);
-  if (!emps.length) { listEl.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:20px">Nenhuma empresa neste status</div>`; document.getElementById('disparoPagination').innerHTML=''; return; }
-
-  const totalDisp = emps.length;
-  const totalDispPages = Math.max(1, Math.ceil(totalDisp / DISPARO_PG));
-  if (disparoPage > totalDispPages) disparoPage = totalDispPages;
-  const pageEmps = emps.slice((disparoPage-1)*DISPARO_PG, disparoPage*DISPARO_PG);
-
-  const chips = getChips();
-  const chip0 = chips[0] || null;
-  const chip1 = chips[1] || null;
-  const fila0 = chip0 ? getFilaChip(chip0.id) : [];
-  const fila1 = chip1 ? getFilaChip(chip1.id) : [];
-
-  listEl.innerHTML = '<div class="ext-list">' + pageEmps.map(e => {
-    const naFila0 = chip0 && fila0.some(f => f.id === e.id);
-    const naFila1 = chip1 && fila1.some(f => f.id === e.id);
-    const enviada = e.status === 'Enviada';
-    return `<div class="empresa-card">
-      <div class="empresa-info">
-        <div class="empresa-nome">${e.googleUrl?`<a href="${escHtml(e.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(e.nome)}</a>`:escHtml(e.nome)}</div>
-        <div class="empresa-meta">
-          ${e.site?`<div class="empresa-site"><a href="${escHtml(e.site)}" target="_blank">${escHtml(e.site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></div>`:''}
-          <div class="empresa-phone">📱 ${escHtml(e.whatsapp)}</div>
-          ${naFila0?`<span style="font-family:'DM Mono',monospace;font-size:8px;padding:2px 7px;border-radius:100px;border:1px solid rgba(184,240,89,0.35);background:rgba(184,240,89,0.08);color:var(--accent)">✓ Chip 1</span>`:''}
-          ${naFila1?`<span style="font-family:'DM Mono',monospace;font-size:8px;padding:2px 7px;border-radius:100px;border:1px solid rgba(91,184,245,0.35);background:rgba(91,184,245,0.08);color:#5bb8f5">✓ Chip 2</span>`:''}
-        </div>
-      </div>
-      ${enviada?'<span class="q-badge ok">✓ enviada</span>':''}
-      <div class="empresa-actions" style="gap:5px">
-        ${!enviada && chip0 ? `<button class="add-btn${naFila0?' added':''}" style="${naFila0?'':'border-color:rgba(184,240,89,0.5);color:var(--accent)'}" onclick="toggleFilaSlotEmpresa(0,'${e.id}')">${naFila0?'✓ C1':'+ C1'}</button>` : ''}
-        ${!enviada && chip1 ? `<button class="add-btn${naFila1?' added':''}" style="${naFila1?'background:#5bb8f5;border-color:#5bb8f5;color:#0a0a0d':'border-color:rgba(91,184,245,0.5);color:#5bb8f5'}" onclick="toggleFilaSlotEmpresa(1,'${e.id}')">${naFila1?'✓ C2':'+ C2'}</button>` : ''}
       </div>
     </div>`;
   }).join('') + '</div>';
   renderPagination('disparoPagination', disparoPage, totalDispPages, totalDisp, DISPARO_PG, 'goDisparoPage', 'changeDisparoPgSize');
+}
+
+
+// ── Configuração por lote (ramo + imagem padrão) ────────────────
+const LOTE_CFG_KEY = 'vs_lote_cfg_v1';
+function getLoteCfg() {
+  try { return JSON.parse(localStorage.getItem(LOTE_CFG_KEY)||'{}'); } catch(e) { return {}; }
+}
+function saveLoteCfg(cfg) {
+  try { localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(cfg)); } catch(e) {}
+}
+// loteKey: "chip-{chipId}-lote-{loteNum}"  ou  "fila-{chipId}-lote-{loteNum}"
+function getLoteCfgKey(chipId, loteNum) { return `chip-${chipId}-lote-${loteNum}`; }
+function getLoteRamo(chipId, loteNum) {
+  const cfg = getLoteCfg();
+  return (cfg[getLoteCfgKey(chipId, loteNum)] || {}).ramoId || null;
+}
+function getLoteImagem(chipId, loteNum) {
+  const cfg = getLoteCfg();
+  return (cfg[getLoteCfgKey(chipId, loteNum)] || {}).imagem2Base64 || null;
+}
+function setLoteRamo(chipId, loteNum, ramoId) {
+  const cfg = getLoteCfg();
+  const k = getLoteCfgKey(chipId, loteNum);
+  if (!cfg[k]) cfg[k] = {};
+  cfg[k].ramoId = ramoId || null;
+  saveLoteCfg(cfg);
+}
+function setLoteImagem(chipId, loteNum, base64, nome) {
+  const cfg = getLoteCfg();
+  const k = getLoteCfgKey(chipId, loteNum);
+  if (!cfg[k]) cfg[k] = {};
+  cfg[k].imagem2Base64 = base64 || null;
+  cfg[k].imagem2Nome = nome || null;
+  saveLoteCfg(cfg);
+}
+function removerLoteImagem(chipId, loteNum) {
+  const cfg = getLoteCfg();
+  const k = getLoteCfgKey(chipId, loteNum);
+  if (cfg[k]) { delete cfg[k].imagem2Base64; delete cfg[k].imagem2Nome; saveLoteCfg(cfg); }
+}
+function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
+  setLoteRamo(chipId, loteNum, ramoId);
+  // Re-sortear mensagens de todos os cards do lote
+  const LOTE_SIZE = 20;
+  const fila = getFilaChip(chipId);
+  const inicio = (loteNum - 1) * LOTE_SIZE;
+  const fim = Math.min(inicio + LOTE_SIZE, fila.length);
+  for (let i = inicio; i < fim; i++) {
+    const item = fila[i];
+    item.ramoId = ramoId || null;
+    const { text, idx } = pickTemplate(item.nome, item.ramoId);
+    item.mensagem = text; item.templateIdx = idx;
+  }
+  saveFilaDisparo();
+  if (isSlot) renderFilaSlot(slot); else renderFila();
+}
+function onLoteImgChange(chipId, loteNum, input, isSlot, slot) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    setLoteImagem(chipId, loteNum, e.target.result, file.name);
+    if (isSlot) renderFilaSlot(slot); else renderFila();
+  };
+  reader.readAsDataURL(file);
+}
+function onLoteImgRemove(chipId, loteNum, isSlot, slot) {
+  removerLoteImagem(chipId, loteNum);
+  if (isSlot) renderFilaSlot(slot); else renderFila();
 }
 
 function getFilaChip(chipId) {
@@ -3506,36 +3258,13 @@ function renderFila() {
         <button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFila('${item.id}')">×</button>
       </div>
       <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
-        <!-- MSG 1: Apresentação -->
-        <div>
+        <div style="width:100%">
           <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
-          <div style="margin-bottom:6px">
-            <label style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.12em;color:var(--muted);margin-bottom:3px;display:block">RAMO DO TEMPLATE</label>
-            <select id="fila-ramo-${item.id}" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onRamoFilaChange('${item.id}',this.value)">
-              <option value="">— sem ramo (geral) —</option>
-              ${getRamos().map(r=>`<option value="${r.id}"${(item.ramoId===r.id)?' selected':''}>${escHtml(r.nome)}</option>`).join('')}
-            </select>
-          </div>
           <textarea class="fila-msg-area" id="fila-msg-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFila('${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
           <button class="fila-msg-shuffle" onclick="shuffleFilaMsg('${item.id}')">↻ sortear</button>
         </div>
-        <!-- MSG 2: Imagens -->
-        <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">② REDESIGN</div>
-          <div>
-              <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-input-${item.id}').click()" style="min-height:70px;border-color:${item.imagem2Base64?'var(--accent-border)':''}">
-                ${item.imagem2Base64?`<img src="${item.imagem2Base64}" alt="preview redesign"/>`:''}
-                <span class="fila-img-label">${item.imagem2Base64?'':'📎 redesign'}</span>
-                ${item.imagem2Base64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagem('${item.id}','2')">×</button>`:''}
-              </div>
-              <input type="file" accept="image/*" class="fila-img-input" id="img2-input-${item.id}" onchange="onImgChange('${item.id}',this,'2')"/>
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px">
-            A imagem do redesign é enviada após a mensagem de texto.
-          </div>
-        </div>
       </div>
-    </div>`;
+    </div>`
   }).join('');
 }
 
@@ -3553,12 +3282,27 @@ function atualizarMsgFila(id, val) {
   if (item) item.mensagem = val;
 }
 
+function shuffleFilaMsgSlot(slot, id) {
+  const chip = getChipBySlot(slot); if (!chip) return;
+  const fila = getFilaChip(chip.id);
+  const item = fila.find(f => f.id === id);
+  if (!item) return;
+  const itemIdx = fila.findIndex(f => f.id === id);
+  const loteNum = Math.floor(itemIdx / 20) + 1;
+  const ramoId = getLoteRamo(chip.id, loteNum) || item.ramoId || null;
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
+  item.mensagem = text; item.templateIdx = idx;
+  const el = document.getElementById(`fila-msg-${slot}-${id}`);
+  if (el) el.value = item.mensagem;
+  saveFilaDisparo();
+}
 function shuffleFilaMsg(id) {
   const fila = getFilaChip(disparoChipId);
   const item = fila.find(f => f.id === id);
   if (!item) return;
-  const ramoSel = document.getElementById(`fila-ramo-${id}`);
-  const ramoId = ramoSel ? (ramoSel.value || null) : (item.ramoId || null);
+  const itemIdx = fila.findIndex(f => f.id === id);
+  const loteNum = Math.floor(itemIdx / 20) + 1;
+  const ramoId = getLoteRamo(disparoChipId, loteNum) || item.ramoId || null;
   const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${id}`);
@@ -3765,31 +3509,18 @@ async function dispararLote() {
       log(`  ② link enviado`);
       await new Promise(r => setTimeout(r, MSG_DELAY));
 
-      // MSG 3 — Imagem 1: site atual (se houver)
-      if (item.imagemBase64) {
-        const base64data = item.imagemBase64.split(',')[1];
-        const mimeType = item.imagemBase64.split(';')[0].split(':')[1] || 'image/jpeg';
-        const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: base64data, mimetype: mimeType, caption: '' } };
+      // MSG 3 — Imagem redesign (item ou padrão do lote)
+      const itemIdxSend = filaAtual.indexOf(item);
+      const loteNumSend = Math.floor(itemIdxSend / 20) + 1;
+      const imgRedesign = item.imagem2Base64 || getLoteImagem(disparoChipId, loteNumSend);
+      if (imgRedesign) {
+        await new Promise(r => setTimeout(r, MSG_DELAY));
+        const b2 = imgRedesign.split(',')[1], m2 = imgRedesign.split(';')[0].split(':')[1] || 'image/jpeg';
+        const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: b2, mimetype: m2, caption: '' } };
         await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
-        log(`  ③ imagem (site atual) enviada`);
-        // MSG 4 — Imagem 2: redesign (se houver) — enviada logo após, mesma sequência
-        if (item.imagem2Base64) {
-          await new Promise(r => setTimeout(r, 4000)); // 4s entre as 2 imagens
-          const base64data2 = item.imagem2Base64.split(',')[1];
-          const mimeType2 = item.imagem2Base64.split(';')[0].split(':')[1] || 'image/jpeg';
-          const payload4 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: base64data2, mimetype: mimeType2, caption: '' } };
-          await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload4) });
-          log(`  ④ imagem (redesign) enviada`);
-        }
-      } else if (item.imagem2Base64) {
-        // só tem redesign, sem site atual
-        const base64data2 = item.imagem2Base64.split(',')[1];
-        const mimeType2 = item.imagem2Base64.split(';')[0].split(':')[1] || 'image/jpeg';
-        const payload4 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: base64data2, mimetype: mimeType2, caption: '' } };
-        await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload4) });
         log(`  ③ imagem (redesign) enviada`);
       } else {
-        log(`  ③ <span style="color:var(--warning)">sem imagens anexadas</span>`);
+        log(`  ③ <span style="color:var(--warning)">sem imagem do redesign (configure no cabeçalho do lote)</span>`);
       }
 
       item.status='enviado'; atualizarStatusFila(item.id,'enviado');
