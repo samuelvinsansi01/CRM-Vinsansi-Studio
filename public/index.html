@@ -3803,7 +3803,8 @@ function renderFilaSlot(slot) {
     }
 
     const loteRamoId = getLoteRamo(chipId, loteNum);
-    const loteImg    = getLoteImagem(chipId, loteNum);
+    const loteImg    = getLoteImagem(chipId, loteNum); // do cache em memória
+    const imgIdbKey  = getLoteImgKey(chipId, loteNum);
     const ramosOpts  = getRamos().map(r=>`<option value="${r.id}"${loteRamoId===r.id?' selected':''} style="background:var(--surface3)">${escHtml(r.nome)}</option>`).join('');
     const imgPreviewId = `lote-img-preview-${slot}-${loteNum}`;
     if (loteImg) imgSrcsToSet.push({ id: imgPreviewId, src: loteImg });
@@ -3826,10 +3827,13 @@ function renderFilaSlot(slot) {
           <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--accent);margin-bottom:4px;padding-top:8px">IMAGEM DO LOTE</div>
           <div class="fila-img-area${loteImg?' has-img':''}" onclick="document.getElementById('lote-img-s${slot}-${loteNum}').click()">
             ${loteImg
-              ? `<img id="${imgPreviewId}" alt="preview" style="max-width:100%;max-height:100px;object-fit:contain;border-radius:5px;display:block"/>
+              ? `<img id="${imgPreviewId}" data-lote-img-key="${imgIdbKey}" alt="preview" style="max-width:100%;max-height:100px;object-fit:contain;border-radius:5px;display:block"/>
                  <div class="fila-img-ok" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--ok);font-weight:700;margin-top:4px">✓ imagem inserida</div>
                  <button class="fila-remove-btn" onclick="event.stopPropagation();onLoteImgRemove('${chipId}',${loteNum},true,${slot})">×</button>`
-              : `<span class="fila-img-label">📎 clique para inserir</span>`
+              : `<img id="${imgPreviewId}" data-lote-img-key="${imgIdbKey}" alt="" style="display:none;max-width:100%;max-height:100px;object-fit:contain;border-radius:5px"/>
+                 <div class="fila-img-ok" style="display:none;font-family:'DM Mono',monospace;font-size:9px;color:var(--ok);font-weight:700;margin-top:4px">✓ imagem inserida</div>
+                 <button class="fila-remove-btn" style="display:none" onclick="event.stopPropagation();onLoteImgRemove('${chipId}',${loteNum},true,${slot})">×</button>
+                 <span class="fila-img-label">📎 clique para inserir</span>`
             }
           </div>
           <input type="file" accept="image/*" class="fila-img-input" id="lote-img-s${slot}-${loteNum}" onchange="onLoteImgChange('${chipId}',${loteNum},this,true,${slot})"/>
@@ -3880,10 +3884,36 @@ function renderFilaSlot(slot) {
 
   itensEl.innerHTML = html;
 
-  // Setar src das imagens via JS (base64 longa não pode ficar em atributo HTML inline)
+  // Setar src das imagens que ja estao no cache em memoria
   imgSrcsToSet.forEach(({ id, src }) => {
     const el = document.getElementById(id);
     if (el) el.src = src;
+  });
+
+  // Para lotes cujo cache ainda nao tem nada, busca do IDB de forma assincrona
+  lotes.forEach((loteItems, loteIdx) => {
+    const loteNum2 = loteHistLen + loteIdx + 1;
+    const k = getLoteImgKey(chipId, loteNum2);
+    if (_imgCache[k] !== undefined) return; // ja carregado (null ou base64)
+    _imgCache[k] = null; // marca como "carregando" para nao buscar de novo
+    idbGet(k).then(val => {
+      if (!val) return;
+      _imgCache[k] = val;
+      const imgEl = document.getElementById(`lote-img-preview-${slot}-${loteNum2}`);
+      if (!imgEl) return;
+      imgEl.src = val;
+      imgEl.style.display = 'block';
+      const wrapper = imgEl.closest('.fila-img-area');
+      if (wrapper) {
+        wrapper.classList.add('has-img');
+        const label = wrapper.querySelector('.fila-img-label');
+        if (label) label.style.display = 'none';
+        const ok = wrapper.querySelector('.fila-img-ok');
+        if (ok) ok.style.display = 'flex';
+        const rmBtn = wrapper.querySelector('.fila-remove-btn');
+        if (rmBtn) rmBtn.style.display = 'flex';
+      }
+    }).catch(() => {});
   });
 }
 
@@ -3898,7 +3928,7 @@ function toggleLoteHist(id) {
 
 
 
-// ── Configuração por lote (ramo + imagem padrão) ────────────────
+// ── Configuração por lote (ramo — sem imagem aqui) ────────────────
 const LOTE_CFG_KEY = 'vs_lote_cfg_v1';
 function getLoteCfg() {
   try { return JSON.parse(localStorage.getItem(LOTE_CFG_KEY)||'{}'); } catch(e) { return {}; }
@@ -3906,15 +3936,10 @@ function getLoteCfg() {
 function saveLoteCfg(cfg) {
   try { localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(cfg)); } catch(e) {}
 }
-// loteKey: "chip-{chipId}-lote-{loteNum}"  ou  "fila-{chipId}-lote-{loteNum}"
 function getLoteCfgKey(chipId, loteNum) { return `chip-${chipId}-lote-${loteNum}`; }
 function getLoteRamo(chipId, loteNum) {
   const cfg = getLoteCfg();
   return (cfg[getLoteCfgKey(chipId, loteNum)] || {}).ramoId || null;
-}
-function getLoteImagem(chipId, loteNum) {
-  const cfg = getLoteCfg();
-  return (cfg[getLoteCfgKey(chipId, loteNum)] || {}).imagem2Base64 || null;
 }
 function setLoteRamo(chipId, loteNum, ramoId) {
   const cfg = getLoteCfg();
@@ -3923,19 +3948,117 @@ function setLoteRamo(chipId, loteNum, ramoId) {
   cfg[k].ramoId = ramoId || null;
   saveLoteCfg(cfg);
 }
+
+// ── IndexedDB para imagens de lote (suporta arquivos grandes >5MB) ──
+const IDB_NAME = 'vs_lote_imgs';
+const IDB_STORE = 'imgs';
+let _idb = null;
+function abrirIDB() {
+  if (_idb) return Promise.resolve(_idb);
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+    req.onsuccess = e => { _idb = e.target.result; res(_idb); };
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+function idbSet(key, value) {
+  return abrirIDB().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const req = tx.objectStore(IDB_STORE).put(value, key);
+    req.onsuccess = () => res();
+    req.onerror   = e => rej(e.target.error);
+  }));
+}
+function idbGet(key) {
+  return abrirIDB().then(db => new Promise((res, rej) => {
+    const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+    req.onsuccess = e => res(e.target.result || null);
+    req.onerror   = e => rej(e.target.error);
+  }));
+}
+function idbDel(key) {
+  return abrirIDB().then(db => new Promise((res, rej) => {
+    const req = db.transaction(IDB_STORE, 'readwrite').objectStore(IDB_STORE).delete(key);
+    req.onsuccess = () => res();
+    req.onerror   = e => rej(e.target.error);
+  }));
+}
+function idbGetAllKeys() {
+  return abrirIDB().then(db => new Promise((res, rej) => {
+    const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).getAllKeys();
+    req.onsuccess = e => res(e.target.result || []);
+    req.onerror   = e => rej(e.target.error);
+  }));
+}
+
+// Cache em memória para imagens já carregadas nesta sessão
+const _imgCache = {};
+
+function getLoteImgKey(chipId, loteNum) { return `chip-${chipId}-lote-${loteNum}`; }
+
+// Retorna a imagem do cache síncrono (pode ser null enquanto ainda não carregou)
+function getLoteImagem(chipId, loteNum) {
+  return _imgCache[getLoteImgKey(chipId, loteNum)] || null;
+}
+
+// Carrega a imagem do IDB para o cache e re-renderiza o slot
+function carregarImagensLote(chipId, loteNum, slot, isSlot) {
+  const k = getLoteImgKey(chipId, loteNum);
+  if (_imgCache[k] !== undefined) return; // já carregado
+  idbGet(k).then(val => {
+    _imgCache[k] = val || null;
+    if (val) {
+      // Atualiza apenas o elemento de preview sem re-renderizar tudo
+      const previewEls = document.querySelectorAll(`[data-lote-img-key="${k}"]`);
+      previewEls.forEach(el => {
+        el.src = val;
+        const wrapper = el.closest('.fila-img-area');
+        if (wrapper) {
+          wrapper.classList.add('has-img');
+          // Garante que o label de placeholder não apareça
+          const label = wrapper.querySelector('.fila-img-label');
+          if (label) label.style.display = 'none';
+          const ok = wrapper.querySelector('.fila-img-ok');
+          if (ok) ok.style.display = '';
+          const rmBtn = wrapper.querySelector('.fila-remove-btn');
+          if (rmBtn) rmBtn.style.display = '';
+        }
+      });
+    }
+  }).catch(() => {});
+}
+
 function setLoteImagem(chipId, loteNum, base64, nome) {
-  const cfg = getLoteCfg();
-  const k = getLoteCfgKey(chipId, loteNum);
-  if (!cfg[k]) cfg[k] = {};
-  cfg[k].imagem2Base64 = base64 || null;
-  cfg[k].imagem2Nome = nome || null;
-  saveLoteCfg(cfg);
+  const k = getLoteImgKey(chipId, loteNum);
+  _imgCache[k] = base64 || null;
+  return idbSet(k, base64 || null);
 }
+
 function removerLoteImagem(chipId, loteNum) {
-  const cfg = getLoteCfg();
-  const k = getLoteCfgKey(chipId, loteNum);
-  if (cfg[k]) { delete cfg[k].imagem2Base64; delete cfg[k].imagem2Nome; saveLoteCfg(cfg); }
+  const k = getLoteImgKey(chipId, loteNum);
+  _imgCache[k] = null;
+  return idbDel(k);
 }
+
+// Limpa imagens de lotes que já não existem em nenhum chip (limpeza automática)
+function limparImagensOlfas() {
+  const chips = getChips();
+  idbGetAllKeys().then(keys => {
+    keys.forEach(k => {
+      const m = k.match(/^chip-(.+)-lote-(\d+)$/);
+      if (!m) return;
+      const chipId = m[1], loteNum = parseInt(m[2]);
+      const chip = chips.find(c => c.id === chipId);
+      if (!chip) { idbDel(k); delete _imgCache[k]; return; }
+      const fila = getFilaChip(chipId);
+      const LOTE_SIZE = 20;
+      const maxLote = Math.ceil(fila.length / LOTE_SIZE);
+      if (loteNum > maxLote) { idbDel(k); delete _imgCache[k]; }
+    });
+  }).catch(() => {});
+}
+
 function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
   setLoteRamo(chipId, loteNum, ramoId);
   // Re-sortear mensagens de todos os cards do lote
@@ -3952,18 +4075,37 @@ function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
   saveFilaDisparo();
   if (isSlot) renderFilaSlot(slot); else renderFila();
 }
+
 function onLoteImgChange(chipId, loteNum, input, isSlot, slot) {
   const file = input.files[0]; if (!file) return;
+  // Feedback imediato: mostra "carregando..."
+  const areaEl = input.previousElementSibling;
+  if (areaEl && areaEl.classList.contains('fila-img-area')) {
+    areaEl.innerHTML = `<span class="fila-img-label" style="color:var(--warning)">⏳ carregando imagem...</span>`;
+  }
   const reader = new FileReader();
   reader.onload = e => {
-    setLoteImagem(chipId, loteNum, e.target.result, file.name);
-    if (isSlot) renderFilaSlot(slot); else renderFila();
+    setLoteImagem(chipId, loteNum, e.target.result, file.name)
+      .then(() => {
+        notify('✓ Imagem do lote salva');
+        if (isSlot) renderFilaSlot(slot); else renderFila();
+      })
+      .catch(err => {
+        notify('// erro ao salvar imagem: ' + (err && err.message ? err.message : err), 'err');
+        // mesmo com erro tenta mostrar preview em memória
+        if (isSlot) renderFilaSlot(slot); else renderFila();
+      });
   };
+  reader.onerror = () => notify('// erro ao ler arquivo', 'err');
   reader.readAsDataURL(file);
 }
+
 function onLoteImgRemove(chipId, loteNum, isSlot, slot) {
-  removerLoteImagem(chipId, loteNum);
-  if (isSlot) renderFilaSlot(slot); else renderFila();
+  removerLoteImagem(chipId, loteNum).then(() => {
+    if (isSlot) renderFilaSlot(slot); else renderFila();
+  }).catch(() => {
+    if (isSlot) renderFilaSlot(slot); else renderFila();
+  });
 }
 
 /* ════════════════════════════
@@ -5306,6 +5448,23 @@ function exportExcelHistory() {
   renderInicio();
   renderExcluidos();
   updateBadges();
+  // Migrar imagens antigas do localStorage para o IDB (executa uma vez)
+  try {
+    const oldCfg = JSON.parse(localStorage.getItem(LOTE_CFG_KEY)||'{}')||{};
+    const migrKeys = Object.keys(oldCfg).filter(k => oldCfg[k] && oldCfg[k].imagem2Base64);
+    if (migrKeys.length) {
+      migrKeys.forEach(k => {
+        const b64 = oldCfg[k].imagem2Base64;
+        idbSet(k, b64).catch(()=>{});
+        delete oldCfg[k].imagem2Base64;
+        delete oldCfg[k].imagem2Nome;
+      });
+      localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(oldCfg));
+      console.log('[migrar] ' + migrKeys.length + ' imagem(ns) movida(s) do localStorage para o IDB');
+    }
+  } catch(e) {}
+  // Limpeza de imagens de lotes obsoletos no IDB
+  setTimeout(limparImagensOlfas, 2000);
   // Abrir accordion do Chip 2 por padrão (prioridade)
   setTimeout(() => {
     const acc1 = document.getElementById('chipAccordion1');
