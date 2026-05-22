@@ -3064,28 +3064,16 @@ function renderFilaSlot(slot) {
           <button class="fila-msg-shuffle" onclick="shuffleFilaMsgSlot(${slot},'${item.id}')">↻ sortear</button>
         </div>
         <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">② IMAGENS — ANTES &amp; DEPOIS</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <div>
-              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-bottom:4px;letter-spacing:0.08em">SITE ATUAL</div>
-              <div class="fila-img-area${item.imagemBase64?' has-img':''}" onclick="document.getElementById('img-s${slot}-${item.id}').click()" style="min-height:80px">
-                ${item.imagemBase64?`<img src="${item.imagemBase64}" alt="preview"/>`:''}
-                <span class="fila-img-label">${item.imagemBase64?'':'📎 antes'}</span>
-                ${item.imagemBase64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagemSlot(${slot},'${item.id}','1')">×</button>`:''}
-              </div>
-              <input type="file" accept="image/*" class="fila-img-input" id="img-s${slot}-${item.id}" onchange="onImgChangeSlot(${slot},'${item.id}',this,'1')"/>
-            </div>
-            <div>
-              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--accent);margin-bottom:4px;letter-spacing:0.08em">REDESIGN</div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">② REDESIGN</div>
+          <div>
               <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-s${slot}-${item.id}').click()" style="min-height:80px;border-color:${item.imagem2Base64?'var(--accent-border)':''}">
                 ${item.imagem2Base64?`<img src="${item.imagem2Base64}" alt="preview redesign"/>`:''}
-                <span class="fila-img-label">${item.imagem2Base64?'':'📎 depois'}</span>
+                <span class="fila-img-label">${item.imagem2Base64?'':'📎 redesign'}</span>
                 ${item.imagem2Base64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagemSlot(${slot},'${item.id}','2')">×</button>`:''}
               </div>
               <input type="file" accept="image/*" class="fila-img-input" id="img2-s${slot}-${item.id}" onchange="onImgChangeSlot(${slot},'${item.id}',this,'2')"/>
-            </div>
           </div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px">As 2 imagens são enviadas em sequência após o texto.</div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px">A imagem do redesign é enviada após o texto.</div>
         </div>
       </div>
     </div>`;
@@ -3533,31 +3521,17 @@ function renderFila() {
         </div>
         <!-- MSG 2: Imagens -->
         <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">② IMAGENS — ANTES &amp; DEPOIS</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-            <!-- Imagem 1: Site atual do cliente -->
-            <div>
-              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-bottom:4px;letter-spacing:0.08em">SITE ATUAL</div>
-              <div class="fila-img-area${item.imagemBase64?' has-img':''}" onclick="document.getElementById('img-input-${item.id}').click()" style="min-height:70px">
-                ${item.imagemBase64?`<img src="${item.imagemBase64}" alt="preview"/>`:''}
-                <span class="fila-img-label">${item.imagemBase64?'':'📎 antes'}</span>
-                ${item.imagemBase64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagem('${item.id}','1')">×</button>`:''}
-              </div>
-              <input type="file" accept="image/*" class="fila-img-input" id="img-input-${item.id}" onchange="onImgChange('${item.id}',this,'1')"/>
-            </div>
-            <!-- Imagem 2: Redesign -->
-            <div>
-              <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--accent);margin-bottom:4px;letter-spacing:0.08em">REDESIGN</div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">② REDESIGN</div>
+          <div>
               <div class="fila-img-area${item.imagem2Base64?' has-img':''}" onclick="document.getElementById('img2-input-${item.id}').click()" style="min-height:70px;border-color:${item.imagem2Base64?'var(--accent-border)':''}">
                 ${item.imagem2Base64?`<img src="${item.imagem2Base64}" alt="preview redesign"/>`:''}
-                <span class="fila-img-label">${item.imagem2Base64?'':'📎 depois'}</span>
+                <span class="fila-img-label">${item.imagem2Base64?'':'📎 redesign'}</span>
                 ${item.imagem2Base64?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();removerImagem('${item.id}','2')">×</button>`:''}
               </div>
               <input type="file" accept="image/*" class="fila-img-input" id="img2-input-${item.id}" onchange="onImgChange('${item.id}',this,'2')"/>
-            </div>
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px">
-            As 2 imagens são enviadas em sequência após a mensagem de texto.
+            A imagem do redesign é enviada após a mensagem de texto.
           </div>
         </div>
       </div>
