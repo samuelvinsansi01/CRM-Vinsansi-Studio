@@ -2385,7 +2385,8 @@ function confirmClearDay() {
   const data = ensureWeekData();
   const emps = data.days[day] || [];
 
-  // Leads "Não enviados" voltam para a Base de Atribuição
+  // Apenas leads com status "Não enviada" voltam para Atribuição e são removidos
+  // Enviada / Em fila / Respondida / Recusada / etc. são intocáveis
   const semStatus = emps.filter(e => !e.status || e.status === 'Não enviada');
   if (semStatus.length) {
     const atrib = getAtribuicaoData();
@@ -2394,7 +2395,8 @@ function confirmClearDay() {
     saveAtribuicaoData([...atrib, ...novos]);
   }
 
-  data.days[day] = [];
+  // Mantém no dia tudo que NÃO é "Não enviada" (em fila, enviados, respondidos, etc.)
+  data.days[day] = emps.filter(e => e.status && e.status !== 'Não enviada');
   saveWeekData(data);
   document.getElementById('clearDayModalOverlay').classList.remove('open');
   renderInicio(); updateBadges();
