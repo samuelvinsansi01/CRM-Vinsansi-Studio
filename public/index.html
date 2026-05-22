@@ -1597,6 +1597,7 @@ function atribuirParaDia(ids, day) {
       id: lead.id, nome: lead.nome, site: lead.site || '',
       whatsapp: lead.whatsapp || '', instagram: lead.instagram || '',
       googleUrl: lead.googleUrl || '',
+      ramoId: lead.ramoId || null,
       status: 'Não enviada', criadoEm: lead.criadoEm || todayStr(),
     });
     atribuidos++;
@@ -2075,9 +2076,7 @@ function showMsg(id, day) {
   const emp  = (data.days[day]||[]).find(e => e.id === id);
   if (!emp) return;
   msgEmpresaId = id;
-  const { text, idx } = pickTemplate(emp.nome);
-  msgTemplateIdx = idx;
-  document.getElementById('msgPanelEmpresaTitle').textContent = emp.nome;
+  const { text, idx } = pickTemplate(emp.nome, emp.ramoId || null);
   document.getElementById('msgPanelEmpresa').innerHTML = `empresa: <span>${escHtml(emp.nome)}</span>`;
   document.getElementById('msgBody').textContent = text;
   document.getElementById('msgCopyBtn').disabled = false;
@@ -2095,7 +2094,7 @@ function shuffleMsg() {
   const data = ensureWeekData();
   const emp  = Object.values(data.days).flat().find(e => e.id === msgEmpresaId);
   if (!emp) return;
-  const { text, idx } = pickOtherTemplate(emp.nome, msgTemplateIdx);
+  const { text, idx } = pickOtherTemplate(emp.nome, msgTemplateIdx, emp.ramoId || null);
   msgTemplateIdx = idx;
   document.getElementById('msgBody').textContent = text;
 }
@@ -2357,6 +2356,7 @@ function importarLeads() {
         whatsapp: phone, instagram: extractInstagram(item),
         googleUrl: extractGoogleUrl(item),
         categoria: extractCategory(item),
+        ramoId: activeRamoId || null,
         temSite: true, temTel: true,
         numStatus: 'pendente',
         importadoEm: todayStr(),
@@ -3057,11 +3057,7 @@ function renderFilaSlot(slot) {
           <button class="fila-msg-shuffle" onclick="shuffleFilaMsgSlot(${slot},'${item.id}')">↻ sortear</button>
         </div>
         <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">② LINK DO SITE</div>
-          <div class="fila-msg-area">${escHtml(LINK_BICHOP)}</div>
-        </div>
-        <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">③ IMAGENS — ANTES &amp; DEPOIS</div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">② IMAGENS — ANTES &amp; DEPOIS</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div>
               <div style="font-family:'DM Mono',monospace;font-size:7px;color:var(--muted);margin-bottom:4px;letter-spacing:0.08em">SITE ATUAL</div>
@@ -3115,7 +3111,7 @@ function shuffleFilaMsgSlot(slot, id) {
   const fila = getFilaChip(chip.id);
   const item = fila.find(f => f.id === id);
   if (!item) return;
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx);
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null);
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${slot}-${id}`);
   if (el) el.value = item.mensagem;
@@ -3256,9 +3252,6 @@ async function dispararLoteChip(slot) {
       const res1 = await fetch(`${chip.url}/message/sendText/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},textMessage:{text:item.mensagem}})});
       if (!res1.ok) throw new Error(`HTTP ${res1.status}`);
       log(`  ① apresentação enviada`);
-      await new Promise(r=>setTimeout(r,MSG_DELAY));
-      await fetch(`${chip.url}/message/sendText/${chip.instance}`,{method:'POST',headers:h,body:JSON.stringify({number:numero,options:{delay:1000},textMessage:{text:LINK_BICHOP}})});
-      log(`  ② link enviado`);
       await new Promise(r=>setTimeout(r,MSG_DELAY));
       if (item.imagemBase64) {
         const b1=item.imagemBase64.split(',')[1], m1=item.imagemBase64.split(';')[0].split(':')[1]||'image/jpeg';
@@ -3433,8 +3426,8 @@ function toggleFilaSlotEmpresa(slot, empId) {
     const all = Object.values(data.days).flat();
     const emp = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) { notify('// empresa sem WhatsApp','warn'); return; }
-    const { text, idx: tIdx } = pickTemplate(emp.nome);
-    fila.push({ id: emp.id, nome: emp.nome, whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, status: 'aguardando', aberto: false });
+    const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
+    fila.push({ id: emp.id, nome: emp.nome, whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: 'aguardando', aberto: false });
     Object.keys(data.days).forEach(day => {
       const e = (data.days[day]||[]).find(e => e.id === empId);
       if (e) e.status = 'Em fila';
@@ -3465,8 +3458,8 @@ function toggleFila(empId) {
     const all  = Object.values(data.days).flat();
     const emp  = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) return;
-    const { text, idx: tIdx } = pickTemplate(emp.nome);
-    fila.push({ id: emp.id, nome: emp.nome, whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, status: 'aguardando', aberto: false });
+    const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
+    fila.push({ id: emp.id, nome: emp.nome, whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: 'aguardando', aberto: false });
     Object.keys(data.days).forEach(day => {
       const e = (data.days[day]||[]).find(e => e.id === empId);
       if (e) e.status = 'Em fila';
@@ -3509,14 +3502,9 @@ function renderFila() {
           <textarea class="fila-msg-area" id="fila-msg-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFila('${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
           <button class="fila-msg-shuffle" onclick="shuffleFilaMsg('${item.id}')">↻ sortear</button>
         </div>
-        <!-- MSG 2: Link site -->
+        <!-- MSG 2: Imagens -->
         <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">② LINK DO SITE</div>
-          <div class="fila-msg-area">${escHtml(LINK_BICHOP)}</div>
-        </div>
-        <!-- MSG 3: Imagens -->
-        <div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">③ IMAGENS — ANTES & DEPOIS</div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">② IMAGENS — ANTES &amp; DEPOIS</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <!-- Imagem 1: Site atual do cliente -->
             <div>
@@ -3566,7 +3554,7 @@ function shuffleFilaMsg(id) {
   const fila = getFilaChip(disparoChipId);
   const item = fila.find(f => f.id === id);
   if (!item) return;
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx);
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null);
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${id}`);
   if (el) el.value = item.mensagem;
