@@ -683,8 +683,11 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 <!-- ── INSTAGRAM ── -->
 <div class="panel" id="panel-instagram">
   <div class="page-header" style="flex-shrink:0">
-    <div class="page-title">Instagram <span>Fila.</span></div>
-    <div class="page-sub">// sem site · 75/dia · 5 blocos de 15 · delay mínimo 2h entre blocos</div>
+    <div>
+      <div class="page-title">Instagram <span>Fila.</span></div>
+      <div class="page-sub">// sem site · 75/dia · 5 blocos de 15 · delay mínimo 2h entre blocos</div>
+    </div>
+    <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;white-space:nowrap;background:var(--insta);border-color:var(--insta)" onclick="abrirModalInstaLead()">+ Lead manual</button>
   </div>
 
   <!-- Barra de ações em lote -->
@@ -938,37 +941,45 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   <!-- CONFIGURAÇÃO DE DISPARO -->
   <div class="card" style="margin-top:16px">
     <div class="card-title">Configuração de disparo</div>
-    <div style="margin-bottom:12px">
+    <div style="margin-bottom:16px">
       <label>Horário de início automático</label>
       <div class="horario-row">
         <input type="time" id="horarioInicio" value="12:00" style="width:auto" oninput="saveEvoConfig()"/>
         <div class="horario-status" id="horarioStatus">aguardando</div>
       </div>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-      <div>
-        <label>Delay entre mensagens <span class="tag">SEG</span></label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="number" id="delayMin" value="15" min="5" style="width:70px" oninput="saveEvoConfig()"/>
-          <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">a</span>
-          <input type="number" id="delayMax" value="30" min="5" style="width:70px" oninput="saveEvoConfig()"/>
-          <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">seg</span>
-        </div>
+
+    <!-- Parâmetros fixos — visível e claro -->
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+
+      <!-- bloco 1: delay -->
+      <div style="background:var(--bg);border:1px solid var(--accent-border);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">INTERVALO ENTRE MENSAGENS</div>
+        <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--accent);line-height:1">2 min</div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">120 seg fixo entre cada envio</div>
       </div>
-      <div>
-        <label>Lotes <span class="tag">ANTI-BAN</span></label>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <input type="checkbox" id="loteAtivo" checked style="width:auto;padding:0;accent-color:var(--accent)" onchange="toggleLoteConfig()"/>
-          <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">Ativar</span>
-          <div id="loteConfigFields" style="display:flex;gap:6px;align-items:center">
-            <input type="number" id="loteTamanho" value="25" min="1" max="60" style="width:55px" oninput="saveEvoConfig()"/>
-            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">por lote ·</span>
-            <input type="number" id="loteEsperaMin" value="60" min="1" style="width:50px" oninput="saveEvoConfig()"/>
-            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">min</span>
-          </div>
-        </div>
+
+      <!-- bloco 2: por hora -->
+      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">MENSAGENS POR HORA</div>
+        <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">20 msg</div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip · cadência constante</div>
       </div>
+
+      <!-- bloco 3: por dia -->
+      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">LIMITE DIÁRIO POR CHIP <span class="tag">ANTI-BAN</span></div>
+        <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">60 msg</div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">máximo seguro · anti-ban</div>
+      </div>
+
     </div>
+    <!-- campos ocultos mantidos para compatibilidade com o código de disparo -->
+    <input type="hidden" id="delayMin"      value="120"/>
+    <input type="hidden" id="delayMax"      value="120"/>
+    <input type="hidden" id="loteTamanho"   value="20"/>
+    <input type="hidden" id="loteEsperaMin" value="60"/>
+    <input type="hidden" id="loteAtivo"     value="1"/>
   </div>
 
   <!-- RAMOS -->
@@ -1074,7 +1085,39 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   </div>
 </div>
 
-<!-- MODAL LIMPAR EXCLUÍDOS -->
+<!-- MODAL NOVO LEAD INSTAGRAM -->
+<div class="modal-overlay" id="instaLeadModal">
+  <div class="modal">
+    <div class="modal-title">Novo lead <span style="color:var(--insta)">Instagram</span></div>
+    <div class="modal-sub">// cadastre manualmente uma empresa para a fila Instagram</div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label>Nome da empresa <span class="tag">OBRIGATÓRIO</span></label>
+      <input type="text" id="ilNome" placeholder="Ex: Studio Silva"/>
+    </div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label>WhatsApp</label>
+      <input type="text" id="ilWhatsapp" placeholder="Ex: 11999999999"/>
+    </div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label>Link Google Maps</label>
+      <input type="text" id="ilGoogleUrl" placeholder="https://maps.google.com/..."/>
+    </div>
+    <div class="field-group" style="margin-bottom:12px">
+      <label>Instagram</label>
+      <input type="text" id="ilInstagram" placeholder="https://instagram.com/..."/>
+    </div>
+    <div class="field-group" style="margin-bottom:16px">
+      <label>Categoria</label>
+      <input type="text" id="ilCategoria" placeholder="Ex: Marcenaria"/>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn-ok" style="background:var(--insta)" onclick="salvarInstaLead()">Salvar lead</button>
+      <button class="modal-btn-cancel" onclick="document.getElementById('instaLeadModal').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+
 <div class="modal-overlay" id="limparExcluidosModal">
   <div class="modal">
     <div class="modal-title">Limpar <span style="color:var(--error)">sites vistos?</span></div>
@@ -1336,13 +1379,20 @@ function getTemplates() {
 }
 function saveTemplates(t) { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(t)); }
 
-function pickTemplate(nome) {
-  const tpl = getTemplates();
+function pickTemplate(nome, ramoId) {
+  // Se tem ramoId, tenta templates do ramo; senão usa fallback geral
+  let tpl;
+  if (ramoId) {
+    tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
+  }
+  if (!tpl || !tpl.length) tpl = getTemplates();
   const idx = Math.floor(Math.random() * tpl.length);
   return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome), idx };
 }
-function pickOtherTemplate(nome, cur) {
-  const tpl = getTemplates();
+function pickOtherTemplate(nome, cur, ramoId) {
+  let tpl;
+  if (ramoId) tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
+  if (!tpl || !tpl.length) tpl = getTemplates();
   let idx; do { idx = Math.floor(Math.random() * tpl.length); } while (idx === cur && tpl.length > 1);
   return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome), idx };
 }
@@ -3961,14 +4011,22 @@ function renderChipsConfig() {
   grid.innerHTML = chips.map(c => `<div class="chip-card">
     <div class="chip-card-header">
       <div class="chip-dot ${c.status==='conectado'?'on':'off'}"></div>
-      <div>
-        <div class="chip-name">${escHtml(c.nome)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="chip-name" id="chipNameDisplay_${c.id}">${escHtml(c.nome)}</div>
         <div class="chip-instance">${escHtml(c.instance)}</div>
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-ghost" style="font-size:10px;padding:6px 12px" onclick="verQRChip('${c.id}')">📱 QR Code</button>
+      <button class="btn btn-ghost" style="font-size:10px;padding:6px 12px" onclick="iniciarRenomeioChip('${c.id}')">✏ Renomear</button>
       <button class="btn btn-danger chip-del" style="font-size:10px;padding:6px 12px" onclick="deletarChip('${c.id}')">✕ Remover</button>
+    </div>
+    <div id="renamePanel_${c.id}" style="display:none;margin-top:10px;display:none">
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" id="renameInput_${c.id}" value="${escHtml(c.nome)}" placeholder="Novo nome..." style="flex:1;font-size:11px;padding:7px 10px"/>
+        <button class="btn btn-primary" style="font-size:10px;padding:6px 12px;white-space:nowrap" onclick="confirmarRenomeioCip('${c.id}')">✓ Salvar</button>
+        <button class="btn btn-ghost" style="font-size:10px;padding:6px 10px" onclick="cancelarRenomeioChip('${c.id}')">✕</button>
+      </div>
     </div>
   </div>`).join('');
 }
@@ -4012,6 +4070,31 @@ function deletarChip(id) {
   renderConfiguracoes(); updateBadges(); notify('✓ Chip removido');
 }
 
+function iniciarRenomeioChip(id) {
+  const panel = document.getElementById('renamePanel_' + id);
+  if (!panel) return;
+  panel.style.display = 'block';
+  const inp = document.getElementById('renameInput_' + id);
+  if (inp) { inp.focus(); inp.select(); }
+}
+function cancelarRenomeioChip(id) {
+  const panel = document.getElementById('renamePanel_' + id);
+  if (panel) panel.style.display = 'none';
+}
+function confirmarRenomeioCip(id) {
+  const inp = document.getElementById('renameInput_' + id);
+  if (!inp) return;
+  const novoNome = inp.value.trim();
+  if (!novoNome) { notify('// informe um nome','err'); return; }
+  const chips = getChips();
+  const chip = chips.find(c => c.id === id);
+  if (!chip) return;
+  chip.nome = novoNome;
+  saveChips(chips);
+  renderConfiguracoes(); updateBadges();
+  notify('✓ Chip renomeado');
+}
+
 /* RAMOS */
 function renderRamosConfig() {
   const ramos = getRamos();
@@ -4049,41 +4132,37 @@ function renderTemplatesConfig() {
   const ramos = getRamos();
   const el = document.getElementById('templatesList');
 
-  // Seletor de ramo e tipo
+  // Seletor de ramo apenas (sem abas de tipo)
   const ramoSel = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
     <select id="tplRamoSel" onchange="onTplRamoChange()" style="flex:1;min-width:140px;font-size:11px;padding:8px 12px">
       <option value="">— Templates gerais (fallback) —</option>
       ${ramos.map(r => `<option value="${r.id}"${tplRamoId===r.id?' selected':''}>${escHtml(r.nome)}</option>`).join('')}
     </select>
-    <div style="display:flex;gap:4px">
-      <button onclick="setTplTipo('com-site')" style="padding:7px 13px;border-radius:7px;border:1px solid ${tplTipo==='com-site'?'var(--accent)':'var(--border2)'};background:${tplTipo==='com-site'?'var(--accent-dim)':'transparent'};color:${tplTipo==='com-site'?'var(--accent)':'var(--muted)'};font-family:'DM Mono',monospace;font-size:9px;cursor:pointer">Com site</button>
-      <button onclick="setTplTipo('sem-site')" style="padding:7px 13px;border-radius:7px;border:1px solid ${tplTipo==='sem-site'?'var(--accent)':'var(--border2)'};background:${tplTipo==='sem-site'?'var(--accent-dim)':'transparent'};color:${tplTipo==='sem-site'?'var(--accent)':'var(--muted)'};font-family:'DM Mono',monospace;font-size:9px;cursor:pointer">Sem site</button>
-    </div>
   </div>`;
 
   let tpls, isRamo;
   if (tplRamoId) {
-    tpls = getTemplatesForRamoTipo(tplRamoId, tplTipo);
+    tpls = getTemplatesForRamoTipo(tplRamoId, 'com-site');
     isRamo = true;
   } else {
     tpls = getTemplates();
     isRamo = false;
   }
 
-  const maxTpl = (tplRamoId && tplTipo==='sem-site') ? 3 : 10;
+  const maxTpl = 10;
   const limitLabel = tplRamoId
     ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${tpls.length}/${maxTpl} templates</span>`
     : '';
 
   const tplsHtml = tpls.map((t, i) => `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:8px;position:relative">
     <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">TEMPLATE ${i+1}</div>
-    <textarea style="min-height:80px;font-size:10px;line-height:1.6" oninput="${isRamo?`saveRamoTemplate('${tplRamoId}','${tplTipo}',${i},this.value)`:`saveTemplate(${i},this.value)`}">${escHtml(t)}</textarea>
-    ${tpls.length>1?`<button class="del-btn" style="position:absolute;top:8px;right:8px" onclick="${isRamo?`removerRamoTemplate('${tplRamoId}','${tplTipo}',${i})`:`removerTemplate(${i})`}">✕</button>`:''}
+    <textarea style="min-height:80px;font-size:10px;line-height:1.6" oninput="${isRamo?`saveRamoTemplate('${tplRamoId}','com-site',${i},this.value)`:`saveTemplate(${i},this.value)`}">${escHtml(t)}</textarea>
+    ${tpls.length>1?`<button class="del-btn" style="position:absolute;top:8px;right:8px" onclick="${isRamo?`removerRamoTemplate('${tplRamoId}','com-site',${i})`:`removerTemplate(${i})`}">✕</button>`:''}
   </div>`).join('');
 
   const addBtn = `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
     ${limitLabel}
-    <button class="btn btn-ghost" onclick="${isRamo?`adicionarRamoTemplate('${tplRamoId}','${tplTipo}')`:`adicionarTemplate()`}" ${tpls.length>=maxTpl?'disabled':''}>+ Novo template</button>
+    <button class="btn btn-ghost" onclick="${isRamo?`adicionarRamoTemplate('${tplRamoId}','com-site')`:`adicionarTemplate()`}" ${tpls.length>=maxTpl?'disabled':''}>+ Novo template</button>
   </div>`;
 
   el.innerHTML = ramoSel + tplsHtml + addBtn;
@@ -4158,6 +4237,28 @@ function instaDefaultBlocos(existingBlocos) {
 }
 
 /* ── RENDER PRINCIPAL ── */
+/* ── MODAL LEAD MANUAL INSTAGRAM ── */
+function abrirModalInstaLead() {
+  ['ilNome','ilWhatsapp','ilGoogleUrl','ilInstagram','ilCategoria'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('instaLeadModal').classList.add('open');
+}
+function salvarInstaLead() {
+  const nome = (document.getElementById('ilNome').value||'').trim();
+  if (!nome) { notify('// informe o nome da empresa','err'); return; }
+  const whatsapp   = (document.getElementById('ilWhatsapp').value||'').trim();
+  const googleUrl  = (document.getElementById('ilGoogleUrl').value||'').trim();
+  const instagram  = (document.getElementById('ilInstagram').value||'').trim();
+  const categoria  = (document.getElementById('ilCategoria').value||'').trim();
+  const fila = getInstaFila();
+  fila.push({ id: genId(), nome, whatsapp, googleUrl, instagram, categoria, criadoEm: todayStr() });
+  saveInstaFila(fila);
+  document.getElementById('instaLeadModal').classList.remove('open');
+  renderInstagram(); updateBadges();
+  notify('✓ Lead adicionado à fila Instagram');
+}
+
 function renderInstagram() {
   renderInstaFila();
   renderInstaSchedDayTabs();
@@ -4190,7 +4291,7 @@ function renderInstaFila() {
       <input type="checkbox" ${sel?'checked':''} onchange="instaToggleSelect('${e.id}',this.checked)"
         style="accent-color:var(--insta);cursor:pointer;flex-shrink:0">
       <div style="flex:1;min-width:0">
-        <div class="empresa-nome">${escHtml(e.nome||'—')}</div>
+        <div class="empresa-nome">${e.googleUrl?`<a href="${escHtml(e.googleUrl)}" target="_blank" title="Ver no Google" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'">${escHtml(e.nome||'—')}</a>`:escHtml(e.nome||'—')}</div>
         <div class="empresa-phone" style="display:flex;gap:8px;flex-wrap:wrap">
           ${e.whatsapp?`<span>📱 ${escHtml(e.whatsapp)}</span>`:''}
           ${stars?`<span style="color:var(--ok)">${stars} ${reviews}</span>`:''}
