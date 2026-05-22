@@ -3535,6 +3535,7 @@ function atualizarStatusFilaSlot(slot, id, status) {
 
 
 function renderFilaZap() {
+  sincronizarFilaComEnviados();
   const chips = getChips();
   const weekDays = currentWeekDays();
   const today = todayStr();
@@ -3706,11 +3707,13 @@ function renderFilaSlot(slot) {
   const itensEl = document.getElementById(`filaItens${slot}`);
   if (!countEl) return;
 
-  // Contagem: apenas aguardando/erro (enviados foram arquivados)
-  const aguardando = filaAtual.filter(f => f.status === 'aguardando').length;
-  countEl.textContent = `(${aguardando} aguardando · ${filaAtual.filter(f=>f.status==='erro').length} erro)`;
+  // Contagem: aguardando/erro ativos
+  const aguardando = filaCompleta.filter(f => f.status === 'aguardando').length;
+  const erros = filaCompleta.filter(f => f.status === 'erro').length;
+  const enviados = filaCompleta.filter(f => f.status === 'enviado').length;
+  countEl.textContent = `(${aguardando} aguardando · ${erros} erro · ${enviados} enviado${enviados!==1?'s':''})`;
 
-  const vazia = filaAtual.length === 0 && (!st.loteHistorico || !st.loteHistorico.length);
+  const vazia = filaCompleta.length === 0 && (!st.loteHistorico || !st.loteHistorico.length);
   vaziEl.style.display  = vazia ? 'block' : 'none';
   itensEl.style.display = vazia ? 'none'  : 'flex';
   if (vazia) { itensEl.innerHTML = ''; return; }
@@ -3746,86 +3749,117 @@ function renderFilaSlot(slot) {
     </div>`;
   });
 
-  // ── Itens ativos (aguardando/erro) ──
-  // Usamos filaCompleta para calcular o número do lote corretamente (enviados já ocupam posições nos lotes)
-  let loteNumAtual = (st.loteHistorico||[]).length;
-  let activeIdx = 0; // índice dentro dos itens não-enviados para contagem de lote visual
-  filaAtual.forEach((item, i) => {
-    if (i % LOTE_SIZE === 0) {
-      loteNumAtual++;
-      const inicio = i + 1;
-      const fim = Math.min(i + LOTE_SIZE, filaAtual.length);
-      const completo = (fim - inicio + 1) === LOTE_SIZE;
-      const cor = completo ? 'var(--accent)' : 'var(--warning)';
-      const borderCor = completo ? 'rgba(184,240,89,0.25)' : 'rgba(240,164,41,0.25)';
-      const bgCor = completo ? 'rgba(184,240,89,0.05)' : 'rgba(240,164,41,0.05)';
-      const label = completo ? `LOTE ${loteNumAtual} — #${inicio}–${fim}` : `LOTE ${loteNumAtual} — #${inicio}–${fim} (${fim-inicio+1}/20)`;
-      const loteRamoId = getLoteRamo(chipId, loteNumAtual);
-      const loteImg = getLoteImagem(chipId, loteNumAtual);
-      const ramosOptsSlot = getRamos().map(r=>`<option value="${r.id}"${loteRamoId===r.id?' selected':''} style="background:var(--surface3)">${escHtml(r.nome)}</option>`).join('');
-      html += `<div style="margin:${i===0&&!st.loteHistorico?.length?'0':'10px'} 0 6px;border-radius:8px;background:${bgCor};border:1px solid ${borderCor};overflow:hidden">
-        <div style="display:flex;align-items:center;gap:10px;padding:7px 12px">
-          <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.12em;color:${cor}">${label}</span>
-          <span style="flex:1;height:1px;background:${borderCor}"></span>
-          ${!completo?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--warning)">${LOTE_SIZE-(fim-inicio+1)} restantes</span>`:'<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--accent)">✓ completo</span>'}
-        </div>
-        <div style="display:flex;align-items:flex-start;gap:10px;padding:0 12px 10px;border-top:1px solid ${borderCor}">
-          <div style="flex:1">
-            <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--muted);margin-bottom:4px;padding-top:8px">RAMO DO TEMPLATE</div>
-            <select style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onLoteRamoChange('${chipId}',${loteNumAtual},this.value,true,${slot})">
-              <option value="" style="background:var(--surface3)">— sem ramo (geral) —</option>
-              ${ramosOptsSlot}
-            </select>
-          </div>
-          <div style="flex-shrink:0;min-width:120px">
-            <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--accent);margin-bottom:4px;padding-top:8px">IMAGEM DO LOTE</div>
-            <div class="fila-img-area${loteImg?' has-img':''}" onclick="document.getElementById('lote-img-s${slot}-${loteNumAtual}').click()" style="min-height:60px;border-color:${loteImg?'var(--accent-border)':''}">
-              ${loteImg?`<img id="lote-img-preview-${slot}-${loteNumAtual}" alt="imagem lote"/>`:''}
-              <span class="fila-img-label">${loteImg?'':'📎 imagem'}</span>
-              ${loteImg?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();onLoteImgRemove('${chipId}',${loteNumAtual},true,${slot})">×</button>`:''}
-            </div>
-            <input type="file" accept="image/*" class="fila-img-input" id="lote-img-s${slot}-${loteNumAtual}" onchange="onLoteImgChange('${chipId}',${loteNumAtual},this,true,${slot})"/>
-          </div>
-        </div>
-      </div>`;
+  // ── Itens ativos ──
+  // Usamos filaCompleta para agrupar lotes corretamente (enviados ocupam posição no lote)
+  // e renderizamos todos — enviados aparecem com badge verde e sem interação de edição
+  const loteHistLen = (st.loteHistorico||[]).length;
+  const imgSrcsToSet = []; // { id, src } para setar após innerHTML
+
+  // Agrupar filaCompleta em lotes de LOTE_SIZE
+  const lotes = [];
+  for (let i = 0; i < filaCompleta.length; i += LOTE_SIZE) {
+    lotes.push(filaCompleta.slice(i, i + LOTE_SIZE));
+  }
+
+  lotes.forEach((loteItems, loteIdx) => {
+    const loteNum = loteHistLen + loteIdx + 1;
+    const pendentesNoLote = loteItems.filter(f => f.status !== 'enviado').length;
+    const totalNoLote = loteItems.length;
+    const todosEnviados = loteItems.every(f => f.status === 'enviado');
+    const completo = totalNoLote === LOTE_SIZE;
+    const cor = todosEnviados ? 'var(--ok)' : completo ? 'var(--accent)' : 'var(--warning)';
+    const borderCor = todosEnviados ? 'rgba(78,203,113,0.25)' : completo ? 'rgba(184,240,89,0.25)' : 'rgba(240,164,41,0.25)';
+    const bgCor = todosEnviados ? 'rgba(78,203,113,0.04)' : completo ? 'rgba(184,240,89,0.05)' : 'rgba(240,164,41,0.05)';
+
+    let label;
+    if (todosEnviados) {
+      label = `LOTE ${loteNum} — todos enviados`;
+    } else if (completo) {
+      label = `LOTE ${loteNum} — #${loteIdx*LOTE_SIZE+1}–${loteIdx*LOTE_SIZE+totalNoLote}`;
+    } else {
+      label = `LOTE ${loteNum} — #${loteIdx*LOTE_SIZE+1}–${loteIdx*LOTE_SIZE+totalNoLote} (${pendentesNoLote} aguardando)`;
     }
-    const waNum = item.whatsapp.replace(/\D/g,'');
-    const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
-    const aberto = item.aberto || false;
-    const isErro = item.status === 'erro';
-    html += `<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}">
-      <div class="fila-item-header" onclick="toggleFilaItemSlot(${slot},'${item.id}')" style="cursor:pointer;user-select:none">
-        <div class="fila-item-num">${i+1}</div>
-        <div class="fila-item-nome">${item.site ? `<a href="${escHtml(item.site)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="${escHtml(item.site)}" onclick="event.stopPropagation()">${escHtml(item.nome)}</a>` : escHtml(item.nome)}</div>
-        <div class="fila-item-wa">+${waNum}</div>
-        <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
-        <div style="color:var(--muted);font-size:12px;margin-left:4px;transition:transform 0.2s;transform:rotate(${aberto?'90':'0'}deg)">▶</div>
-        ${!isErro?`<button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFilaSlot(${slot},'${item.id}')">×</button>`:''}
+
+    const loteRamoId = getLoteRamo(chipId, loteNum);
+    const loteImg    = getLoteImagem(chipId, loteNum);
+    const ramosOpts  = getRamos().map(r=>`<option value="${r.id}"${loteRamoId===r.id?' selected':''} style="background:var(--surface3)">${escHtml(r.nome)}</option>`).join('');
+    const imgPreviewId = `lote-img-preview-${slot}-${loteNum}`;
+    if (loteImg) imgSrcsToSet.push({ id: imgPreviewId, src: loteImg });
+
+    html += `<div style="margin:${loteIdx===0&&!loteHistLen?'0':'10px'} 0 6px;border-radius:8px;background:${bgCor};border:1px solid ${borderCor};overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 12px">
+        <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.12em;color:${cor}">${label}</span>
+        <span style="flex:1;height:1px;background:${borderCor}"></span>
+        ${todosEnviados?'<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--ok)">✓ concluído</span>':!completo?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--warning)">${LOTE_SIZE-totalNoLote} restantes</span>`:'<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--accent)">✓ completo</span>'}
       </div>
-      <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
-        <div style="width:100%">
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
-          <textarea class="fila-msg-area" id="fila-msg-${slot}-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFilaSlot(${slot},'${item.id}',this.value)">${escHtml(item.mensagem)}</textarea>
-          <button class="fila-msg-shuffle" onclick="shuffleFilaMsgSlot(${slot},'${item.id}')">↻ sortear</button>
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:0 12px 10px;border-top:1px solid ${borderCor}">
+        <div style="flex:1">
+          <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--muted);margin-bottom:4px;padding-top:8px">RAMO DO TEMPLATE</div>
+          <select style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;width:100%;outline:none" onchange="onLoteRamoChange('${chipId}',${loteNum},this.value,true,${slot})">
+            <option value="" style="background:var(--surface3)">— sem ramo (geral) —</option>
+            ${ramosOpts}
+          </select>
+        </div>
+        <div style="flex-shrink:0;min-width:120px">
+          <div style="font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.1em;color:var(--accent);margin-bottom:4px;padding-top:8px">IMAGEM DO LOTE</div>
+          <div class="fila-img-area${loteImg?' has-img':''}" onclick="document.getElementById('lote-img-s${slot}-${loteNum}').click()" style="min-height:60px;border-color:${loteImg?'var(--accent-border)':''}">
+            ${loteImg?`<img id="${imgPreviewId}" alt="imagem lote"/>`:''}
+            <span class="fila-img-label">${loteImg?'':'📎 imagem'}</span>
+            ${loteImg?`<button class="fila-remove-btn" style="top:4px;right:4px" onclick="event.stopPropagation();onLoteImgRemove('${chipId}',${loteNum},true,${slot})">×</button>`:''}
+          </div>
+          <input type="file" accept="image/*" class="fila-img-input" id="lote-img-s${slot}-${loteNum}" onchange="onLoteImgChange('${chipId}',${loteNum},this,true,${slot})"/>
         </div>
       </div>
     </div>`;
+
+    // Renderizar itens do lote
+    loteItems.forEach((item, itemIdx) => {
+      const waNum = item.whatsapp.replace(/\D/g,'');
+      const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
+      const aberto = item.aberto || false;
+      const isEnviado = item.status === 'enviado';
+      const isErro = item.status === 'erro';
+      const posGlobal = loteIdx * LOTE_SIZE + itemIdx + 1;
+
+      if (isEnviado) {
+        // Enviados: linha compacta, sem edição, sem botão remover
+        html += `<div class="fila-item enviado" id="fila-item-${slot}-${item.id}" style="opacity:0.55">
+          <div class="fila-item-header" style="cursor:default">
+            <div class="fila-item-num" style="color:var(--muted)">${posGlobal}</div>
+            <div class="fila-item-nome" style="color:var(--muted)">${escHtml(item.nome)}</div>
+            <div class="fila-item-wa" style="color:var(--muted)">+${waNum}</div>
+            <div class="fila-item-status enviado">✓ enviado</div>
+          </div>
+        </div>`;
+      } else {
+        html += `<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}">
+          <div class="fila-item-header" onclick="toggleFilaItemSlot(${slot},'${item.id}')" style="cursor:pointer;user-select:none">
+            <div class="fila-item-num">${posGlobal}</div>
+            <div class="fila-item-nome">${item.site ? `<a href="${escHtml(item.site)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="${escHtml(item.site)}" onclick="event.stopPropagation()">${escHtml(item.nome)}</a>` : escHtml(item.nome)}</div>
+            <div class="fila-item-wa">+${waNum}</div>
+            <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
+            <div style="color:var(--muted);font-size:12px;margin-left:4px;transition:transform 0.2s;transform:rotate(${aberto?'90':'0'}deg)">▶</div>
+            ${!isErro?`<button class="fila-remove-btn" style="position:static;top:auto;right:auto;width:22px;height:22px" onclick="event.stopPropagation();removerFilaSlot(${slot},'${item.id}')">×</button>`:''}
+          </div>
+          <div class="fila-item-body" style="display:${aberto?'flex':'none'}">
+            <div style="width:100%">
+              <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">① APRESENTAÇÃO</div>
+              <textarea class="fila-msg-area" id="fila-msg-${slot}-${item.id}" style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.7;min-height:80px;border:1px solid var(--border2);resize:vertical;width:100%;outline:none" oninput="atualizarMsgFilaSlot(${slot},'${item.id}',this.value)">${escHtml(item.mensagem||'')}</textarea>
+              <button class="fila-msg-shuffle" onclick="shuffleFilaMsgSlot(${slot},'${item.id}')">↻ sortear</button>
+            </div>
+          </div>
+        </div>`;
+      }
+    });
   });
 
   itensEl.innerHTML = html;
 
-  // Atribuir src das imagens de lote via JS (evita truncamento de base64 em atributo HTML)
-  if (chipId) {
-    let loteN = (st.loteHistorico||[]).length;
-    for (let i = 0; i < filaAtual.length; i += LOTE_SIZE) {
-      loteN++;
-      const img = getLoteImagem(chipId, loteN);
-      if (img) {
-        const imgEl = document.getElementById(`lote-img-preview-${slot}-${loteN}`);
-        if (imgEl) imgEl.src = img;
-      }
-    }
-  }
+  // Setar src das imagens via JS (base64 longa não pode ficar em atributo HTML inline)
+  imgSrcsToSet.forEach(({ id, src }) => {
+    const el = document.getElementById(id);
+    if (el) el.src = src;
+  });
 }
 
 function toggleLoteHist(id) {
@@ -3905,6 +3939,38 @@ function onLoteImgChange(chipId, loteNum, input, isSlot, slot) {
 function onLoteImgRemove(chipId, loteNum, isSlot, slot) {
   removerLoteImagem(chipId, loteNum);
   if (isSlot) renderFilaSlot(slot); else renderFila();
+}
+
+/* ════════════════════════════
+   SINCRONIZAR FILA — corrige status de itens já enviados
+════════════════════════════ */
+function sincronizarFilaComEnviados() {
+  const data = ensureWeekData();
+  const chips = getChips();
+  let corrigidos = 0;
+
+  // Constrói um Set de IDs já enviados (qualquer status diferente de Não enviada / Em fila)
+  const statusEnviados = new Set(['Enviada','Respondida','Não respondida','Recusada','Fechada']);
+  const idsEnviados = new Set();
+  Object.values(data.days).forEach(emps => {
+    (emps||[]).forEach(e => { if (statusEnviados.has(e.status)) idsEnviados.add(e.id); });
+  });
+
+  chips.forEach(chip => {
+    const fila = getFilaChip(chip.id);
+    fila.forEach(item => {
+      if (item.status === 'aguardando' && idsEnviados.has(item.id)) {
+        item.status = 'enviado';
+        corrigidos++;
+      }
+    });
+  });
+
+  if (corrigidos > 0) {
+    saveFilaDisparo();
+    console.log(`[sincronizar] ${corrigidos} item(ns) corrigido(s) para status enviado`);
+  }
+  return corrigidos;
 }
 
 function getFilaChip(chipId) {
@@ -5211,6 +5277,7 @@ function exportExcelHistory() {
 
   renderRamoSelect();
   ensureWeekData();
+  sincronizarFilaComEnviados();
   renderInicio();
   renderExcluidos();
   updateBadges();
