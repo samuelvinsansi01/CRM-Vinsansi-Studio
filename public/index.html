@@ -2993,6 +2993,104 @@ function renderFilaZap() {
   renderFila0(); renderFila1();
 }
 
+/* ════════════════════════════
+   RENDER DISPARO EMPRESAS
+   Popula disparoStatusTabs + disparoEmpresasList
+════════════════════════════ */
+function renderDisparoEmpresas() {
+  const data     = ensureWeekData();
+  const chips    = getChips();
+  const weekDays = currentWeekDays();
+  if (!weekDays.includes(disparoDay)) disparoDay = todayStr();
+
+  const emps = data.days[disparoDay] || [];
+
+  // ── Status tabs ──
+  const statusTabsEl = document.getElementById('disparoStatusTabs');
+  if (statusTabsEl) {
+    const counts = {};
+    STATUS_OPTIONS.forEach(s => { counts[s] = emps.filter(e => (e.status||'Não enviada')===s).length; });
+    statusTabsEl.innerHTML = STATUS_OPTIONS.map(s =>
+      `<div class="status-tab${disparoStatus===s?' active':''}" onclick="setDisparoStatus('${s}')">
+        ${s} <span class="st-count">${counts[s]}</span>
+      </div>`
+    ).join('');
+  }
+
+  // ── Stats row ──
+  const statsEl = document.getElementById('disparoStats');
+  if (statsEl) {
+    const total   = emps.length;
+    const comWa   = emps.filter(e => e.whatsapp).length;
+    const emFila  = emps.filter(e => (e.status||'Não enviada')==='Em fila').length;
+    const enviado = emps.filter(e => (e.status||'Não enviada')==='Enviada').length;
+    statsEl.innerHTML = total
+      ? `<span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${total} leads · <span style="color:var(--ok)">${comWa} com WhatsApp</span> · <span style="color:var(--accent)">${emFila} na fila</span> · <span style="color:var(--text2)">${enviado} enviados</span></span>`
+      : '';
+  }
+
+  // ── Lista de empresas ──
+  const listEl = document.getElementById('disparoEmpresasList');
+  if (!listEl) return;
+
+  const filtered = emps.filter(e => (e.status||'Não enviada') === disparoStatus);
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / DISPARO_PG));
+  if (disparoPage > totalPages) disparoPage = totalPages;
+  const pageItems = filtered.slice((disparoPage-1)*DISPARO_PG, disparoPage*DISPARO_PG);
+
+  if (!totalItems) {
+    listEl.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhuma empresa com status "${disparoStatus}" neste dia</div>`;
+    renderPagination('disparoPagination', 1, 1, 0, DISPARO_PG, 'goDisparoPage', 'changeDisparoPgSize');
+    return;
+  }
+
+  listEl.innerHTML = pageItems.map(e => {
+    const googleUrl = e.googleUrl || '';
+    const nomeDisplay = googleUrl
+      ? `<a href="${escHtml(googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(e.nome)}</a>`
+      : escHtml(e.nome);
+
+    // Verificar em qual chip está na fila
+    const naFila = chips.map((c, slot) => {
+      const fila = getFilaChip(c.id);
+      const idx  = fila.findIndex(f => f.id === e.id);
+      return { slot, nome: c.nome, naFila: idx >= 0 };
+    });
+
+    const botoes = chips.map((c, slot) => {
+      const { naFila: emFila } = naFila[slot];
+      const cor  = slot === 0 ? 'var(--accent)' : '#5bb8f5';
+      const corBg = slot === 0 ? 'rgba(184,240,89,0.08)' : 'rgba(91,184,245,0.08)';
+      return `<button onclick="toggleFilaSlotEmpresa(${slot},'${e.id}')"
+        style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 10px;border-radius:6px;cursor:pointer;border:1px solid ${emFila?cor:'var(--border2)'};background:${emFila?corBg:'transparent'};color:${emFila?cor:'var(--muted)'};transition:all 0.15s;white-space:nowrap"
+        title="${emFila?'Remover de':'Adicionar ao'} Chip ${slot+1} — ${escHtml(c.nome)}">
+        ${emFila?'✓':'+'} C${slot+1}
+      </button>`;
+    }).join('');
+
+    const semChip = chips.length === 0;
+
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nomeDisplay}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+          ${e.whatsapp?`<span style="color:var(--ok)">📱 ${escHtml(e.whatsapp)}</span>`:'<span style="color:var(--error)">sem WhatsApp</span>'}
+          ${e.site?`<a href="${escHtml(e.site)}" target="_blank" style="color:var(--muted);text-decoration:none">${escHtml(e.site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a>`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        ${semChip
+          ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">configure chips primeiro</span>`
+          : (e.whatsapp ? botoes : `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--error)">sem WhatsApp</span>`)
+        }
+      </div>
+    </div>`;
+  }).join('');
+
+  renderPagination('disparoPagination', disparoPage, totalPages, totalItems, DISPARO_PG, 'goDisparoPage', 'changeDisparoPgSize');
+}
+
 function setDisparoChip(id) {
   disparoChipId = id;
   renderFilaZap();
