@@ -3489,6 +3489,8 @@ async function iniciarDisparoChip(slot) {
   if (!pendentes.length) { notify('// nenhum item aguardando — todos já enviados','warn'); return; }
 
   // ── Validação: todos os lotes com pendentes devem ter imagem ──
+  // Faz a checagem direto no IDB (async) para evitar falso erro quando
+  // o cache ainda não foi populado após abertura da página
   const lotesComPendentes = [];
   for (let i = 0; i < filaCompleta.length; i += LOTE_SIZE) {
     const loteSlice = filaCompleta.slice(i, i + LOTE_SIZE);
@@ -3498,6 +3500,15 @@ async function iniciarDisparoChip(slot) {
       lotesComPendentes.push(loteNum);
     }
   }
+
+  // Garante que o cache está populado para cada lote antes de validar
+  await Promise.all(lotesComPendentes.map(async loteNum => {
+    const k = getLoteImgKey(chip.id, loteNum);
+    if (_imgCache[k] === undefined) {
+      try { _imgCache[k] = (await idbGet(k)) || null; } catch { _imgCache[k] = null; }
+    }
+  }));
+
   const lotesSemImagem = lotesComPendentes.filter(n => !getLoteImagem(chip.id, n));
   if (lotesSemImagem.length) {
     notify(`// Lote${lotesSemImagem.length>1?'s':''} ${lotesSemImagem.join(', ')} sem imagem — insira a imagem antes de disparar`, 'err');
