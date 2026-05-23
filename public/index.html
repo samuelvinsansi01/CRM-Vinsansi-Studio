@@ -568,6 +568,13 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <span class="nav-badge" id="badge-fila-zap">0</span>
     </div>
 
+    <div class="nav-section-label">Resultados</div>
+    <div class="nav-item" onclick="switchPanel('acompanhamento')" data-label="Acompanhamento">
+      <div class="nav-icon">📈</div>
+      <span class="nav-label">Acompanhamento</span>
+      <span class="nav-badge" id="badge-acompanhamento">0</span>
+    </div>
+
     <div class="nav-section-label">Ferramentas</div>
     <div class="nav-item" onclick="switchPanel('redirecionamentos')" data-label="Redirecionamentos">
       <div class="nav-icon">🔗</div>
@@ -1084,6 +1091,78 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   </div>
 </div>
 
+<!-- ── ACOMPANHAMENTO ── -->
+<div class="panel" id="panel-acompanhamento">
+  <div class="page-header" style="flex-shrink:0">
+    <div class="page-title">Acompanha<span>mento.</span></div>
+    <div class="page-sub">// base de resultados mensais · leads enviados · edite o status a qualquer momento</div>
+  </div>
+
+  <!-- ABAS LISTA / MÉTRICAS -->
+  <div style="display:flex;gap:5px;margin-bottom:20px;flex-shrink:0;border-bottom:1px solid var(--border);padding-bottom:12px">
+    <button id="acompTabLista" onclick="setAcompTab('lista')"
+      style="padding:7px 16px;border:1px solid var(--accent-border);border-radius:8px;background:var(--accent-dim);color:var(--accent);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s">
+      📋 Lista de leads
+    </button>
+    <button id="acompTabMetricas" onclick="setAcompTab('metricas')"
+      style="padding:7px 16px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s">
+      📊 Métricas
+    </button>
+  </div>
+
+  <!-- PAINEL LISTA -->
+  <div id="acompPainelLista" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <!-- seletor de mês -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-shrink:0;flex-wrap:wrap">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Mês:</div>
+      <div id="acompMesesTabs" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <div id="acompFiltroStatus" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+      </div>
+    </div>
+
+    <!-- tabela -->
+    <div class="stretch-card" style="flex:1">
+      <div class="table-wrap" style="flex:1">
+        <table>
+          <thead>
+            <tr>
+              <th>Empresa</th>
+              <th>Site</th>
+              <th>WhatsApp</th>
+              <th>Enviado em</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="acompTbody">
+            <tr><td colspan="6" class="table-empty">Nenhum resultado neste mês ainda</td></tr>
+          </tbody>
+        </table>
+        <div id="acompPagination"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAINEL MÉTRICAS -->
+  <div id="acompPainelMetricas" style="display:none;flex-direction:column;gap:16px">
+    <!-- seletor de mês (métricas) -->
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Mês:</div>
+      <div id="acompMesesTabsMetricas" style="display:flex;gap:5px;flex-wrap:wrap"></div>
+    </div>
+
+    <!-- stat chips -->
+    <div id="acompStatsRow" class="stats-row"></div>
+
+    <!-- comparativo por mês -->
+    <div class="card" id="acompComparativoCard">
+      <div class="card-title">Comparativo por mês</div>
+      <div id="acompComparativoTabela"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ── CONFIGURAÇÕES ── -->
 <div class="panel" id="panel-configuracoes">
   <div class="page-header">
@@ -1346,6 +1425,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 ════════════════════════════ */
 const EMPRESAS_KEY   = 'vs_empresas_v2';
 const HISTORY_KEY    = 'vs_history_v2';
+const ACOMP_KEY      = 'vs_acompanhamento_v1'; // base de resultados mensais
 const EVO_KEY        = 'vs_evo_config_v2';
 const SIDEBAR_KEY    = 'vs_sidebar';
 const EXCLUDED_KEY   = 'vs_excluded_domains';
@@ -1938,12 +2018,12 @@ function toggleSidebar() {
   s.classList.toggle('collapsed', open);
   localStorage.setItem(SIDEBAR_KEY, open ? '0' : '1');
 }
-const PANELS = ['inicio','importar','validacao','atribuicao','instagram','fila-zap','redirecionamentos','configuracoes'];
+const PANELS = ['inicio','importar','validacao','atribuicao','instagram','fila-zap','acompanhamento','redirecionamentos','configuracoes'];
 function switchPanel(name) {
   PANELS.forEach(p => document.getElementById('panel-'+p).classList.toggle('active', p===name));
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
-    const panelMap = {'Início':'inicio','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','Instagram':'instagram','Fila WhatsApp':'fila-zap','Redirecionamentos':'redirecionamentos','Configurações':'configuracoes'};
+    const panelMap = {'Início':'inicio','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','Instagram':'instagram','Fila WhatsApp':'fila-zap','Acompanhamento':'acompanhamento','Redirecionamentos':'redirecionamentos','Configurações':'configuracoes'};
     el.classList.toggle('active', panelMap[label] === name);
   });
   if (name==='inicio')         renderInicio();
@@ -1952,6 +2032,7 @@ function switchPanel(name) {
   if (name==='atribuicao')     renderAtribuicao();
   if (name==='instagram')      renderInstagram();
   if (name==='fila-zap')       renderFilaZap();
+  if (name==='acompanhamento') renderAcompanhamento();
   if (name==='configuracoes')  renderConfiguracoes();
   updateBadges();
 }
@@ -1969,6 +2050,12 @@ function updateBadges() {
   document.getElementById('badge-fila-zap').textContent = naoEnv;
   const instaEl = document.getElementById('badge-instagram');
   if (instaEl) instaEl.textContent = getInstaFila().length;
+  const acompEl = document.getElementById('badge-acompanhamento');
+  if (acompEl) {
+    const mk = currentMonthKey();
+    const acomp = getAcompData();
+    acompEl.textContent = (acomp[mk]||[]).length;
+  }
 }
 
 /* ════════════════════════════
@@ -1979,12 +2066,58 @@ function saveWeekData(d){ localStorage.setItem(EMPRESAS_KEY, JSON.stringify(d));
 function ensureWeekData() {
   let d = getWeekData(); const ws = currentWeekStartStr();
   if (!d || d.weekStart !== ws) {
-    if (d && Object.values(d.days||{}).flat().length > 0) localStorage.setItem(HISTORY_KEY, JSON.stringify({ ...d, archivedAt: todayStr() }));
+    // Virada de semana detectada
+    if (d && Object.values(d.days||{}).flat().length > 0) {
+      const flat = Object.values(d.days).flat();
+
+      // Leads pós-envio (Enviada e além) → migrar para base mensal
+      const STATUS_MENSAIS = ['Enviada','Respondida','Não respondida','Recusada','Fechada'];
+      const paraMes = flat.filter(e => STATUS_MENSAIS.includes(e.status||''));
+      if (paraMes.length) {
+        migrarParaMes(paraMes);
+      }
+
+      // Leads semanais (Não enviada, Em fila) → devolver para Atribuição automaticamente
+      const parmaAtrib = flat.filter(e => !e.status || e.status === 'Não enviada' || e.status === 'Em fila');
+      if (parmaAtrib.length) {
+        const atrib = getAtribuicaoData();
+        const atribIds = new Set(atrib.map(a => a.id));
+        const novos = parmaAtrib.filter(e => !atribIds.has(e.id)).map(e => ({ ...e, voltouDaSemana: todayStr(), diaDestino: null }));
+        saveAtribuicaoData([...atrib, ...novos]);
+      }
+
+      // Salva histórico para compatibilidade
+      localStorage.setItem(HISTORY_KEY, JSON.stringify({ ...d, archivedAt: todayStr() }));
+    }
     d = { weekStart: ws, days: {} }; saveWeekData(d);
   }
   return d;
 }
 function getHistoryData() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)||'null'); } catch { return null; } }
+
+/* ════════════════════════════
+   STORAGE — ACOMPANHAMENTO MENSAL
+════════════════════════════ */
+function getAcompData()  { try { return JSON.parse(localStorage.getItem(ACOMP_KEY)||'{}'); } catch { return {}; } }
+function saveAcompData(d){ localStorage.setItem(ACOMP_KEY, JSON.stringify(d)); }
+function currentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+}
+function monthKeyLabel(key) {
+  const [y, m] = key.split('-');
+  const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return `${months[parseInt(m,10)-1]}/${y}`;
+}
+function migrarParaMes(leads) {
+  const data = getAcompData();
+  const mk = currentMonthKey();
+  if (!data[mk]) data[mk] = [];
+  const existingIds = new Set(data[mk].map(e => e.id));
+  const novos = leads.filter(e => !existingIds.has(e.id)).map(e => ({ ...e, migradoEm: todayStr() }));
+  data[mk] = [...data[mk], ...novos];
+  saveAcompData(data);
+}
 function flattenWeekData(d) { return Object.values(d.days||{}).flat(); }
 function getAllNomes(d) { return new Set(flattenWeekData(d).map(e => normalizeStr(e.nome))); }
 function getAllPhones(d) { return new Set(flattenWeekData(d).map(e => normalizePhone(e.whatsapp||'')).filter(Boolean)); }
@@ -2371,8 +2504,13 @@ function confirmClear() {
   const data = ensureWeekData();
   const flat = flattenWeekData(data);
 
+  // Leads pós-envio → migrar para base mensal
+  const STATUS_MENSAIS = ['Enviada','Respondida','Não respondida','Recusada','Fechada'];
+  const paraMes = flat.filter(e => STATUS_MENSAIS.includes(e.status||''));
+  if (paraMes.length) migrarParaMes(paraMes);
+
   // Leads sem status (Não enviada) voltam para a Base de Atribuição
-  const semStatus = flat.filter(e => !e.status || e.status === 'Não enviada');
+  const semStatus = flat.filter(e => !e.status || e.status === 'Não enviada' || e.status === 'Em fila');
   if (semStatus.length) {
     const atrib = getAtribuicaoData();
     const atribIds = new Set(atrib.map(a => a.id));
@@ -2387,10 +2525,10 @@ function confirmClear() {
   saveWeekData(data);
   document.getElementById('clearModal').classList.remove('open');
   renderInicio(); updateBadges();
-  const msg = semStatus.length
-    ? `Semana limpa · ${semStatus.length} lead${semStatus.length!==1?'s':''} voltaram para Atribuição`
-    : 'Semana limpa';
-  notify(msg);
+  const msgs = [];
+  if (paraMes.length) msgs.push(`${paraMes.length} lead${paraMes.length!==1?'s':''} → Acompanhamento`);
+  if (semStatus.length) msgs.push(`${semStatus.length} → Atribuição`);
+  notify('Semana limpa' + (msgs.length ? ' · ' + msgs.join(' · ') : ''));
 }
 
 function clearDayModal() {
@@ -2410,9 +2548,13 @@ function confirmClearDay() {
   const data = ensureWeekData();
   const emps = data.days[day] || [];
 
-  // Apenas leads com status "Não enviada" voltam para Atribuição e são removidos
-  // Enviada / Em fila / Respondida / Recusada / etc. são intocáveis
-  const semStatus = emps.filter(e => !e.status || e.status === 'Não enviada');
+  // Leads pós-envio → migrar para base mensal
+  const STATUS_MENSAIS = ['Enviada','Respondida','Não respondida','Recusada','Fechada'];
+  const paraMes = emps.filter(e => STATUS_MENSAIS.includes(e.status||''));
+  if (paraMes.length) migrarParaMes(paraMes);
+
+  // Leads sem status voltam para Atribuição
+  const semStatus = emps.filter(e => !e.status || e.status === 'Não enviada' || e.status === 'Em fila');
   if (semStatus.length) {
     const atrib = getAtribuicaoData();
     const atribIds = new Set(atrib.map(a => a.id));
@@ -2420,15 +2562,15 @@ function confirmClearDay() {
     saveAtribuicaoData([...atrib, ...novos]);
   }
 
-  // Mantém no dia tudo que NÃO é "Não enviada" (em fila, enviados, respondidos, etc.)
-  data.days[day] = emps.filter(e => e.status && e.status !== 'Não enviada');
+  // Remove todos do dia
+  data.days[day] = [];
   saveWeekData(data);
   document.getElementById('clearDayModalOverlay').classList.remove('open');
   renderInicio(); updateBadges();
-  const msg = semStatus.length
-    ? `${dayLabel(day)} limpo · ${semStatus.length} lead${semStatus.length!==1?'s':''} voltaram para Atribuição`
-    : `${dayLabel(day)} limpo`;
-  notify(msg);
+  const msgs = [];
+  if (paraMes.length) msgs.push(`${paraMes.length} → Acompanhamento`);
+  if (semStatus.length) msgs.push(`${semStatus.length} → Atribuição`);
+  notify(`${dayLabel(day)} limpo` + (msgs.length ? ' · ' + msgs.join(' · ') : ''));
 }
 
 /* ════════════════════════════
@@ -5466,6 +5608,206 @@ function exportExcelHistory() {
   const wb = XLSX.utils.book_new();
   Object.keys(hist.days).sort().forEach(day => { if ((hist.days[day]||[]).length) buildSheet(wb, dayLabelShort(day), hist.days[day]); });
   downloadWb(wb, `prospeccao-anterior.xlsx`); notify('✓ Excel histórico gerado');
+}
+
+/* ════════════════════════════
+   ACOMPANHAMENTO — RENDER
+════════════════════════════ */
+let acompTab        = 'lista';
+let acompMes        = currentMonthKey();
+let acompMesMetricas = currentMonthKey();
+let acompFiltroSt   = null; // null = todos
+let acompPage       = 1; let ACOMP_PG = 20;
+
+function setAcompTab(tab) {
+  acompTab = tab;
+  document.getElementById('acompPainelLista').style.display    = tab==='lista'    ? 'flex' : 'none';
+  document.getElementById('acompPainelMetricas').style.display = tab==='metricas' ? 'flex' : 'none';
+  const bLista    = document.getElementById('acompTabLista');
+  const bMetricas = document.getElementById('acompTabMetricas');
+  bLista.style.borderColor    = tab==='lista'    ? 'var(--accent-border)' : 'var(--border2)';
+  bLista.style.background     = tab==='lista'    ? 'var(--accent-dim)'    : 'var(--bg)';
+  bLista.style.color          = tab==='lista'    ? 'var(--accent)'        : 'var(--muted)';
+  bMetricas.style.borderColor = tab==='metricas' ? 'var(--accent-border)' : 'var(--border2)';
+  bMetricas.style.background  = tab==='metricas' ? 'var(--accent-dim)'    : 'var(--bg)';
+  bMetricas.style.color       = tab==='metricas' ? 'var(--accent)'        : 'var(--muted)';
+  if (tab==='metricas') renderAcompMetricas();
+  else renderAcompLista();
+}
+
+function renderAcompanhamento() {
+  setAcompTab(acompTab);
+}
+
+function renderAcompMesesTabs(containerId, activeMes, onClickFn) {
+  const data = getAcompData();
+  const meses = Object.keys(data).sort().reverse();
+  const mk = currentMonthKey();
+  // garantir mês atual mesmo sem dados
+  if (!meses.includes(mk)) meses.unshift(mk);
+  document.getElementById(containerId).innerHTML = meses.map(m =>
+    `<div class="day-tab${m===activeMes?' active':''}" onclick="${onClickFn}('${m}')" style="font-size:9px;padding:4px 12px">
+      ${monthKeyLabel(m)}${m===mk?' <span style="color:var(--accent);font-size:8px">●</span>':''}
+      <span class="day-count">${(data[m]||[]).length}</span>
+    </div>`
+  ).join('');
+}
+
+function setAcompMes(m) {
+  acompMes = m;
+  acompFiltroSt = null;
+  acompPage = 1;
+  renderAcompLista();
+}
+
+function setAcompMesMetricas(m) {
+  acompMesMetricas = m;
+  renderAcompMetricas();
+}
+
+function setAcompFiltro(st) {
+  acompFiltroSt = (acompFiltroSt === st) ? null : st;
+  acompPage = 1;
+  renderAcompLista();
+}
+
+function renderAcompLista() {
+  renderAcompMesesTabs('acompMesesTabs', acompMes, 'setAcompMes');
+  const data = getAcompData();
+  const leads = (data[acompMes]||[]).slice().reverse(); // mais recente primeiro
+  const STATUS_ACOMP = ['Enviada','Respondida','Não respondida','Recusada','Fechada'];
+
+  // filtro de status
+  const counts = {};
+  STATUS_ACOMP.forEach(s => { counts[s] = leads.filter(e => (e.status||'Enviada')===s).length; });
+  document.getElementById('acompFiltroStatus').innerHTML = STATUS_ACOMP.map(s =>
+    `<div class="status-tab${acompFiltroSt===s?' active':''}" onclick="setAcompFiltro('${s}')" style="font-size:8px;padding:3px 10px">
+      ${s} <span class="st-count">${counts[s]}</span>
+    </div>`
+  ).join('');
+
+  const filtered = acompFiltroSt ? leads.filter(e => (e.status||'Enviada')===acompFiltroSt) : leads;
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems/ACOMP_PG));
+  if (acompPage > totalPages) acompPage = totalPages;
+  const pageItems = filtered.slice((acompPage-1)*ACOMP_PG, acompPage*ACOMP_PG);
+
+  const tbody = document.getElementById('acompTbody');
+  if (!totalItems) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">Nenhum lead neste mês${acompFiltroSt?' com este status':''}</td></tr>`;
+  } else {
+    tbody.innerHTML = pageItems.map(e => {
+      const statusOpts = ['Enviada','Respondida','Não respondida','Recusada','Fechada'];
+      return `<tr>
+        <td class="td-name">${e.googleUrl?`<a href="${escHtml(e.googleUrl)}" target="_blank">${escHtml(e.nome)}</a>`:escHtml(e.nome)}</td>
+        <td class="td-link">${e.site?`<a href="${escHtml(e.site)}" target="_blank">${escHtml(e.site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a>`:'<span class="td-missing">—</span>'}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:9px">${e.whatsapp?`<a href="${buildWaLink(e.whatsapp)}" target="_blank" style="color:var(--ok);text-decoration:none">${escHtml(e.whatsapp)}</a>`:'—'}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${e.enviadoEm||e.migradoEm||'—'}</td>
+        <td><select class="status-select" onchange="updateAcompStatus('${e.id}','${acompMes}',this.value)">
+          ${statusOpts.map(s=>`<option value="${s}"${(e.status||'Enviada')===s?' selected':''}>${s}</option>`).join('')}
+        </select></td>
+        <td><button class="del-btn" title="Remover do acompanhamento" onclick="deleteAcompLead('${e.id}','${acompMes}')">✕</button></td>
+      </tr>`;
+    }).join('');
+  }
+  renderPagination('acompPagination', acompPage, totalPages, totalItems, ACOMP_PG, 'goAcompPage', 'changeAcompPgSize');
+}
+
+function goAcompPage(p)       { acompPage=p; renderAcompLista(); }
+function changeAcompPgSize(n) { ACOMP_PG=n; acompPage=1; renderAcompLista(); }
+
+function updateAcompStatus(id, mes, status) {
+  const data = getAcompData();
+  if (!data[mes]) return;
+  const lead = data[mes].find(e => e.id === id);
+  if (!lead) return;
+  lead.status = status;
+  saveAcompData(data);
+  renderAcompLista();
+  updateBadges();
+  notify(`✓ Status atualizado: ${status}`);
+}
+
+function deleteAcompLead(id, mes) {
+  const data = getAcompData();
+  if (!data[mes]) return;
+  const lead = data[mes].find(e => e.id === id);
+  abrirModalConfirm(
+    `Remover <strong>${lead ? escHtml(lead.nome) : 'este lead'}</strong> do acompanhamento?`,
+    () => {
+      const d = getAcompData();
+      if (!d[mes]) return;
+      d[mes] = d[mes].filter(e => e.id !== id);
+      saveAcompData(d);
+      renderAcompLista();
+      updateBadges();
+      notify('Lead removido do acompanhamento');
+    }
+  );
+}
+
+function renderAcompMetricas() {
+  renderAcompMesesTabs('acompMesesTabsMetricas', acompMesMetricas, 'setAcompMesMetricas');
+  const data = getAcompData();
+  const leads = data[acompMesMetricas] || [];
+  const total = leads.length;
+  const resp  = leads.filter(e => e.status==='Respondida').length;
+  const nresp = leads.filter(e => e.status==='Não respondida').length;
+  const fech  = leads.filter(e => e.status==='Fechada').length;
+  const recus = leads.filter(e => e.status==='Recusada').length;
+  const env   = leads.filter(e => e.status==='Enviada').length;
+  const txResp = total ? Math.round((resp/total)*100) : 0;
+  const txFech = resp  ? Math.round((fech/resp)*100)  : 0;
+
+  document.getElementById('acompStatsRow').innerHTML = `
+    <div class="stat-chip"><div class="stat-chip-val">${total}</div><div class="stat-chip-label">TOTAL ENVIADOS</div></div>
+    <div class="stat-chip"><div class="stat-chip-val" style="color:var(--accent)">${env}</div><div class="stat-chip-label">AGUARDANDO RESP.</div></div>
+    <div class="stat-chip"><div class="stat-chip-val" style="color:var(--ok)">${resp}</div><div class="stat-chip-label">RESPONDIDAS</div></div>
+    <div class="stat-chip"><div class="stat-chip-val" style="color:var(--muted)">${nresp}</div><div class="stat-chip-label">NÃO RESPONDIDAS</div></div>
+    <div class="stat-chip"><div class="stat-chip-val" style="color:var(--error)">${recus}</div><div class="stat-chip-label">RECUSADAS</div></div>
+    <div class="stat-chip"><div class="stat-chip-val" style="color:var(--ok)">${fech}</div><div class="stat-chip-label">FECHADAS</div></div>
+    <div class="stat-chip"><div class="stat-chip-val" style="color:var(--accent)">${txResp}%</div><div class="stat-chip-label">TAXA DE RESPOSTA</div></div>
+    <div class="stat-chip"><div class="stat-chip-val" style="color:var(--ok)">${txFech}%</div><div class="stat-chip-label">CONVERSÃO (resp→fecha)</div></div>
+  `;
+
+  // Comparativo por mês
+  const meses = Object.keys(data).sort();
+  if (meses.length > 1) {
+    document.getElementById('acompComparativoCard').style.display = 'block';
+    document.getElementById('acompComparativoTabela').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Mês</th><th>Enviados</th><th>Respondidos</th><th>Não resp.</th><th>Recusados</th><th>Fechados</th><th>Tx. resposta</th><th>Tx. fechamento</th>
+          </tr></thead>
+          <tbody>
+            ${meses.map(m => {
+              const ls = data[m]||[];
+              const t  = ls.length;
+              const r  = ls.filter(e=>e.status==='Respondida').length;
+              const f  = ls.filter(e=>e.status==='Fechada').length;
+              const nr = ls.filter(e=>e.status==='Não respondida').length;
+              const rc = ls.filter(e=>e.status==='Recusada').length;
+              const tr = t ? Math.round((r/t)*100) : 0;
+              const tf = r ? Math.round((f/r)*100) : 0;
+              const isActive = m===acompMesMetricas;
+              return `<tr style="${isActive?'background:var(--accent-dim);':''}">
+                <td style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:${isActive?'var(--accent)':'var(--text2)'}">${monthKeyLabel(m)}</td>
+                <td style="font-family:'DM Mono',monospace;font-size:10px">${t}</td>
+                <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--ok)">${r}</td>
+                <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">${nr}</td>
+                <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--error)">${rc}</td>
+                <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--ok)">${f}</td>
+                <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);font-weight:700">${tr}%</td>
+                <td style="font-family:'DM Mono',monospace;font-size:10px;color:var(--ok);font-weight:700">${tf}%</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } else {
+    document.getElementById('acompComparativoCard').style.display = meses.length > 1 ? 'block' : 'none';
+  }
 }
 
 /* ════════════════════════════
