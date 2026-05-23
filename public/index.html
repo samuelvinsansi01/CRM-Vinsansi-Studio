@@ -3806,7 +3806,9 @@ function renderFilaZap() {
     </div>`;
   }).join('');
   renderDisparoEmpresas();
-  renderFilaSlot(0, disparoDay); renderFilaSlot(1, disparoDay);
+  const allChips = getChips();
+  allChips.forEach((_, s) => renderFilaSlot(s, disparoDay));
+  if (allChips.length === 0) { renderFilaSlot(0, disparoDay); renderFilaSlot(1, disparoDay); }
 }
 
 /* ════════════════════════════
@@ -3876,12 +3878,20 @@ function renderDisparoEmpresas() {
 
     const botoes = chips.map((c, slot) => {
       const { naFila: emFila } = naFila[slot];
-      const cor  = slot === 0 ? 'var(--accent)' : '#5bb8f5';
-      const corBg = slot === 0 ? 'rgba(184,240,89,0.08)' : 'rgba(91,184,245,0.08)';
+      const cor    = slot === 0 ? 'var(--accent)' : '#5bb8f5';
+      const corBg  = slot === 0 ? 'rgba(184,240,89,0.08)' : 'rgba(91,184,245,0.08)';
+      const qtdNoDia = getFilaChipNoDia(c.id, disparoDay).length;
+      const cheio  = !emFila && qtdNoDia >= CHIP_LIMIT;
+      const label  = emFila ? `✓ C${slot+1}` : cheio ? `✕ C${slot+1}` : `+ C${slot+1}`;
+      const title  = emFila
+        ? `Remover do Chip ${slot+1} — ${escHtml(c.nome)}`
+        : cheio
+          ? `Chip ${slot+1} cheio (${CHIP_LIMIT}/${CHIP_LIMIT}) · clique para redirecionar ao próximo disponível`
+          : `Adicionar ao Chip ${slot+1} — ${escHtml(c.nome)} (${qtdNoDia}/${CHIP_LIMIT})`;
       return `<button onclick="toggleFilaSlotEmpresa(${slot},'${e.id}')"
-        style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 10px;border-radius:6px;cursor:pointer;border:1px solid ${emFila?cor:'var(--border2)'};background:${emFila?corBg:'transparent'};color:${emFila?cor:'var(--muted)'};transition:all 0.15s;white-space:nowrap"
-        title="${emFila?'Remover de':'Adicionar ao'} Chip ${slot+1} — ${escHtml(c.nome)}">
-        ${emFila?'✓':'+'} C${slot+1}
+        style="font-family:'DM Mono',monospace;font-size:8px;padding:4px 10px;border-radius:6px;cursor:pointer;border:1px solid ${emFila?cor:cheio?'rgba(255,92,92,0.4)':'var(--border2)'};background:${emFila?corBg:cheio?'rgba(255,92,92,0.06)':'transparent'};color:${emFila?cor:cheio?'var(--error)':'var(--muted)'};transition:all 0.15s;white-space:nowrap"
+        title="${title}">
+        ${label}
       </button>`;
     }).join('');
 
@@ -3980,8 +3990,10 @@ function renderFilaSlot(slot, filterDay) {
   const aguardando = filaCompleta.filter(f => f.status === 'aguardando').length;
   const erros = filaCompleta.filter(f => f.status === 'erro').length;
   const enviados = filaCompleta.filter(f => f.status === 'enviado').length;
-  countEl.textContent = `(${aguardando} aguardando · ${erros} erro · ${enviados} enviado${enviados!==1?'s':''})`;
-
+  const totalNoDia = filaCompleta.length;
+  const cheio = totalNoDia >= CHIP_LIMIT;
+  countEl.textContent = `(${totalNoDia}/${CHIP_LIMIT} · ${aguardando} aguardando · ${erros} erro · ${enviados} enviado${enviados!==1?'s':''})`;
+  countEl.style.color = cheio ? 'var(--error)' : totalNoDia >= CHIP_LIMIT * 0.8 ? 'var(--warning)' : '';
   const vazia = filaCompleta.length === 0 && (!st.loteHistorico || !st.loteHistorico.length);
   vaziEl.style.display  = vazia ? 'block' : 'none';
   itensEl.style.display = vazia ? 'none'  : 'flex';
@@ -4396,6 +4408,15 @@ function saveFilaDisparo() {
   try { localStorage.setItem('vs_fila_disparo_v1', JSON.stringify(filaDisparo)); } catch(e) { console.warn('saveFilaDisparo error', e); }
 }
 
+const CHIP_LIMIT = 60; // máximo de leads por chip por dia
+
+function getFilaChipNoDia(chipId, day) {
+  // Retorna apenas os itens da fila do chip que pertencem ao dia informado
+  const data = ensureWeekData();
+  const idsNoDia = new Set((data.days[day]||[]).map(e => e.id));
+  return getFilaChip(chipId).filter(f => idsNoDia.has(f.id));
+}
+
 function toggleFilaSlotEmpresa(slot, empId) {
   const chips = getChips();
   const chip = chips[slot] || null;
@@ -4403,12 +4424,11 @@ function toggleFilaSlotEmpresa(slot, empId) {
   const fila = getFilaChip(chip.id);
   const idx = fila.findIndex(f => f.id === empId);
   const data = ensureWeekData();
+
   if (idx >= 0) {
-    // Remover da fila
+    // ── REMOVER da fila ──
     fila.splice(idx, 1);
-    // Se não está em nenhuma outra fila, volta para "Não enviada"
-    const chips2 = getChips();
-    const emOutraFila = chips2.some((c,s) => s !== slot && getFilaChip(c.id).some(f => f.id === empId));
+    const emOutraFila = chips.some((c, s) => s !== slot && getFilaChip(c.id).some(f => f.id === empId));
     if (!emOutraFila) {
       Object.keys(data.days).forEach(day => {
         const emp = (data.days[day]||[]).find(e => e.id === empId);
@@ -4416,28 +4436,59 @@ function toggleFilaSlotEmpresa(slot, empId) {
       });
       saveWeekData(data);
     }
-  } else {
-    // Adicionar à fila
-    const all = Object.values(data.days).flat();
-    const emp = all.find(e => e.id === empId);
-    if (!emp || !emp.whatsapp) { notify('// empresa sem WhatsApp','warn'); return; }
-    const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
-    // Se já foi enviada, entra na fila com status "enviado" para não ser disparada novamente
-    const jaEnviado = emp.status === 'Enviada' || emp.status === 'Respondida' || emp.status === 'Não respondida' || emp.status === 'Recusada' || emp.status === 'Fechada';
-    const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
-    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
-    if (!jaEnviado) {
-      Object.keys(data.days).forEach(day => {
-        const e = (data.days[day]||[]).find(e => e.id === empId);
-        if (e) e.status = 'Em fila';
-      });
-      saveWeekData(data);
-    }
+    saveFilaDisparo();
+    renderDisparoEmpresas();
+    chips.forEach((_, s) => renderFilaSlot(s, disparoDay));
+    updateBadges();
+    return;
   }
-  renderDisparoEmpresas();
-  renderFilaSlot(0, disparoDay);
-  renderFilaSlot(1, disparoDay);
+
+  // ── ADICIONAR à fila ──
+  const all = Object.values(data.days).flat();
+  const emp = all.find(e => e.id === empId);
+  if (!emp || !emp.whatsapp) { notify('// empresa sem WhatsApp','warn'); return; }
+
+  // Verificar se o chip alvo tem vaga no dia atual
+  const filaChipNoDia = getFilaChipNoDia(chip.id, disparoDay);
+  if (filaChipNoDia.length >= CHIP_LIMIT) {
+    // Chip alvo cheio — procurar próximo chip com vaga (ordem circular a partir do slot+1)
+    let slotDestino = -1;
+    for (let i = 1; i <= chips.length; i++) {
+      const s = (slot + i) % chips.length;
+      const c = chips[s];
+      if (c && getFilaChipNoDia(c.id, disparoDay).length < CHIP_LIMIT) {
+        slotDestino = s;
+        break;
+      }
+    }
+
+    if (slotDestino === -1) {
+      notify(`// todos os chips estão cheios (${CHIP_LIMIT} leads/chip) neste dia`, 'warn');
+      return;
+    }
+
+    const chipDestino = chips[slotDestino];
+    notify(`// Chip ${slot+1} cheio → adicionando ao Chip ${slotDestino+1} (${chipDestino.nome})`, 'warn');
+    // Redireciona para o chip com vaga
+    toggleFilaSlotEmpresa(slotDestino, empId);
+    return;
+  }
+
+  // Chip tem vaga — adicionar normalmente
+  const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
+  const jaEnviado = ['Enviada','Respondida','Não respondida','Recusada','Fechada'].includes(emp.status||'');
+  const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
+  fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
+  if (!jaEnviado) {
+    Object.keys(data.days).forEach(day => {
+      const e = (data.days[day]||[]).find(e => e.id === empId);
+      if (e) e.status = 'Em fila';
+    });
+    saveWeekData(data);
+  }
   saveFilaDisparo();
+  renderDisparoEmpresas();
+  chips.forEach((_, s) => renderFilaSlot(s, disparoDay));
   updateBadges();
 }
 
