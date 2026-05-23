@@ -3489,16 +3489,12 @@ async function iniciarDisparoChip(slot) {
   if (!pendentes.length) { notify('// nenhum item aguardando — todos já enviados','warn'); return; }
 
   // ── Validação: todos os lotes com pendentes devem ter imagem ──
-  // Faz a checagem direto no IDB (async) para evitar falso erro quando
-  // o cache ainda não foi populado após abertura da página
+  // Itera apenas sobre itens aguardando, que é como os lotes são
+  // numerados visualmente e como as imagens são salvas pelo usuário
   const lotesComPendentes = [];
-  for (let i = 0; i < filaCompleta.length; i += LOTE_SIZE) {
-    const loteSlice = filaCompleta.slice(i, i + LOTE_SIZE);
-    const temPendente = loteSlice.some(f => f.status === 'aguardando');
-    if (temPendente) {
-      const loteNum = Math.floor(i / LOTE_SIZE) + 1;
-      lotesComPendentes.push(loteNum);
-    }
+  for (let i = 0; i < pendentes.length; i += LOTE_SIZE) {
+    const loteNum = Math.floor(i / LOTE_SIZE) + 1;
+    lotesComPendentes.push(loteNum);
   }
 
   // Garante que o cache está populado para cada lote antes de validar
