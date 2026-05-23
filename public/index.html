@@ -616,6 +616,12 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="card-title" style="flex-shrink:0">Leads ativos</div>
     <div class="day-tabs" id="inicioDayTabs"></div>
     <div class="status-tabs" id="inicioStatusTabs"></div>
+    <div style="margin-bottom:10px;flex-shrink:0">
+      <input id="inicioBusca" type="text" placeholder="🔍 Buscar por nome, site ou WhatsApp..."
+        oninput="inicioPage=1;renderInicio()"
+        style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"/>
+    </div>
     <div class="table-wrap" id="inicioTableWrap">
       <table>
         <thead>
@@ -841,6 +847,12 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         Aguardando atribuição
         <span id="instaFilaTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
         <button onclick="instaSelecionarTodos()" style="margin-left:8px;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer;transition:all 0.18s" onmouseover="this.style.color='var(--insta)';this.style.borderColor='var(--insta)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Selecionar todos</button>
+      </div>
+      <div style="margin-bottom:10px;flex-shrink:0">
+        <input id="instaBusca" type="text" placeholder="🔍 Buscar por nome ou WhatsApp..."
+          oninput="instaPage=0;renderInstagram()"
+          style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
+          onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='var(--border2)'"/>
       </div>
       <div id="instaFilaList" class="stretch-list">
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhuma empresa aguardando atribuição</div>
@@ -1130,6 +1142,12 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
         <div id="acompFiltroStatus" style="display:flex;gap:5px;flex-wrap:wrap"></div>
       </div>
+    </div>
+    <div style="margin-bottom:10px;flex-shrink:0">
+      <input id="acompBusca" type="text" placeholder="🔍 Buscar por nome, site ou WhatsApp..."
+        oninput="acompPage=1;renderAcompLista()"
+        style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"/>
     </div>
 
     <!-- tabela -->
@@ -2316,14 +2334,22 @@ function renderInicio() {
   ).join('');
 
   const filtered = emps.filter(e => (e.status||'Não enviada') === selectedStatus);
-  const totalItems = filtered.length;
+
+  // aplicar busca
+  const inicioBuscaEl = document.getElementById('inicioBusca');
+  const inicioBuscaQ = inicioBuscaEl ? normalizeStr(inicioBuscaEl.value) : '';
+  const filteredFinal = inicioBuscaQ
+    ? filtered.filter(e => normalizeStr(e.nome||'').includes(inicioBuscaQ) || normalizeStr(e.site||'').includes(inicioBuscaQ) || (e.whatsapp||'').includes(inicioBuscaQ))
+    : filtered;
+
+  const totalItems = filteredFinal.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / INICIO_PG));
   if (inicioPage > totalPages) inicioPage = totalPages;
-  const pageItems = filtered.slice((inicioPage-1)*INICIO_PG, inicioPage*INICIO_PG);
+  const pageItems = filteredFinal.slice((inicioPage-1)*INICIO_PG, inicioPage*INICIO_PG);
 
   const tbody = document.getElementById('inicioTbody');
   if (!totalItems) {
-    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Nenhuma empresa com status "${selectedStatus}" neste dia</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="table-empty">${inicioBuscaQ ? `Nenhum resultado para "${inicioBuscaEl.value}"` : `Nenhuma empresa com status "${selectedStatus}" neste dia`}</td></tr>`;
   } else {
     tbody.innerHTML = pageItems.map(e => {
       const googleUrl = e.googleUrl || '';
@@ -2361,8 +2387,8 @@ function renderInicio() {
   renderExcluidos();
 }
 
-function setDay(day)    { selectedDay = day; selectedStatus = 'Não enviada'; inicioPage = 1; renderInicio(); }
-function setStatus(st)  { selectedStatus = st; inicioPage = 1; renderInicio(); }
+function setDay(day)    { selectedDay = day; selectedStatus = 'Não enviada'; inicioPage = 1; const b=document.getElementById('inicioBusca'); if(b) b.value=''; renderInicio(); }
+function setStatus(st)  { selectedStatus = st; inicioPage = 1; const b=document.getElementById('inicioBusca'); if(b) b.value=''; renderInicio(); }
 
 /* ════════════════════════════
    PAGINAÇÃO — HELPERS
@@ -5269,9 +5295,17 @@ function renderInstagram() {
 
 /* ── COLUNA ESQUERDA: fila aguardando atribuição ── */
 function renderInstaFila() {
-  const fila = getInstaFila().filter(e => !e.diaDestino);
+  const filaAll = getInstaFila().filter(e => !e.diaDestino);
+
+  // busca
+  const buscaEl = document.getElementById('instaBusca');
+  const buscaQ  = buscaEl ? normalizeStr(buscaEl.value) : '';
+  const fila = buscaQ
+    ? filaAll.filter(e => normalizeStr(e.nome||'').includes(buscaQ) || (e.whatsapp||'').includes(buscaQ))
+    : filaAll;
+
   const totalEl = document.getElementById('instaFilaTotalBadge');
-  if (totalEl) totalEl.textContent = fila.length ? `· ${fila.length} empresa${fila.length>1?'s':''}` : '';
+  if (totalEl) totalEl.textContent = filaAll.length ? `· ${fila.length}${buscaQ?'/'+filaAll.length:''} empresa${filaAll.length>1?'s':''}` : '';
 
   const start = instaPage * INSTA_PAGE_SIZE;
   const page  = fila.slice(start, start + INSTA_PAGE_SIZE);
@@ -5713,6 +5747,7 @@ function setAcompMes(m) {
   acompMes = m;
   acompFiltroSt = null;
   acompPage = 1;
+  const b = document.getElementById('acompBusca'); if (b) b.value = '';
   renderAcompLista();
 }
 
@@ -5743,14 +5778,22 @@ function renderAcompLista() {
   ).join('');
 
   const filtered = acompFiltroSt ? leads.filter(e => (e.status||'Enviada')===acompFiltroSt) : leads;
-  const totalItems = filtered.length;
+
+  // busca
+  const buscaEl = document.getElementById('acompBusca');
+  const buscaQ  = buscaEl ? normalizeStr(buscaEl.value) : '';
+  const filteredFinal = buscaQ
+    ? filtered.filter(e => normalizeStr(e.nome||'').includes(buscaQ) || normalizeStr(e.site||'').includes(buscaQ) || (e.whatsapp||'').includes(buscaQ))
+    : filtered;
+
+  const totalItems = filteredFinal.length;
   const totalPages = Math.max(1, Math.ceil(totalItems/ACOMP_PG));
   if (acompPage > totalPages) acompPage = totalPages;
-  const pageItems = filtered.slice((acompPage-1)*ACOMP_PG, acompPage*ACOMP_PG);
+  const pageItems = filteredFinal.slice((acompPage-1)*ACOMP_PG, acompPage*ACOMP_PG);
 
   const tbody = document.getElementById('acompTbody');
   if (!totalItems) {
-    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">Nenhum lead neste mês${acompFiltroSt?' com este status':''}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="table-empty">${buscaQ ? `Nenhum resultado para "${buscaEl.value}"` : `Nenhum lead neste mês${acompFiltroSt?' com este status':''}`}</td></tr>`;
   } else {
     tbody.innerHTML = pageItems.map(e => {
       const statusOpts = ['Enviada','Respondida','Não respondida','Recusada','Fechada'];
