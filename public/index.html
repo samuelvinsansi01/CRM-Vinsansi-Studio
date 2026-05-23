@@ -1680,19 +1680,16 @@ function getTemplates() {
 function saveTemplates(t) { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(t)); }
 
 function pickTemplate(nome, ramoId) {
-  // Se tem ramoId, tenta templates do ramo; senão usa fallback geral
-  let tpl;
-  if (ramoId) {
-    tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
-  }
-  if (!tpl || !tpl.length) tpl = getTemplates();
+  if (!ramoId) return null; // sem ramo = sem template
+  const tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
+  if (!tpl || !tpl.length) return null; // ramo sem templates configurados
   const idx = Math.floor(Math.random() * tpl.length);
   return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
 }
 function pickOtherTemplate(nome, cur, ramoId) {
-  let tpl;
-  if (ramoId) tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
-  if (!tpl || !tpl.length) tpl = getTemplates();
+  if (!ramoId) return null;
+  const tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
+  if (!tpl || !tpl.length) return null;
   let idx; do { idx = Math.floor(Math.random() * tpl.length); } while (idx === cur && tpl.length > 1);
   return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
 }
@@ -3575,23 +3572,15 @@ async function dispararLoteChip(slot) {
       log(`  ① apresentação enviada`);
       await new Promise(r => setTimeout(r, MSG_DELAY));
 
-      // MSG 2 — Link
-      const payload2 = { number: numero, options: { delay: 1000 }, textMessage: { text: LINK_BICHOP } };
-      await fetch(`${chip.url}/message/sendText/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload2) });
-      log(`  ② link enviado`);
-      await new Promise(r => setTimeout(r, MSG_DELAY));
-
-      // MSG 3 — Imagem do lote (número do lote baseado na posição na fila completa)
-      const filaCompleta = getFilaChip(chip.id);
-      const primeiroItemIdx = filaCompleta.findIndex(f => f.id === lote[0].id);
-      const loteNum = primeiroItemIdx >= 0 ? Math.floor(primeiroItemIdx / 20) + 1 : st.loteAtual;
+      // MSG 2 — Imagem do lote
+      const loteNum = st.loteAtual;
       const imgRedesign = getLoteImagem(chip.id, loteNum);
       if (imgRedesign) {
         await new Promise(r => setTimeout(r, MSG_DELAY));
         const b2 = imgRedesign.split(',')[1], m2 = imgRedesign.split(';')[0].split(':')[1] || 'image/jpeg';
         const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: b2, mimetype: m2, caption: '' } };
         await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
-        log(`  ③ imagem enviada`);
+        log(`  ② imagem enviada`);
       }
 
       item.status = 'enviado';
@@ -4482,7 +4471,9 @@ function toggleFilaSlotEmpresa(slot, empId) {
   }
 
   // Chip tem vaga — adicionar normalmente
-  const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
+  const tplResult = pickTemplate(emp.nome, emp.ramoId || null);
+  if (!tplResult) { notify('// lead sem ramo definido — atribua um ramo antes de adicionar à fila', 'warn'); return; }
+  const { text, idx: tIdx } = tplResult;
   const jaEnviado = ['Enviada','Respondida','Não respondida','Recusada','Fechada'].includes(emp.status||'');
   const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
   fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
@@ -4516,10 +4507,12 @@ function toggleFila(empId) {
     const all  = Object.values(data.days).flat();
     const emp  = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) return;
-    const { text, idx: tIdx } = pickTemplate(emp.nome, emp.ramoId || null);
+    const tplResult2 = pickTemplate(emp.nome, emp.ramoId || null);
+    if (!tplResult2) { notify('// lead sem ramo definido — atribua um ramo antes de adicionar à fila', 'warn'); return; }
+    const { text: tText, idx: tIdx } = tplResult2;
     const jaEnviado = emp.status === 'Enviada' || emp.status === 'Respondida' || emp.status === 'Não respondida' || emp.status === 'Recusada' || emp.status === 'Fechada';
     const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
-    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
+    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: tText, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
     if (!jaEnviado) {
       Object.keys(data.days).forEach(day => {
         const e = (data.days[day]||[]).find(e => e.id === empId);
@@ -4802,24 +4795,17 @@ async function dispararLote() {
       log(`  ① apresentação enviada`);
       await new Promise(r => setTimeout(r, MSG_DELAY));
 
-      // MSG 2 — Link
-      const payload2 = { number: numero, options: { delay: 1000 }, textMessage: { text: LINK_BICHOP } };
-      await fetch(`${chip.url}/message/sendText/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload2) });
-      log(`  ② link enviado`);
-      await new Promise(r => setTimeout(r, MSG_DELAY));
-
-      // MSG 3 — Imagem redesign (item ou padrão do lote)
-      const itemIdxSend = filaAtual.indexOf(item);
-      const loteNumSend = Math.floor(itemIdxSend / 20) + 1;
+      // MSG 2 — Imagem redesign (item ou padrão do lote)
+      const loteNumSend = loteAtual;
       const imgRedesign = item.imagem2Base64 || getLoteImagem(disparoChipId, loteNumSend);
       if (imgRedesign) {
         await new Promise(r => setTimeout(r, MSG_DELAY));
         const b2 = imgRedesign.split(',')[1], m2 = imgRedesign.split(';')[0].split(':')[1] || 'image/jpeg';
         const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: b2, mimetype: m2, caption: '' } };
         await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
-        log(`  ③ imagem (redesign) enviada`);
+        log(`  ② imagem (redesign) enviada`);
       } else {
-        log(`  ③ <span style="color:var(--warning)">sem imagem do redesign (configure no cabeçalho do lote)</span>`);
+        log(`  ② <span style="color:var(--warning)">sem imagem (configure no cabeçalho do lote)</span>`);
       }
 
       item.status='enviado'; atualizarStatusFila(item.id,'enviado');
@@ -5240,7 +5226,7 @@ function renderTemplatesConfig() {
   // Seletor de ramo apenas (sem abas de tipo)
   const ramoSel = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
     <select id="tplRamoSel" onchange="onTplRamoChange()" style="flex:1;min-width:140px;font-size:11px;padding:8px 12px">
-      <option value="">— Templates gerais (fallback) —</option>
+      <option value="">— Selecione um ramo —</option>
       ${ramos.map(r => `<option value="${r.id}"${tplRamoId===r.id?' selected':''}>${escHtml(r.nome)}</option>`).join('')}
     </select>
   </div>`;
@@ -5250,8 +5236,9 @@ function renderTemplatesConfig() {
     tpls = getTemplatesForRamoTipo(tplRamoId, 'com-site');
     isRamo = true;
   } else {
-    tpls = getTemplates();
-    isRamo = false;
+    // Sem ramo selecionado — não exibe nada
+    el.innerHTML = ramoSel + `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:16px 0">// Selecione um ramo para ver e editar os templates.</div>`;
+    return;
   }
 
   const maxTpl = 10;
