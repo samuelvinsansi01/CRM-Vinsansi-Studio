@@ -5400,7 +5400,7 @@ function renderInstaFila() {
           ${e.categoria?`<span style="color:var(--muted)">${escHtml(e.categoria)}</span>`:''}
         </div>
       </div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0">
+      <div style="display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0;align-items:center">
         ${days.map(day => {
           const count = instaCountForDay(week, day);
           const full  = count >= INSTA_DIA_LIMIT;
@@ -5410,6 +5410,11 @@ function renderInstaFila() {
             style="background:${full?'rgba(255,80,80,0.08)':'var(--surface2)'};border:1px solid ${full?'rgba(255,80,80,0.3)':'var(--border2)'};color:${full?'var(--error)':'var(--text2)'};border-radius:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 6px;cursor:${full?'not-allowed':'pointer'}"
             ${full?'disabled':''}>${lbl}</button>`;
         }).join('')}
+        <button onclick="excluirInstaFila('${e.id}')"
+          title="Excluir lead permanentemente"
+          style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:10px;padding:3px 7px;cursor:pointer;transition:all 0.18s;margin-left:2px"
+          onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)';this.style.background='rgba(255,92,92,0.06)'"
+          onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -5437,6 +5442,23 @@ function instaSelecionarTodos() {
   renderInstaFila();
 }
 function instaDeselecionarTodos() { instaSelectedIds.clear(); renderInstaFila(); }
+
+function excluirInstaFila(id) {
+  const fila = getInstaFila();
+  const lead = fila.find(e => e.id === id);
+  if (!lead) return;
+  abrirModalConfirm(
+    `Excluir <strong>${escHtml(lead.nome)}</strong> permanentemente? O site será bloqueado nas importações futuras.`,
+    () => {
+      saveInstaFila(getInstaFila().filter(e => e.id !== id));
+      if (lead.site) addExcludedDomains([lead.site]);
+      instaSelectedIds.delete(id);
+      renderInstaFila();
+      updateBadges();
+      notify(`✕ ${lead.nome} excluído`);
+    }
+  );
+}
 
 /* ── ATRIBUIÇÃO INDIVIDUAL ── */
 function instaAtribuirUm(empresaId, day) {
