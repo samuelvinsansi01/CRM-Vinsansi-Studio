@@ -824,25 +824,15 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   <div class="page-header" style="flex-shrink:0">
     <div>
       <div class="page-title">Instagram <span>Fila.</span></div>
-      <div class="page-sub">// sem site · 75/dia · 5 blocos de 15 · delay mínimo 2h entre blocos</div>
+      <div class="page-sub">// 60 leads por dia · atribuição manual · link do Instagram obrigatório</div>
     </div>
     <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;white-space:nowrap;background:var(--insta);border-color:var(--insta)" onclick="abrirModalInstaLead()">+ Lead manual</button>
   </div>
 
-  <!-- Barra de ações em lote -->
-  <div class="insta-acoes-lote" id="instaAcoesLote">
-    <span id="instaLoteLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--insta)">0 selecionados</span>
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-      <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Atribuir para:</span>
-      <div class="day-tabs" id="instaLoteDayTabs" style="margin-bottom:0"></div>
-    </div>
-    <button class="btn" style="font-size:10px;padding:7px 14px;margin-left:auto;background:var(--insta);color:#fff" onclick="instaAtribuirLote()">Atribuir selecionados →</button>
-    <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="instaDeselecionarTodos()">Cancelar</button>
-  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex:1;min-height:0;overflow:hidden">
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-    <!-- COLUNA ESQUERDA: fila de aguardando atribuição -->
-    <div class="stretch-card">
+    <!-- COLUNA ESQUERDA: fila aguardando atribuição -->
+    <div class="stretch-card" style="display:flex;flex-direction:column;min-height:0">
       <div class="card-title" style="flex-shrink:0">
         Aguardando atribuição
         <span id="instaFilaTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
@@ -854,27 +844,26 @@ tr:hover td{background:rgba(255,255,255,0.015);}
           style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
           onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='var(--border2)'"/>
       </div>
-      <div id="instaFilaList" class="stretch-list">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhuma empresa aguardando atribuição</div>
+      <!-- barra de ações em lote -->
+      <div id="instaAcoesLote" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;flex-shrink:0">
+        <span id="instaLoteLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--insta)">0 selecionados</span>
+        <div style="display:flex;gap:5px;flex-wrap:wrap" id="instaLoteDayBtns"></div>
+        <button class="btn btn-ghost" style="font-size:9px;padding:4px 10px;margin-left:auto" onclick="instaDeselecionarTodos()">✕ Cancelar</button>
       </div>
+      <div id="instaFilaList" class="stretch-list" style="flex:1;overflow-y:auto"></div>
       <div id="instaFilaPagination"></div>
     </div>
 
-    <!-- COLUNA DIREITA: cronograma por dia -->
-    <div>
-      <div class="card" style="margin-bottom:12px">
-        <div class="card-title">Dia</div>
-        <div class="day-tabs" id="instaSchedDayTabs" style="margin-bottom:0"></div>
+    <!-- COLUNA DIREITA: leads do dia -->
+    <div class="stretch-card" style="display:flex;flex-direction:column;min-height:0">
+      <div class="card-title" style="flex-shrink:0">
+        Leads do dia
+        <span id="instaDayTotal" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
+        <button onclick="instaLimparDia()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer" onmouseover="this.style.color='var(--error)';this.style.borderColor='var(--error)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Limpar dia</button>
       </div>
-      <div class="stretch-card">
-        <div class="card-title" style="flex-shrink:0">
-          Blocos do dia
-          <span id="instaSchedTotal" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
-          <button onclick="instaRemoverDia()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer" onmouseover="this.style.color='var(--error)';this.style.borderColor='var(--error)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Limpar dia</button>
-        </div>
-        <div id="instaSchedBlocks">
-          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">Selecione um dia</div>
-        </div>
+      <div class="day-tabs" id="instaDayTabs" style="flex-shrink:0;margin-bottom:12px"></div>
+      <div id="instaDayList" class="stretch-list" style="flex:1;overflow-y:auto">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">Selecione um dia</div>
       </div>
     </div>
   </div>
@@ -1479,7 +1468,8 @@ const TEMPLATES_KEY  = 'vs_templates_v2';
 const TEMPLATES_RAMO_KEY = 'vs_templates_ramo_v1'; // templates por ramo+tipo
 const VAL_KEY        = 'vs_validacao_v2';   // fila de validação
 const ATRIBUICAO_KEY = 'vs_atribuicao_v1';  // base de atribuição (leads validados sem dia)
-const INSTA_KEY      = 'vs_insta_fila_v2';  // fila instagram
+const INSTA_KEY      = 'vs_insta_fila_v2';  // fila instagram aguardando atribuição
+const INSTA_WEEK_KEY = 'vs_insta_week_v1';  // leads instagram atribuídos por dia
 const INSTA_SCHED_KEY = 'vs_insta_sched_v1'; // cronograma instagram
 const FILA_DISPARO_KEY = 'vs_fila_disparo_v1'; // fila de disparo WhatsApp
 
@@ -2090,7 +2080,11 @@ function updateBadges() {
   const naoEnv = flat.filter(e => (e.status||'Não enviada')==='Não enviada' && e.whatsapp).length;
   document.getElementById('badge-fila-zap').textContent = naoEnv;
   const instaEl = document.getElementById('badge-instagram');
-  if (instaEl) instaEl.textContent = getInstaFila().length;
+  if (instaEl) {
+    const instaWeek = getInstaWeek();
+    const totalInsta = Object.values(instaWeek).flat().length;
+    instaEl.textContent = totalInsta + getInstaFila().length;
+  }
   const acompEl = document.getElementById('badge-acompanhamento');
   if (acompEl) {
     const mk = currentMonthKey();
@@ -5285,50 +5279,6 @@ function removerTemplate(idx) {
    INSTAGRAM — PAINEL PRINCIPAL
 ════════════════════════════ */
 
-const INSTA_PAGE_SIZE  = 30;
-const INSTA_DIA_LIMIT  = 75;
-const INSTA_BLOCOS     = 5;
-const INSTA_POR_BLOCO  = 15; // 5 × 15 = 75
-
-let instaPage         = 0;
-let instaSelectedIds  = new Set();
-let instaSchedDay     = null; // dia selecionado no cronograma (YYYY/MM/DD)
-let instaLoteDay      = null; // dia selecionado na barra de lote
-
-/* ── helpers de dia ── */
-function instaWeekDays() {
-  // retorna os próximos 14 dias a partir de hoje (dd/MM/YYYY → chave YYYY/MM/DD)
-  const days = [];
-  const today = new Date();
-  for (let i = 0; i < 14; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const key = d.toISOString().slice(0,10).replace(/-/g,'/');
-    days.push(key);
-  }
-  return days;
-}
-
-function instaCountForDay(sched, day) {
-  if (!sched[day]) return 0;
-  return sched[day].reduce((s, bloco) => s + (bloco.empresas||[]).length, 0);
-}
-
-function instaDefaultBlocos(existingBlocos) {
-  // Garante 5 blocos; preserva dados existentes
-  const defaults = ['09:00','11:00','13:00','15:00','17:00'];
-  const result = [];
-  for (let i = 0; i < INSTA_BLOCOS; i++) {
-    if (existingBlocos && existingBlocos[i]) {
-      result.push(existingBlocos[i]);
-    } else {
-      result.push({ hora: defaults[i], empresas: [] });
-    }
-  }
-  return result;
-}
-
-/* ── RENDER PRINCIPAL ── */
 /* ── MODAL LEAD MANUAL INSTAGRAM ── */
 function abrirModalInstaLead() {
   ['ilNome','ilWhatsapp','ilGoogleUrl','ilInstagram','ilCategoria'].forEach(id => {
@@ -5351,18 +5301,44 @@ function salvarInstaLead() {
   notify('✓ Lead adicionado à fila Instagram');
 }
 
+/* ════════════════════════════
+   INSTAGRAM — STORAGE
+════════════════════════════ */
+function getInstaFila()    { try { return JSON.parse(localStorage.getItem(INSTA_KEY)||'[]'); } catch { return []; } }
+function saveInstaFila(d)  { localStorage.setItem(INSTA_KEY, JSON.stringify(d)); }
+function getInstaWeek()    { try { return JSON.parse(localStorage.getItem(INSTA_WEEK_KEY)||'{}'); } catch { return {}; } }
+function saveInstaWeek(d)  { localStorage.setItem(INSTA_WEEK_KEY, JSON.stringify(d)); }
+
+const INSTA_DIA_LIMIT  = 60;
+const INSTA_PAGE_SIZE  = 30;
+const INSTA_STATUS     = ['Não contatado','DM Enviada','Respondeu','Não respondeu','Fechou','Recusou'];
+
+let instaPage         = 0;
+let instaSelectedIds  = new Set();
+let instaActiveDay    = null;
+
+/* ── Dias da semana ── */
+function instaWeekDays() {
+  const days = []; const d = new Date(currentWeekStartStr());
+  for (let i = 0; i < 7; i++) { days.push(d.toLocaleDateString('pt-BR')); d.setDate(d.getDate()+1); }
+  return days;
+}
+
+function instaCountForDay(week, day) { return (week[day]||[]).length; }
+
+/* ════════════════════════════
+   INSTAGRAM — RENDER PRINCIPAL
+════════════════════════════ */
 function renderInstagram() {
   renderInstaFila();
-  renderInstaSchedDayTabs();
-  renderInstaLoteDayTabs();
+  renderInstaDayTabs();
+  renderInstaDayList();
   updateBadges();
 }
 
 /* ── COLUNA ESQUERDA: fila aguardando atribuição ── */
 function renderInstaFila() {
-  const filaAll = getInstaFila().filter(e => !e.diaDestino);
-
-  // busca
+  const filaAll = getInstaFila();
   const buscaEl = document.getElementById('instaBusca');
   const buscaQ  = buscaEl ? normalizeStr(buscaEl.value) : '';
   const fila = buscaQ
@@ -5371,6 +5347,26 @@ function renderInstaFila() {
 
   const totalEl = document.getElementById('instaFilaTotalBadge');
   if (totalEl) totalEl.textContent = filaAll.length ? `· ${fila.length}${buscaQ?'/'+filaAll.length:''} empresa${filaAll.length>1?'s':''}` : '';
+
+  const week = getInstaWeek();
+  const days = instaWeekDays();
+
+  // Barra de lote
+  const barra = document.getElementById('instaAcoesLote');
+  if (barra) {
+    barra.style.display = instaSelectedIds.size > 0 ? 'flex' : 'none';
+    const label = document.getElementById('instaLoteLabel');
+    if (label) label.textContent = `${instaSelectedIds.size} selecionada${instaSelectedIds.size>1?'s':''}`;
+    const btnsEl = document.getElementById('instaLoteDayBtns');
+    if (btnsEl) btnsEl.innerHTML = days.map(day => {
+      const count = instaCountForDay(week, day);
+      const full  = count >= INSTA_DIA_LIMIT;
+      const label = new Date(day.split('/').reverse().join('-')).toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/');
+      return `<button onclick="instaAtribuirLote('${day}')"
+        style="background:${full?'rgba(255,80,80,0.08)':'var(--surface2)'};border:1px solid ${full?'rgba(255,80,80,0.3)':'var(--border2)'};color:${full?'var(--error)':'var(--text2)'};border-radius:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 8px;cursor:${full?'not-allowed':'pointer'}"
+        title="${day} · ${count}/${INSTA_DIA_LIMIT}" ${full?'disabled':''}>${label} <span style="opacity:0.6">${count}/${INSTA_DIA_LIMIT}</span></button>`;
+    }).join('');
+  }
 
   const start = instaPage * INSTA_PAGE_SIZE;
   const page  = fila.slice(start, start + INSTA_PAGE_SIZE);
@@ -5387,33 +5383,33 @@ function renderInstaFila() {
     const sel = instaSelectedIds.has(e.id);
     const stars = e.totalScore ? `⭐ ${Number(e.totalScore).toFixed(1)}` : '';
     const reviews = e.reviewsCount ? `(${e.reviewsCount} avaliações)` : '';
-    return `<div class="insta-empresa-row" style="${sel?'background:rgba(225,48,108,0.07);':''}" id="insta-row-${e.id}">
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);${sel?'background:rgba(225,48,108,0.07);':''}" id="insta-row-${e.id}">
       <input type="checkbox" ${sel?'checked':''} onchange="instaToggleSelect('${e.id}',this.checked)"
         style="accent-color:var(--insta);cursor:pointer;flex-shrink:0">
       <div style="flex:1;min-width:0">
-        <div class="empresa-nome">${e.googleUrl?`<a href="${escHtml(e.googleUrl)}" target="_blank" title="Ver no Google" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'">${escHtml(e.nome||'—')}</a>`:escHtml(e.nome||'—')}</div>
-        <div class="empresa-phone" style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${e.googleUrl?`<a href="${escHtml(e.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'">${escHtml(e.nome||'—')}</a>`:escHtml(e.nome||'—')}
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
           ${e.whatsapp?`<span>📱 ${escHtml(e.whatsapp)}</span>`:''}
           ${stars?`<span style="color:var(--ok)">${stars} ${reviews}</span>`:''}
           ${e.categoria?`<span style="color:var(--muted)">${escHtml(e.categoria)}</span>`:''}
         </div>
       </div>
-      <div style="display:flex;gap:4px;flex-shrink:0">
-        ${instaWeekDays().slice(0,7).map(day=>{
-          const sched = getInstaSched();
-          const count = instaCountForDay(sched, day);
+      <div style="display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0">
+        ${days.map(day => {
+          const count = instaCountForDay(week, day);
           const full  = count >= INSTA_DIA_LIMIT;
-          const label = new Date(day.replace(/\//g,'-')).toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','');
+          const lbl   = new Date(day.split('/').reverse().join('-')).toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','');
           return `<button onclick="instaAtribuirUm('${e.id}','${day}')"
-            title="${dayLabelShort(day)} · ${count}/${INSTA_DIA_LIMIT}"
+            title="${day} · ${count}/${INSTA_DIA_LIMIT}"
             style="background:${full?'rgba(255,80,80,0.08)':'var(--surface2)'};border:1px solid ${full?'rgba(255,80,80,0.3)':'var(--border2)'};color:${full?'var(--error)':'var(--text2)'};border-radius:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 6px;cursor:${full?'not-allowed':'pointer'}"
-            ${full?'disabled':''}>${label}</button>`;
+            ${full?'disabled':''}>${lbl}</button>`;
         }).join('')}
       </div>
     </div>`;
   }).join('');
 
-  // Paginação
   const totalPags = Math.ceil(fila.length / INSTA_PAGE_SIZE);
   const pagEl = document.getElementById('instaFilaPagination');
   if (pagEl) {
@@ -5422,256 +5418,241 @@ function renderInstaFila() {
           ${instaPage>0?`<button class="btn btn-ghost" style="font-size:9px;padding:5px 12px" onclick="instaChangePage(${instaPage-1})">← Anterior</button>`:''}
           <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);align-self:center">${instaPage+1} / ${totalPags}</span>
           ${instaPage<totalPags-1?`<button class="btn btn-ghost" style="font-size:9px;padding:5px 12px" onclick="instaChangePage(${instaPage+1})">Próxima →</button>`:''}
-        </div>`
-      : '';
-  }
-
-  // Barra de lote
-  const barra = document.getElementById('instaAcoesLote');
-  if (barra) {
-    barra.style.display = instaSelectedIds.size > 0 ? 'flex' : 'none';
-    const label = document.getElementById('instaLoteLabel');
-    if (label) label.textContent = `${instaSelectedIds.size} selecionada${instaSelectedIds.size>1?'s':''}`;
+        </div>` : '';
   }
 }
 
-function instaChangePage(p) {
-  instaPage = p;
-  renderInstaFila();
-}
+function instaChangePage(p) { instaPage = p; renderInstaFila(); }
 
 function instaToggleSelect(id, checked) {
-  if (checked) instaSelectedIds.add(id);
-  else instaSelectedIds.delete(id);
+  if (checked) instaSelectedIds.add(id); else instaSelectedIds.delete(id);
   renderInstaFila();
 }
-
 function instaSelecionarTodos() {
-  const fila = getInstaFila().filter(e => !e.diaDestino);
-  fila.forEach(e => instaSelectedIds.add(e.id));
+  getInstaFila().forEach(e => instaSelectedIds.add(e.id));
   renderInstaFila();
 }
-
-function instaDeselecionarTodos() {
-  instaSelectedIds.clear();
-  renderInstaFila();
-}
+function instaDeselecionarTodos() { instaSelectedIds.clear(); renderInstaFila(); }
 
 /* ── ATRIBUIÇÃO INDIVIDUAL ── */
 function instaAtribuirUm(empresaId, day) {
+  const week = getInstaWeek();
+  if ((week[day]||[]).length >= INSTA_DIA_LIMIT) { notify(`// limite de ${INSTA_DIA_LIMIT}/dia atingido`,'warn'); return; }
   const fila = getInstaFila();
-  const idx  = fila.findIndex(e => e.id === empresaId);
-  if (idx === -1) return;
-
-  const sched = getInstaSched();
-  const count = instaCountForDay(sched, day);
-  if (count >= INSTA_DIA_LIMIT) { notify(`// limite de ${INSTA_DIA_LIMIT}/dia atingido`, 'warn'); return; }
-
-  // Garantir 5 blocos no dia
-  if (!sched[day]) sched[day] = instaDefaultBlocos();
-  else sched[day] = instaDefaultBlocos(sched[day]);
-
-  // Encontrar bloco com espaço (ordem sequencial)
-  let colocou = false;
-  for (const bloco of sched[day]) {
-    if ((bloco.empresas||[]).length < INSTA_POR_BLOCO) {
-      bloco.empresas.push({ ...fila[idx] });
-      colocou = true;
-      break;
-    }
-  }
-  if (!colocou) { notify(`// todos os blocos cheios neste dia`, 'warn'); return; }
-
-  // Marcar como atribuída
-  fila[idx].diaDestino = day;
-  saveInstaFila(fila);
-  saveInstaSched(sched);
-
+  const emp  = fila.find(e => e.id === empresaId);
+  if (!emp) return;
+  if (!week[day]) week[day] = [];
+  week[day].push({ ...emp, status: 'Não contatado', instagramUrl: '', atribuidoEm: todayStr() });
+  const novaFila = fila.filter(e => e.id !== empresaId);
+  saveInstaFila(novaFila);
+  saveInstaWeek(week);
   instaSelectedIds.delete(empresaId);
-  notify(`✓ ${fila[idx].nome} → ${dayLabelShort(day)}`);
+  if (!instaActiveDay) instaActiveDay = day;
+  notify(`✓ ${emp.nome} → ${day}`);
   renderInstagram();
 }
 
 /* ── ATRIBUIÇÃO EM LOTE ── */
-function renderInstaLoteDayTabs() {
-  const el = document.getElementById('instaLoteDayTabs');
-  if (!el) return;
-  const sched = getInstaSched();
-  el.innerHTML = instaWeekDays().slice(0,7).map(day => {
-    const count = instaCountForDay(sched, day);
-    const full  = count >= INSTA_DIA_LIMIT;
-    const label = new Date(day.replace(/\//g,'-')).toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/').replace(' ','\u00a0');
-    const active = instaLoteDay === day;
-    return `<div class="day-tab${active?' active':''}" onclick="instaSetLoteDay('${day}')"
-      style="${full?'opacity:0.4;pointer-events:none':''}" title="${dayLabelShort(day)} · ${count}/${INSTA_DIA_LIMIT}">
-      ${label}<span style="font-family:'DM Mono',monospace;font-size:7px;color:${active?'rgba(255,255,255,0.7)':'var(--muted)'}"> ${count}/${INSTA_DIA_LIMIT}</span>
-    </div>`;
-  }).join('');
-}
-
-function instaSetLoteDay(day) {
-  instaLoteDay = day;
-  renderInstaLoteDayTabs();
-}
-
-function instaAtribuirLote() {
-  if (!instaLoteDay) { notify('// selecione um dia', 'warn'); return; }
-  if (!instaSelectedIds.size) { notify('// nenhuma empresa selecionada', 'warn'); return; }
-
-  const fila   = getInstaFila();
-  const sched  = getInstaSched();
-  if (!sched[instaLoteDay]) sched[instaLoteDay] = instaDefaultBlocos();
-  else sched[instaLoteDay] = instaDefaultBlocos(sched[instaLoteDay]);
-
+function instaAtribuirLote(day) {
+  if (!instaSelectedIds.size) { notify('// nenhuma empresa selecionada','warn'); return; }
+  const week = getInstaWeek();
+  const fila = getInstaFila();
+  if (!week[day]) week[day] = [];
   let atribuidos = 0, overflow = 0;
   const ids = [...instaSelectedIds];
-
   for (const id of ids) {
-    const idx = fila.findIndex(e => e.id === id);
-    if (idx === -1) continue;
-
-    const count = instaCountForDay(sched, instaLoteDay);
-    if (count >= INSTA_DIA_LIMIT) { overflow++; continue; }
-
-    // Encontrar bloco com espaço
-    let colocou = false;
-    for (const bloco of sched[instaLoteDay]) {
-      if ((bloco.empresas||[]).length < INSTA_POR_BLOCO) {
-        bloco.empresas.push({ ...fila[idx] });
-        colocou = true;
-        break;
-      }
-    }
-    if (!colocou) { overflow++; continue; }
-
-    fila[idx].diaDestino = instaLoteDay;
+    if (week[day].length >= INSTA_DIA_LIMIT) { overflow++; continue; }
+    const emp = fila.find(e => e.id === id);
+    if (!emp) continue;
+    week[day].push({ ...emp, status: 'Não contatado', instagramUrl: '', atribuidoEm: todayStr() });
     atribuidos++;
   }
-
-  saveInstaFila(fila);
-  saveInstaSched(sched);
+  const novaFila = fila.filter(e => !ids.slice(0, atribuidos).includes(e.id));
+  // filtrar corretamente os atribuídos
+  const atribuidosIds = new Set();
+  ids.forEach(id => { if (atribuidosIds.size < atribuidos && week[day].find(e => e.id === id)) atribuidosIds.add(id); });
+  saveInstaFila(fila.filter(e => !atribuidosIds.has(e.id)));
+  saveInstaWeek(week);
   instaSelectedIds.clear();
-
-  let msg = `✓ ${atribuidos} empresa${atribuidos>1?'s':''} → ${dayLabelShort(instaLoteDay)}`;
-  if (overflow) msg += ` · ${overflow} não couberam (limite ${INSTA_DIA_LIMIT}/dia)`;
+  if (!instaActiveDay) instaActiveDay = day;
+  let msg = `✓ ${atribuidos} empresa${atribuidos>1?'s':''} → ${day}`;
+  if (overflow) msg += ` · ${overflow} não couberam`;
   notify(msg, overflow > 0 ? 'warn' : '');
   renderInstagram();
 }
 
-/* ── COLUNA DIREITA: cronograma por dia ── */
-function renderInstaSchedDayTabs() {
-  const el = document.getElementById('instaSchedDayTabs');
+/* ── COLUNA DIREITA: tabs de dia ── */
+function renderInstaDayTabs() {
+  const el = document.getElementById('instaDayTabs');
   if (!el) return;
-  const sched = getInstaSched();
-  el.innerHTML = instaWeekDays().slice(0,7).map(day => {
-    const count  = instaCountForDay(sched, day);
-    const active = instaSchedDay === day;
-    const label  = new Date(day.replace(/\//g,'-')).toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/').replace(' ','\u00a0');
-    return `<div class="day-tab${active?' active':''}" onclick="instaSelectSchedDay('${day}')">
-      ${label}${count?`<span style="font-family:'DM Mono',monospace;font-size:7px;color:${active?'rgba(255,255,255,0.7)':'var(--muted)'}"> ${count}</span>`:''}
+  const week = getInstaWeek();
+  const days = instaWeekDays();
+  if (!instaActiveDay) instaActiveDay = days.find(d => (week[d]||[]).length > 0) || days[0];
+  el.innerHTML = days.map(day => {
+    const count  = (week[day]||[]).length;
+    const active = instaActiveDay === day;
+    const lbl    = new Date(day.split('/').reverse().join('-')).toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/');
+    return `<div class="day-tab${active?' active':''}" onclick="instaSelectDay('${day}')">
+      ${lbl}${count?`<span class="day-count">${count}</span>`:''}
     </div>`;
   }).join('');
-  renderInstaSchedBlocks();
 }
 
-function instaSelectSchedDay(day) {
-  instaSchedDay = day;
-  renderInstaSchedDayTabs();
-}
+function instaSelectDay(day) { instaActiveDay = day; renderInstaDayTabs(); renderInstaDayList(); }
 
-function renderInstaSchedBlocks() {
-  const el = document.getElementById('instaSchedBlocks');
-  const totalEl = document.getElementById('instaSchedTotal');
+/* ── LISTA DE LEADS DO DIA ── */
+function renderInstaDayList() {
+  const el = document.getElementById('instaDayList');
+  const totalEl = document.getElementById('instaDayTotal');
   if (!el) return;
+  if (!instaActiveDay) { el.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">Selecione um dia</div>'; return; }
 
-  if (!instaSchedDay) {
-    el.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">Selecione um dia</div>';
-    if (totalEl) totalEl.textContent = '';
+  const week  = getInstaWeek();
+  const leads = week[instaActiveDay] || [];
+  if (totalEl) totalEl.textContent = `· ${leads.length}/${INSTA_DIA_LIMIT}`;
+
+  if (!leads.length) {
+    el.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead atribuído neste dia</div>';
     return;
   }
 
-  const sched  = getInstaSched();
-  const blocos = instaDefaultBlocos(sched[instaSchedDay]);
-  const total  = blocos.reduce((s,b) => s + (b.empresas||[]).length, 0);
-  if (totalEl) totalEl.textContent = total ? `· ${total}/${INSTA_DIA_LIMIT}` : '· vazio';
-
-  el.innerHTML = blocos.map((bloco, bi) => {
-    const empresas = bloco.empresas || [];
-    return `<div class="insta-block">
-      <div class="insta-block-header">
-        <span class="insta-block-title">Bloco ${bi+1} · ${empresas.length}/${INSTA_POR_BLOCO}</span>
-        <div class="insta-block-time">
-          <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">⏰</span>
-          <input type="time" value="${bloco.hora||''}"
-            onchange="instaSetBlocoHora('${instaSchedDay}',${bi},this.value)">
+  el.innerHTML = leads.map((e, i) => {
+    const temInsta = !!(e.instagramUrl);
+    const statusColor = { 'Não contatado':'var(--muted)', 'DM Enviada':'var(--accent)', 'Respondeu':'var(--ok)', 'Não respondeu':'var(--muted)', 'Fechou':'var(--ok)', 'Recusou':'var(--error)' }[e.status] || 'var(--muted)';
+    return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);flex-shrink:0">${i+1}.</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${e.googleUrl?`<a href="${escHtml(e.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'">${escHtml(e.nome||'—')}</a>`:escHtml(e.nome||'—')}
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);margin-top:1px">
+            ${e.whatsapp?`📱 ${escHtml(e.whatsapp)}&nbsp;&nbsp;`:''}${e.totalScore?`⭐ ${Number(e.totalScore).toFixed(1)}`:''}
+          </div>
         </div>
+        <button onclick="abrirModalExcluirInstaLead('${e.id}','${instaActiveDay}')"
+          title="Excluir lead"
+          style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:10px;padding:3px 7px;cursor:pointer;transition:all 0.18s"
+          onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)';this.style.background='rgba(255,92,92,0.06)'"
+          onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
       </div>
-      ${empresas.length
-        ? empresas.map((e,ei) => `<div class="insta-empresa-row">
-            <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);flex-shrink:0">${ei+1}.</span>
-            <div style="flex:1;min-width:0">
-              <div class="empresa-nome">${escHtml(e.nome||'—')}</div>
-              <div class="empresa-phone">${e.whatsapp?`📱 ${escHtml(e.whatsapp)}`:''} ${e.totalScore?`· ⭐ ${Number(e.totalScore).toFixed(1)}`:''}</div>
-            </div>
-            <button onclick="instaRemoverDeBloco('${instaSchedDay}',${bi},${ei})"
-              style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:2px 6px;border-radius:4px"
-              onmouseover="this.style.color='var(--error)'" onmouseout="this.style.color='var(--muted)'">✕</button>
-          </div>`).join('')
-        : `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);padding:12px;text-align:center">// bloco vazio</div>`
-      }
+
+      <!-- Link Instagram -->
+      <div style="display:flex;align-items:center;gap:6px">
+        ${temInsta
+          ? `<a href="${escHtml(e.instagramUrl)}" target="_blank"
+              style="font-family:'DM Mono',monospace;font-size:9px;color:var(--insta);text-decoration:none;display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+              title="${escHtml(e.instagramUrl)}">
+              📷 ${escHtml(e.instagramUrl.replace(/^https?:\/\/(www\.)?instagram\.com\//,'@').replace(/\/$/,''))}
+            </a>
+            <button onclick="instaEditarLink('${e.id}','${instaActiveDay}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:9px;padding:2px 6px" title="Editar link">✏️</button>`
+          : `<div style="display:flex;flex:1;gap:6px">
+              <input id="instaLinkInput-${e.id}" type="text" placeholder="Cole o link do Instagram..."
+                style="flex:1;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.3);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;padding:5px 9px;outline:none"
+                onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='rgba(225,48,108,0.3)'"
+                onkeydown="if(event.key==='Enter') instasSalvarLink('${e.id}','${instaActiveDay}')"/>
+              <button onclick="instasSalvarLink('${e.id}','${instaActiveDay}')"
+                style="background:var(--insta);color:#fff;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:4px 10px;cursor:pointer">Salvar</button>
+            </div>`
+        }
+      </div>
+
+      <!-- Status -->
+      <div style="display:flex;align-items:center;gap:8px">
+        <select onchange="instaUpdateStatus('${e.id}','${instaActiveDay}',this.value)" ${!temInsta && e.status==='Não contatado'?'disabled title="Adicione o link do Instagram primeiro"':''}
+          style="flex:1;font-family:'DM Mono',monospace;font-size:9px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:${statusColor};outline:none">
+          ${INSTA_STATUS.map(s => `<option value="${s}" ${e.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+        ${e.dmEnviadaEm?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${e.dmEnviadaEm}</span>`:''}
+      </div>
     </div>`;
   }).join('');
 }
 
-function instaSetBlocoHora(day, blocoIdx, hora) {
-  const sched = getInstaSched();
-  if (!sched[day]) sched[day] = instaDefaultBlocos();
-  else sched[day] = instaDefaultBlocos(sched[day]);
-  sched[day][blocoIdx].hora = hora;
-  saveInstaSched(sched);
-  notify('✓ Horário salvo');
+/* ── LINK DO INSTAGRAM ── */
+function instasSalvarLink(id, day) {
+  const input = document.getElementById(`instaLinkInput-${id}`);
+  if (!input) return;
+  let url = input.value.trim();
+  if (!url) { notify('// cole o link do Instagram primeiro','warn'); return; }
+  if (!url.startsWith('http')) url = 'https://instagram.com/' + url.replace('@','');
+  const week = getInstaWeek();
+  const lead = (week[day]||[]).find(e => e.id === id);
+  if (!lead) return;
+  lead.instagramUrl = url;
+  saveInstaWeek(week);
+  renderInstaDayList();
+  notify('✓ Link do Instagram salvo');
 }
 
-function instaRemoverDeBloco(day, blocoIdx, empresaIdx) {
-  const sched = getInstaSched();
-  if (!sched[day] || !sched[day][blocoIdx]) return;
-  const empresa = sched[day][blocoIdx].empresas.splice(empresaIdx, 1)[0];
+function instaEditarLink(id, day) {
+  const week = getInstaWeek();
+  const lead = (week[day]||[]).find(e => e.id === id);
+  if (!lead) return;
+  lead.instagramUrl = '';
+  saveInstaWeek(week);
+  renderInstaDayList();
+}
 
-  // Devolver à fila (remover diaDestino)
-  if (empresa) {
-    const fila = getInstaFila();
-    const idx  = fila.findIndex(e => e.id === empresa.id);
-    if (idx !== -1) { delete fila[idx].diaDestino; saveInstaFila(fila); }
-    else { // Não achou na fila (foi importada direto no sched); reinsere
-      fila.push({ ...empresa, diaDestino: undefined });
-      saveInstaFila(fila);
+/* ── STATUS ── */
+function instaUpdateStatus(id, day, status) {
+  const week = getInstaWeek();
+  const lead = (week[day]||[]).find(e => e.id === id);
+  if (!lead) return;
+  lead.status = status;
+  if (status === 'DM Enviada' && !lead.dmEnviadaEm) lead.dmEnviadaEm = todayStr();
+  saveInstaWeek(week);
+  renderInstaDayList();
+  notify(`✓ Status: ${status}`);
+}
+
+/* ── LIMPAR DIA ── */
+function instaLimparDia() {
+  if (!instaActiveDay) return;
+  abrirModalConfirm(
+    `Limpar todos os leads de <strong>${instaActiveDay}</strong>? Eles serão removidos permanentemente.`,
+    () => {
+      const week = getInstaWeek();
+      delete week[instaActiveDay];
+      saveInstaWeek(week);
+      renderInstagram();
+      notify(`✓ Dia ${instaActiveDay} limpo`);
     }
-  }
-  saveInstaSched(sched);
-  notify('✓ Empresa devolvida à fila');
-  renderInstagram();
+  );
 }
 
-function instaRemoverDia() {
-  if (!instaSchedDay) return;
-  if (!confirm(`Limpar todas as empresas de ${dayLabelShort(instaSchedDay)}?`)) return;
-  const sched = getInstaSched();
-  const blocos = sched[instaSchedDay] || [];
+/* ── EXCLUIR LEAD INSTAGRAM ── */
+function abrirModalExcluirInstaLead(id, day) {
+  const week = getInstaWeek();
+  const lead = (week[day]||[]).find(e => e.id === id);
+  if (!lead) return;
+  abrirModalConfirm(
+    `Excluir <strong>${escHtml(lead.nome)}</strong> permanentemente? Será removido da plataforma inteira e o site bloqueado.`,
+    () => {
+      // Remove da semana instagram
+      const w = getInstaWeek();
+      if (w[day]) { w[day] = w[day].filter(e => e.id !== id); saveInstaWeek(w); }
+      // Remove da fila
+      saveInstaFila(getInstaFila().filter(e => e.id !== id));
+      // Bloqueia o site
+      if (lead.site) addExcludedDomains([lead.site]);
+      renderInstagram();
+      updateBadges();
+      notify(`✕ ${lead.nome} excluído`);
+    }
+  );
+}
 
-  // Devolver todas as empresas à fila
-  const fila = getInstaFila();
-  blocos.forEach(bloco => {
-    (bloco.empresas||[]).forEach(e => {
-      const idx = fila.findIndex(f => f.id === e.id);
-      if (idx !== -1) delete fila[idx].diaDestino;
-      else fila.push({ ...e, diaDestino: undefined });
-    });
-  });
-  saveInstaFila(fila);
-  delete sched[instaSchedDay];
-  saveInstaSched(sched);
-  notify(`✓ Dia ${dayLabelShort(instaSchedDay)} limpo`);
-  renderInstagram();
+/* ── VIRADA DE SEMANA: migrar para Acompanhamento Instagram ── */
+function migrarInstaParaMes(leads) {
+  const data = getAcompData();
+  const mk   = currentMonthKey();
+  if (!data[mk]) data[mk] = {};
+  if (!data[mk].instagram) data[mk].instagram = [];
+  const existingIds = new Set(data[mk].instagram.map(e => e.id));
+  const novos = leads.filter(e => !existingIds.has(e.id)).map(e => ({ ...e, migradoEm: todayStr(), fonte: 'instagram' }));
+  data[mk].instagram = [...data[mk].instagram, ...novos];
+  saveAcompData(data);
 }
 
 /* ════════════════════════════
