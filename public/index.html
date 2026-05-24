@@ -1616,8 +1616,8 @@ function getWeekStart(d) { const dt = d ? new Date(d) : new Date(); dt.setHours(
 function currentWeekStartStr() { return getWeekStart().toLocaleDateString('pt-BR'); }
 function currentWeekDays() {
   const days = [], start = getWeekStart();
-  for (let i = 1; i <= 6; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d.toLocaleDateString('pt-BR')); }
-  return days; // seg a sáb
+  for (let i = 0; i <= 6; i++) { const d = new Date(start); d.setDate(start.getDate() + i); days.push(d.toLocaleDateString('pt-BR')); }
+  return days; // dom a sáb
 }
 function dayLabel(dateStr) {
   const [d, m, y] = dateStr.split('/').map(Number);
