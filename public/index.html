@@ -5319,12 +5319,16 @@ let instaActiveDay    = null;
 
 /* ── Dias da semana ── */
 function instaWeekDays() {
-  const days = []; const d = new Date(currentWeekStartStr());
-  for (let i = 0; i < 7; i++) { days.push(d.toLocaleDateString('pt-BR')); d.setDate(d.getDate()+1); }
-  return days;
+  return currentWeekDays(); // dd/mm/aaaa — mesmo padrão do sistema
 }
 
 function instaCountForDay(week, day) { return (week[day]||[]).length; }
+
+function instaParseDay(day) {
+  // Converte dd/mm/aaaa para Date corretamente
+  const [d, m, y] = day.split('/').map(Number);
+  return new Date(y, m - 1, d);
+}
 
 /* ════════════════════════════
    INSTAGRAM — RENDER PRINCIPAL
@@ -5361,7 +5365,7 @@ function renderInstaFila() {
     if (btnsEl) btnsEl.innerHTML = days.map(day => {
       const count = instaCountForDay(week, day);
       const full  = count >= INSTA_DIA_LIMIT;
-      const label = new Date(day.split('/').reverse().join('-')).toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/');
+      const label = instaParseDay(day).toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/');
       return `<button onclick="instaAtribuirLote('${day}')"
         style="background:${full?'rgba(255,80,80,0.08)':'var(--surface2)'};border:1px solid ${full?'rgba(255,80,80,0.3)':'var(--border2)'};color:${full?'var(--error)':'var(--text2)'};border-radius:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 8px;cursor:${full?'not-allowed':'pointer'}"
         title="${day} · ${count}/${INSTA_DIA_LIMIT}" ${full?'disabled':''}>${label} <span style="opacity:0.6">${count}/${INSTA_DIA_LIMIT}</span></button>`;
@@ -5400,7 +5404,7 @@ function renderInstaFila() {
         ${days.map(day => {
           const count = instaCountForDay(week, day);
           const full  = count >= INSTA_DIA_LIMIT;
-          const lbl   = new Date(day.split('/').reverse().join('-')).toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','');
+          const lbl   = instaParseDay(day).toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','');
           return `<button onclick="instaAtribuirUm('${e.id}','${day}')"
             title="${day} · ${count}/${INSTA_DIA_LIMIT}"
             style="background:${full?'rgba(255,80,80,0.08)':'var(--surface2)'};border:1px solid ${full?'rgba(255,80,80,0.3)':'var(--border2)'};color:${full?'var(--error)':'var(--text2)'};border-radius:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 6px;cursor:${full?'not-allowed':'pointer'}"
@@ -5491,7 +5495,8 @@ function renderInstaDayTabs() {
   el.innerHTML = days.map(day => {
     const count  = (week[day]||[]).length;
     const active = instaActiveDay === day;
-    const lbl    = new Date(day.split('/').reverse().join('-')).toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/');
+    const dt     = instaParseDay(day);
+    const lbl    = dt.toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/');
     return `<div class="day-tab${active?' active':''}" onclick="instaSelectDay('${day}')">
       ${lbl}${count?`<span class="day-count">${count}</span>`:''}
     </div>`;
