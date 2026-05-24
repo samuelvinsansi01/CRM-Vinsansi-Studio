@@ -5309,6 +5309,35 @@ function saveInstaFila(d)  { localStorage.setItem(INSTA_KEY, JSON.stringify(d));
 function getInstaWeek()    { try { return JSON.parse(localStorage.getItem(INSTA_WEEK_KEY)||'{}'); } catch { return {}; } }
 function saveInstaWeek(d)  { localStorage.setItem(INSTA_WEEK_KEY, JSON.stringify(d)); }
 
+/* ── MIGRAÇÃO: normaliza chaves antigas para dd/mm/aaaa ── */
+function migrarChavesInstaWeek() {
+  const raw = localStorage.getItem(INSTA_WEEK_KEY);
+  if (!raw) return;
+  let data; try { data = JSON.parse(raw); } catch { return; }
+
+  let alterou = false;
+  const novo = {};
+
+  for (const key of Object.keys(data)) {
+    // Formato antigo: aaaa/mm/dd  ou aaaa-mm-dd
+    const matchISO = key.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
+    if (matchISO) {
+      const novaChave = `${matchISO[3]}/${matchISO[2]}/${matchISO[1]}`; // → dd/mm/aaaa
+      novo[novaChave] = [...(novo[novaChave]||[]), ...(data[key]||[])];
+      alterou = true;
+    } else {
+      // Já está no formato certo ou desconhecido — mantém
+      novo[key] = [...(novo[key]||[]), ...(data[key]||[])];
+    }
+  }
+
+  if (alterou) {
+    saveInstaWeek(novo);
+    console.log('[insta] chaves migradas:', Object.keys(data), '→', Object.keys(novo));
+    notify('✓ Leads do Instagram recuperados');
+  }
+}
+
 const INSTA_DIA_LIMIT  = 60;
 const INSTA_PAGE_SIZE  = 30;
 const INSTA_STATUS     = ['Não contatado','DM Enviada','Respondeu','Não respondeu','Fechou','Recusou'];
@@ -5543,57 +5572,86 @@ function renderInstaDayList() {
     return;
   }
 
+  const statusColor = { 'Não contatado':'var(--muted)', 'DM Enviada':'var(--accent)', 'Respondeu':'var(--ok)', 'Não respondeu':'var(--muted)', 'Fechou':'var(--ok)', 'Recusou':'var(--error)' };
+
   el.innerHTML = leads.map((e, i) => {
     const temInsta = !!(e.instagramUrl);
-    const statusColor = { 'Não contatado':'var(--muted)', 'DM Enviada':'var(--accent)', 'Respondeu':'var(--ok)', 'Não respondeu':'var(--muted)', 'Fechou':'var(--ok)', 'Recusou':'var(--error)' }[e.status] || 'var(--muted)';
-    return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px">
+    const stColor  = statusColor[e.status] || 'var(--muted)';
+    const handle   = temInsta ? e.instagramUrl.replace(/^https?:\/\/(www\.)?instagram\.com\//,'@').replace(/\/$/,'') : '';
+
+    return `<div style="padding:9px 12px;border-bottom:1px solid var(--border)">
+      <!-- LINHA PRINCIPAL -->
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);flex-shrink:0">${i+1}.</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-            ${e.googleUrl?`<a href="${escHtml(e.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'">${escHtml(e.nome||'—')}</a>`:escHtml(e.nome||'—')}
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);margin-top:1px">
-            ${e.whatsapp?`📱 ${escHtml(e.whatsapp)}&nbsp;&nbsp;`:''}${e.totalScore?`⭐ ${Number(e.totalScore).toFixed(1)}`:''}
-          </div>
+        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);flex-shrink:0;width:16px">${i+1}.</span>
+
+        <!-- Nome + Instagram -->
+        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <a href="${escHtml(e.googleUrl||'#')}" target="_blank"
+            style="font-weight:700;font-size:11px;color:var(--text);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px"
+            onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'"
+            title="Abrir no Google">${escHtml(e.nome||'—')}</a>
+          ${temInsta
+            ? `<a href="${escHtml(e.instagramUrl)}" target="_blank"
+                style="font-family:'DM Mono',monospace;font-size:9px;color:var(--insta);text-decoration:none;display:flex;align-items:center;gap:3px;white-space:nowrap"
+                title="Abrir Instagram">📷 ${escHtml(handle)}</a>
+               <button onclick="instaEditarLink('${e.id}','${instaActiveDay}')" title="Editar link"
+                style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:9px;padding:1px 4px;line-height:1">✏️</button>`
+            : ''
+          }
         </div>
-        <button onclick="abrirModalExcluirInstaLead('${e.id}','${instaActiveDay}')"
-          title="Excluir lead"
-          style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:10px;padding:3px 7px;cursor:pointer;transition:all 0.18s"
-          onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)';this.style.background='rgba(255,92,92,0.06)'"
-          onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
+
+        <!-- Ações da direita -->
+        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+          <!-- Select status -->
+          <select onchange="instaUpdateStatus('${e.id}','${instaActiveDay}',this.value)"
+            ${!temInsta?'disabled title="Adicione o link do Instagram primeiro"':''}
+            style="font-family:'DM Mono',monospace;font-size:8px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:${stColor};outline:none;cursor:pointer;opacity:${temInsta?1:0.45}">
+            ${INSTA_STATUS.map(s => `<option value="${s}" ${e.status===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+          ${e.dmEnviadaEm?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);white-space:nowrap">${e.dmEnviadaEm}</span>`:''}
+
+          <!-- Voltar para atribuição -->
+          <button onclick="instaVoltarParaFila('${e.id}','${instaActiveDay}')" title="Voltar para a fila de atribuição"
+            style="background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 7px;cursor:pointer;transition:all 0.15s;white-space:nowrap"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">↩</button>
+
+          <!-- Excluir -->
+          <button onclick="abrirModalExcluirInstaLead('${e.id}','${instaActiveDay}')" title="Excluir lead permanentemente"
+            style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:10px;padding:3px 7px;cursor:pointer;transition:all 0.18s"
+            onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)';this.style.background='rgba(255,92,92,0.06)'"
+            onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
+        </div>
       </div>
 
-      <!-- Link Instagram -->
-      <div style="display:flex;align-items:center;gap:6px">
-        ${temInsta
-          ? `<a href="${escHtml(e.instagramUrl)}" target="_blank"
-              style="font-family:'DM Mono',monospace;font-size:9px;color:var(--insta);text-decoration:none;display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-              title="${escHtml(e.instagramUrl)}">
-              📷 ${escHtml(e.instagramUrl.replace(/^https?:\/\/(www\.)?instagram\.com\//,'@').replace(/\/$/,''))}
-            </a>
-            <button onclick="instaEditarLink('${e.id}','${instaActiveDay}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:9px;padding:2px 6px" title="Editar link">✏️</button>`
-          : `<div style="display:flex;flex:1;gap:6px">
-              <input id="instaLinkInput-${e.id}" type="text" placeholder="Cole o link do Instagram..."
-                style="flex:1;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.3);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;padding:5px 9px;outline:none"
-                onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='rgba(225,48,108,0.3)'"
-                onkeydown="if(event.key==='Enter') instasSalvarLink('${e.id}','${instaActiveDay}')"/>
-              <button onclick="instasSalvarLink('${e.id}','${instaActiveDay}')"
-                style="background:var(--insta);color:#fff;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:4px 10px;cursor:pointer">Salvar</button>
-            </div>`
-        }
-      </div>
-
-      <!-- Status -->
-      <div style="display:flex;align-items:center;gap:8px">
-        <select onchange="instaUpdateStatus('${e.id}','${instaActiveDay}',this.value)" ${!temInsta && e.status==='Não contatado'?'disabled title="Adicione o link do Instagram primeiro"':''}
-          style="flex:1;font-family:'DM Mono',monospace;font-size:9px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:${statusColor};outline:none">
-          ${INSTA_STATUS.map(s => `<option value="${s}" ${e.status===s?'selected':''}>${s}</option>`).join('')}
-        </select>
-        ${e.dmEnviadaEm?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${e.dmEnviadaEm}</span>`:''}
-      </div>
+      <!-- CAMPO DE LINK (só aparece se não tiver instagram) -->
+      ${!temInsta ? `
+      <div style="display:flex;gap:6px;margin-top:6px;margin-left:24px">
+        <input id="instaLinkInput-${e.id}" type="text" placeholder="Cole o link do Instagram..."
+          style="flex:1;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.3);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;padding:5px 9px;outline:none"
+          onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='rgba(225,48,108,0.3)'"
+          onkeydown="if(event.key==='Enter') instasSalvarLink('${e.id}','${instaActiveDay}')"/>
+        <button onclick="instasSalvarLink('${e.id}','${instaActiveDay}')"
+          style="background:var(--insta);color:#fff;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:4px 12px;cursor:pointer">Salvar</button>
+      </div>` : ''}
     </div>`;
   }).join('');
+}
+
+/* ── VOLTAR PARA FILA ── */
+function instaVoltarParaFila(id, day) {
+  const week = getInstaWeek();
+  const lead = (week[day]||[]).find(e => e.id === id);
+  if (!lead) return;
+  week[day] = week[day].filter(e => e.id !== id);
+  saveInstaWeek(week);
+  const fila = getInstaFila();
+  if (!fila.find(e => e.id === id)) {
+    const { status, instagramUrl, atribuidoEm, dmEnviadaEm, ...base } = lead;
+    saveInstaFila([...fila, base]);
+  }
+  renderInstagram();
+  notify(`↩ ${lead.nome} voltou para a fila`);
 }
 
 /* ── LINK DO INSTAGRAM ── */
@@ -6127,6 +6185,7 @@ function confirmarExcluirLead() {
 
   renderRamoSelect();
   ensureWeekData();
+  migrarChavesInstaWeek();
   sincronizarFilaComEnviados();
   renderInicio();
   renderExcluidos();
