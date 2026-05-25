@@ -4622,7 +4622,7 @@ function shuffleFilaMsgSlot(slot, id) {
   if (!item) return;
   const itemIdx = fila.findIndex(f => f.id === id);
   const loteNum = Math.floor(itemIdx / getLoteSize()) + 1;
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null);
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${slot}-${id}`);
   if (el) el.value = item.mensagem;
@@ -4634,7 +4634,7 @@ function shuffleFilaMsg(id) {
   if (!item) return;
   const itemIdx = fila.findIndex(f => f.id === id);
   const loteNum = Math.floor(itemIdx / getLoteSize()) + 1;
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null);
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${id}`);
   if (el) el.value = item.mensagem;
