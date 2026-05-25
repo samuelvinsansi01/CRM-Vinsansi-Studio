@@ -3741,6 +3741,19 @@ function renderChipAccordions() {
     return;
   }
 
+  // Salvar estado visual antes de reconstruir
+  const _estadoAntes = chips.map((_, slot) => {
+    const st = chipSlotState[slot];
+    return {
+      disparoEmAndamento: st ? st.disparoEmAndamento : false,
+      aguardandoLote: st ? st.aguardandoLote : false,
+      loteAtual: st ? st.loteAtual : 0,
+      lotesTotal: st ? st.lotesTotal : 0,
+      pausado: st ? st.pausado : false,
+      accordionAberto: document.getElementById(`chipAccordion${slot}`)?.classList.contains('open') || false,
+    };
+  });
+
   zapRight.innerHTML = chips.map((chip, slot) => {
     const c = CHIP_COLORS[slot % CHIP_COLORS.length];
     const disparoIcon = slot === 0 ? '🟢' : slot === 1 ? '🔵' : '🟣';
@@ -3797,6 +3810,33 @@ function renderChipAccordions() {
       </div>
     </div>`;
   }).join('');
+
+  // Restaurar estado visual dos chips que estavam em andamento
+  chips.forEach((chip, slot) => {
+    const est = _estadoAntes[slot];
+    if (!est) return;
+    if (est.accordionAberto) {
+      const acc = document.getElementById(`chipAccordion${slot}`);
+      if (acc) acc.classList.add('open');
+    }
+    const btnEl  = document.getElementById(`btnDisparar${slot}`);
+    const spinEl = document.getElementById(`spinner${slot}`);
+    const btnTxt = document.getElementById(`disparoBtn${slot}`);
+    const pausaEl = document.getElementById(`btnPausa${slot}`);
+    if (est.disparoEmAndamento) {
+      if (btnEl)  btnEl.disabled = true;
+      if (spinEl) spinEl.style.display = 'block';
+      if (btnTxt) btnTxt.textContent = est.pausado
+        ? `⏸ Pausado (${est.loteAtual}/${est.lotesTotal})`
+        : `⏳ Enviando lote ${est.loteAtual}/${est.lotesTotal}...`;
+      if (pausaEl) pausaEl.style.display = 'inline-flex';
+    } else if (est.aguardandoLote) {
+      if (btnEl)  btnEl.disabled = true;
+      if (btnTxt) btnTxt.textContent = `⏱ Aguardando próximo lote...`;
+      const panel = document.getElementById(`loteEsperaPanel${slot}`);
+      if (panel) panel.style.display = 'block';
+    }
+  });
 }
 
 function renderFilaZap() {
@@ -3805,8 +3845,12 @@ function renderFilaZap() {
   const weekDays = currentWeekDays();
   const today = todayStr();
 
-  // Reconstrói os accordions com base nos chips reais
-  renderChipAccordions();
+  // Só reconstrói os accordions se nenhum disparo estiver em andamento
+  // (evita resetar botão/spinner ao trocar de aba durante o envio)
+  const disparoAtivo = chipSlotState.some(st => st.disparoEmAndamento || st.aguardandoLote);
+  if (!disparoAtivo) {
+    renderChipAccordions();
+  }
 
   // Populate chip panels (labels/info já inseridos pelo renderChipAccordions)
   chips.forEach((chip, slot) => {
