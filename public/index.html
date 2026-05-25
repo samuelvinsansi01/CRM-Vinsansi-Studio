@@ -919,6 +919,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
           </div>
           <div style="display:flex;gap:8px;margin-bottom:0">
             <button class="btn btn-danger" style="font-size:11px" onclick="limparFilaChip(0)">Limpar fila</button>
+            <button class="btn btn-ghost" id="btnPausa0" onclick="togglePausaChip(0)" style="display:none;font-size:11px;border-color:var(--warning);color:var(--warning)">⏸ Pausar</button>
             <button class="btn btn-primary" style="flex:1" id="btnDisparar0" onclick="iniciarDisparoChip(0)">
               <div class="spinner" id="spinner0"></div>
               <span id="disparoBtn0">🟢 Disparar</span>
@@ -974,6 +975,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
           </div>
           <div style="display:flex;gap:8px;margin-bottom:0">
             <button class="btn btn-danger" style="font-size:11px" onclick="limparFilaChip(1)">Limpar fila</button>
+            <button class="btn btn-ghost" id="btnPausa1" onclick="togglePausaChip(1)" style="display:none;font-size:11px;border-color:var(--warning);color:var(--warning)">⏸ Pausar</button>
             <button class="btn btn-primary" style="flex:1;background:#5bb8f5;color:#0a0a0d" id="btnDisparar1" onclick="iniciarDisparoChip(1)">
               <div class="spinner" id="spinner1" style="border-top-color:#0a0a0d"></div>
               <span id="disparoBtn1">🔵 Disparar</span>
@@ -3396,8 +3398,8 @@ function aprovarParaInsta(id) {
 
 /* ─── Per-chip state (indexed 0 = Chip1, 1 = Chip2) ─── */
 const chipSlotState = [
-  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null },
-  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null }
+  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false },
+  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false }
 ];
 
 /* ─── Limit por dia = 60 × nº de chips ─── */
@@ -3534,6 +3536,7 @@ async function dispararLoteChip(slot) {
   if (btnEl)  btnEl.disabled = true;
   if (spinEl) spinEl.style.display = 'block';
   if (btnTxt) btnTxt.textContent = `Lote ${st.loteAtual}/${st.lotesTotal}...`;
+  _atualizarBotaoPausa(slot);
 
   const logEl = document.getElementById(`disparoLog${slot}`);
   if (logEl) logEl.style.display = 'block';
@@ -3552,6 +3555,19 @@ async function dispararLoteChip(slot) {
   for (let i = 0; i < lote.length; i++) {
     const item = lote[i];
     if (item.status === 'enviado') continue;
+
+    // ── Verificar pausa ──
+    if (st.pausado) {
+      log(`<span style="color:var(--warning)">⏸ Pausado após ${i} envio${i!==1?'s':''} — aguardando retomada...</span>`);
+      const btnTxtP = document.getElementById(`disparoBtn${slot}`);
+      if (btnTxtP) btnTxtP.textContent = `⏸ Pausado (${i}/${lote.length})`;
+      while (st.pausado) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+      log(`<span style="color:var(--ok)">▶ Retomado</span>`);
+      if (btnTxtP) btnTxtP.textContent = `Lote ${st.loteAtual}/${st.lotesTotal}...`;
+    }
+
     item.status = 'enviando';
     atualizarStatusFilaSlot(slot, item.id, 'enviando');
     log(`Enviando para <span style="color:var(--text)">${escHtml(item.nome)}</span>...`);
@@ -3637,11 +3653,14 @@ async function dispararLoteChip(slot) {
     if (barEl) barEl.style.width = '0%';
     notify(`✓ Lote ${st.loteAtual} concluído · próximo em ${esperaMin}min`);
     iniciarCountdownLoteChip(slot, esperaMs);
+    _atualizarBotaoPausa(slot);
   } else {
     // Todos os lotes concluídos
     st.aguardandoLote = false;
+    st.pausado = false;
     if (btnEl)  btnEl.disabled = false;
     if (btnTxt) btnTxt.textContent = slot === 0 ? '🟢 Disparar' : '🔵 Disparar';
+    _atualizarBotaoPausa(slot);
 
     // Coletar erros para retry
     const erroItems = getFilaChip(chip.id).filter(f => f.status === 'erro');
@@ -3735,6 +3754,7 @@ function cancelarLotesChip(slot) {
   if (st.loteCountdownInt) { clearInterval(st.loteCountdownInt); st.loteCountdownInt = null; }
   st.filaLotes = []; st.loteAtual = 0; st.lotesTotal = 0;
   st.aguardandoLote = false; st.loteEsperaFim = null;
+  st.pausado = false;
   const panel = document.getElementById(`loteEsperaPanel${slot}`);
   if (panel) panel.style.display = 'none';
   const btnEl  = document.getElementById(`btnDisparar${slot}`);
@@ -3742,6 +3762,36 @@ function cancelarLotesChip(slot) {
   if (btnEl)  btnEl.disabled = false;
   if (btnTxt) btnTxt.textContent = slot===0 ? '🟢 Disparar' : '🔵 Disparar';
   notify('// fila cancelada','warn');
+  _atualizarBotaoPausa(slot);
+}
+
+function togglePausaChip(slot) {
+  const st = chipSlotState[slot];
+  if (!st.disparoEmAndamento && !st.aguardandoLote) return; // só age se estiver rodando
+  st.pausado = !st.pausado;
+  _atualizarBotaoPausa(slot);
+  if (st.pausado) {
+    notify(`⏸ Chip ${slot+1} pausado — aguardando término do envio atual`, 'warn');
+  } else {
+    notify(`▶ Chip ${slot+1} retomado`);
+  }
+}
+
+function _atualizarBotaoPausa(slot) {
+  const st = chipSlotState[slot];
+  const btn = document.getElementById(`btnPausa${slot}`);
+  if (!btn) return;
+  const ativo = st.disparoEmAndamento || st.aguardandoLote;
+  btn.style.display = ativo ? 'inline-flex' : 'none';
+  if (st.pausado) {
+    btn.textContent = '▶ Retomar';
+    btn.style.borderColor = 'var(--ok)';
+    btn.style.color = 'var(--ok)';
+  } else {
+    btn.textContent = '⏸ Pausar';
+    btn.style.borderColor = 'var(--warning)';
+    btn.style.color = 'var(--warning)';
+  }
 }
 
 async function confirmarProximoLoteChip(slot) {
@@ -4717,7 +4767,7 @@ function toggleLoteConfig() {
    DISPARO — LOTES
 ════════════════════════════ */
 function getLoteConfig() {
-  return { ativo: document.getElementById('loteAtivo')?.checked||false, tamanho: parseInt(document.getElementById('loteTamanho')?.value)||15, esperaMin: parseInt(document.getElementById('loteEsperaMin')?.value)||60 };
+  return { ativo: document.getElementById('loteAtivo')?.checked||false, tamanho: parseInt(document.getElementById('loteTamanho')?.value)||30, esperaMin: parseInt(document.getElementById('loteEsperaMin')?.value)||90 };
 }
 
 function cancelarLotes() {
@@ -6171,8 +6221,8 @@ function confirmarExcluirLead() {
   const cfg = loadEvoConfig();
   if (cfg.delayMin)      document.getElementById('delayMin').value      = cfg.delayMin; else document.getElementById('delayMin').value = 120;
   if (cfg.delayMax)      document.getElementById('delayMax').value      = cfg.delayMax; else document.getElementById('delayMax').value = 180;
-  if (cfg.loteTamanho)   document.getElementById('loteTamanho').value   = cfg.loteTamanho;
-  if (cfg.loteEsperaMin) document.getElementById('loteEsperaMin').value = cfg.loteEsperaMin;
+  if (cfg.loteTamanho)   document.getElementById('loteTamanho').value   = cfg.loteTamanho;   else document.getElementById('loteTamanho').value   = 30;
+  if (cfg.loteEsperaMin) document.getElementById('loteEsperaMin').value = cfg.loteEsperaMin; else document.getElementById('loteEsperaMin').value = 90;
   if (cfg.horarioInicio) document.getElementById('horarioInicio').value = cfg.horarioInicio;
 
   // init chips — prioridade chip 2 com final 8457
