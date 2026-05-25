@@ -3422,7 +3422,7 @@ async function dispararLoteChip(slot) {
   if (!chip) return;
   st.loteAtual++;
   const lote = st.filaLotes.shift();
-  const esperaMin = parseInt(document.getElementById('loteEsperaMin')?.value)||60;
+  const esperaMin = Math.max(90, parseInt(document.getElementById('loteEsperaMin')?.value)||90);
   const delayMin  = parseInt(document.getElementById('delayMin')?.value)||120;
   const delayMax  = parseInt(document.getElementById('delayMax')?.value)||180;
   const MSG_DELAY = 15000;
@@ -4078,7 +4078,9 @@ function renderFilaSlot(slot, filterDay) {
     const pendentesNoLote = loteItems.filter(f => f.status !== 'enviado').length;
     const totalNoLote = loteItems.length;
     const todosEnviados = loteItems.every(f => f.status === 'enviado');
-    const completo = totalNoLote === LOTE_SIZE;
+    // Lote é "completo" se tem LOTE_SIZE itens OU se não é o último (lotes intermediários sempre são completos)
+    const isUltimoLote = loteIdx === lotes.length - 1;
+    const completo = totalNoLote >= LOTE_SIZE || !isUltimoLote;
     const cor = todosEnviados ? 'var(--ok)' : completo ? 'var(--accent)' : 'var(--warning)';
     const borderCor = todosEnviados ? 'rgba(78,203,113,0.25)' : completo ? 'rgba(184,240,89,0.25)' : 'rgba(240,164,41,0.25)';
     const bgCor = todosEnviados ? 'rgba(78,203,113,0.04)' : completo ? 'rgba(184,240,89,0.05)' : 'rgba(240,164,41,0.05)';
@@ -4782,10 +4784,12 @@ function toggleLoteConfig() {
    DISPARO — LOTES
 ════════════════════════════ */
 function getLoteSize() {
-  return parseInt(document.getElementById('loteTamanho')?.value) || 30;
+  return Math.max(30, parseInt(document.getElementById('loteTamanho')?.value) || 30);
 }
 function getLoteConfig() {
-  return { ativo: document.getElementById('loteAtivo')?.checked||false, tamanho: parseInt(document.getElementById('loteTamanho')?.value)||30, esperaMin: parseInt(document.getElementById('loteEsperaMin')?.value)||90 };
+  const tam = Math.max(30, parseInt(document.getElementById('loteTamanho')?.value)||30);
+  const esp = Math.max(90, parseInt(document.getElementById('loteEsperaMin')?.value)||90);
+  return { ativo: document.getElementById('loteAtivo')?.checked||false, tamanho: tam, esperaMin: esp };
 }
 
 function cancelarLotes() {
@@ -6238,9 +6242,12 @@ function confirmarExcluirLead() {
 
   const cfg = loadEvoConfig();
   if (cfg.delayMin)      document.getElementById('delayMin').value      = cfg.delayMin; else document.getElementById('delayMin').value = 120;
-  if (cfg.delayMax)      document.getElementById('delayMax').value      = cfg.delayMax; else document.getElementById('delayMax').value = 180;
-  if (cfg.loteTamanho)   document.getElementById('loteTamanho').value   = cfg.loteTamanho;   else document.getElementById('loteTamanho').value   = 30;
-  if (cfg.loteEsperaMin) document.getElementById('loteEsperaMin').value = cfg.loteEsperaMin; else document.getElementById('loteEsperaMin').value = 90;
+  if (cfg.delayMax)      document.getElementById('delayMax').value      = cfg.delayMax; else document.getElementById('delayMax').value = 120;
+  // Garante mínimo de 30 para lote e 90 para espera — corrige valores legados no localStorage
+  const loteTamanhoSalvo  = parseInt(cfg.loteTamanho)   || 0;
+  const loteEsperaSalvo   = parseInt(cfg.loteEsperaMin) || 0;
+  document.getElementById('loteTamanho').value   = loteTamanhoSalvo  >= 30 ? loteTamanhoSalvo  : 30;
+  document.getElementById('loteEsperaMin').value = loteEsperaSalvo   >= 90 ? loteEsperaSalvo   : 90;
   if (cfg.horarioInicio) document.getElementById('horarioInicio').value = cfg.horarioInicio;
 
   atualizarStatsDisparo();
