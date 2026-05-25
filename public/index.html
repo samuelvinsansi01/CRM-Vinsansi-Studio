@@ -4354,20 +4354,20 @@ function limparImagensOlfas() {
 function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
   setLoteRamo(chipId, loteNum, ramoId);
   const LOTE_SIZE = getLoteSize();
-  const fila = getFilaChip(chipId);
+  // Usa fila filtrada pelo dia — mesmos itens e mesma ordem que o render
+  const filaDia = getFilaChipNoDia(chipId, disparoDay);
   const loteIdx = loteNum - 1;
   const inicio = loteIdx * LOTE_SIZE;
-  const fim = Math.min(inicio + LOTE_SIZE, fila.length);
+  const fim = Math.min(inicio + LOTE_SIZE, filaDia.length);
+  // Atualiza os itens por referência (eles existem também em filaDisparo[chipId])
   for (let i = inicio; i < fim; i++) {
-    const item = fila[i];
+    const item = filaDia[i];
     if (!item || item.status === 'enviado') continue;
     item.ramoId = ramoId || null;
     if (ramoId) {
-      // Ramo selecionado: sorteia template do ramo
       const { text, idx } = pickTemplate(item.nome, ramoId);
       item.mensagem = text; item.templateIdx = idx;
     } else {
-      // Sem ramo: limpa mensagem para o usuário digitar manualmente
       item.mensagem = ''; item.templateIdx = -1;
     }
   }
