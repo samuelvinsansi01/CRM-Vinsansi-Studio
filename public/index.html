@@ -4033,6 +4033,30 @@ function renderFilaSlot(slot, filterDay) {
   const LOTE_SIZE = getLoteSize();
   let html = '';
 
+  // ── Sincronizar ramoId e templates ANTES de renderizar ──
+  {
+    let _sync = false;
+    const _fila = getFilaChip(chipId);
+    lotes.forEach((loteItems, loteIdx) => {
+      const loteNum = loteHistLen + loteIdx + 1;
+      const ramoDoLote = getLoteRamo(chipId, loteNum);
+      if (!ramoDoLote) return;
+      const _ini = loteIdx * LOTE_SIZE;
+      const _fim = Math.min(_ini + LOTE_SIZE, _fila.length);
+      for (let _i = _ini; _i < _fim; _i++) {
+        const _it = _fila[_i];
+        if (!_it || _it.status === 'enviado') continue;
+        if (_it.ramoId !== ramoDoLote || !_it.mensagem) {
+          _it.ramoId = ramoDoLote;
+          const { text, idx } = pickTemplate(_it.nome, ramoDoLote);
+          _it.mensagem = text; _it.templateIdx = idx;
+          _sync = true;
+        }
+      }
+    });
+    if (_sync) saveFilaDisparo();
+  }
+
   // ── Histórico de lotes já disparados ──
   (st.loteHistorico || []).forEach(lhist => {
     const todosEnviados = lhist.items.every(i => i.status === 'enviado');
@@ -4353,13 +4377,14 @@ function limparImagensOlfas() {
 
 function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
   setLoteRamo(chipId, loteNum, ramoId);
-  // Re-sortear mensagens de todos os cards do lote
   const LOTE_SIZE = getLoteSize();
   const fila = getFilaChip(chipId);
-  const inicio = (loteNum - 1) * LOTE_SIZE;
+  const loteIdx = loteNum - 1;
+  const inicio = loteIdx * LOTE_SIZE;
   const fim = Math.min(inicio + LOTE_SIZE, fila.length);
   for (let i = inicio; i < fim; i++) {
     const item = fila[i];
+    if (!item) continue;
     item.ramoId = ramoId || null;
     const { text, idx } = pickTemplate(item.nome, item.ramoId);
     item.mensagem = text; item.templateIdx = idx;
