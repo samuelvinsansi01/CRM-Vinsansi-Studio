@@ -876,7 +876,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div class="zapLeft-inner">
       <div class="page-header" style="flex-shrink:0;padding:20px 20px 0">
         <div class="page-title">Fila <span>WhatsApp.</span></div>
-        <div class="page-sub">// 2 chips · disparo paralelo · 20 por lote · 1h de delay</div>
+        <div class="page-sub" id="filaZapSub">// carregando...</div>
       </div>
 
       <div style="padding:16px 20px;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
@@ -1112,15 +1112,15 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <!-- bloco 2: por hora -->
       <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">MENSAGENS POR LOTE</div>
-        <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">30 msg</div>
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip · 2 lotes por dia</div>
+        <div id="statLoteVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">30 msg</div>
+        <div id="statLoteSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip · 2 lotes por dia</div>
       </div>
 
       <!-- bloco 3: por dia -->
       <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">LIMITE DIÁRIO POR CHIP <span class="tag">ANTI-BAN</span></div>
         <div style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">60 msg</div>
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">2 lotes × 30 · espera 90 min</div>
+        <div id="statDiaSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">2 lotes × 30 · espera 90 min</div>
       </div>
 
     </div>
@@ -3375,7 +3375,7 @@ async function iniciarDisparoChip(slot) {
   if (!fila.length) { notify('// fila vazia','warn'); return; }
 
   // Congela o lote — snapshot dos itens aguardando
-  const LOTE_SIZE = 20;
+  const LOTE_SIZE = getLoteSize();
   const filaCompleta = getFilaChip(chip.id);
   const pendentes = filaCompleta.filter(f => f.status === 'aguardando');
   if (!pendentes.length) { notify('// nenhum item aguardando — todos já enviados','warn'); return; }
@@ -4030,7 +4030,7 @@ function renderFilaSlot(slot, filterDay) {
   itensEl.style.display = vazia ? 'none'  : 'flex';
   if (vazia) { itensEl.innerHTML = ''; return; }
 
-  const LOTE_SIZE = 20;
+  const LOTE_SIZE = getLoteSize();
   let html = '';
 
   // ── Histórico de lotes já disparados ──
@@ -4342,7 +4342,7 @@ function limparImagensOlfas() {
       const chip = chips.find(c => c.id === chipId);
       if (!chip) { idbDel(k); delete _imgCache[k]; return; }
       const fila = getFilaChip(chipId);
-      const LOTE_SIZE = 20;
+      const LOTE_SIZE = getLoteSize();
       const maxLote = Math.ceil(fila.length / LOTE_SIZE);
       if (loteNum > maxLote) { idbDel(k); delete _imgCache[k]; }
     });
@@ -4352,7 +4352,7 @@ function limparImagensOlfas() {
 function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
   setLoteRamo(chipId, loteNum, ramoId);
   // Re-sortear mensagens de todos os cards do lote
-  const LOTE_SIZE = 20;
+  const LOTE_SIZE = getLoteSize();
   const fila = getFilaChip(chipId);
   const inicio = (loteNum - 1) * LOTE_SIZE;
   const fim = Math.min(inicio + LOTE_SIZE, fila.length);
@@ -4619,8 +4619,7 @@ function shuffleFilaMsgSlot(slot, id) {
   const item = fila.find(f => f.id === id);
   if (!item) return;
   const itemIdx = fila.findIndex(f => f.id === id);
-  const loteNum = Math.floor(itemIdx / 20) + 1;
-  const ramoId = getLoteRamo(chip.id, loteNum) || item.ramoId || null;
+  const loteNum = Math.floor(itemIdx / getLoteSize()) + 1;
   const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${slot}-${id}`);
@@ -4632,8 +4631,7 @@ function shuffleFilaMsg(id) {
   const item = fila.find(f => f.id === id);
   if (!item) return;
   const itemIdx = fila.findIndex(f => f.id === id);
-  const loteNum = Math.floor(itemIdx / 20) + 1;
-  const ramoId = getLoteRamo(disparoChipId, loteNum) || item.ramoId || null;
+  const loteNum = Math.floor(itemIdx / getLoteSize()) + 1;
   const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, ramoId);
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${id}`);
@@ -4743,6 +4741,27 @@ function checkHorarioDisparo(now) {
    EVO CONFIG
 ════════════════════════════ */
 function loadEvoConfig() { try { return JSON.parse(localStorage.getItem(EVO_KEY)||'{}'); } catch { return {}; } }
+function atualizarStatsDisparo() {
+  const tamanho  = parseInt(document.getElementById('loteTamanho')?.value)   || 30;
+  const esperaMin= parseInt(document.getElementById('loteEsperaMin')?.value) || 90;
+  const chips    = getChips();
+  const nChips   = chips.length || 1;
+  const lotesDay = Math.floor(CHIP_LIMIT / tamanho);
+  const esperaH  = esperaMin >= 60
+    ? (esperaMin % 60 === 0 ? `${esperaMin/60}h` : `${Math.floor(esperaMin/60)}h${esperaMin%60}`)
+    : `${esperaMin}min`;
+
+  const subEl    = document.getElementById('filaZapSub');
+  const loteVal  = document.getElementById('statLoteVal');
+  const loteSub  = document.getElementById('statLoteSub');
+  const diaSub   = document.getElementById('statDiaSub');
+
+  if (subEl)   subEl.textContent   = `// ${nChips} chip${nChips!==1?'s':''} · disparo paralelo · ${tamanho} por lote · ${esperaH} de delay`;
+  if (loteVal) loteVal.textContent = `${tamanho} msg`;
+  if (loteSub) loteSub.textContent = `por chip · ${lotesDay} lote${lotesDay!==1?'s':''} por dia`;
+  if (diaSub)  diaSub.textContent  = `${lotesDay} lote${lotesDay!==1?'s':''} × ${tamanho} · espera ${esperaH}`;
+}
+
 function saveEvoConfig() {
   const cfg = {
     delayMin: document.getElementById('delayMin')?.value,
@@ -4752,6 +4771,7 @@ function saveEvoConfig() {
     horarioInicio: document.getElementById('horarioInicio')?.value,
   };
   localStorage.setItem(EVO_KEY, JSON.stringify(cfg));
+  atualizarStatsDisparo();
 }
 function toggleLoteConfig() {
   const fields = document.getElementById('loteConfigFields');
@@ -4761,6 +4781,9 @@ function toggleLoteConfig() {
 /* ════════════════════════════
    DISPARO — LOTES
 ════════════════════════════ */
+function getLoteSize() {
+  return parseInt(document.getElementById('loteTamanho')?.value) || 30;
+}
 function getLoteConfig() {
   return { ativo: document.getElementById('loteAtivo')?.checked||false, tamanho: parseInt(document.getElementById('loteTamanho')?.value)||30, esperaMin: parseInt(document.getElementById('loteEsperaMin')?.value)||90 };
 }
@@ -6219,6 +6242,8 @@ function confirmarExcluirLead() {
   if (cfg.loteTamanho)   document.getElementById('loteTamanho').value   = cfg.loteTamanho;   else document.getElementById('loteTamanho').value   = 30;
   if (cfg.loteEsperaMin) document.getElementById('loteEsperaMin').value = cfg.loteEsperaMin; else document.getElementById('loteEsperaMin').value = 90;
   if (cfg.horarioInicio) document.getElementById('horarioInicio').value = cfg.horarioInicio;
+
+  atualizarStatsDisparo();
 
   // init chips — prioridade chip 2 com final 8457
   const chips = getChips();
