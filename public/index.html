@@ -1563,16 +1563,14 @@ function getTemplates() {
 function saveTemplates(t) { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(t)); }
 
 function pickTemplate(nome, ramoId) {
-  if (!ramoId) return null; // sem ramo = sem template
-  const tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
-  if (!tpl || !tpl.length) return null; // ramo sem templates configurados
+  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, 'com-site') : getTemplates();
+  if (!tpl || !tpl.length) return { text: '', idx: 0 };
   const idx = Math.floor(Math.random() * tpl.length);
   return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
 }
 function pickOtherTemplate(nome, cur, ramoId) {
-  if (!ramoId) return null;
-  const tpl = getTemplatesForRamoTipo(ramoId, 'com-site');
-  if (!tpl || !tpl.length) return null;
+  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, 'com-site') : getTemplates();
+  if (!tpl || !tpl.length) return { text: '', idx: 0 };
   let idx; do { idx = Math.floor(Math.random() * tpl.length); } while (idx === cur && tpl.length > 1);
   return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
 }
@@ -4515,7 +4513,6 @@ function toggleFilaSlotEmpresa(slot, empId) {
 
   // Chip tem vaga — adicionar normalmente
   const tplResult = pickTemplate(emp.nome, emp.ramoId || null);
-  if (!tplResult) { notify('// lead sem ramo definido — atribua um ramo antes de adicionar à fila', 'warn'); return; }
   const { text, idx: tIdx } = tplResult;
   const jaEnviado = ['Enviada','Respondida','Não respondida','Recusada','Fechada'].includes(emp.status||'');
   const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
@@ -4551,7 +4548,6 @@ function toggleFila(empId) {
     const emp  = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) return;
     const tplResult2 = pickTemplate(emp.nome, emp.ramoId || null);
-    if (!tplResult2) { notify('// lead sem ramo definido — atribua um ramo antes de adicionar à fila', 'warn'); return; }
     const { text: tText, idx: tIdx } = tplResult2;
     const jaEnviado = emp.status === 'Enviada' || emp.status === 'Respondida' || emp.status === 'Não respondida' || emp.status === 'Recusada' || emp.status === 'Fechada';
     const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
