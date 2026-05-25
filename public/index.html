@@ -2121,6 +2121,16 @@ function ensureWeekData() {
         const atribIds = new Set(atrib.map(a => a.id));
         const novos = parmaAtrib.filter(e => !atribIds.has(e.id)).map(e => ({ ...e, voltouDaSemana: todayStr(), diaDestino: null }));
         saveAtribuicaoData([...atrib, ...novos]);
+
+        // Limpar esses leads das filas de disparo dos chips
+        const idsRetornados = new Set(parmaAtrib.map(e => e.id));
+        const chips = getChips();
+        chips.forEach(c => {
+          if (filaDisparo[c.id]) {
+            filaDisparo[c.id] = filaDisparo[c.id].filter(f => !idsRetornados.has(f.id));
+          }
+        });
+        saveFilaDisparo();
       }
 
       // Salva histórico para compatibilidade
@@ -4415,11 +4425,17 @@ function sincronizarFilaComEnviados() {
   const chips = getChips();
   let corrigidos = 0;
 
-  // Constrói um Set de IDs já enviados (qualquer status diferente de Não enviada / Em fila)
+  // Constrói um Set de IDs já enviados — semana atual
   const statusEnviados = new Set(['Enviada','Respondida','Não respondida','Recusada','Fechada']);
   const idsEnviados = new Set();
   Object.values(data.days).forEach(emps => {
     (emps||[]).forEach(e => { if (statusEnviados.has(e.status)) idsEnviados.add(e.id); });
+  });
+
+  // Também verifica no acompanhamento mensal (semanas anteriores)
+  const acomp = getAcompData();
+  Object.values(acomp).forEach(mes => {
+    (mes||[]).forEach(e => { if (e.id) idsEnviados.add(e.id); });
   });
 
   chips.forEach(chip => {
