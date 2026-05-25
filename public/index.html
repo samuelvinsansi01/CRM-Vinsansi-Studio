@@ -4073,30 +4073,6 @@ function renderFilaSlot(slot, filterDay) {
     lotes.push(filaCompleta.slice(i, i + LOTE_SIZE));
   }
 
-  // ── Sincronizar ramoId e templates ANTES de renderizar ──
-  {
-    let _sync = false;
-    const _fila = getFilaChip(chipId);
-    lotes.forEach((loteItems, loteIdx) => {
-      const loteNum = loteHistLen + loteIdx + 1;
-      const ramoDoLote = getLoteRamo(chipId, loteNum);
-      if (!ramoDoLote) return;
-      const _ini = loteIdx * LOTE_SIZE;
-      const _fim = Math.min(_ini + LOTE_SIZE, _fila.length);
-      for (let _i = _ini; _i < _fim; _i++) {
-        const _it = _fila[_i];
-        if (!_it || _it.status === 'enviado') continue;
-        if (_it.ramoId !== ramoDoLote || !_it.mensagem) {
-          _it.ramoId = ramoDoLote;
-          const { text, idx } = pickTemplate(_it.nome, ramoDoLote);
-          _it.mensagem = text; _it.templateIdx = idx;
-          _sync = true;
-        }
-      }
-    });
-    if (_sync) saveFilaDisparo();
-  }
-
   lotes.forEach((loteItems, loteIdx) => {
     const loteNum = loteHistLen + loteIdx + 1;
     const pendentesNoLote = loteItems.filter(f => f.status !== 'enviado').length;
@@ -4384,10 +4360,16 @@ function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
   const fim = Math.min(inicio + LOTE_SIZE, fila.length);
   for (let i = inicio; i < fim; i++) {
     const item = fila[i];
-    if (!item) continue;
+    if (!item || item.status === 'enviado') continue;
     item.ramoId = ramoId || null;
-    const { text, idx } = pickTemplate(item.nome, item.ramoId);
-    item.mensagem = text; item.templateIdx = idx;
+    if (ramoId) {
+      // Ramo selecionado: sorteia template do ramo
+      const { text, idx } = pickTemplate(item.nome, ramoId);
+      item.mensagem = text; item.templateIdx = idx;
+    } else {
+      // Sem ramo: limpa mensagem para o usuário digitar manualmente
+      item.mensagem = ''; item.templateIdx = -1;
+    }
   }
   saveFilaDisparo();
   if (isSlot) renderFilaSlot(slot, disparoDay); else renderFila();
@@ -4539,11 +4521,9 @@ function toggleFilaSlotEmpresa(slot, empId) {
   }
 
   // Chip tem vaga — adicionar normalmente
-  const tplResult = pickTemplate(emp.nome, emp.ramoId || null);
-  const { text, idx: tIdx } = tplResult;
   const jaEnviado = ['Enviada','Respondida','Não respondida','Recusada','Fechada'].includes(emp.status||'');
   const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
-  fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: text, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
+  fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: '', templateIdx: -1, ramoId: null, status: filaStatus, aberto: false });
   if (!jaEnviado) {
     Object.keys(data.days).forEach(day => {
       const e = (data.days[day]||[]).find(e => e.id === empId);
@@ -4574,11 +4554,9 @@ function toggleFila(empId) {
     const all  = Object.values(data.days).flat();
     const emp  = all.find(e => e.id === empId);
     if (!emp || !emp.whatsapp) return;
-    const tplResult2 = pickTemplate(emp.nome, emp.ramoId || null);
-    const { text: tText, idx: tIdx } = tplResult2;
     const jaEnviado = emp.status === 'Enviada' || emp.status === 'Respondida' || emp.status === 'Não respondida' || emp.status === 'Recusada' || emp.status === 'Fechada';
     const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
-    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: tText, templateIdx: tIdx, ramoId: emp.ramoId || null, status: filaStatus, aberto: false });
+    fila.push({ id: emp.id, nome: emp.nome, site: emp.site || '', whatsapp: emp.whatsapp, mensagem: '', templateIdx: -1, ramoId: null, status: filaStatus, aberto: false });
     if (!jaEnviado) {
       Object.keys(data.days).forEach(day => {
         const e = (data.days[day]||[]).find(e => e.id === empId);
