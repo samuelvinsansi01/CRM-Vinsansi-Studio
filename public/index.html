@@ -4033,30 +4033,6 @@ function renderFilaSlot(slot, filterDay) {
   const LOTE_SIZE = getLoteSize();
   let html = '';
 
-  // ── Sincronizar ramoId e templates ANTES de renderizar ──
-  {
-    let _sync = false;
-    const _fila = getFilaChip(chipId);
-    lotes.forEach((loteItems, loteIdx) => {
-      const loteNum = loteHistLen + loteIdx + 1;
-      const ramoDoLote = getLoteRamo(chipId, loteNum);
-      if (!ramoDoLote) return;
-      const _ini = loteIdx * LOTE_SIZE;
-      const _fim = Math.min(_ini + LOTE_SIZE, _fila.length);
-      for (let _i = _ini; _i < _fim; _i++) {
-        const _it = _fila[_i];
-        if (!_it || _it.status === 'enviado') continue;
-        if (_it.ramoId !== ramoDoLote || !_it.mensagem) {
-          _it.ramoId = ramoDoLote;
-          const { text, idx } = pickTemplate(_it.nome, ramoDoLote);
-          _it.mensagem = text; _it.templateIdx = idx;
-          _sync = true;
-        }
-      }
-    });
-    if (_sync) saveFilaDisparo();
-  }
-
   // ── Histórico de lotes já disparados ──
   (st.loteHistorico || []).forEach(lhist => {
     const todosEnviados = lhist.items.every(i => i.status === 'enviado');
@@ -4095,6 +4071,30 @@ function renderFilaSlot(slot, filterDay) {
   const lotes = [];
   for (let i = 0; i < filaCompleta.length; i += LOTE_SIZE) {
     lotes.push(filaCompleta.slice(i, i + LOTE_SIZE));
+  }
+
+  // ── Sincronizar ramoId e templates ANTES de renderizar ──
+  {
+    let _sync = false;
+    const _fila = getFilaChip(chipId);
+    lotes.forEach((loteItems, loteIdx) => {
+      const loteNum = loteHistLen + loteIdx + 1;
+      const ramoDoLote = getLoteRamo(chipId, loteNum);
+      if (!ramoDoLote) return;
+      const _ini = loteIdx * LOTE_SIZE;
+      const _fim = Math.min(_ini + LOTE_SIZE, _fila.length);
+      for (let _i = _ini; _i < _fim; _i++) {
+        const _it = _fila[_i];
+        if (!_it || _it.status === 'enviado') continue;
+        if (_it.ramoId !== ramoDoLote || !_it.mensagem) {
+          _it.ramoId = ramoDoLote;
+          const { text, idx } = pickTemplate(_it.nome, ramoDoLote);
+          _it.mensagem = text; _it.templateIdx = idx;
+          _sync = true;
+        }
+      }
+    });
+    if (_sync) saveFilaDisparo();
   }
 
   lotes.forEach((loteItems, loteIdx) => {
