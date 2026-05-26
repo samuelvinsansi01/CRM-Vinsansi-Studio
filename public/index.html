@@ -5612,6 +5612,10 @@ function renderAtribInstaFila() {
         </div>
         <!-- Campo de link Instagram inline -->
         <div style="display:flex;gap:6px;margin-top:7px;align-items:center">
+          <a href="https://www.google.com/search?q=site:instagram.com+${encodeURIComponent('"'+e.nome+'"')}" target="_blank"
+            title="Buscar Instagram no Google"
+            style="background:none;border:1px solid rgba(225,48,108,0.25);color:var(--insta);border-radius:6px;font-size:11px;padding:4px 8px;cursor:pointer;flex-shrink:0;text-decoration:none;line-height:1;display:flex;align-items:center;transition:all 0.18s"
+            onmouseover="this.style.background='rgba(225,48,108,0.1)'" onmouseout="this.style.background='none'">🔍</a>
           <input id="atrib-insta-link-${e.id}" type="text"
             value="${escHtml(e.instagram||'')}"
             placeholder="Cole o link do Instagram..."
