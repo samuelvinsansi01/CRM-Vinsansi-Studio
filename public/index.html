@@ -915,11 +915,6 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   <!-- ABAS: Backlog + dias da semana -->
   <div id="instaTabBar" style="display:flex;gap:0;flex-shrink:0;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap"></div>
 
-  <!-- AVISO 19H (só aparece quando relevante) -->
-  <div id="instaCorteAviso" style="display:none;flex-shrink:0;margin-bottom:10px;background:rgba(240,164,41,0.07);border:1px solid rgba(240,164,41,0.25);border-radius:8px;padding:8px 14px;font-family:'DM Mono',monospace;font-size:9px;color:var(--warning)">
-    ⚠ Após 19:00 — leads inseridos agora vão para amanhã
-  </div>
-
   <!-- CONTEÚDO DA ABA ATIVA -->
   <div id="instaTabContent" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden"></div>
 </div>
@@ -1953,14 +1948,20 @@ function updateBadges() {
   const val = getValData();
   document.getElementById('badge-validacao').textContent = val.length;
   const atribuicaoEl = document.getElementById('badge-atribuicao');
-  if (atribuicaoEl) atribuicaoEl.textContent = getAtribuicaoData().length + getInstaFila().length;
+  if (atribuicaoEl) {
+    // Atribuição = zap sem dia + insta sem link ainda
+    const instaSemLink = getInstaFila().filter(e => !e.instagram).length;
+    atribuicaoEl.textContent = getAtribuicaoData().length + instaSemLink;
+  }
   const naoEnv = flat.filter(e => (e.status||'Não enviada')==='Não enviada' && e.whatsapp).length;
   document.getElementById('badge-fila-zap').textContent = naoEnv;
   const instaEl = document.getElementById('badge-instagram');
   if (instaEl) {
     const instaWeek = getInstaWeek();
     const totalInsta = Object.values(instaWeek).flat().length;
-    instaEl.textContent = totalInsta + getInstaFila().length;
+    // Backlog = insta com link confirmado ainda não alocado em dia
+    const instaBacklog = getInstaFila().filter(e => !!e.instagram).length;
+    instaEl.textContent = totalInsta + instaBacklog;
   }
   // Atualiza contadores das abas da base de atribuição
   updateAtribTabCounts();
@@ -2027,7 +2028,7 @@ function ensureWeekData() {
           const filaIds = new Set(filaAtual.map(f => f.id));
           const voltam = instaNaoContatados
             .filter(e => !filaIds.has(e.id))
-            .map(({ status, instagramUrl, atribuidoEm, dmEnviadaEm, ...base }) => ({ ...base, voltouEm: todayStr() }));
+            .map(({ status, instagramUrl, atribuidoEm, dmEnviadaEm, ...base }) => ({ ...base, instagram: base.instagram || instagramUrl || '', voltouEm: todayStr() }));
           saveInstaFila([...filaAtual, ...voltam]);
         }
         saveInstaWeek({});
@@ -5558,7 +5559,8 @@ function renderAtribInstaFila() {
   const listEl = document.getElementById('atribInstaList');
   if (!listEl) return;
 
-  const filaAll = getInstaFila();
+  // Atribuição exibe apenas leads que ainda NÃO têm link do Instagram
+  const filaAll = getInstaFila().filter(e => !e.instagram);
   const buscaEl = document.getElementById('atribInstaBusca');
   const buscaQ  = buscaEl ? normalizeStr(buscaEl.value) : '';
   const fila = buscaQ
@@ -5644,7 +5646,7 @@ function renderAtribInstaFila() {
 
 function atribInstaChangePage(p) { atribInstaPage = p; renderAtribInstaFila(); }
 
-/* ── CONFIRMAR LINK E MANDAR PARA O DIA ── */
+/* ── CONFIRMAR LINK → VAI PARA O BACKLOG ── */
 function atribInstaConfirmarLink(id) {
   const input = document.getElementById(`atrib-insta-link-${id}`);
   if (!input) return;
@@ -5656,25 +5658,16 @@ function atribInstaConfirmarLink(id) {
   const emp  = fila.find(e => e.id === id);
   if (!emp) return;
 
-  const day  = instaDeterminarDiaDestino();
-  const week = getInstaWeek();
-  if (!week[day]) week[day] = [];
-  if (week[day].length >= INSTA_DIA_LIMIT) {
-    notify(`// limite de ${INSTA_DIA_LIMIT}/dia atingido em ${day}`, 'warn'); return;
-  }
-
-  week[day].push({ ...emp, instagramUrl: url, status: 'Não contatado', atribuidoEm: todayStr() });
-  saveInstaWeek(week);
-  saveInstaFila(fila.filter(e => e.id !== id));
+  // Salva o link no item — ele permanece na INSTA_KEY, agora com instagram preenchido.
+  // O backlog do painel Instagram exibe apenas os que têm e.instagram preenchido.
+  emp.instagram = url;
+  saveInstaFila(fila);
 
   updateAtribInstaCorteInfo();
   renderAtribInstaFila();
-  // Atualiza painel Instagram se estiver aberto
   if (document.getElementById('panel-instagram')?.classList.contains('active')) renderInstagram();
   updateBadges();
-  const hora = new Date().getHours();
-  const aviso = hora >= INSTA_CUTOFF_HOUR ? ' (após 19h → dia seguinte)' : '';
-  notify(`✓ ${emp.nome} → ${day}${aviso}`);
+  notify(`✓ ${emp.nome} → Backlog Instagram`);
 }
 
 /* ── EXCLUIR DA FILA INSTAGRAM (BASE DE ATRIBUIÇÃO) ── */
@@ -5917,12 +5910,13 @@ function renderInstaTabContent() {
 
 /* ── ABA BACKLOG ── */
 function renderInstaBacklog(container) {
-  const filaAll = getInstaFila();
+  // Apenas leads com link do Instagram já confirmado na Atribuição
+  const filaAll = getInstaFila().filter(e => !!(e.instagram));
 
   if (!filaAll.length) {
     container.innerHTML = `<div class="stretch-card" style="flex:1">
       <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:48px">
-        // backlog vazio · leads aprovados na Atribuição aparecem aqui
+        // backlog vazio · confirme o link do Instagram na aba Atribuição para os leads aparecerem aqui
       </div></div>`;
     return;
   }
@@ -6050,6 +6044,8 @@ function instaVoltarBacklog(id, day) {
   const fila = getInstaFila();
   if (!fila.find(e => e.id === id)) {
     const { status, instagramUrl, atribuidoEm, dmEnviadaEm, ...base } = lead;
+    // Garante que e.instagram (usado pelo backlog) está presente
+    if (!base.instagram && instagramUrl) base.instagram = instagramUrl;
     saveInstaFila([...fila, base]);
   }
   renderInstagram();
@@ -6102,7 +6098,7 @@ function instaLimparDia(day) {
       const filaAtual = getInstaFila();
       const filaIds   = new Set(filaAtual.map(f => f.id));
       const novos = voltam.filter(e => !filaIds.has(e.id))
-        .map(({ status, instagramUrl, atribuidoEm, dmEnviadaEm, ...base }) => ({ ...base, voltouEm: todayStr() }));
+        .map(({ status, instagramUrl, atribuidoEm, dmEnviadaEm, ...base }) => ({ ...base, instagram: base.instagram || instagramUrl || '', voltouEm: todayStr() }));
       saveInstaFila([...filaAtual, ...novos]);
     }
     delete w[day]; saveInstaWeek(w);
