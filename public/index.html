@@ -904,52 +904,24 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 
 <!-- ── INSTAGRAM ── -->
 <div class="panel" id="panel-instagram">
+  <!-- HEADER -->
   <div class="page-header" style="flex-shrink:0">
     <div>
       <div class="page-title">Instagram <span>Fila.</span></div>
-      <div class="page-sub">// 60 leads por dia · atribuição manual · link do Instagram obrigatório</div>
-    </div>
-    <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;white-space:nowrap;background:var(--insta);border-color:var(--insta)" onclick="abrirModalInstaLead()">+ Lead manual</button>
-  </div>
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex:1;min-height:0;overflow:hidden">
-
-    <!-- COLUNA ESQUERDA: fila aguardando atribuição -->
-    <div class="stretch-card" style="display:flex;flex-direction:column;min-height:0">
-      <div class="card-title" style="flex-shrink:0">
-        Aguardando atribuição
-        <span id="instaFilaTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
-        <button onclick="instaSelecionarTodos()" style="margin-left:8px;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer;transition:all 0.18s" onmouseover="this.style.color='var(--insta)';this.style.borderColor='var(--insta)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Selecionar todos</button>
-      </div>
-      <div style="margin-bottom:10px;flex-shrink:0">
-        <input id="instaBusca" type="text" placeholder="🔍 Buscar por nome ou WhatsApp..."
-          oninput="instaPage=0;renderInstagram()"
-          style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
-          onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='var(--border2)'"/>
-      </div>
-      <!-- barra de ações em lote -->
-      <div id="instaAcoesLote" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;flex-shrink:0">
-        <span id="instaLoteLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--insta)">0 selecionados</span>
-        <div style="display:flex;gap:5px;flex-wrap:wrap" id="instaLoteDayBtns"></div>
-        <button class="btn btn-ghost" style="font-size:9px;padding:4px 10px;margin-left:auto" onclick="instaDeselecionarTodos()">✕ Cancelar</button>
-      </div>
-      <div id="instaFilaList" class="stretch-list" style="flex:1;overflow-y:auto"></div>
-      <div id="instaFilaPagination"></div>
-    </div>
-
-    <!-- COLUNA DIREITA: leads do dia -->
-    <div class="stretch-card" style="display:flex;flex-direction:column;min-height:0">
-      <div class="card-title" style="flex-shrink:0">
-        Leads do dia
-        <span id="instaDayTotal" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
-        <button onclick="instaLimparDia()" style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer" onmouseover="this.style.color='var(--error)';this.style.borderColor='var(--error)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Limpar dia</button>
-      </div>
-      <div class="day-tabs" id="instaDayTabs" style="flex-shrink:0;margin-bottom:12px"></div>
-      <div id="instaDayList" class="stretch-list" style="flex:1;overflow-y:auto">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">Selecione um dia</div>
-      </div>
+      <div class="page-sub">// backlog · 60 leads por dia · clique para copiar mensagem</div>
     </div>
   </div>
+
+  <!-- ABAS: Backlog + dias da semana -->
+  <div id="instaTabBar" style="display:flex;gap:0;flex-shrink:0;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap"></div>
+
+  <!-- AVISO 19H (só aparece quando relevante) -->
+  <div id="instaCorteAviso" style="display:none;flex-shrink:0;margin-bottom:10px;background:rgba(240,164,41,0.07);border:1px solid rgba(240,164,41,0.25);border-radius:8px;padding:8px 14px;font-family:'DM Mono',monospace;font-size:9px;color:var(--warning)">
+    ⚠ Após 19:00 — leads inseridos agora vão para amanhã
+  </div>
+
+  <!-- CONTEÚDO DA ABA ATIVA -->
+  <div id="instaTabContent" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden"></div>
 </div>
 
 <div class="panel" id="panel-fila-zap" style="padding:0;overflow:hidden;flex-direction:row;height:100vh;">
@@ -1232,6 +1204,14 @@ tr:hover td{background:rgba(255,255,255,0.015);}
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px">Templates usados no disparo WhatsApp. Use {EMPRESA} para o nome da empresa.</div>
     <div id="templatesList"></div>
     <button class="btn btn-ghost" style="margin-top:12px" onclick="adicionarTemplate()">+ Novo template</button>
+  </div>
+
+  <!-- INSTAGRAM TEMPLATES -->
+  <div class="card" style="margin-top:16px">
+    <div class="card-title" style="color:var(--insta)">Templates Instagram <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· sorteio automático ao copiar</span></div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px">Use {EMPRESA} para o nome. Ao clicar em copiar no lead, um template é sorteado e o nome preenchido automaticamente.</div>
+    <div id="instaTemplatesList"></div>
+    <button class="btn btn-ghost" style="margin-top:12px;border-color:rgba(225,48,108,0.3);color:var(--insta)" onclick="adicionarInstaTemplate()">+ Novo template Instagram</button>
   </div>
 </div>
 
@@ -1951,7 +1931,7 @@ function switchPanel(name) {
   });
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
-    const panelMap = {'Início':'inicio','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','Fila WhatsApp':'fila-zap','Acompanhamento':'acompanhamento','Redirecionamentos':'redirecionamentos','Configurações':'configuracoes'};
+    const panelMap = {'Início':'inicio','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','Instagram':'instagram','Fila WhatsApp':'fila-zap','Acompanhamento':'acompanhamento','Redirecionamentos':'redirecionamentos','Configurações':'configuracoes'};
     el.classList.toggle('active', panelMap[label] === name);
   });
   if (name==='inicio')         renderInicio();
@@ -5207,6 +5187,7 @@ function renderConfiguracoes() {
   renderChipsConfig();
   renderRamosConfig();
   renderTemplatesConfig();
+  renderInstaTemplatesConfig();
 }
 
 /* CHIPS */
@@ -5467,7 +5448,6 @@ function salvarInstaLeadInline() {
    BASE DE ATRIBUIÇÃO — ABAS
 ════════════════════════════ */
 let atribActiveTab = 'zap'; // 'zap' | 'insta'
-const INSTA_CUTOFF_HOUR = 19; // após 19h → vai pro dia seguinte
 
 function salvarZapLeadManual() {
   const nome     = (document.getElementById('zapLeadNome')?.value||'').trim();
@@ -5750,307 +5730,318 @@ function migrarChavesInstaWeek() {
   }
 }
 
-const INSTA_DIA_LIMIT  = 60;
-const INSTA_PAGE_SIZE  = 30;
-const INSTA_STATUS     = ['Não contatado','DM Enviada','Respondeu','Não respondeu','Fechou','Recusou'];
+/* ── Constantes e estado do painel Instagram (declaração única) ── */
+const INSTA_DIA_LIMIT   = 60;
+const INSTA_PAGE_SIZE   = 50;
+const INSTA_CUTOFF_HOUR = 19;
+const INSTA_STATUS      = ['Não contatado','DM Enviada','Respondeu','Não respondeu','Fechou','Recusou'];
 
-let instaPage         = 0;
-let instaSelectedIds  = new Set();
-let instaActiveDay    = null;
+let instaPage      = 0;
+let instaBacklogPg = 0;
+let instaActiveTab = 'backlog'; // 'backlog' | dd/mm/aaaa
 
-/* ── Dias da semana ── */
-function instaWeekDays() {
-  return currentWeekDays(); // dd/mm/aaaa — mesmo padrão do sistema
-}
-
-function instaCountForDay(week, day) { return (week[day]||[]).length; }
-
+function instaWeekDays()              { return currentWeekDays(); }
+function instaCountForDay(week, day)  { return (week[day]||[]).length; }
 function instaParseDay(day) {
-  // Converte dd/mm/aaaa para Date corretamente
   const [d, m, y] = day.split('/').map(Number);
   return new Date(y, m - 1, d);
 }
 
 /* ════════════════════════════
+   INSTAGRAM TEMPLATES
+════════════════════════════ */
+const INSTA_TEMPLATES_KEY = 'vs_insta_templates_v1';
+const INSTA_TEMPLATES_DEFAULT = [
+`Olá, tudo bem?
+Me chamo Samuel. Encontrei a {EMPRESA} e estive vendo o trabalho de vocês aqui no Instagram. Cada projeto postado aqui reforça o nível do que entregam, dá para ver o cuidado em cada detalhe.
+Percebi que vocês ainda não têm um site. Para marcenarias com esse padrão de projeto, isso é uma oportunidade clara. O cliente que pesquisa no Google simplesmente não encontra vocês, e a decisão de orçar muitas vezes começa antes do primeiro contato.
+Recentemente desenvolvi um projeto para uma marcenaria chamada Bicho Preguiça: bichopreguicaplanejados.com.br
+A ideia é que qualquer pessoa que chegue pelo Google ou pelas redes sociais consiga visualizar de modo sofisticado e completo tudo que vocês já entregaram, criando uma jornada que reforce o valor do trabalho antes do orçamento.
+Montei uma amostra do que poderia ser feito para vocês. Dá uma olhada e me fala se faz sentido, beleza?`,
+`Olá, tudo bem?
+Me chamo Samuel. Achei a {EMPRESA} e estive vendo o trabalho de vocês aqui no Instagram. Cada projeto apresentado e postado aqui reforça a qualidade do que entregam. Nota-se o cuidado e a qualidade em cada entrega.
+O que percebi é que vocês ainda não têm um site. No nicho de marcenarias e planejados, o cliente forma a percepção de valor antes mesmo de entrar em contato. Quem não aparece no Google fica fora dessa decisão.
+Deixo aqui um projeto que desenvolvi para uma marcenaria chamada Bicho Preguiça: bichopreguicaplanejados.com.br
+Sem um espaço próprio no Google, cada cliente que pesquisa ativamente por móveis planejados na região passa direto para quem tem. Esse é o tipo de decisão que acontece antes de qualquer contato, e vocês ficam fora dela.
+Montei uma amostra do que poderia ser feito para vocês. Dá uma olhada e me fala se faz sentido, beleza?`,
+`Olá, tudo bem?
+Me chamo Samuel. Encontrei a {EMPRESA} e estive vendo o trabalho de vocês aqui no Instagram. Os projetos que postam têm um padrão muito bom, cada detalhe bem pensado e bem apresentado.
+Só que percebi que vocês ainda não têm presença no Google. Isso significa que o cliente que está pesquisando ativamente por móveis planejados na região não encontra vocês. Essa busca acontece exatamente no momento em que ele está pronto para orçar.
+Aqui um projeto que desenvolvi recentemente para uma marcenaria chamada Bicho Preguiça: bichopreguicaplanejados.com.br
+O objetivo é que qualquer pessoa que chegue até vocês consiga visualizar com clareza e sofisticação tudo que já entregaram, criando uma jornada que reforce o valor do projeto antes do primeiro contato.
+Montei uma amostra do que poderia ser feito para vocês. Dá uma olhada e me fala se faz sentido, beleza?`
+];
+
+function getInstaTemplates() {
+  try { return JSON.parse(localStorage.getItem(INSTA_TEMPLATES_KEY)||'null') || INSTA_TEMPLATES_DEFAULT; } catch { return INSTA_TEMPLATES_DEFAULT; }
+}
+function saveInstaTemplates(t) { localStorage.setItem(INSTA_TEMPLATES_KEY, JSON.stringify(t)); }
+
+function sortearInstaTemplate(nome) {
+  const tpls = getInstaTemplates();
+  if (!tpls.length) return '';
+  const t = tpls[Math.floor(Math.random() * tpls.length)];
+  return t.replace(/\{EMPRESA\}/g, nome || '');
+}
+
+function copiarInstaMsg(nome) {
+  const msg = sortearInstaTemplate(nome);
+  if (!msg) { notify('// nenhum template Instagram cadastrado','warn'); return; }
+  navigator.clipboard.writeText(msg).then(() => {
+    notify('📋 Mensagem copiada');
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = msg; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    notify('📋 Mensagem copiada');
+  });
+}
+
+function renderInstaTemplatesConfig() {
+  const el = document.getElementById('instaTemplatesList');
+  if (!el) return;
+  const tpls = getInstaTemplates();
+  el.innerHTML = tpls.map((t, i) => `
+    <div style="background:var(--bg);border:1px solid rgba(225,48,108,0.2);border-radius:10px;padding:12px;margin-bottom:8px;position:relative">
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--insta);margin-bottom:8px;opacity:0.7">TEMPLATE ${i+1}</div>
+      <textarea style="min-height:100px;font-size:10px;line-height:1.6;border-color:rgba(225,48,108,0.2)"
+        oninput="saveInstaTemplateItem(${i},this.value)"
+        onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='rgba(225,48,108,0.2)'">${escHtml(t)}</textarea>
+      ${tpls.length>1?`<button class="del-btn" style="position:absolute;top:8px;right:8px" onclick="removerInstaTemplate(${i})">✕</button>`:''}
+    </div>`).join('');
+}
+function saveInstaTemplateItem(idx, val) {
+  const tpls = getInstaTemplates(); tpls[idx] = val; saveInstaTemplates(tpls);
+}
+function adicionarInstaTemplate() {
+  const tpls = getInstaTemplates();
+  if (tpls.length >= 10) { notify('// limite de 10 templates','warn'); return; }
+  tpls.push('Olá, tudo bem?\nMe chamo Samuel. Encontrei a {EMPRESA}...\n\nDá uma olhada e me fala se faz sentido, beleza?');
+  saveInstaTemplates(tpls); renderInstaTemplatesConfig(); notify('✓ Template Instagram adicionado');
+}
+function removerInstaTemplate(idx) {
+  const tpls = getInstaTemplates();
+  if (tpls.length <= 1) { notify('// mantenha ao menos 1 template','warn'); return; }
+  tpls.splice(idx, 1); saveInstaTemplates(tpls); renderInstaTemplatesConfig();
+}
+
+/* ════════════════════════════
    INSTAGRAM — RENDER PRINCIPAL
 ════════════════════════════ */
+
+/* ── alocar automaticamente: preenche o dia mais próximo disponível ── */
+function instaAlocarAuto(id) {
+  const fila = getInstaFila();
+  const emp  = fila.find(e => e.id === id);
+  if (!emp) return;
+  const week = getInstaWeek();
+  const days = instaWeekDays();
+  const hora = new Date().getHours();
+  // após 19h: não aloca hoje, começa de amanhã
+  const hoje = todayStr();
+  const diasDisponiveis = hora >= INSTA_CUTOFF_HOUR
+    ? days.filter(d => d !== hoje)
+    : days;
+
+  const dia = diasDisponiveis.find(d => (week[d]||[]).length < INSTA_DIA_LIMIT);
+  if (!dia) { notify('// todos os dias estão cheios (60/dia)','warn'); return; }
+
+  if (!week[dia]) week[dia] = [];
+  week[dia].push({ ...emp, status: 'Não contatado', instagramUrl: emp.instagram || '', atribuidoEm: todayStr() });
+  saveInstaWeek(week);
+  saveInstaFila(fila.filter(e => e.id !== id));
+  notify(`✓ ${emp.nome} → ${dia}`);
+  renderInstagram(); updateBadges();
+}
+
 function renderInstagram() {
-  renderInstaFila();
-  renderInstaDayTabs();
-  renderInstaDayList();
+  renderInstaTabBar();
+  renderInstaCorteAviso();
+  renderInstaTabContent();
   updateBadges();
 }
 
-/* ── COLUNA ESQUERDA: fila aguardando atribuição ── */
-function renderInstaFila() {
-  const filaAll = getInstaFila();
-  const buscaEl = document.getElementById('instaBusca');
-  const buscaQ  = buscaEl ? normalizeStr(buscaEl.value) : '';
-  const fila = buscaQ
-    ? filaAll.filter(e => normalizeStr(e.nome||'').includes(buscaQ) || (e.whatsapp||'').includes(buscaQ))
-    : filaAll;
+function renderInstaCorteAviso() {
+  const el = document.getElementById('instaCorteAviso');
+  if (!el) return;
+  const hora = new Date().getHours();
+  el.style.display = hora >= INSTA_CUTOFF_HOUR ? 'block' : 'none';
+}
 
-  const totalEl = document.getElementById('instaFilaTotalBadge');
-  if (totalEl) totalEl.textContent = filaAll.length ? `· ${fila.length}${buscaQ?'/'+filaAll.length:''} empresa${filaAll.length>1?'s':''}` : '';
-
+/* ── barra de abas ── */
+function renderInstaTabBar() {
+  const bar = document.getElementById('instaTabBar');
+  if (!bar) return;
   const week = getInstaWeek();
   const days = instaWeekDays();
+  const backlogCount = getInstaFila().length;
 
-  // Barra de lote
-  const barra = document.getElementById('instaAcoesLote');
-  if (barra) {
-    barra.style.display = instaSelectedIds.size > 0 ? 'flex' : 'none';
-    const label = document.getElementById('instaLoteLabel');
-    if (label) label.textContent = `${instaSelectedIds.size} selecionada${instaSelectedIds.size>1?'s':''}`;
-    const btnsEl = document.getElementById('instaLoteDayBtns');
-    if (btnsEl) btnsEl.innerHTML = days.map(day => {
-      const count = instaCountForDay(week, day);
-      const full  = count >= INSTA_DIA_LIMIT;
-      const label = instaParseDay(day).toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/');
-      return `<button onclick="instaAtribuirLote('${day}')"
-        style="background:${full?'rgba(255,80,80,0.08)':'var(--surface2)'};border:1px solid ${full?'rgba(255,80,80,0.3)':'var(--border2)'};color:${full?'var(--error)':'var(--text2)'};border-radius:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 8px;cursor:${full?'not-allowed':'pointer'}"
-        title="${day} · ${count}/${INSTA_DIA_LIMIT}" ${full?'disabled':''}>${label} <span style="opacity:0.6">${count}/${INSTA_DIA_LIMIT}</span></button>`;
-    }).join('');
+  const tabStyle = (active, color) => `background:none;border:none;border-bottom:2px solid ${active?color:'transparent'};color:${active?color:'var(--muted)'};font-family:'DM Mono',monospace;font-size:10px;padding:8px 16px;cursor:pointer;font-weight:700;transition:all 0.18s;margin-bottom:-1px;white-space:nowrap`;
+
+  const backlogActive = instaActiveTab === 'backlog';
+  let html = `<button onclick="instaSetTab('backlog')" style="${tabStyle(backlogActive,'var(--insta)')}">`
+    + `📦 Backlog${backlogCount?` <span style="opacity:0.65;font-weight:400">(${backlogCount})</span>`:''}` + `</button>`;
+
+  days.forEach(day => {
+    const count  = instaCountForDay(week, day);
+    const active = instaActiveTab === day;
+    const dt     = instaParseDay(day);
+    const lbl    = dt.toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','');
+    const full   = count >= INSTA_DIA_LIMIT;
+    const color  = full ? 'var(--warning)' : 'var(--accent)';
+    html += `<button onclick="instaSetTab('${day}')" style="${tabStyle(active, color)}">`
+      + `${lbl}${count?` <span style="opacity:0.65;font-weight:400">${count}</span>`:''}` + `</button>`;
+  });
+
+  bar.innerHTML = html;
+}
+
+function instaSetTab(tab) {
+  instaActiveTab = tab;
+  instaBacklogPg = 0;
+  renderInstagram();
+}
+
+/* ── conteúdo da aba ── */
+function renderInstaTabContent() {
+  const el = document.getElementById('instaTabContent');
+  if (!el) return;
+  if (instaActiveTab === 'backlog') {
+    renderInstaBacklog(el);
+  } else {
+    renderInstaDia(el, instaActiveTab);
   }
+}
 
-  const start = instaPage * INSTA_PAGE_SIZE;
-  const page  = fila.slice(start, start + INSTA_PAGE_SIZE);
-  const listEl = document.getElementById('instaFilaList');
-  if (!listEl) return;
+/* ── ABA BACKLOG ── */
+function renderInstaBacklog(container) {
+  const filaAll = getInstaFila();
 
-  if (!fila.length) {
-    listEl.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhuma empresa aguardando atribuição</div>';
-    document.getElementById('instaFilaPagination').innerHTML = '';
+  if (!filaAll.length) {
+    container.innerHTML = `<div class="stretch-card" style="flex:1">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:48px">
+        // backlog vazio · leads aprovados na Atribuição aparecem aqui
+      </div></div>`;
     return;
   }
 
-  listEl.innerHTML = page.map(e => {
-    const sel = instaSelectedIds.has(e.id);
-    const stars = e.totalScore ? `⭐ ${Number(e.totalScore).toFixed(1)}` : '';
-    const reviews = e.reviewsCount ? `(${e.reviewsCount} avaliações)` : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);${sel?'background:rgba(225,48,108,0.07);':''}" id="insta-row-${e.id}">
-      <input type="checkbox" ${sel?'checked':''} onchange="instaToggleSelect('${e.id}',this.checked)"
-        style="accent-color:var(--insta);cursor:pointer;flex-shrink:0">
+  const totalPags = Math.max(1, Math.ceil(filaAll.length / INSTA_PAGE_SIZE));
+  if (instaBacklogPg >= totalPags) instaBacklogPg = totalPags - 1;
+  const page = filaAll.slice(instaBacklogPg * INSTA_PAGE_SIZE, (instaBacklogPg + 1) * INSTA_PAGE_SIZE);
+
+  const rows = page.map(e => {
+    const stars   = e.totalScore   ? `⭐ ${Number(e.totalScore).toFixed(1)}` : '';
+    const reviews = e.reviewsCount ? `(${e.reviewsCount} av.)` : '';
+    const instaUrl = e.instagram || e.instagramUrl || '';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border)">
+      <!-- Nome clicável no instagram -->
       <div style="flex:1;min-width:0">
-        <div style="font-weight:700;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-          ${e.googleUrl?`<a href="${escHtml(e.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'">${escHtml(e.nome||'—')}</a>`:escHtml(e.nome||'—')}
-        </div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
-          ${stars?`<span style="color:var(--ok)">${stars} ${reviews}</span>`:''}
-          ${e.categoria?`<span style="color:var(--muted)">${escHtml(e.categoria)}</span>`:''}
-        </div>
+        ${instaUrl
+          ? `<a href="${escHtml(instaUrl)}" target="_blank" style="font-weight:700;font-size:12px;color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'">${escHtml(e.nome||'—')}</a>`
+          : `<span style="font-weight:700;font-size:12px">${escHtml(e.nome||'—')}</span>`}
+        ${stars||e.categoria?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:1px">${[stars&&(stars+(reviews?` ${reviews}`:'')),'',e.categoria].filter(Boolean).join(' · ')}</div>`:''}
       </div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0;align-items:center">
-        ${days.map(day => {
-          const count = instaCountForDay(week, day);
-          const full  = count >= INSTA_DIA_LIMIT;
-          const lbl   = instaParseDay(day).toLocaleDateString('pt-BR',{weekday:'short'}).replace('.','');
-          return `<button onclick="instaAtribuirUm('${e.id}','${day}')"
-            title="${day} · ${count}/${INSTA_DIA_LIMIT}"
-            style="background:${full?'rgba(255,80,80,0.08)':'var(--surface2)'};border:1px solid ${full?'rgba(255,80,80,0.3)':'var(--border2)'};color:${full?'var(--error)':'var(--text2)'};border-radius:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 6px;cursor:${full?'not-allowed':'pointer'}"
-            ${full?'disabled':''}>${lbl}</button>`;
-        }).join('')}
-        <button onclick="excluirInstaFila('${e.id}')"
-          title="Excluir lead permanentemente"
-          style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:10px;padding:3px 7px;cursor:pointer;transition:all 0.18s;margin-left:2px"
+      <!-- Botão alocar -->
+      <button onclick="instaAlocarAuto('${e.id}')"
+        style="background:var(--insta);color:#fff;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:6px 14px;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:opacity 0.18s"
+        onmouseover="this.style.opacity='0.82'" onmouseout="this.style.opacity='1'">
+        → Alocar
+      </button>
+      <!-- Excluir -->
+      <button onclick="excluirInstaFila('${e.id}')" title="Excluir"
+        style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:11px;padding:4px 8px;cursor:pointer;flex-shrink:0;transition:all 0.18s"
+        onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)';this.style.background='rgba(255,92,92,0.06)'"
+        onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
+    </div>`;
+  }).join('');
+
+  const pag = totalPags > 1 ? `<div style="display:flex;gap:6px;justify-content:center;padding:12px;flex-wrap:wrap">
+    ${instaBacklogPg>0?`<button class="btn btn-ghost" style="font-size:9px;padding:5px 12px" onclick="instaBacklogPg--;renderInstaTabContent()">← Anterior</button>`:''}
+    <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);align-self:center">${instaBacklogPg+1} / ${totalPags}</span>
+    ${instaBacklogPg<totalPags-1?`<button class="btn btn-ghost" style="font-size:9px;padding:5px 12px" onclick="instaBacklogPg++;renderInstaTabContent()">Próxima →</button>`:''}
+  </div>` : '';
+
+  container.innerHTML = `<div class="stretch-card" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+    <div class="card-title" style="flex-shrink:0">
+      Backlog
+      <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· ${filaAll.length} empresa${filaAll.length>1?'s':''} aguardando</span>
+    </div>
+    <div style="flex:1;overflow-y:auto">${rows}</div>
+    ${pag}
+  </div>`;
+}
+
+/* ── ABA DIA ── */
+function renderInstaDia(container, day) {
+  const week  = getInstaWeek();
+  const leads = week[day] || [];
+  const full  = leads.length >= INSTA_DIA_LIMIT;
+  const statusColor = { 'Não contatado':'var(--muted)', 'DM Enviada':'var(--insta)', 'Respondeu':'var(--ok)', 'Não respondeu':'var(--muted)', 'Fechou':'var(--ok)', 'Recusou':'var(--error)' };
+
+  const header = `<div class="card-title" style="flex-shrink:0">
+    Leads do dia
+    <span style="font-size:10px;color:${full?'var(--warning)':'var(--muted)'};font-weight:400;text-transform:none;letter-spacing:0">· ${leads.length}/${INSTA_DIA_LIMIT}</span>
+    <button onclick="instaLimparDia('${day}')"
+      style="margin-left:auto;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer"
+      onmouseover="this.style.color='var(--error)';this.style.borderColor='var(--error)'"
+      onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Limpar dia</button>
+  </div>`;
+
+  if (!leads.length) {
+    container.innerHTML = `<div class="stretch-card" style="flex:1;display:flex;flex-direction:column;min-height:0">${header}
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:48px">// nenhum lead atribuído neste dia</div>
+    </div>`; return;
+  }
+
+  const rows = leads.map((e, i) => {
+    const stColor = statusColor[e.status] || 'var(--muted)';
+    const instaUrl = e.instagramUrl || e.instagram || '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border)">
+      <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);width:18px;flex-shrink:0">${i+1}.</span>
+      <!-- Nome = link direto para o instagram -->
+      <div style="flex:1;min-width:0">
+        ${instaUrl
+          ? `<a href="${escHtml(instaUrl)}" target="_blank" style="font-weight:700;font-size:12px;color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'" title="Abrir Instagram">${escHtml(e.nome||'—')}</a>`
+          : `<span style="font-weight:700;font-size:12px;color:var(--text2)">${escHtml(e.nome||'—')}</span>`}
+        ${e.categoria?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:1px">${escHtml(e.categoria)}</div>`:''}
+      </div>
+      <!-- Ações -->
+      <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+        <!-- Copiar mensagem -->
+        <button onclick="copiarInstaMsg('${escHtml(e.nome||'').replace(/'/g,"\\'")}')" title="Copiar mensagem"
+          style="background:none;border:1px solid rgba(225,48,108,0.3);color:var(--insta);border-radius:6px;font-size:13px;padding:3px 8px;cursor:pointer;transition:all 0.18s;flex-shrink:0"
+          onmouseover="this.style.background='rgba(225,48,108,0.1)'"
+          onmouseout="this.style.background='none'">📋</button>
+        <!-- Select status -->
+        <select onchange="instaUpdateStatus('${e.id}','${day}',this.value)"
+          style="font-family:'DM Mono',monospace;font-size:8px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:${stColor};outline:none;cursor:pointer">
+          ${INSTA_STATUS.map(s => `<option value="${s}" ${e.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+        ${e.dmEnviadaEm?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);white-space:nowrap">${e.dmEnviadaEm}</span>`:''}
+        <!-- Voltar para backlog -->
+        <button onclick="instaVoltarBacklog('${e.id}','${day}')" title="Voltar para o backlog"
+          style="background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;padding:3px 7px;cursor:pointer;transition:all 0.15s"
+          onmouseover="this.style.borderColor='var(--insta)';this.style.color='var(--insta)'"
+          onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">↩</button>
+        <!-- Excluir -->
+        <button onclick="abrirModalExcluirInstaLead('${e.id}','${day}')" title="Excluir permanentemente"
+          style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:10px;padding:3px 7px;cursor:pointer;transition:all 0.18s"
           onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)';this.style.background='rgba(255,92,92,0.06)'"
           onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
       </div>
     </div>`;
   }).join('');
 
-  const totalPags = Math.ceil(fila.length / INSTA_PAGE_SIZE);
-  const pagEl = document.getElementById('instaFilaPagination');
-  if (pagEl) {
-    pagEl.innerHTML = totalPags > 1
-      ? `<div style="display:flex;gap:6px;justify-content:center;padding:12px;flex-wrap:wrap">
-          ${instaPage>0?`<button class="btn btn-ghost" style="font-size:9px;padding:5px 12px" onclick="instaChangePage(${instaPage-1})">← Anterior</button>`:''}
-          <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);align-self:center">${instaPage+1} / ${totalPags}</span>
-          ${instaPage<totalPags-1?`<button class="btn btn-ghost" style="font-size:9px;padding:5px 12px" onclick="instaChangePage(${instaPage+1})">Próxima →</button>`:''}
-        </div>` : '';
-  }
+  container.innerHTML = `<div class="stretch-card" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+    ${header}
+    <div style="flex:1;overflow-y:auto">${rows}</div>
+  </div>`;
 }
 
-function instaChangePage(p) { instaPage = p; renderInstaFila(); }
-
-function instaToggleSelect(id, checked) {
-  if (checked) instaSelectedIds.add(id); else instaSelectedIds.delete(id);
-  renderInstaFila();
-}
-function instaSelecionarTodos() {
-  getInstaFila().forEach(e => instaSelectedIds.add(e.id));
-  renderInstaFila();
-}
-function instaDeselecionarTodos() { instaSelectedIds.clear(); renderInstaFila(); }
-
-function excluirInstaFila(id) {
-  const fila = getInstaFila();
-  const lead = fila.find(e => e.id === id);
-  if (!lead) return;
-  abrirModalConfirm(
-    `Excluir <strong>${escHtml(lead.nome)}</strong> permanentemente? O site será bloqueado nas importações futuras.`,
-    () => {
-      saveInstaFila(getInstaFila().filter(e => e.id !== id));
-      if (lead.site) addExcludedDomains([lead.site]);
-      instaSelectedIds.delete(id);
-      renderInstaFila();
-      updateBadges();
-      notify(`✕ ${lead.nome} excluído`);
-    }
-  );
-}
-
-/* ── ATRIBUIÇÃO INDIVIDUAL ── */
-function instaAtribuirUm(empresaId, day) {
-  const week = getInstaWeek();
-  if ((week[day]||[]).length >= INSTA_DIA_LIMIT) { notify(`// limite de ${INSTA_DIA_LIMIT}/dia atingido`,'warn'); return; }
-  const fila = getInstaFila();
-  const emp  = fila.find(e => e.id === empresaId);
-  if (!emp) return;
-  if (!week[day]) week[day] = [];
-  week[day].push({ ...emp, status: 'Não contatado', instagramUrl: '', atribuidoEm: todayStr() });
-  const novaFila = fila.filter(e => e.id !== empresaId);
-  saveInstaFila(novaFila);
-  saveInstaWeek(week);
-  instaSelectedIds.delete(empresaId);
-  if (!instaActiveDay) instaActiveDay = day;
-  notify(`✓ ${emp.nome} → ${day}`);
-  renderInstagram();
-}
-
-/* ── ATRIBUIÇÃO EM LOTE ── */
-function instaAtribuirLote(day) {
-  if (!instaSelectedIds.size) { notify('// nenhuma empresa selecionada','warn'); return; }
-  const week = getInstaWeek();
-  const fila = getInstaFila();
-  if (!week[day]) week[day] = [];
-  let atribuidos = 0, overflow = 0;
-  const ids = [...instaSelectedIds];
-  for (const id of ids) {
-    if (week[day].length >= INSTA_DIA_LIMIT) { overflow++; continue; }
-    const emp = fila.find(e => e.id === id);
-    if (!emp) continue;
-    week[day].push({ ...emp, status: 'Não contatado', instagramUrl: '', atribuidoEm: todayStr() });
-    atribuidos++;
-  }
-  const novaFila = fila.filter(e => !ids.slice(0, atribuidos).includes(e.id));
-  // filtrar corretamente os atribuídos
-  const atribuidosIds = new Set();
-  ids.forEach(id => { if (atribuidosIds.size < atribuidos && week[day].find(e => e.id === id)) atribuidosIds.add(id); });
-  saveInstaFila(fila.filter(e => !atribuidosIds.has(e.id)));
-  saveInstaWeek(week);
-  instaSelectedIds.clear();
-  if (!instaActiveDay) instaActiveDay = day;
-  let msg = `✓ ${atribuidos} empresa${atribuidos>1?'s':''} → ${day}`;
-  if (overflow) msg += ` · ${overflow} não couberam`;
-  notify(msg, overflow > 0 ? 'warn' : '');
-  renderInstagram();
-}
-
-/* ── COLUNA DIREITA: tabs de dia ── */
-function renderInstaDayTabs() {
-  const el = document.getElementById('instaDayTabs');
-  if (!el) return;
-  const week = getInstaWeek();
-  const days = instaWeekDays();
-  if (!instaActiveDay) instaActiveDay = days.find(d => (week[d]||[]).length > 0) || days[0];
-  el.innerHTML = days.map(day => {
-    const count  = (week[day]||[]).length;
-    const active = instaActiveDay === day;
-    const dt     = instaParseDay(day);
-    const lbl    = dt.toLocaleDateString('pt-BR',{weekday:'short',day:'numeric'}).replace('.','/');
-    return `<div class="day-tab${active?' active':''}" onclick="instaSelectDay('${day}')">
-      ${lbl}${count?`<span class="day-count">${count}</span>`:''}
-    </div>`;
-  }).join('');
-}
-
-function instaSelectDay(day) { instaActiveDay = day; renderInstaDayTabs(); renderInstaDayList(); }
-
-/* ── LISTA DE LEADS DO DIA ── */
-function renderInstaDayList() {
-  const el = document.getElementById('instaDayList');
-  const totalEl = document.getElementById('instaDayTotal');
-  if (!el) return;
-  if (!instaActiveDay) { el.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">Selecione um dia</div>'; return; }
-
-  const week  = getInstaWeek();
-  const leads = week[instaActiveDay] || [];
-  if (totalEl) totalEl.textContent = `· ${leads.length}/${INSTA_DIA_LIMIT}`;
-
-  if (!leads.length) {
-    el.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead atribuído neste dia</div>';
-    return;
-  }
-
-  const statusColor = { 'Não contatado':'var(--muted)', 'DM Enviada':'var(--accent)', 'Respondeu':'var(--ok)', 'Não respondeu':'var(--muted)', 'Fechou':'var(--ok)', 'Recusou':'var(--error)' };
-
-  el.innerHTML = leads.map((e, i) => {
-    const temInsta = !!(e.instagramUrl);
-    const stColor  = statusColor[e.status] || 'var(--muted)';
-    const handle   = temInsta ? e.instagramUrl.replace(/^https?:\/\/(www\.)?instagram\.com\//,'@').replace(/\/$/,'') : '';
-
-    return `<div style="padding:9px 12px;border-bottom:1px solid var(--border)">
-      <!-- LINHA PRINCIPAL -->
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);flex-shrink:0;width:16px">${i+1}.</span>
-
-        <!-- Nome + Instagram -->
-        <div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <a href="${escHtml(e.googleUrl||'#')}" target="_blank"
-            style="font-weight:700;font-size:11px;color:var(--text);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px"
-            onmouseover="this.style.color='var(--insta)'" onmouseout="this.style.color='var(--text)'"
-            title="Abrir no Google">${escHtml(e.nome||'—')}</a>
-          ${temInsta
-            ? `<a href="${escHtml(e.instagramUrl)}" target="_blank"
-                style="font-family:'DM Mono',monospace;font-size:9px;color:var(--insta);text-decoration:none;display:flex;align-items:center;gap:3px;white-space:nowrap"
-                title="Abrir Instagram">📷 ${escHtml(handle)}</a>
-               <button onclick="instaEditarLink('${e.id}','${instaActiveDay}')" title="Editar link"
-                style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:9px;padding:1px 4px;line-height:1">✏️</button>`
-            : ''
-          }
-        </div>
-
-        <!-- Ações da direita -->
-        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
-          <!-- Select status -->
-          <select onchange="instaUpdateStatus('${e.id}','${instaActiveDay}',this.value)"
-            ${!temInsta?'disabled title="Adicione o link do Instagram primeiro"':''}
-            style="font-family:'DM Mono',monospace;font-size:8px;padding:3px 6px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:${stColor};outline:none;cursor:pointer;opacity:${temInsta?1:0.45}">
-            ${INSTA_STATUS.map(s => `<option value="${s}" ${e.status===s?'selected':''}>${s}</option>`).join('')}
-          </select>
-          ${e.dmEnviadaEm?`<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);white-space:nowrap">${e.dmEnviadaEm}</span>`:''}
-
-          <!-- Voltar para atribuição -->
-          <button onclick="instaVoltarParaFila('${e.id}','${instaActiveDay}')" title="Voltar para a fila de atribuição"
-            style="background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 7px;cursor:pointer;transition:all 0.15s;white-space:nowrap"
-            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">↩</button>
-
-          <!-- Excluir -->
-          <button onclick="abrirModalExcluirInstaLead('${e.id}','${instaActiveDay}')" title="Excluir lead permanentemente"
-            style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:10px;padding:3px 7px;cursor:pointer;transition:all 0.18s"
-            onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)';this.style.background='rgba(255,92,92,0.06)'"
-            onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
-        </div>
-      </div>
-
-      <!-- CAMPO DE LINK (só aparece se não tiver instagram) -->
-      ${!temInsta ? `
-      <div style="display:flex;gap:6px;margin-top:6px;margin-left:24px">
-        <input id="instaLinkInput-${e.id}" type="text" placeholder="Cole o link do Instagram..."
-          style="flex:1;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.3);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;padding:5px 9px;outline:none"
-          onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='rgba(225,48,108,0.3)'"
-          onkeydown="if(event.key==='Enter') instasSalvarLink('${e.id}','${instaActiveDay}')"/>
-        <button onclick="instasSalvarLink('${e.id}','${instaActiveDay}')"
-          style="background:var(--insta);color:#fff;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:4px 12px;cursor:pointer">Salvar</button>
-      </div>` : ''}
-    </div>`;
-  }).join('');
-}
-
-/* ── VOLTAR PARA FILA ── */
-function instaVoltarParaFila(id, day) {
+/* ── VOLTAR PARA BACKLOG ── */
+function instaVoltarBacklog(id, day) {
   const week = getInstaWeek();
   const lead = (week[day]||[]).find(e => e.id === id);
   if (!lead) return;
@@ -6062,32 +6053,22 @@ function instaVoltarParaFila(id, day) {
     saveInstaFila([...fila, base]);
   }
   renderInstagram();
-  notify(`↩ ${lead.nome} voltou para a fila`);
+  notify(`↩ ${lead.nome} voltou ao backlog`);
 }
 
-/* ── LINK DO INSTAGRAM ── */
-function instasSalvarLink(id, day) {
-  const input = document.getElementById(`instaLinkInput-${id}`);
-  if (!input) return;
-  let url = input.value.trim();
-  if (!url) { notify('// cole o link do Instagram primeiro','warn'); return; }
-  if (!url.startsWith('http')) url = 'https://instagram.com/' + url.replace('@','');
-  const week = getInstaWeek();
-  const lead = (week[day]||[]).find(e => e.id === id);
+/* ── EXCLUIR DO BACKLOG ── */
+function excluirInstaFila(id) {
+  const fila = getInstaFila();
+  const lead = fila.find(e => e.id === id);
   if (!lead) return;
-  lead.instagramUrl = url;
-  saveInstaWeek(week);
-  renderInstaDayList();
-  notify('✓ Link do Instagram salvo');
-}
-
-function instaEditarLink(id, day) {
-  const week = getInstaWeek();
-  const lead = (week[day]||[]).find(e => e.id === id);
-  if (!lead) return;
-  lead.instagramUrl = '';
-  saveInstaWeek(week);
-  renderInstaDayList();
+  abrirModalConfirm(
+    `Excluir <strong>${escHtml(lead.nome)}</strong> permanentemente?`,
+    () => {
+      saveInstaFila(getInstaFila().filter(e => e.id !== id));
+      renderInstagram(); updateBadges();
+      notify(`✕ ${lead.nome} excluído`);
+    }
+  );
 }
 
 /* ── STATUS ── */
@@ -6098,76 +6079,61 @@ function instaUpdateStatus(id, day, status) {
   lead.status = status;
   if (status === 'DM Enviada' && !lead.dmEnviadaEm) lead.dmEnviadaEm = todayStr();
   saveInstaWeek(week);
-  renderInstaDayList();
-  notify(`✓ Status: ${status}`);
+  renderInstaDia(document.getElementById('instaTabContent'), day);
+  notify(`✓ ${status}`);
 }
 
 /* ── LIMPAR DIA ── */
-function instaLimparDia() {
-  if (!instaActiveDay) return;
-  const week = getInstaWeek();
-  const leads = week[instaActiveDay] || [];
+function instaLimparDia(day) {
+  const week  = getInstaWeek();
+  const leads = week[day] || [];
   const naoContatados = leads.filter(e => !e.status || e.status === 'Não contatado');
   const outros = leads.filter(e => e.status && e.status !== 'Não contatado');
   const aviso = naoContatados.length
-    ? `<br><br><span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${naoContatados.length} lead${naoContatados.length>1?'s':''} "Não contatado" voltarão para a fila de atribuição. ${outros.length} com status retêm no histórico.</span>`
+    ? `<br><br><span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${naoContatados.length} "Não contatado" voltarão ao backlog. ${outros.length} com status ficam no histórico.</span>`
     : '';
-  abrirModalConfirm(
-    `Limpar todos os leads de <strong>${instaActiveDay}</strong>?${aviso}`,
-    () => {
-      const w = getInstaWeek();
-      // Leads com status vão para acompanhamento, "Não contatado" voltam para fila
-      const STATUS_INSTA_MENSAIS = ['DM Enviada','Respondeu','Não respondeu','Fechou','Recusou'];
-      const paraMes = (w[instaActiveDay]||[]).filter(e => STATUS_INSTA_MENSAIS.includes(e.status||''));
-      if (paraMes.length) migrarInstaParaMes(paraMes);
-
-      // "Não contatado" → volta para fila de atribuição instagram
-      const voltam = (w[instaActiveDay]||[]).filter(e => !e.status || e.status === 'Não contatado');
-      if (voltam.length) {
-        const filaAtual = getInstaFila();
-        const filaIds = new Set(filaAtual.map(f => f.id));
-        const novosNaFila = voltam
-          .filter(e => !filaIds.has(e.id))
-          .map(({ status, instagramUrl, atribuidoEm, dmEnviadaEm, ...base }) => ({ ...base, voltouEm: todayStr() }));
-        saveInstaFila([...filaAtual, ...novosNaFila]);
-      }
-
-      delete w[instaActiveDay];
-      saveInstaWeek(w);
-      renderInstagram();
-      renderAtribInstaFila();
-      updateBadges();
-      let msg = `✓ Dia ${instaActiveDay} limpo`;
-      if (voltam.length)  msg += ` · ${voltam.length} → fila de atribuição`;
-      if (paraMes.length) msg += ` · ${paraMes.length} → acompanhamento`;
-      notify(msg);
+  abrirModalConfirm(`Limpar todos os leads de <strong>${day}</strong>?${aviso}`, () => {
+    const w = getInstaWeek();
+    const STATUS_HIST = ['DM Enviada','Respondeu','Não respondeu','Fechou','Recusou'];
+    const paraMes = (w[day]||[]).filter(e => STATUS_HIST.includes(e.status||''));
+    if (paraMes.length) migrarInstaParaMes(paraMes);
+    const voltam = (w[day]||[]).filter(e => !e.status || e.status === 'Não contatado');
+    if (voltam.length) {
+      const filaAtual = getInstaFila();
+      const filaIds   = new Set(filaAtual.map(f => f.id));
+      const novos = voltam.filter(e => !filaIds.has(e.id))
+        .map(({ status, instagramUrl, atribuidoEm, dmEnviadaEm, ...base }) => ({ ...base, voltouEm: todayStr() }));
+      saveInstaFila([...filaAtual, ...novos]);
     }
-  );
+    delete w[day]; saveInstaWeek(w);
+    instaActiveTab = 'backlog';
+    renderInstagram(); renderAtribInstaFila(); updateBadges();
+    let msg = `✓ Dia ${day} limpo`;
+    if (voltam.length)  msg += ` · ${voltam.length} → backlog`;
+    if (paraMes.length) msg += ` · ${paraMes.length} → acompanhamento`;
+    notify(msg);
+  });
 }
 
-/* ── EXCLUIR LEAD INSTAGRAM ── */
+/* ── EXCLUIR LEAD DO DIA ── */
 function abrirModalExcluirInstaLead(id, day) {
   const week = getInstaWeek();
   const lead = (week[day]||[]).find(e => e.id === id);
   if (!lead) return;
   abrirModalConfirm(
-    `Excluir <strong>${escHtml(lead.nome)}</strong> permanentemente? Será removido da plataforma inteira e o site bloqueado.`,
+    `Excluir <strong>${escHtml(lead.nome)}</strong> permanentemente?`,
     () => {
-      // Remove da semana instagram
       const w = getInstaWeek();
       if (w[day]) { w[day] = w[day].filter(e => e.id !== id); saveInstaWeek(w); }
-      // Remove da fila
       saveInstaFila(getInstaFila().filter(e => e.id !== id));
-      // Bloqueia o site
       if (lead.site) addExcludedDomains([lead.site]);
-      renderInstagram();
-      updateBadges();
+      renderInstagram(); updateBadges();
       notify(`✕ ${lead.nome} excluído`);
     }
   );
 }
 
-/* ── VIRADA DE SEMANA: migrar para Acompanhamento Instagram ── */
+/* ── MIGRAR PARA ACOMPANHAMENTO ── */
 function migrarInstaParaMes(leads) {
   const data = getAcompData();
   const mk   = currentMonthKey();
