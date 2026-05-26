@@ -804,8 +804,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   <!-- ABA WHATSAPP -->
   <div id="atribPanelZap" style="flex:1;display:flex;flex-direction:column;min-height:0">
 
-    <!-- FORMULÁRIO INLINE NOVO LEAD ZAP (fixo no topo) -->
-    <div id="zapLeadForm" style="display:block;flex-shrink:0;margin-bottom:12px;background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:12px 14px">
+    <!-- FORMULÁRIO INLINE NOVO LEAD ZAP (fechado por padrão) -->
+    <div id="zapLeadForm" style="display:none;flex-shrink:0;margin-bottom:12px;background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:12px 14px">
       <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:0.1em;margin-bottom:10px;text-transform:uppercase">// novo lead manual</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input id="zapLeadNome" type="text" placeholder="Nome da empresa*"
@@ -842,6 +842,9 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         Aguardando atribuição
         <span id="atribTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
         <button onclick="selecionarTodos()" style="margin-left:8px;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer;transition:all 0.18s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Selecionar todos</button>
+        <button id="btnToggleZapForm" onclick="toggleAtribForm('zap')"
+          style="background:none;border:1px solid var(--accent-border);color:var(--accent);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 10px;cursor:pointer;transition:all 0.18s;margin-left:auto"
+          onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='none'">+ Novo lead</button>
       </div>
       <div style="margin-bottom:12px;flex-shrink:0">
         <input id="atribBusca" type="text" placeholder="🔍 Buscar por nome, site ou WhatsApp..."
@@ -858,13 +861,8 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 
   <!-- ABA INSTAGRAM -->
   <div id="atribPanelInsta" style="flex:1;display:none;flex-direction:column;min-height:0">
-    <!-- info de corte horário -->
-    <div id="atribInstaCorteInfo" style="flex-shrink:0;margin-bottom:10px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);display:flex;align-items:center;gap:8px">
-      <span id="atribInstaCorteLabel"></span>
-    </div>
-
-    <!-- FORMULÁRIO INLINE NOVO LEAD INSTAGRAM (fixo no topo) -->
-    <div style="display:block;flex-shrink:0;margin-bottom:12px;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.25);border-radius:10px;padding:12px 14px">
+    <!-- FORMULÁRIO INLINE NOVO LEAD INSTAGRAM (fechado por padrão) -->
+    <div id="instaLeadForm" style="display:none;flex-shrink:0;margin-bottom:12px;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.25);border-radius:10px;padding:12px 14px">
       <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--insta);letter-spacing:0.1em;margin-bottom:10px;text-transform:uppercase">// novo lead manual</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input id="instaLeadNome" type="text" placeholder="Nome da empresa*"
@@ -886,6 +884,9 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <div class="card-title" style="flex-shrink:0">
         Aguardando atribuição
         <span id="atribInstaFilaTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
+        <button id="btnToggleInstaForm" onclick="toggleAtribForm('insta')"
+          style="background:none;border:1px solid rgba(225,48,108,0.3);color:var(--insta);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 10px;cursor:pointer;transition:all 0.18s;margin-left:auto"
+          onmouseover="this.style.background='rgba(225,48,108,0.06)'" onmouseout="this.style.background='none'">+ Novo lead</button>
       </div>
       <div style="margin-bottom:10px;flex-shrink:0">
         <input id="atribInstaBusca" type="text" placeholder="🔍 Buscar por nome ou WhatsApp..."
@@ -914,11 +915,6 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 
   <!-- ABAS: Backlog + dias da semana -->
   <div id="instaTabBar" style="display:flex;gap:0;flex-shrink:0;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap"></div>
-
-  <!-- AVISO 19H (só aparece quando relevante) -->
-  <div id="instaCorteAviso" style="display:none;flex-shrink:0;margin-bottom:10px;background:rgba(240,164,41,0.07);border:1px solid rgba(240,164,41,0.25);border-radius:8px;padding:8px 14px;font-family:'DM Mono',monospace;font-size:9px;color:var(--warning)">
-    ⚠ Após 19:00 — leads inseridos agora vão para amanhã
-  </div>
 
   <!-- CONTEÚDO DA ABA ATIVA -->
   <div id="instaTabContent" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden"></div>
@@ -5446,6 +5442,7 @@ function salvarInstaLeadInline() {
   const nEl = document.getElementById('instaLeadNome'); if (nEl) nEl.value = '';
   const lEl = document.getElementById('instaLeadLink'); if (lEl) lEl.value = '';
   document.getElementById('instaLeadNome')?.focus();
+  toggleAtribForm('insta'); // fecha o form
   renderInstagram(); renderAtribInstaFila(); updateBadges();
   notify(`✓ ${capitalizeName(nome)} → Fila Instagram`);
 }
@@ -5479,6 +5476,7 @@ function salvarZapLeadManual() {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('zapLeadNome')?.focus();
+  toggleAtribForm('zap'); // fecha o form
   renderAtribuicao(); updateBadges(); updateAtribTabCounts();
   notify(`✓ ${capitalizeName(nome)} → Base de Atribuição`);
 }
@@ -5523,14 +5521,22 @@ function updateAtribTabCounts() {
 
 /* ── Info de corte horário ── */
 function updateAtribInstaCorteInfo() {
-  const el = document.getElementById('atribInstaCorteLabel');
-  if (!el) return;
-  const now  = new Date();
-  const hora = now.getHours();
-  if (hora >= INSTA_CUTOFF_HOUR) {
-    el.innerHTML = `<span style="color:var(--warning)">⚠ Após ${INSTA_CUTOFF_HOUR}:00 — leads inseridos agora vão para amanhã</span>`;
-  } else {
-    el.innerHTML = `<span style="color:var(--ok)">✓ Antes das ${INSTA_CUTOFF_HOUR}:00 — leads inseridos agora entram hoje</span>`;
+  // aviso removido — sem exibição de info de horário
+}
+
+function toggleAtribForm(aba) {
+  const formId = aba === 'zap' ? 'zapLeadForm' : 'instaLeadForm';
+  const btnId  = aba === 'zap' ? 'btnToggleZapForm' : 'btnToggleInstaForm';
+  const form   = document.getElementById(formId);
+  const btn    = document.getElementById(btnId);
+  if (!form) return;
+  const open = form.style.display !== 'none';
+  form.style.display = open ? 'none' : 'block';
+  if (btn) btn.textContent = open ? '+ Novo lead' : '✕ Fechar';
+  if (!open) {
+    // foca no primeiro input ao abrir
+    const first = form.querySelector('input');
+    if (first) setTimeout(() => first.focus(), 50);
   }
 }
 
@@ -5588,11 +5594,6 @@ function renderAtribInstaFila() {
   if (atribInstaPage >= totalPags) atribInstaPage = totalPags - 1;
   const page = fila.slice(atribInstaPage * ATRIB_INSTA_PG, (atribInstaPage + 1) * ATRIB_INSTA_PG);
 
-  // Determina dia destino para mostrar ao usuário
-  const diaDestino = instaDeterminarDiaDestino();
-  const hora = new Date().getHours();
-  const corteAtivo = hora >= INSTA_CUTOFF_HOUR;
-
   listEl.innerHTML = page.map(e => {
     const stars   = e.totalScore   ? `⭐ ${Number(e.totalScore).toFixed(1)}` : '';
     const reviews = e.reviewsCount ? `(${e.reviewsCount} av.)` : '';
@@ -5627,11 +5628,7 @@ function renderAtribInstaFila() {
             onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
         </div>
       </div>
-      <!-- dia destino -->
-      <div style="flex-shrink:0;text-align:right;font-family:'DM Mono',monospace;font-size:8px;padding-top:2px">
-        <span style="color:${corteAtivo?'var(--warning)':'var(--ok)'}">→ ${diaDestino}</span>
-        ${corteAtivo?'<div style="color:var(--muted);margin-top:2px">após 19h</div>':''}
-      </div>
+
     </div>`;
   }).join('');
 
@@ -5856,16 +5853,8 @@ function instaAlocarAuto(id) {
 
 function renderInstagram() {
   renderInstaTabBar();
-  renderInstaCorteAviso();
   renderInstaTabContent();
   updateBadges();
-}
-
-function renderInstaCorteAviso() {
-  const el = document.getElementById('instaCorteAviso');
-  if (!el) return;
-  const hora = new Date().getHours();
-  el.style.display = hora >= INSTA_CUTOFF_HOUR ? 'block' : 'none';
 }
 
 /* ── barra de abas ── */
