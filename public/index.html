@@ -5621,20 +5621,15 @@ function renderAtribInstaFila() {
             placeholder="Cole o link do Instagram..."
             style="flex:1;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.25);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;padding:5px 9px;outline:none;transition:border-color 0.18s"
             onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='rgba(225,48,108,0.25)'"
+            onpaste="setTimeout(()=>atribInstaConfirmarLink('${e.id}'),0)"
             onkeydown="if(event.key==='Enter') atribInstaConfirmarLink('${e.id}')"/>
-          <button onclick="atribInstaConfirmarLink('${e.id}')"
-            style="background:var(--insta);color:#fff;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:5px 13px;cursor:pointer;white-space:nowrap;flex-shrink:0">
-            ✓ Confirmar
-          </button>
           <button onclick="atribInstaExcluir('${e.id}')"
             style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-size:10px;padding:4px 7px;cursor:pointer;transition:all 0.18s;flex-shrink:0"
             onmouseover="this.style.borderColor='var(--error)';this.style.color='var(--error)';this.style.background='rgba(255,92,92,0.06)'"
             onmouseout="this.style.borderColor='transparent';this.style.color='var(--muted)';this.style.background='none'">✕</button>
         </div>
       </div>
-
-    </div>`;
-  }).join('');
+    </div>`; }).join('');
 
   // Paginação
   const pEl = document.getElementById('atribInstaPagination');
