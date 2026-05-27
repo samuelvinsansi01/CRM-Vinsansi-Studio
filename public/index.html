@@ -666,7 +666,7 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 <div class="panel" id="panel-importar">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Importar <span>Leads.</span></div>
-    <div class="page-sub">// cole o JSON da Apify · filtra automaticamente por site + telefone</div>
+    <div class="page-sub">// cole o JSON da Apify · empresas SEM site → Validação · COM site → já vistos</div>
   </div>
   <div class="import-grid" style="align-items:start">
     <div style="display:flex;flex-direction:column">
@@ -695,11 +695,46 @@ tr:hover td{background:rgba(255,255,255,0.015);}
         </div>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column">
+    <div style="display:flex;flex-direction:column;gap:16px">
       <div class="stretch-card">
         <div class="card-title" style="flex-shrink:0">Prévia <span id="previewCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
         <div id="importPreviewList" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// aguardando JSON...</div>
         <div id="importPreviewPagination"></div>
+      </div>
+      <!-- Card: Validação Manual -->
+      <div class="card">
+        <div class="card-title">Validação Manual</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:14px">// Insira um lead avulso ou valide um número pontualmente</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="field-group">
+            <label>Nome da empresa <span class="tag">OBRIGATÓRIO</span></label>
+            <input type="text" id="manualLeadNome" placeholder="Ex: Studio Silva"/>
+          </div>
+          <div class="field-group">
+            <label>Número WhatsApp</label>
+            <input type="text" id="manualLeadPhone" placeholder="+55 11 9 9999-9999"/>
+          </div>
+          <div class="field-group">
+            <label>Link Google Maps</label>
+            <input type="text" id="manualLeadGoogleUrl" placeholder="https://maps.google.com/..."/>
+          </div>
+          <div class="field-group">
+            <label>Link Instagram</label>
+            <input type="text" id="manualLeadInsta" placeholder="https://instagram.com/..."/>
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:6px">Chip para validação:</div>
+          <div id="manualValChipTabs" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"></div>
+          <div id="manualValResult" style="display:none;font-family:'DM Mono',monospace;font-size:9px;padding:6px 10px;border-radius:7px;margin-bottom:10px"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-ghost" style="flex:1" onclick="validarNumeroManual()">
+            <div class="spinner" id="manualValSpinner" style="border-top-color:var(--text2)"></div>
+            Validar número
+          </button>
+          <button class="btn btn-primary" style="flex:1" onclick="adicionarLeadManual()">✓ Adicionar lead</button>
+        </div>
       </div>
     </div>
   </div>
@@ -709,76 +744,47 @@ tr:hover td{background:rgba(255,255,255,0.015);}
 <div class="panel" id="panel-validacao">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Validação <span>de Leads.</span></div>
-    <div class="page-sub">// valide números · aprovados vão para Base de Atribuição</div>
+    <div class="page-sub">// triagem rápida · número válido → tag ZAP · sem número → tag INSTA · ambos vão para Atribuição</div>
   </div>
 
   <!-- ABAS DE RESULTADO -->
   <div style="display:flex;gap:5px;margin-bottom:16px;flex-shrink:0;border-bottom:1px solid var(--border);padding-bottom:12px">
     <button id="valResultTabPendentes" class="val-result-tab active" onclick="setValResultTab('pendentes')"
       style="padding:6px 14px;border:1px solid var(--accent-border);border-radius:8px;background:var(--accent-dim);color:var(--accent);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
-      📋 Aguardando / Inválidos
+      📋 Aguardando Validação
       <span id="valCountSemZap" style="background:rgba(255,92,92,0.15);border:1px solid rgba(255,92,92,0.3);color:var(--error);padding:1px 6px;border-radius:100px;font-size:8px">0</span>
     </button>
     <button id="valResultTabValidados" class="val-result-tab" onclick="setValResultTab('validados')"
       style="padding:6px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
-      ✅ Número Validado
+      ✅ Número Validado (ZAP)
       <span id="valCountComZap" style="background:rgba(78,203,113,0.1);border:1px solid rgba(78,203,113,0.3);color:var(--ok);padding:1px 6px;border-radius:100px;font-size:8px">0</span>
     </button>
   </div>
 
-  <!-- COM SITE -->
+  <!-- PAINEL PRINCIPAL -->
   <div class="val-sub-panel active stretch-container" id="valPanelComSite">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;width:100%">
-      <div class="stretch-card">
-        <div class="card-title" style="flex-shrink:0">Empresas com site — validar número WhatsApp</div>
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;flex-shrink:0">
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Chip para validação:</div>
-          <div id="valChipTabs" class="chip-tabs"></div>
-          <div id="valMantidosBadge" title="Empresas que serão mantidas após 'Manter apenas estes' ou 'Limpar página'">
-            <span class="mantidos-dot"></span>
-            <span id="valMantidosCount">0</span> mantidos
-          </div>
-          <button class="btn btn-primary" style="font-size:10px;padding:7px 14px" onclick="validarTodosNumeros()">
-            <div class="spinner" id="valSpinner" style="border-top-color:#0a0a0d"></div>
-            Validar todos os números
-          </button>
-        </div>
-        <div id="valComSiteList" class="stretch-list" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// nenhuma empresa aguardando validação</div>
-        <div id="valPagination"></div>
-      </div>
-      <!-- CARD VALIDADOR DE LINKS -->
-      <div class="card" id="cardValidadorLinks">
-        <div class="card-title">Validador de links — selecionar sites</div>
-        <!-- SELETOR DE ABA ALVO -->
-        <div style="display:flex;gap:6px;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px">
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:flex;align-items:center;padding:0 4px;white-space:nowrap">Limpar da aba:</div>
-          <button id="validadorAbaBtn0" onclick="setValidadorAba('pendentes')"
-            style="flex:1;padding:5px 8px;border:1px solid var(--accent-border);border-radius:6px;background:var(--accent-dim);color:var(--accent);font-family:'DM Mono',monospace;font-size:8px;cursor:pointer;transition:all 0.18s;white-space:nowrap">
-            📋 Aguardando / Inválidos
-          </button>
-          <button id="validadorAbaBtn1" onclick="setValidadorAba('validados')"
-            style="flex:1;padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:8px;cursor:pointer;transition:all 0.18s;white-space:nowrap">
-            ✅ Número Validado
-          </button>
-        </div>
-        <div id="validadorAbaInfo" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:14px">
-          Cole os links que achar bons. Os sites <strong style="color:var(--text2)">não colados</strong> serão removidos apenas da aba <strong style="color:var(--accent)">Aguardando / Inválidos</strong>.
-        </div>
-        <div style="margin-bottom:10px">
-          <label>Colar links (um por linha)</label>
-          <textarea id="validadorLinksInput" placeholder="https://empresa1.com.br&#10;https://empresa2.com.br&#10;..." style="min-height:120px;font-size:10px" oninput="previewValidadorLinks()"></textarea>
-        </div>
-        <div id="validadorLinksPreview" style="margin-bottom:12px"></div>
-        <div class="btn-row">
-          <button class="btn btn-primary" style="flex:1" onclick="confirmarValidadorLinks()">✓ Manter apenas estes</button>
-          <button class="btn btn-ghost" onclick="limparPaginaValidador()" title="Remove da página atual apenas os itens que não estão nos links colados">🗑 Limpar página</button>
-          <button class="btn btn-ghost" onclick="document.getElementById('validadorLinksInput').value='';previewValidadorLinks();updateMantidosBadge(0,false)">Limpar</button>
+    <div class="stretch-card" style="width:100%">
+      <div class="card-title" style="flex-shrink:0">Leads sem site — validar número WhatsApp
+        <div id="valMantidosBadge" title="Empresas que serão mantidas" style="display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;border-radius:100px;border:1px solid rgba(91,184,245,0.35);background:rgba(91,184,245,0.07);color:#5bb8f5;opacity:0;transform:scale(0.9);transition:opacity 0.22s,transform 0.22s;white-space:nowrap;pointer-events:none">
+          <span class="mantidos-dot" style="width:5px;height:5px;border-radius:50%;background:#5bb8f5;flex-shrink:0"></span>
+          <span id="valMantidosCount">0</span> mantidos
         </div>
       </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;flex-shrink:0">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Chip para validação:</div>
+        <div id="valChipTabs" class="chip-tabs"></div>
+        <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;margin-left:auto" onclick="validarTodosNumeros()">
+          <div class="spinner" id="valSpinner" style="border-top-color:#0a0a0d"></div>
+          Validar todos
+        </button>
+        <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="aprovarTodosParaAtribuicao()">
+          → Enviar todos para Atribuição
+        </button>
+      </div>
+      <div id="valComSiteList" class="stretch-list" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// nenhuma empresa aguardando validação</div>
+      <div id="valPagination"></div>
     </div>
   </div>
-
-
 </div>
 
 <!-- ── ATRIBUIÇÃO ── -->
@@ -810,10 +816,6 @@ tr:hover td{background:rgba(255,255,255,0.015);}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <input id="zapLeadNome" type="text" placeholder="Nome da empresa*"
           style="flex:2;min-width:160px;background:var(--bg);border:1px solid var(--accent-border);border-radius:7px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:8px 11px;outline:none;transition:border-color 0.18s"
-          onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--accent-border)'"
-          onkeydown="if(event.key==='Enter')document.getElementById('zapLeadSite').focus()"/>
-        <input id="zapLeadSite" type="text" placeholder="Site (opcional)"
-          style="flex:2;min-width:140px;background:var(--bg);border:1px solid var(--accent-border);border-radius:7px;color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:8px 11px;outline:none;transition:border-color 0.18s"
           onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--accent-border)'"
           onkeydown="if(event.key==='Enter')document.getElementById('zapLeadWpp').focus()"/>
         <input id="zapLeadWpp" type="text" placeholder="WhatsApp (opcional)"
@@ -1689,6 +1691,8 @@ function renderAtribuicao() {
     const sel = atribSelecionados.has(lead.id);
     const dias = diasEmEspera(lead.validadoEm || lead.criadoEm);
     const voltou = lead.voltouDaSemana;
+    const canal = lead.canal || 'zap'; // legado sem canal assume zap
+    const isInsta = canal === 'insta';
 
     let ageBadge = '';
     if (dias >= 2) {
@@ -1702,20 +1706,58 @@ function renderAtribuicao() {
       voltouBadge = `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--text2);background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px">↩ voltou da semana</span>`;
     }
 
+    const canalBadge = isInsta
+      ? `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--insta);background:rgba(225,48,108,0.08);border:1px solid rgba(225,48,108,0.3);border-radius:4px;padding:2px 7px">📸 INSTA</span>`
+      : `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--ok);background:rgba(78,203,113,0.08);border:1px solid rgba(78,203,113,0.3);border-radius:4px;padding:2px 7px">💬 ZAP</span>`;
+
     const cardBorder = sel
       ? 'border-color:var(--accent);background:var(--accent-dim)'
-      : dias >= 1 ? 'border-color:rgba(240,164,41,0.3)' : '';
+      : isInsta ? 'border-color:rgba(225,48,108,0.2)' : dias >= 1 ? 'border-color:rgba(240,164,41,0.3)' : '';
+
+    // Ações específicas por canal
+    let actionsHtml = '';
+    if (isInsta) {
+      // Lead INSTA: campo para colar Instagram + botão → Fila Insta
+      const temInsta = !!(lead.instagram);
+      actionsHtml = `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end;min-width:160px">
+        <div style="display:flex;gap:5px;align-items:center;width:100%">
+          <input id="atrib-insta-input-${lead.id}" type="url" placeholder="instagram.com/empresa" value="${escHtml(lead.instagram||'')}"
+            style="flex:1;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.25);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;padding:5px 8px;outline:none;width:0"
+            onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='rgba(225,48,108,0.25)'"
+            onkeydown="if(event.key==='Enter')mandarParaFilaInsta('${lead.id}')"/>
+          <button onclick="atribPromoverParaZap('${lead.id}')" title="Inserir número e promover para ZAP"
+            style="background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-size:9px;padding:5px 7px;cursor:pointer;transition:all 0.18s;flex-shrink:0"
+            onmouseover="this.style.borderColor='var(--ok)';this.style.color='var(--ok)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">✏️</button>
+        </div>
+        <button onclick="mandarParaFilaInsta('${lead.id}')"
+          style="background:var(--insta);color:#fff;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:5px 11px;cursor:pointer;white-space:nowrap;transition:opacity 0.18s;width:100%;opacity:${temInsta?'1':'0.5'}"
+          onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${temInsta?'1':'0.5'}'">
+          → Fila Insta
+        </button>
+        <button class="del-btn" onclick="removerDaAtribuicao('${lead.id}')">✕</button>
+      </div>`;
+    } else {
+      // Lead ZAP: botão → Fila Zap (Backlog)
+      actionsHtml = `<div class="empresa-actions" style="flex-direction:column;gap:5px;align-items:flex-end">
+        <button onclick="mandarParaBacklogZap('${lead.id}')"
+          style="background:var(--accent);color:#0a0a0d;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:5px 12px;cursor:pointer;white-space:nowrap;transition:opacity 0.18s"
+          onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+          → Fila Zap
+        </button>
+        <button class="del-btn" onclick="removerDaAtribuicao('${lead.id}')">✕</button>
+      </div>`;
+    }
 
     return `<div class="empresa-card" id="atrib-card-${lead.id}" style="${cardBorder}">
-      <!-- checkbox de seleção -->
-      <div style="flex-shrink:0;margin-right:4px">
+      <!-- checkbox de seleção (só ZAP) -->
+      ${!isInsta ? `<div style="flex-shrink:0;margin-right:4px">
         <div onclick="toggleAtribSel('${lead.id}')"
           style="width:18px;height:18px;border-radius:4px;border:2px solid ${sel?'var(--accent)':'var(--border2)'};
           background:${sel?'var(--accent)':'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;
           transition:all 0.15s;flex-shrink:0">
           ${sel?`<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="#0a0a0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`:''}
         </div>
-      </div>
+      </div>` : ''}
       <div class="empresa-info">
         <div class="empresa-nome">
           ${lead.googleUrl
@@ -1723,41 +1765,18 @@ function renderAtribuicao() {
             : escHtml(lead.nome)}
         </div>
         <div class="empresa-meta">
-          ${lead.site ? `<div class="empresa-site"><a href="${escHtml(lead.site)}" target="_blank">${escHtml(lead.site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></div>` : ''}
-          ${lead.whatsapp ? `<div class="empresa-phone">📱 ${escHtml(lead.whatsapp)}</div>` : ''}
+          ${canalBadge}
+          ${!isInsta && lead.whatsapp ? `<div class="empresa-phone">📱 ${escHtml(lead.whatsapp)}</div>` : ''}
           ${ageBadge}
           ${voltouBadge}
         </div>
       </div>
-      <div class="empresa-actions" style="flex-direction:column;gap:5px;align-items:flex-end">
-        <!-- Atribuição individual: dropdown de dias -->
-        <div style="position:relative">
-          <button onclick="toggleAtribDropdown('${lead.id}')"
-            style="background:var(--surface2);border:1px solid var(--border2);color:var(--text2);border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;padding:5px 10px;cursor:pointer;white-space:nowrap;transition:all 0.18s"
-            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
-            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">
-            Atribuir ↓
-          </button>
-          <div id="atrib-dd-${lead.id}" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px;z-index:50;min-width:140px;box-shadow:0 8px 24px rgba(0,0,0,0.4)">
-            ${weekDays.map(day => {
-              const data = ensureWeekData();
-              const count = (data.days[day]||[]).length;
-              return `<div onclick="atribuirIndividual('${lead.id}','${day}')"
-                style="padding:6px 10px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px"
-                onmouseover="this.style.background='var(--accent-dim)';this.style.color='var(--accent)'"
-                onmouseout="this.style.background='transparent';this.style.color='var(--text2)'">
-                <span>${dayLabel(day)}${day===today?' ●':''}</span>
-                <span style="color:var(--muted);font-size:8px">${count}/${getDailyLimit()}</span>
-              </div>`;
-            }).join('')}
-          </div>
-        </div>
-        <button class="del-btn" onclick="removerDaAtribuicao('${lead.id}')">✕</button>
-      </div>
+      ${actionsHtml}
     </div>`;
   }).join('') + '</div>';
   renderPagination('atribPagination', atribPage, totalAtribPages, totalAtrib, ATRIB_PG, 'goAtribPage', 'changeAtribPgSize');
 }
+
 
 function toggleAtribSel(id) {
   if (atribSelecionados.has(id)) atribSelecionados.delete(id);
@@ -1866,7 +1885,199 @@ function removerDaAtribuicao(id) {
   );
 }
 
+/* ════════════════════════════
+   BACKLOG FILA ZAP
+════════════════════════════ */
+const ZAP_BACKLOG_KEY = 'vin_zap_backlog';
+function getZapBacklog()   { try { return JSON.parse(localStorage.getItem(ZAP_BACKLOG_KEY)||'[]'); } catch { return []; } }
+function saveZapBacklog(d) { localStorage.setItem(ZAP_BACKLOG_KEY, JSON.stringify(d)); }
 
+function mandarParaBacklogZap(id) {
+  const atrib = getAtribuicaoData();
+  const lead  = atrib.find(a => a.id === id);
+  if (!lead) return;
+
+  const backlog = getZapBacklog();
+  if (backlog.find(b => b.id === id)) { notify('// já está no Backlog ZAP','warn'); return; }
+
+  backlog.push({
+    id: lead.id, nome: lead.nome, whatsapp: lead.whatsapp || '',
+    instagram: lead.instagram || '', googleUrl: lead.googleUrl || '',
+    canal: 'zap', criadoEm: lead.criadoEm || todayStr(),
+    entradaBacklogEm: todayStr(),
+  });
+  saveZapBacklog(backlog);
+  saveAtribuicaoData(atrib.filter(a => a.id !== id));
+  atribSelecionados.delete(id);
+  renderAtribuicao(); updateBadges();
+  notify(`✓ ${lead.nome} → Backlog Fila Zap`);
+}
+
+
+
+/* ════════════════════════════
+   MANUAL LEAD (Importar panel)
+════════════════════════════ */
+let manualValChipId = null;
+
+function renderManualValChips() {
+  const chips = getChips();
+  const el = document.getElementById('manualValChipTabs');
+  if (!el) return;
+  if (!chips.length) { el.innerHTML = '<span style="font-size:9px;color:var(--muted)">// nenhum chip configurado</span>'; return; }
+  if (!manualValChipId) manualValChipId = chips[0].id;
+  el.innerHTML = chips.map(c => `
+    <div onclick="manualValChipId='${c.id}';renderManualValChips()"
+      style="padding:4px 10px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;border:1px solid ${manualValChipId===c.id?'var(--accent)':'var(--border2)'};background:${manualValChipId===c.id?'var(--accent-dim)':'var(--bg)'};color:${manualValChipId===c.id?'var(--accent)':'var(--muted)'};transition:all 0.18s">
+      ${escHtml(c.nome)}
+    </div>`).join('');
+}
+
+async function validarNumeroManual() {
+  const phone = (document.getElementById('manualLeadPhone')?.value || '').trim();
+  const resultEl = document.getElementById('manualValResult');
+  const spinnerEl = document.getElementById('manualValSpinner');
+  if (!phone) { notify('// insira um número para validar','warn'); return; }
+  const chip = getChipById(manualValChipId) || getChips()[0];
+  if (!chip) { notify('// nenhum chip configurado','warn'); return; }
+  const numero = normalizePhone(phone);
+  if (!numero || numero.length < 10) { notify('// número inválido','err'); return; }
+  const numFull = numero.startsWith('55') ? numero : '55' + numero;
+  if (spinnerEl) spinnerEl.style.display = 'inline-block';
+  if (resultEl) resultEl.style.display = 'none';
+  try {
+    const res = await fetch(`${chip.url}/chat/whatsappNumbers/${chip.instance}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': chip.key },
+      body: JSON.stringify({ numbers: [numFull] })
+    });
+    const data = await res.json();
+    const r = Array.isArray(data) ? data[0] : data;
+    const valido = r?.exists === true;
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      resultEl.style.background = valido ? 'rgba(78,203,113,0.1)' : 'rgba(255,92,92,0.1)';
+      resultEl.style.border = `1px solid ${valido ? 'rgba(78,203,113,0.3)' : 'rgba(255,92,92,0.3)'}`;
+      resultEl.style.color = valido ? 'var(--ok)' : 'var(--error)';
+      resultEl.textContent = valido ? '✓ número válido no WhatsApp' : '✗ número não encontrado no WhatsApp';
+    }
+  } catch(e) {
+    notify('// erro ao validar número','err');
+  } finally {
+    if (spinnerEl) spinnerEl.style.display = 'none';
+  }
+}
+
+function adicionarLeadManual() {
+  const nome = (document.getElementById('manualLeadNome')?.value || '').trim();
+  if (!nome) { notify('// nome da empresa é obrigatório','warn'); return; }
+  const phone = (document.getElementById('manualLeadPhone')?.value || '').trim();
+  const googleUrl = (document.getElementById('manualLeadGoogleUrl')?.value || '').trim();
+  const instagram = (document.getElementById('manualLeadInsta')?.value || '').trim();
+  const lead = {
+    id: 'manual_' + Date.now(),
+    nome, whatsapp: phone ? normalizePhone(phone) : '',
+    googleUrl, instagram,
+    site: '', ramoId: null,
+    canal: phone ? 'zap' : 'insta',
+    criadoEm: todayStr(),
+  };
+  const atrib = getAtribuicaoData();
+  atrib.push(lead);
+  saveAtribuicaoData(atrib);
+  // Limpa os campos
+  ['manualLeadNome','manualLeadPhone','manualLeadGoogleUrl','manualLeadInsta'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const resultEl = document.getElementById('manualValResult');
+  if (resultEl) resultEl.style.display = 'none';
+  renderAtribuicao(); updateBadges();
+  notify(`✓ ${nome} → Atribuição`);
+}
+
+/* ════════════════════════════
+   ATRIBUIÇÃO — funções INSTA
+════════════════════════════ */
+function mandarParaFilaInsta(id) {
+  const atrib = getAtribuicaoData();
+  const lead = atrib.find(a => a.id === id);
+  if (!lead) return;
+  const inputEl = document.getElementById(`atrib-insta-input-${id}`);
+  if (inputEl) lead.instagram = inputEl.value.trim() || lead.instagram || '';
+  const fila = getInstaFila();
+  if (fila.find(f => f.id === id)) { notify('// já está na Fila Insta','warn'); return; }
+  fila.push({
+    id: lead.id, nome: lead.nome, instagram: lead.instagram || '',
+    googleUrl: lead.googleUrl || '', whatsapp: lead.whatsapp || '',
+    status: 'pendente', criadoEm: lead.criadoEm || todayStr(),
+  });
+  saveInstaFila(fila);
+  saveAtribuicaoData(atrib.filter(a => a.id !== id));
+  atribSelecionados.delete(id);
+  renderAtribuicao(); updateBadges();
+  notify(`✓ ${lead.nome} → Fila Insta`);
+}
+
+function atribPromoverParaZap(id) {
+  const atrib = getAtribuicaoData();
+  const lead = atrib.find(a => a.id === id);
+  if (!lead) return;
+  const inputEl = document.getElementById(`atrib-insta-input-${id}`);
+  const novoNum = inputEl ? inputEl.value.trim() : '';
+  if (!novoNum) { notify('// insira um número WhatsApp no campo e tente novamente','warn'); return; }
+  lead.whatsapp = normalizePhone(novoNum);
+  lead.canal = 'zap';
+  saveAtribuicaoData(atrib);
+  renderAtribuicao();
+  notify(`✓ ${lead.nome} promovido para ZAP`);
+}
+
+/* ════════════════════════════
+   FILA ZAP — RENDER BACKLOG
+════════════════════════════ */
+function renderZapBacklogPanel() {
+  // Oculta elementos de dia normal, mostra conteúdo de backlog no disparoEmpresasList
+  const statusEl = document.getElementById('disparoStatusTabs');
+  const statsEl  = document.getElementById('disparoStats');
+  const listEl   = document.getElementById('disparoEmpresasList');
+
+  if (statusEl) statusEl.innerHTML = '';
+  if (statsEl)  statsEl.innerHTML  = '';
+  if (!listEl)  return;
+
+  const backlog = getZapBacklog();
+  if (!backlog.length) {
+    listEl.innerHTML = `<div class="fila-empty">// Backlog vazio — mande leads da Atribuição</div>`;
+    return;
+  }
+
+  listEl.innerHTML = backlog.map(item => `
+    <div class="empresa-card" id="backlog-card-${item.id}" style="display:flex;align-items:center;gap:12px;padding:12px 14px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${item.googleUrl ? `<a href="${escHtml(item.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(item.nome)}</a>` : escHtml(item.nome)}
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px">
+          ${item.whatsapp ? `📱 ${escHtml(item.whatsapp)}` : '// sem número'} · entrada: ${escHtml(item.entradaBacklogEm||'')}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        ${item.whatsapp ? `
+          <a href="https://wa.me/${item.whatsapp.replace(/\D/g,'')}" target="_blank"
+            style="background:var(--ok);color:#fff;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:5px 11px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center">
+            📲 Abrir ZAP
+          </a>` : ''}
+        <button onclick="removerDoBacklogZap('${item.id}')" class="del-btn" title="Remover do backlog">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function removerDoBacklogZap(id) {
+  const backlog = getZapBacklog().filter(b => b.id !== id);
+  saveZapBacklog(backlog);
+  renderFilaZap(); updateBadges();
+  notify('// removido do backlog');
+}
 
 /* ════════════════════════════
    MODAL LIMPAR EXCLUÍDOS
@@ -2584,6 +2795,7 @@ function removerExcluido(domain) {
 function renderImportarPanel() {
   renderRamoSelect();
   importPreview();
+  renderManualValChips();
 }
 
 function parseApifyJson(raw) {
@@ -2605,37 +2817,33 @@ function importPreview() {
   const total     = arr.length;
   const fora      = arr.filter(i => !isRamoMatch(i));
   const doRamo    = arr.filter(isRamoMatch);
-  const semSite   = doRamo.filter(i => !hasValidSiteRaw(i));
-  const siteBloq  = doRamo.filter(i => hasValidSiteRaw(i) && (isSiteBlocklisted(extractSite(i)) || isExcludedDomain(extractSite(i))));
-  const comSite   = doRamo.filter(i => hasValidSiteRaw(i) && !isSiteBlocklisted(extractSite(i)) && !isExcludedDomain(extractSite(i)));
-  const semTel    = comSite.filter(i => !hasValidPhone(i));
-  const validos   = comSite.filter(hasValidPhone);
+  // Novo critério: SEM site = válido → Validação; COM site = já-vistos
+  const comSiteRamo   = doRamo.filter(i => hasValidSiteRaw(i) && !isSiteBlocklisted(extractSite(i)) && !isExcludedDomain(extractSite(i)));
+  const comSiteJaVisto= doRamo.filter(i => hasValidSiteRaw(i) && (isSiteBlocklisted(extractSite(i)) || isExcludedDomain(extractSite(i))));
+  const semSiteRamo   = doRamo.filter(i => !hasValidSiteRaw(i));
+  const semTel        = semSiteRamo.filter(i => !hasValidPhone(i));
+  const validos       = semSiteRamo.filter(hasValidPhone);
 
   // deduplication check
   const data = ensureWeekData();
   const valFila = getValData();
   const existPhones = new Set([...getAllPhones(data), ...valFila.map(v => normalizePhone(v.whatsapp||'')).filter(Boolean)]);
-  const existSites  = new Set([...getAllSites(data),  ...valFila.map(v => extractDomain(v.site||'')).filter(Boolean)]);
   const novos = validos.filter(i => {
     const ph = normalizePhone(extractPhone(i));
-    const si = extractDomain(extractSite(i));
-    return !existPhones.has(ph) && !existSites.has(si);
+    return !existPhones.has(ph);
   });
-  const semSiteRamo = doRamo.filter(i => !hasValidSiteRaw(i) || isSiteBlocklisted(extractSite(i)));
 
   sumEl.innerHTML = `
     <span class="acc">${total}</span> total ·
     <span class="err">${fora.length}</span> fora do ramo ·
-    <span class="warn">${semSite.length}</span> sem site ·
-    <span class="err">${siteBloq.length}</span> site bloqueado ·
+    <span class="err">${comSiteRamo.length + comSiteJaVisto.length}</span> com site → já vistos ·
     <span class="warn">${semTel.length}</span> sem telefone ·
-    <span class="acc">${validos.length}</span> válidos ·
-    <span class="acc">${novos.length}</span> novos ·
-    <span class="insta" style="color:var(--insta)">${semSiteRamo.length}</span> → Instagram
+    <span class="acc">${validos.length}</span> sem site ·
+    <span class="acc">${novos.length}</span> novos → Validação
   `;
-  countEl.textContent = `· ${validos.length} válidos`;
+  countEl.textContent = `· ${validos.length} sem site`;
 
-  if (!validos.length && !semSiteRamo.length) { listEl.innerHTML='<span style="color:var(--muted)">// nenhuma empresa válida encontrada</span>'; document.getElementById('importPreviewPagination').innerHTML=''; return; }
+  if (!validos.length) { listEl.innerHTML='<span style="color:var(--muted)">// nenhuma empresa sem site encontrada</span>'; document.getElementById('importPreviewPagination').innerHTML=''; return; }
 
   const totalPrev = validos.length;
   const totalPrevPages = Math.max(1, Math.ceil(totalPrev / IMPORT_PG));
@@ -2643,23 +2851,26 @@ function importPreview() {
   const previewItems = validos.slice((importPage-1)*IMPORT_PG, importPage*IMPORT_PG);
 
   listEl.innerHTML = '<div class="ext-list">' + previewItems.map(item => {
-    const nome  = extractName(item);
-    const site  = extractSite(item);
-    const phone = extractPhone(item);
-    const cat   = extractCategory(item);
+    const nome     = extractName(item);
+    const phone    = extractPhone(item);
+    const cat      = extractCategory(item);
+    const googleUrl= extractGoogleUrl(item);
     const ph = normalizePhone(phone);
-    const si = extractDomain(site);
-    const isDup = existPhones.has(ph) || existSites.has(si);
+    const isDup = existPhones.has(ph);
+    const score   = item.totalScore;
+    const reviews = item.reviewsCount;
+    const scoreStr = score ? `⭐ ${Number(score).toFixed(1)}` : '';
+    const revStr   = reviews ? `(${reviews})` : '';
     return `<div class="empresa-card" style="${isDup?'opacity:0.45':''}">
       <div class="empresa-info">
-        <div class="empresa-nome">${escHtml(nome)}</div>
+        <div class="empresa-nome">${googleUrl?`<a href="${escHtml(googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(nome)}</a>`:escHtml(nome)}</div>
         <div class="empresa-meta">
-          <div class="empresa-site"><a href="${escHtml(site)}" target="_blank">${escHtml(site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></div>
           <div class="empresa-phone">📱 ${escHtml(phone)}</div>
           ${cat?`<span class="q-badge ok" style="font-size:7px">${escHtml(cat)}</span>`:''}
+          ${scoreStr?`<span class="q-badge info" style="font-size:7px">${scoreStr} ${revStr}</span>`:''}
         </div>
       </div>
-      ${isDup?'<span class="q-badge warn">duplicada</span>':'<span class="q-badge ok">✓ válida</span>'}
+      ${isDup?'<span class="q-badge warn">duplicada</span>':'<span class="q-badge ok">✓ sem site</span>'}
     </div>`;
   }).join('') + '</div>';
   renderPagination('importPreviewPagination', importPage, totalPrevPages, totalPrev, IMPORT_PG, 'goImportPage', 'changeImportPgSize');
@@ -2680,9 +2891,8 @@ function importarLeads() {
   const instaFila = getInstaFila();
   const existInstaPhones = new Set(instaFila.map(v => normalizePhone(v.whatsapp||'')).filter(Boolean));
 
-  let addedComSite = 0, addedInsta = 0, skipped = 0;
+  let addedSemSite = 0, addedJaVistos = 0, skipped = 0;
   const novaValFila = [...valFila];
-  const novaInstaFila = [...instaFila];
 
   arr.filter(isRamoMatch).forEach(item => {
     const nome  = extractName(item);
@@ -2691,55 +2901,37 @@ function importarLeads() {
     if (!nome) { skipped++; return; }
 
     const ph = normalizePhone(phone);
-    const si = extractDomain(site);
-
-    const temSite = hasValidSiteRaw(item) && !isSiteBlocklisted(site) && !isExcludedDomain(site);
+    const temSite = hasValidSiteRaw(item) && !isSiteBlocklisted(site);
     const temTel  = hasValidPhone(item);
 
-    // ── rota com-site → Validação ──
-    if (temSite && temTel) {
-      if ((ph && existPhones.has(ph)) || (si && existSites.has(si))) { skipped++; return; }
-      const entry = {
-        id: genId(), nome, site,
-        whatsapp: phone, instagram: extractInstagram(item),
-        googleUrl: extractGoogleUrl(item),
-        categoria: extractCategory(item),
-        ramoId: activeRamoId || null,
-        temSite: true, temTel: true,
-        numStatus: 'pendente',
-        importadoEm: todayStr(),
-        diaDestino: importTargetDay,
-      };
-      if (ph) existPhones.add(ph);
-      if (si) existSites.add(si);
-      novaValFila.push({ ...entry, tipo: 'com-site' });
-      addedComSite++;
+    // ── COM site → já-vistos (bloqueado permanentemente) ──
+    if (temSite) {
+      const si = extractDomain(site);
+      if (si && !isExcludedDomain(site)) addExcludedDomains([site]);
+      addedJaVistos++;
       return;
     }
 
-    // ── rota sem-site → Instagram ──
-    if (temTel && !temSite) {
-      // filtro de qualidade: mínimo 10 avaliações e nota ≥ 4.0
-      const reviews = item.reviewsCount;
-      const score   = item.totalScore;
-      const reviewsOk = reviews !== null && reviews !== undefined && Number(reviews) >= 10;
-      const scoreOk   = score   !== null && score   !== undefined && Number(score)   >= 4.0;
-      if (!reviewsOk || !scoreOk) { skipped++; return; }
-      // dedup por telefone
-      if (ph && existInstaPhones.has(ph)) { skipped++; return; }
+    // ── SEM site + com telefone → Validação ──
+    if (!temSite && temTel) {
+      if (ph && existPhones.has(ph)) { skipped++; return; }
       const entry = {
         id: genId(), nome,
         whatsapp: phone,
         instagram: extractInstagram(item),
         googleUrl: extractGoogleUrl(item),
         categoria: extractCategory(item),
-        reviewsCount: Number(reviews),
-        totalScore: Number(score),
+        ramoId: activeRamoId || null,
+        reviewsCount: item.reviewsCount != null ? Number(item.reviewsCount) : null,
+        totalScore:   item.totalScore   != null ? Number(item.totalScore)   : null,
+        numStatus: 'pendente',
+        tipo: 'sem-site',
+        canal: 'pendente', // será definido após validação do número
         importadoEm: todayStr(),
       };
-      if (ph) existInstaPhones.add(ph);
-      novaInstaFila.push(entry);
-      addedInsta++;
+      if (ph) existPhones.add(ph);
+      novaValFila.push(entry);
+      addedSemSite++;
       return;
     }
 
@@ -2747,14 +2939,13 @@ function importarLeads() {
   });
 
   saveValData(novaValFila);
-  saveInstaFila(novaInstaFila);
   updateBadges();
   importPreview();
 
-  let msg = `✓ ${addedComSite} com site → Validação`;
-  if (addedInsta) msg += ` · ${addedInsta} sem site → Instagram`;
+  let msg = `✓ ${addedSemSite} sem site → Validação`;
+  if (addedJaVistos) msg += ` · ${addedJaVistos} com site → já vistos`;
   if (skipped)    msg += ` · ${skipped} ignoradas`;
-  notify(msg, (addedComSite + addedInsta) > 0 ? '' : 'warn');
+  notify(msg, addedSemSite > 0 ? '' : 'warn');
   document.getElementById('importJsonInput').value = '';
 }
 
@@ -2813,7 +3004,8 @@ function setValidadorAba(aba) {
 
 function renderValidacao() {
   const val = getValData();
-  const comSite = val.filter(v => v.tipo === 'com-site');
+  // Suporta tanto 'sem-site' (novo fluxo) quanto 'com-site' (legado) — todos entram na validação
+  const comSite = val.filter(v => v.tipo === 'sem-site' || v.tipo === 'com-site' || !v.tipo);
 
   const semZap = comSite.filter(v => v.numStatus !== 'valido');
   const comZap = comSite.filter(v => v.numStatus === 'valido');
@@ -2968,7 +3160,7 @@ async function validarTodosNumeros() {
   const chip = getChipById(activeChipId);
   if (!chip) { notify('// selecione um chip primeiro','warn'); return; }
   const val = getValData();
-  const pendentes = val.filter(v => v.tipo==='com-site' && v.numStatus==='pendente');
+  const pendentes = val.filter(v => (v.tipo==='sem-site' || v.tipo==='com-site' || !v.tipo) && v.numStatus==='pendente');
   if (!pendentes.length) { notify('// nenhum número pendente','warn'); return; }
 
   document.getElementById('valSpinner').style.display = 'block';
@@ -3268,8 +3460,9 @@ function aprovarParaFila(id) {
   const atrib = getAtribuicaoData();
   if (atrib.find(a => a.id === v.id)) { notify('// já está na Base de Atribuição','warn'); return; }
   atrib.push({
-    id: v.id, nome: v.nome, site: v.site, whatsapp: v.whatsapp,
+    id: v.id, nome: v.nome, site: v.site || '', whatsapp: v.whatsapp,
     instagram: v.instagram, googleUrl: v.googleUrl,
+    canal: 'zap', // número validado via WhatsApp
     status: 'Não enviada', criadoEm: v.importadoEm || todayStr(),
     validadoEm: todayStr(), diaDestino: null,
   });
@@ -3290,18 +3483,72 @@ function aprovarParaInsta(id) {
   const linkInput = document.getElementById(`insta-link-${id}`);
   if (linkInput) v.instagram = linkInput.value.trim();
 
-  const instaFila = getInstaFila();
-  instaFila.push({ ...v, status: 'pendente', aprovadoEm: todayStr() });
-  saveInstaFila(instaFila);
+  // Manda para a Base de Atribuição com tag INSTA
+  const atrib = getAtribuicaoData();
+  if (!atrib.find(a => a.id === v.id)) {
+    atrib.push({
+      id: v.id, nome: v.nome, site: '', whatsapp: v.whatsapp || '',
+      instagram: v.instagram || '', googleUrl: v.googleUrl || '',
+      canal: 'insta', // sem WhatsApp validado
+      status: 'Não enviada', criadoEm: v.importadoEm || todayStr(),
+      validadoEm: todayStr(), diaDestino: null,
+    });
+    saveAtribuicaoData(atrib);
+  }
 
   saveValData(getValData().filter(x => x.id !== id));
   renderValidacao(); updateBadges();
-  notify(`✓ ${v.nome} → Fila Instagram`);
+  notify(`✓ ${v.nome} → Atribuição (tag INSTA)`);
 }
 
-/* ════════════════════════════
-   FILA WHATSAPP — RENDER
-════════════════════════════ */
+/* Aprova TODOS os leads validados para Atribuição (ZAP ou INSTA conforme numStatus) */
+function aprovarTodosParaAtribuicao() {
+  const val = getValData();
+  const atrib = getAtribuicaoData();
+  const existIds = new Set(atrib.map(a => a.id));
+  let addedZap = 0, addedInsta = 0;
+
+  // Processa leads com número válido → tag ZAP
+  val.filter(v => v.numStatus === 'valido' && !existIds.has(v.id)).forEach(v => {
+    atrib.push({
+      id: v.id, nome: v.nome, site: '', whatsapp: v.whatsapp,
+      instagram: v.instagram || '', googleUrl: v.googleUrl || '',
+      canal: 'zap',
+      status: 'Não enviada', criadoEm: v.importadoEm || todayStr(),
+      validadoEm: todayStr(), diaDestino: null,
+    });
+    existIds.add(v.id);
+    addedZap++;
+  });
+
+  // Processa leads sem número válido (invalido) → tag INSTA
+  val.filter(v => v.numStatus === 'invalido' && !existIds.has(v.id)).forEach(v => {
+    atrib.push({
+      id: v.id, nome: v.nome, site: '', whatsapp: '',
+      instagram: v.instagram || '', googleUrl: v.googleUrl || '',
+      canal: 'insta',
+      status: 'Não enviada', criadoEm: v.importadoEm || todayStr(),
+      validadoEm: todayStr(), diaDestino: null,
+    });
+    existIds.add(v.id);
+    addedInsta++;
+  });
+
+  if (!addedZap && !addedInsta) { notify('// nenhum lead pronto para atribuição','warn'); return; }
+
+  saveAtribuicaoData(atrib);
+  // Remove os aprovados da validação
+  const removedIds = new Set([...val.filter(v => v.numStatus === 'valido' || v.numStatus === 'invalido').map(v => v.id)]);
+  saveValData(val.filter(v => !removedIds.has(v.id)));
+  renderValidacao(); updateBadges();
+  let msg = `✓ `;
+  if (addedZap)   msg += `${addedZap} ZAP`;
+  if (addedInsta) msg += `${addedZap?', ':''}${addedInsta} INSTA`;
+  msg += ' → Atribuição';
+  notify(msg);
+}
+
+
 
 
 
@@ -3873,8 +4120,16 @@ function renderFilaZap() {
   // Set disparoChipId for empresa listing (use chip[0] by default)
   if (!disparoChipId && chips.length) disparoChipId = chips[0].id;
 
-  if (!weekDays.includes(disparoDay)) disparoDay = today;
-  document.getElementById('disparoDayTabs').innerHTML = weekDays.map(day => {
+  if (!weekDays.includes(disparoDay) && disparoDay !== 'backlog') disparoDay = today;
+
+  const backlogCount = getZapBacklog().length;
+  const backlogTab = `<div class="day-tab${disparoDay==='backlog'?' active':''}" onclick="setDisparoDay('backlog')"
+    style="${disparoDay==='backlog'?'':''}">
+    📦 Backlog
+    ${backlogCount>0?`<span class="day-count">${backlogCount}</span>`:''}
+  </div>`;
+
+  document.getElementById('disparoDayTabs').innerHTML = backlogTab + weekDays.map(day => {
     const data  = ensureWeekData();
     const count = (data.days[day]||[]).filter(e => e.whatsapp && (e.status||'Não enviada')==='Não enviada').length;
     const active= day === disparoDay;
@@ -3883,9 +4138,14 @@ function renderFilaZap() {
       ${count>0?`<span class="day-count">${count}</span>`:''}
     </div>`;
   }).join('');
-  renderDisparoEmpresas();
-  chips.forEach((_, s) => renderFilaSlot(s, disparoDay));
-  if (!chips.length) { /* nada a renderizar */ }
+
+  if (disparoDay === 'backlog') {
+    renderZapBacklogPanel();
+  } else {
+    renderDisparoEmpresas();
+    chips.forEach((_, s) => renderFilaSlot(s, disparoDay));
+    if (!chips.length) { /* nada a renderizar */ }
+  }
 }
 
 /* ════════════════════════════
@@ -5454,7 +5714,6 @@ let atribActiveTab = 'zap'; // 'zap' | 'insta'
 
 function salvarZapLeadManual() {
   const nome     = (document.getElementById('zapLeadNome')?.value||'').trim();
-  const site     = (document.getElementById('zapLeadSite')?.value||'').trim();
   const whatsapp = (document.getElementById('zapLeadWpp')?.value||'').trim();
   if (!nome) { notify('// nome da empresa é obrigatório','err'); return; }
 
@@ -5462,23 +5721,24 @@ function salvarZapLeadManual() {
   atrib.push({
     id: genId(),
     nome: capitalizeName(nome),
-    site: site || '',
+    site: '',
     whatsapp: whatsapp || '',
     instagram: '',
     googleUrl: '',
+    canal: 'zap',
     status: 'Não enviada',
     criadoEm: todayStr(),
     diaDestino: null,
   });
   saveAtribuicaoData(atrib);
   // Limpar campos
-  ['zapLeadNome','zapLeadSite','zapLeadWpp'].forEach(id => {
+  ['zapLeadNome','zapLeadWpp'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('zapLeadNome')?.focus();
   toggleAtribForm('zap'); // fecha o form
   renderAtribuicao(); updateBadges(); updateAtribTabCounts();
-  notify(`✓ ${capitalizeName(nome)} → Base de Atribuição`);
+  notify(`✓ ${capitalizeName(nome)} → Base de Atribuição (ZAP)`);
 }
 
 function setAtribTab(tab) {
@@ -5688,8 +5948,7 @@ function atribInstaExcluir(id) {
 /* ════════════════════════════
    INSTAGRAM — STORAGE
 ════════════════════════════ */
-function getInstaFila()    { try { return JSON.parse(localStorage.getItem(INSTA_KEY)||'[]'); } catch { return []; } }
-function saveInstaFila(d)  { localStorage.setItem(INSTA_KEY, JSON.stringify(d)); }
+// getInstaFila / saveInstaFila definidas acima — sem duplicata
 function getInstaWeek()    { try { return JSON.parse(localStorage.getItem(INSTA_WEEK_KEY)||'{}'); } catch { return {}; } }
 function saveInstaWeek(d)  { localStorage.setItem(INSTA_WEEK_KEY, JSON.stringify(d)); }
 
