@@ -6864,25 +6864,45 @@ function confirmarExcluirLead() {
       console.log('[migrar] ' + migrKeys.length + ' imagem(ns) movida(s) do localStorage para o IDB');
     }
   } catch(e) {}
-  // ── Migração: corrige leads de Atribuição sem canal definido ──
-  // Leads antigos não tinham campo canal. Leads com canal 'pendente' nunca foram validados.
-  // Regra: se tem whatsapp → 'zap', senão → 'insta'
+  // ── Migração v2: move leads INSTA de ATRIBUICAO_KEY para INSTA_KEY ──
+  // O campo canal foi corrigido na v1, mas os leads ficaram na lista errada.
+  // Leads com canal 'insta' (ou sem canal e sem whatsapp) devem estar em INSTA_KEY.
   try {
     const atribRaw = JSON.parse(localStorage.getItem(ATRIBUICAO_KEY) || '[]');
-    const precisaMigrar = atribRaw.some(a => !a.canal || a.canal === 'pendente');
-    if (precisaMigrar) {
-      const corrigidos = atribRaw.map(a => {
-        if (!a.canal || a.canal === 'pendente') {
-          return { ...a, canal: a.whatsapp ? 'zap' : 'insta' };
-        }
-        return a;
-      });
-      localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(corrigidos));
-      const nZap   = corrigidos.filter(a => a.canal === 'zap').length;
-      const nInsta = corrigidos.filter(a => a.canal === 'insta').length;
-      console.log(`[migração canal] ${nZap} → ZAP · ${nInsta} → INSTA`);
+    const instaRaw = JSON.parse(localStorage.getItem(INSTA_KEY) || '[]');
+    const instaIds = new Set(instaRaw.map(i => i.id));
+
+    // Determina canal correto para cada lead (incluindo legados sem canal)
+    const atribComCanal = atribRaw.map(a => ({
+      ...a,
+      canal: (a.canal && a.canal !== 'pendente') ? a.canal : (a.whatsapp ? 'zap' : 'insta')
+    }));
+
+    const ficamNoZap  = atribComCanal.filter(a => a.canal === 'zap');
+    const vaoParaInsta = atribComCanal.filter(a => a.canal === 'insta');
+
+    if (vaoParaInsta.length > 0) {
+      // Adiciona na INSTA_KEY (sem duplicar)
+      const novosInsta = vaoParaInsta
+        .filter(a => !instaIds.has(a.id))
+        .map(a => ({
+          id: a.id,
+          nome: a.nome || '',
+          whatsapp: a.whatsapp || '',
+          instagram: a.instagram || '',
+          googleUrl: a.googleUrl || '',
+          categoria: a.categoria || '',
+          totalScore: a.totalScore || null,
+          reviewsCount: a.reviewsCount || null,
+          criadoEm: a.criadoEm || a.validadoEm || '',
+          canal: 'insta',
+        }));
+
+      localStorage.setItem(INSTA_KEY, JSON.stringify([...instaRaw, ...novosInsta]));
+      localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(ficamNoZap));
+      console.log(`[migração v2] ${novosInsta.length} leads → INSTA_KEY · ${ficamNoZap.length} ficam em ATRIBUICAO_KEY (ZAP)`);
     }
-  } catch(e) { console.warn('[migração canal] erro:', e); }
+  } catch(e) { console.warn('[migração v2] erro:', e); }
 
   // Limpeza de imagens de lotes obsoletos no IDB
   setTimeout(limparImagensOlfas, 2000);
