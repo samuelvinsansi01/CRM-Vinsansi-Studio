@@ -1912,6 +1912,37 @@ function mandarParaBacklogZap(id) {
   renderAtribuicao(); updateBadges();
   notify(`✓ ${lead.nome} → Backlog Fila Zap`);
 }
+function moverParaBacklogZapDoDia(id, day) {
+  const data = ensureWeekData();
+  const lead = (data.days[day]||[]).find(e => e.id === id);
+  if (!lead) { notify('// lead não encontrado','warn'); return; }
+  const backlog = getZapBacklog();
+  if (backlog.find(b => b.id === id)) { notify('// já está no Backlog ZAP','warn'); return; }
+  backlog.push({
+    id: lead.id, nome: lead.nome, whatsapp: lead.whatsapp || '',
+    instagram: lead.instagram || '', googleUrl: lead.googleUrl || '',
+    site: lead.site || '', ramoId: lead.ramoId || null,
+    canal: 'zap', criadoEm: lead.criadoEm || todayStr(),
+    entradaBacklogEm: todayStr(),
+  });
+  saveZapBacklog(backlog);
+  data.days[day] = data.days[day].filter(e => e.id !== id);
+  saveWeekData(data);
+  renderInicio(); renderDisparoEmpresas(); updateBadges();
+  notify(`↩ ${lead.nome} → Backlog Fila Zap`);
+}
+
+function moverParaBacklogInstaDoInsta(id, key) {
+  // key = 'week' (vem de um dia do insta) | 'fila' (vem da fila pendente)
+  // Para fila pendente, a função existente instaVoltarBacklog não se aplica (já está na fila)
+  // Aqui é para mover do dia para o backlog insta — alias para instaVoltarBacklog
+  // mas também serve para remover da fila instaFila para voltar ao backlog atrib se necessário.
+  // Na prática: do dia de insta → backlog insta já existe (instaVoltarBacklog).
+  // Do renderFilaInsta (lista pendente da fila) → não há opção de "backlog", só remover.
+  // Não há segundo backlog Insta — a fila pendente IS o backlog.
+  notify('// lead já está no backlog Insta', 'warn');
+}
+
 
 
 
@@ -2503,7 +2534,13 @@ function renderInicio() {
         }</td>
         <td><select class="status-select" onchange="updateStatus('${e.id}','${selectedDay}',this.value)">${getStatusOptions(e.status||'Não enviada').map(s=>`<option value="${s}"${(e.status||'Não enviada')===s?' selected':''}>${s}</option>`).join('')}</select></td>
         <td><button class="btn btn-ghost" style="font-size:9px;padding:4px 9px" onclick="showMsg('${e.id}','${selectedDay}')">Msg</button></td>
-        <td><button class="del-btn" onclick="deleteEmpresa('${e.id}','${selectedDay}')">✕</button></td>
+        <td style="white-space:nowrap">
+          <button onclick="moverParaBacklogZapDoDia('${e.id}','${selectedDay}')" title="Mover para Backlog Zap"
+            style="background:none;border:1px solid var(--border2);color:var(--muted);border-radius:5px;font-family:'DM Mono',monospace;font-size:9px;padding:3px 8px;cursor:pointer;margin-right:4px;transition:all 0.15s"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">↩ Backlog</button>
+          <button class="del-btn" onclick="deleteEmpresa('${e.id}','${selectedDay}')">✕</button>
+        </td>
       </tr>`;
     }).join('');
   }
@@ -4258,6 +4295,10 @@ function renderDisparoEmpresas() {
             ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">configure chips primeiro</span>`
             : (e.whatsapp ? botoes : `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--error)">sem WhatsApp</span>`)
         }
+        <button onclick="moverParaBacklogZapDoDia('${e.id}','${disparoDay}')" title="Mover para Backlog Zap"
+          style="background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 8px;cursor:pointer;transition:all 0.15s;margin-left:2px"
+          onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+          onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">↩</button>
         <button onclick="abrirModalExcluirLead('${e.id}','${disparoDay}')"
           title="Excluir lead da plataforma"
           style="background:none;border:1px solid transparent;color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;padding:3px 7px;cursor:pointer;transition:all 0.18s;margin-left:2px"
@@ -5331,12 +5372,33 @@ function renderFilaInsta() {
           ?`<button class="btn btn-insta" style="font-size:10px;padding:7px 14px" onclick="marcarInstaEnviado('${item.id}')">✓ Marcar enviado</button>`
           :`<span class="q-badge ok">✓ enviado</span>`
         }
+        <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px;margin-right:4px" onclick="instaFilaVoltarAtribuicao('${item.id}')" title="Devolver para Atribuição">↩ Atribuição</button>
         <button class="btn btn-danger" style="font-size:10px;padding:7px 12px" onclick="removerDaFilaInsta('${item.id}')">Remover</button>
       </div>
     </div>`;
   }).join('');
 }
 
+
+function instaFilaVoltarAtribuicao(id) {
+  const fila = getInstaFila();
+  const item = fila.find(f => f.id === id);
+  if (!item) return;
+  const atrib = getAtribuicaoData();
+  if (!atrib.find(a => a.id === id)) {
+    atrib.push({
+      id: item.id, nome: item.nome, whatsapp: item.whatsapp || '',
+      instagram: item.instagram || '', googleUrl: item.googleUrl || '',
+      canal: 'insta', site: '',
+      status: 'Não enviada', criadoEm: item.criadoEm || todayStr(),
+      validadoEm: todayStr(), diaDestino: null,
+    });
+    saveAtribuicaoData(atrib);
+  }
+  saveInstaFila(fila.filter(f => f.id !== id));
+  renderFilaInsta(); updateBadges();
+  notify(`↩ ${item.nome} → Atribuição`);
+}
 function setInstaStatus(s) { instaStatus = s; renderFilaInsta(); }
 
 function salvarInstaLink(id) {
