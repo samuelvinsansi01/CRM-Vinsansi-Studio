@@ -1691,7 +1691,7 @@ function renderAtribuicao() {
     const sel = atribSelecionados.has(lead.id);
     const dias = diasEmEspera(lead.validadoEm || lead.criadoEm);
     const voltou = lead.voltouDaSemana;
-    const canal = lead.canal || 'zap'; // legado sem canal assume zap
+    const canal = lead.canal && lead.canal !== 'pendente' ? lead.canal : (lead.whatsapp ? 'zap' : 'insta'); // legado: inferir canal pelo whatsapp
     const isInsta = canal === 'insta';
 
     let ageBadge = '';
@@ -6864,6 +6864,26 @@ function confirmarExcluirLead() {
       console.log('[migrar] ' + migrKeys.length + ' imagem(ns) movida(s) do localStorage para o IDB');
     }
   } catch(e) {}
+  // ── Migração: corrige leads de Atribuição sem canal definido ──
+  // Leads antigos não tinham campo canal. Leads com canal 'pendente' nunca foram validados.
+  // Regra: se tem whatsapp → 'zap', senão → 'insta'
+  try {
+    const atribRaw = JSON.parse(localStorage.getItem(ATRIBUICAO_KEY) || '[]');
+    const precisaMigrar = atribRaw.some(a => !a.canal || a.canal === 'pendente');
+    if (precisaMigrar) {
+      const corrigidos = atribRaw.map(a => {
+        if (!a.canal || a.canal === 'pendente') {
+          return { ...a, canal: a.whatsapp ? 'zap' : 'insta' };
+        }
+        return a;
+      });
+      localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(corrigidos));
+      const nZap   = corrigidos.filter(a => a.canal === 'zap').length;
+      const nInsta = corrigidos.filter(a => a.canal === 'insta').length;
+      console.log(`[migração canal] ${nZap} → ZAP · ${nInsta} → INSTA`);
+    }
+  } catch(e) { console.warn('[migração canal] erro:', e); }
+
   // Limpeza de imagens de lotes obsoletos no IDB
   setTimeout(limparImagensOlfas, 2000);
   // Abrir o primeiro chip por padrão
