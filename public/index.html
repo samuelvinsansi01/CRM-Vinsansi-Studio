@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --bg: #0a0a0d;
@@ -65,6 +66,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .sidebar-footer{padding:16px;border-top:1px solid var(--border);font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.08em;overflow:hidden;flex-shrink:0;}
 .sidebar.collapsed .sidebar-footer{display:none;}
 .sidebar-clock{color:var(--text2);font-size:11px;margin-bottom:2px;}
+.auth-box{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
+.auth-user{font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);line-height:1.5;word-break:break-word;letter-spacing:0.02em;}
+.auth-user strong{color:var(--accent);font-weight:500;}
+.auth-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.auth-actions .btn{font-size:9px;padding:7px 9px;width:100%;font-family:'DM Mono',monospace;letter-spacing:0.04em;}
 
 /* ══ MOBILE TOPBAR (hidden on desktop) ══ */
 .mobile-topbar{display:none;position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:var(--surface);border-bottom:1px solid var(--border);z-index:30;align-items:center;padding:0 16px;gap:12px;}
@@ -588,6 +594,16 @@ tr:hover td{background:rgba(255,255,255,0.015);}
   <div class="sidebar-footer">
     <div class="sidebar-clock" id="sidebarClock">--:--</div>
     <div id="sidebarDate">carregando...</div>
+
+    <div class="auth-box">
+      <div class="auth-user" id="authUserBox">
+        <strong>Conta</strong><br>não conectado
+      </div>
+      <div class="auth-actions">
+        <button class="btn btn-primary" id="authLoginBtn" onclick="loginGoogle()">Entrar com Google</button>
+        <button class="btn btn-ghost" id="authLogoutBtn" onclick="logoutSupabase()" style="display:none">Sair</button>
+      </div>
+    </div>
   </div>
 </aside>
 
@@ -1397,8 +1413,97 @@ const INSTA_WEEK_KEY = 'vs_insta_week_v1';  // leads instagram atribuídos por d
 const INSTA_SCHED_KEY = 'vs_insta_sched_v1'; // cronograma instagram
 const FILA_DISPARO_KEY = 'vs_fila_disparo_v1'; // fila de disparo WhatsApp
 
+// Supabase — usado primeiro apenas para login Google.
+// Ainda não mexe nos leads e ainda não substitui o localStorage.
+const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
+const sbClient = window.supabase
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+  : null;
+let currentUser = null;
+
 const STATUS_OPTIONS = ['Não enviada','Em fila','Enviada','Respondida','Não respondida','Recusada','Fechada'];
 const WEEKDAY_NAMES  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+/* ════════════════════════════
+   AUTH — SUPABASE / GOOGLE
+   Por enquanto só identifica o usuário.
+   Não salva leads no banco ainda.
+════════════════════════════ */
+function getAuthRedirectUrl() {
+  return window.location.origin + window.location.pathname;
+}
+
+function getUserDisplayName(user) {
+  if (!user) return '';
+  return user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'Usuário';
+}
+
+function renderAuthUser(user) {
+  const box = document.getElementById('authUserBox');
+  const loginBtn = document.getElementById('authLoginBtn');
+  const logoutBtn = document.getElementById('authLogoutBtn');
+  if (!box || !loginBtn || !logoutBtn) return;
+
+  if (user) {
+    const name = getUserDisplayName(user);
+    box.innerHTML = `<strong>Conectado</strong><br>${escapeHtml(name)}`;
+    loginBtn.style.display = 'none';
+    logoutBtn.style.display = 'inline-flex';
+  } else {
+    box.innerHTML = '<strong>Conta</strong><br>não conectado';
+    loginBtn.style.display = 'inline-flex';
+    logoutBtn.style.display = 'none';
+  }
+}
+
+async function initAuth() {
+  if (!sbClient) {
+    console.warn('[auth] Supabase SDK não carregou.');
+    renderAuthUser(null);
+    return;
+  }
+
+  const { data, error } = await sbClient.auth.getSession();
+  if (error) console.warn('[auth] getSession:', error.message);
+  currentUser = data?.session?.user || null;
+  renderAuthUser(currentUser);
+
+  sbClient.auth.onAuthStateChange((_event, session) => {
+    currentUser = session?.user || null;
+    renderAuthUser(currentUser);
+  });
+}
+
+async function loginGoogle() {
+  if (!sbClient) {
+    notify('Supabase não carregou. Recarregue a página.', 'err');
+    return;
+  }
+
+  const { error } = await sbClient.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: getAuthRedirectUrl() }
+  });
+
+  if (error) {
+    console.error('[auth] loginGoogle:', error);
+    notify('Erro ao entrar com Google', 'err');
+  }
+}
+
+async function logoutSupabase() {
+  if (!sbClient) return;
+  const { error } = await sbClient.auth.signOut();
+  if (error) {
+    console.error('[auth] logout:', error);
+    notify('Erro ao sair da conta', 'err');
+    return;
+  }
+  currentUser = null;
+  renderAuthUser(null);
+  notify('Conta desconectada');
+}
 
 /* ════════════════════════════
    DEFAULT RAMOS
@@ -6883,6 +6988,9 @@ function confirmarExcluirLead() {
 (function() {
   const s = document.getElementById('sidebar');
   if (localStorage.getItem(SIDEBAR_KEY)==='1') s.classList.remove('collapsed');
+
+  // Inicializa login Google sem interferir nos dados atuais.
+  initAuth();
 
   const cfg = loadEvoConfig();
   if (cfg.delayMin)      document.getElementById('delayMin').value      = cfg.delayMin; else document.getElementById('delayMin').value = 120;
