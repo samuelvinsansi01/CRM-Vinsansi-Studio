@@ -1449,6 +1449,15 @@ function getUserDisplayName(user) {
   return user.user_metadata?.full_name || user.user_metadata?.name || user.email || 'Usuário';
 }
 
+function escapeHtml(str = '') {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function renderAuthUser(user) {
   const box = document.getElementById('authUserBox');
   const loginBtn = document.getElementById('authLoginBtn');
