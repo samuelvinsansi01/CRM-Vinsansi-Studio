@@ -1382,3 +1382,6 @@ body.auth-locked .app{
     font-size:28px!important;
   }
 }
+
+/* V22 EVOLUTION */
+#evoStatus{margin-top:12px;font-family:'DM Mono',monospace;}

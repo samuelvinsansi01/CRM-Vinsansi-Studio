@@ -7619,3 +7619,21 @@ function authGateSelfTest() {
     currentUser: currentUser ? { id: currentUser.id, email: currentUser.email } : null
   };
 }
+
+const EVOLUTION_CFG='vs_evolution_cfg_v1';
+
+function saveEvolutionConfig(){
+ const cfg={
+  url:document.getElementById('evoUrl')?.value||'',
+  instance:document.getElementById('evoInstance')?.value||'',
+  apiKey:document.getElementById('evoKey')?.value||''
+ };
+ localStorage.setItem(EVOLUTION_CFG,JSON.stringify(cfg));
+ const el=document.getElementById('evoStatus');
+ if(el) el.textContent='Configuração salva.';
+}
+
+function getEvolutionConfig(){
+ try{return JSON.parse(localStorage.getItem(EVOLUTION_CFG)||'{}');}
+ catch{return {};}
+}
