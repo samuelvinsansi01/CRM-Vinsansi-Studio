@@ -1,7 +1,17 @@
 {
-  "outputDirectory": "public",
+  "version": 2,
   "rewrites": [
-    { "source": "/r",   "destination": "/r.html" },
-    { "source": "/",    "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/r/(.*)",
+      "destination": "/public/r.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/public/index.html"
+    }
   ]
 }
