@@ -138,6 +138,9 @@ function saveFilaDisparo({ delay = 250, reason = 'dispatch-queue-save' } = {}) {
     if (typeof dedupeFilaDisparoV31 === 'function') {
       filaDisparo = dedupeFilaDisparoV31(filaDisparo, 'saveFilaDisparo.beforeSave');
     }
+    if (typeof repairCompletedDispatchQueueItemsV438 === 'function') {
+      repairCompletedDispatchQueueItemsV438('saveFilaDisparo.beforeSave');
+    }
     localStorage.setItem(FILA_DISPARO_KEY, JSON.stringify(filaDisparo));
     localStorage.setItem(FILA_DISPARO_UPDATED_AT_KEY_V431, updatedAt);
   } catch(e) {

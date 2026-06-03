@@ -701,7 +701,11 @@ async function dispararLoteChip(slot) {
 
       item.status = 'enviado';
       atualizarStatusFilaSlot(slot, item.id, 'enviado');
-      atualizarStatusEmpresa(item.id, 'Enviada');
+      try {
+        atualizarStatusEmpresa(item.id, 'Enviada', { phone:numero, sentAt:new Date().toISOString() });
+      } catch(statusError) {
+        console.warn('[whatsapp-send][status-update-error]', { itemId:item.id, error:statusError?.message || statusError });
+      }
       whatsappSendLogV436('lead-complete', getWhatsappPartLogPayloadV436({ chip, item, phone:numero, baseUrl, part:'complete', hasImage:!!imgRedesign }));
       log(`<span style="color:${chipCor}">✓ ${escHtml(item.nome)}</span>`);
     } catch(e) {
@@ -831,6 +835,8 @@ function exibirRetryPanel(slot, count, horario) {
 async function iniciarRetryChip(slot) {
   const st = chipSlotState[slot];
   if (st.disparoEmAndamento || st.aguardandoLote) return;
+  repairCompletedDispatchQueueItemsV438('retry-before-start');
+  st.retryItems = (st.retryItems || []).filter(item => !isDispatchItemFullyDeliveredV438(item));
   if (!st.retryItems || !st.retryItems.length) { notify('// nenhum item para retry','warn'); return; }
   const chip = getChipBySlot(slot); if (!chip) return;
   if (blockChipDispatchReloadLockV432(slot, chip)) return;
@@ -921,6 +927,84 @@ function _atualizarBotaoPausa(slot) {
     btn.style.borderColor = 'var(--warning)';
     btn.style.color = 'var(--warning)';
   }
+}
+
+function atualizarStatusEmpresa(id, status = 'Enviada', meta = {}) {
+  if (!id) return false;
+  const nowIso = meta.sentAt || new Date().toISOString();
+  const sentDay = typeof todayStr === 'function' ? todayStr() : nowIso.slice(0, 10);
+  let changed = false;
+
+  try {
+    if (typeof ensureWeekData === 'function' && typeof saveWeekData === 'function') {
+      const data = ensureWeekData();
+      Object.keys(data.days || {}).forEach(day => {
+        const emp = (data.days[day] || []).find(item => item?.id === id);
+        if (!emp) return;
+        emp.status = status;
+        if (status === 'Enviada') {
+          emp.enviadoEm = sentDay;
+          emp.sentAt = nowIso;
+          emp.whatsappStatus = 'sent';
+        }
+        changed = true;
+      });
+      if (changed) saveWeekData(data);
+    }
+  } catch (error) {
+    console.warn('[whatsapp-send][status-update-error]', { id, scope:'week', error:error?.message || error });
+  }
+
+  try {
+    if (typeof getLeadBaseData === 'function' && typeof LEADS_BASE_KEY !== 'undefined') {
+      const base = getLeadBaseData();
+      const lead = base.find(item => item?.id === id);
+      if (lead) {
+        lead.status = status;
+        if (status === 'Enviada') {
+          lead.enviadoEm = sentDay;
+          lead.sentAt = nowIso;
+          lead.whatsappStatus = 'sent';
+        }
+        localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(base));
+        changed = true;
+      }
+    }
+  } catch (error) {
+    console.warn('[whatsapp-send][status-update-error]', { id, scope:'base', error:error?.message || error });
+  }
+
+  try { if (changed && typeof updateBadges === 'function') updateBadges(); } catch(e) {}
+  return changed;
+}
+
+function isDispatchItemFullyDeliveredV438(item = {}) {
+  return !!(item && item.textSent === true && item.text2Sent === true && item.mediaSent === true);
+}
+
+function repairCompletedDispatchQueueItemsV438(source = 'dispatch-repair') {
+  let repaired = 0;
+  try {
+    Object.keys(filaDisparo || {}).forEach(chipId => {
+      (filaDisparo[chipId] || []).forEach(item => {
+        if (!item || item.status === 'enviado' || !isDispatchItemFullyDeliveredV438(item)) return;
+        item.status = 'enviado';
+        item.error = '';
+        item.repairedAfterSendAt = new Date().toISOString();
+        atualizarStatusEmpresa(item.id, 'Enviada', { phone:item.whatsapp || item.phone || '', sentAt:item.repairedAfterSendAt });
+        repaired++;
+      });
+    });
+    if (repaired) {
+      localStorage.setItem(FILA_DISPARO_KEY, JSON.stringify(filaDisparo));
+      localStorage.setItem(FILA_DISPARO_UPDATED_AT_KEY_V431, new Date().toISOString());
+      uiSyncLogV426('optimistic-update', { entity:'dispatch-queue', action:'repair-completed-send', source, count:repaired });
+      try { console.warn('[whatsapp-send][status-repaired]', { source, count:repaired }); } catch(e) {}
+    }
+  } catch(error) {
+    console.warn('[whatsapp-send][status-repair-error]', { source, error:error?.message || error });
+  }
+  return repaired;
 }
 
 async function confirmarProximoLoteChip(slot) {

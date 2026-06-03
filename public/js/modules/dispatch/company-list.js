@@ -154,6 +154,9 @@ function renderFila0() { renderFilaSlot(0, disparoDay); }
 function renderFila1() { renderFilaSlot(1, disparoDay); }
 
 function renderFilaSlot(slot, filterDay) {
+  if (typeof repairCompletedDispatchQueueItemsV438 === 'function') {
+    repairCompletedDispatchQueueItemsV438('render-fila-slot');
+  }
   const today = todayStr();
   const dayFiltro = filterDay || disparoDay || today;
   const isToday = dayFiltro === today;
