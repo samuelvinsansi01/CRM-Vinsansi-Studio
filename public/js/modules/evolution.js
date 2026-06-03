@@ -72,7 +72,8 @@ async function testEvolutionConnection() {
   updateEvolutionStatusCard('warn', 'Testando...', 'Consultando status da instância.');
 
   try {
-    const endpoint = `${settings.url}/instance/connectionState/${encodeURIComponent(settings.instance)}`;
+    const baseUrl = typeof assertEvolutionBaseUrlV436 === 'function' ? assertEvolutionBaseUrlV436(settings.url) : settings.url;
+    const endpoint = `${baseUrl}/instance/connectionState/${encodeURIComponent(settings.instance)}`;
     const res = await fetch(endpoint, {
       method: 'GET',
       headers: (typeof getEvolutionHeadersV405 === 'function' ? getEvolutionHeadersV405(settings) : getEvolutionHeaders(settings))
@@ -552,7 +553,7 @@ function applyLeadMessageTemplate() {
 async function sendActiveLeadWhatsappMessage() {
   if (!activeLeadDrawerId || !activeLeadDrawerData) return;
 
-  const settings = getEvolutionSettings ? getEvolutionSettings() : {};
+  const settings = getEvolutionConfigForChipV405 ? getEvolutionConfigForChipV405() : (getEvolutionSettings ? getEvolutionSettings() : {});
   const result = document.getElementById('leadMessageResult');
   const text = (document.getElementById('leadMessageText')?.value || '').trim();
   const phone = normalizePhoneForEvolution(activeLeadDrawerData.whatsapp || activeLeadDrawerData.phone || activeLeadDrawerData.telefone || '');
@@ -578,7 +579,8 @@ async function sendActiveLeadWhatsappMessage() {
   if (result) result.textContent = 'Enviando mensagem...';
 
   try {
-    const endpoint = `${settings.url}/message/sendText/${encodeURIComponent(settings.instance)}`;
+    const baseUrl = typeof assertEvolutionBaseUrlV436 === 'function' ? assertEvolutionBaseUrlV436(settings.url) : settings.url;
+    const endpoint = `${baseUrl}/message/sendText/${encodeURIComponent(settings.instance)}`;
 
     const payload = {
       number: phone,

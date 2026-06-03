@@ -139,6 +139,74 @@ function getLoteSize() {
   const value = inputValue || configValue || WHATSAPP_CHIP_BLOCK_SIZE_V426 || 30;
   return Math.max(1, Number.isFinite(value) ? Math.floor(value) : 30);
 }
+
+function getDefaultEvolutionUrlV436() {
+  try {
+    const host = window.location.hostname;
+    return (host === 'localhost' || host === '127.0.0.1' || host === '::1') ? 'http://localhost:8080' : '';
+  } catch {
+    return '';
+  }
+}
+
+function getEvolutionBaseUrl(chip = {}) {
+  const url =
+    chip?.url ||
+    chip?.baseUrl ||
+    chip?.base_url ||
+    chip?.evolutionUrl ||
+    chip?.evolution_url ||
+    chip?.baseEvolutionUrl ||
+    window.currentEvolutionUrl ||
+    getDefaultEvolutionUrlV436();
+
+  return String(url || '').trim().replace(/\/+$/, '');
+}
+
+function isLocalPanelHostV436() {
+  try {
+    const host = window.location.hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
+function isLoopbackEvolutionBaseUrlV436(baseUrl = '') {
+  const raw = String(baseUrl || '').trim();
+  if (!raw) return false;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.startsWith('127.');
+  } catch {
+    return /(?:localhost|127\.0\.0\.1|^127\.)/i.test(raw);
+  }
+}
+
+function assertEvolutionBaseUrlV436(baseUrl = '') {
+  if (!baseUrl) {
+    throw new Error('Evolution URL ausente. Configure a URL publica HTTPS no chip.');
+  }
+  if (!isLocalPanelHostV436() && isLoopbackEvolutionBaseUrlV436(baseUrl)) {
+    throw new Error('Evolution URL invalida em producao. Use uma URL publica HTTPS.');
+  }
+  return baseUrl;
+}
+
+function whatsappContentHashV436(value = '') {
+  const str = String(value || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function whatsappSendLogV436(event, payload = {}) {
+  const logger = window.__crmConsoleOriginalV434?.log || console.log;
+  try { logger(`[whatsapp-send][${event}]`, payload); } catch(e) {}
+}
 const AUTH_LOCAL_USER_KEY_V423 = 'vs_auth_local_user_v423';
 const AUTH_LOCAL_EMAIL_KEY_V425 = 'vs_auth_local_email_v425';
 const supabaseDataAdapter = (sbClient && window.SupabaseAdapter)
@@ -323,10 +391,11 @@ function dedupeOperationalSnapshotV31(snapshot = {}, source = 'operational-snaps
   return next;
 }
 
-function getWhatsappSendGuardKeyV31({ leadId = '', phone = '', text = '', instance = '' } = {}) {
+function getWhatsappSendGuardKeyV31({ leadId = '', phone = '', text = '', content = '', instance = '', part = 'text' } = {}) {
   const phoneKey = normalizePhoneStrictV31(phone);
-  const textKey = normalizeTextKeyV31(text).slice(0, 180);
-  return `${leadId || 'no-lead'}|${phoneKey}|${instance || ''}|${textKey}`;
+  const partKey = normalizeTextKeyV31(part || 'text') || 'text';
+  const contentKey = whatsappContentHashV436(content || text || '');
+  return `${leadId || 'no-lead'}|${phoneKey}|${instance || ''}|${partKey}|${contentKey}`;
 }
 
 function acquireWhatsappSendLockV31(payload = {}, ttlMs = 10000) {
@@ -342,6 +411,7 @@ function acquireWhatsappSendLockV31(payload = {}, ttlMs = 10000) {
   if (activeAt && now - activeAt < ttlMs) {
     try { console.warn('[message-send-blocked]', { reason:'duplicate-lock', key, ageMs:now - activeAt, phone:payload.phone, leadId:payload.leadId }); } catch(e) {}
     try { console.warn('[whatsapp-send-blocked]', { reason:'duplicate-lock', key, ageMs:now - activeAt, phone:payload.phone, leadId:payload.leadId }); } catch(e) {}
+    whatsappSendLogV436('duplicate-blocked', { reason:'duplicate-lock', key, ageMs:now - activeAt, phone:payload.phone, leadId:payload.leadId, part:payload.part || '' });
     return { ok:false, key, ageMs:now - activeAt };
   }
   window.__whatsappSendLocksV31.set(key, now);

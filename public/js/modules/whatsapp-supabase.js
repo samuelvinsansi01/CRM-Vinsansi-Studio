@@ -1252,7 +1252,7 @@ function getConversationEvolutionConfigV412(leadId) {
   const exactChip = chips.find(chip => String(chip.instance || '').trim() === String(instance).trim());
   if (exactChip) {
     return {
-      url: String(exactChip.url || exactChip.baseUrl || exactChip.evolutionUrl || '').replace(/\/$/, ''),
+      url: typeof getEvolutionBaseUrl === 'function' ? getEvolutionBaseUrl(exactChip) : String(exactChip.url || exactChip.baseUrl || exactChip.evolutionUrl || '').replace(/\/+$/, ''),
       instance: String(exactChip.instance || '').trim(),
       apiKey: exactChip.key || exactChip.apiKey || exactChip.apikey || '',
       chip: exactChip
@@ -1442,7 +1442,10 @@ async function sendConversationReplyV38() {
       instance: cfg.instance,
       apiKey: cfg.apiKey,
       number: phone,
-      text
+      text,
+      leadId: realLeadId,
+      part:'reply',
+      chip: cfg.chip
     });
     updateLocalOutgoingWhatsappMessageStatusV426(messageId, 'saving', { leadId:realLeadId, response:data });
     if (realLeadId) addLeadHistory(realLeadId, 'Resposta enviada pela Central de Conversas', lead);

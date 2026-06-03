@@ -203,31 +203,111 @@ function normalizeDispatchPhoneV432(value = '') {
   return digits.startsWith('55') ? digits : '55' + digits;
 }
 
-function isRemoteHttpsPanelV435() {
-  try {
-    const host = window.location.hostname;
-    return window.location.protocol === 'https:' && !['localhost', '127.0.0.1', '::1'].includes(host);
-  } catch {
-    return false;
-  }
-}
-
-function isLoopbackEvolutionUrlV435(value = '') {
-  try {
-    const url = new URL(String(value || '').trim());
-    const host = url.hostname.toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.startsWith('127.');
-  } catch {
-    return /^https?:\/\/(?:localhost|127\.|0\.0\.0\.0|\[::1\])/i.test(String(value || '').trim());
-  }
-}
-
 function getEvolutionUrlReachabilityErrorV435(chip) {
-  if (!chip?.url) return '';
-  if (isRemoteHttpsPanelV435() && isLoopbackEvolutionUrlV435(chip.url)) {
-    return `Chip configurado com ${chip.url}. No painel publicado, localhost/127.0.0.1 nao e acessivel. Use uma URL publica HTTPS da Evolution (VPS, dominio, ngrok ou Cloudflare Tunnel).`;
+  const baseUrl = typeof getEvolutionBaseUrl === 'function' ? getEvolutionBaseUrl(chip) : String(chip?.url || '').replace(/\/+$/, '');
+  if (!baseUrl) return 'Evolution URL ausente. Configure a URL publica HTTPS no chip.';
+  if (typeof isLoopbackEvolutionBaseUrlV436 === 'function' && !isLocalPanelHostV436() && isLoopbackEvolutionBaseUrlV436(baseUrl)) {
+    return `Chip configurado com ${baseUrl}. No painel publicado, localhost/127.0.0.1 nao e acessivel. Use uma URL publica HTTPS da Evolution (VPS, dominio, ngrok ou Cloudflare Tunnel).`;
   }
   return '';
+}
+
+function getWhatsappPartLogPayloadV436({ chip = {}, item = {}, phone = '', baseUrl = '', part = '', hasImage = false } = {}) {
+  return {
+    leadId: item.leadId || item.id || '',
+    phone,
+    instance: chip.instance || '',
+    baseUrl,
+    part,
+    hasMessage1: !!String(item.mensagem || '').trim(),
+    hasMessage2: !!String(item.mensagem2 || '').trim(),
+    hasImage: !!hasImage
+  };
+}
+
+async function sendWhatsappTextPartV436({ chip, item, phone, text, part, baseUrl, hasImage }) {
+  const payload = getWhatsappPartLogPayloadV436({ chip, item, phone, baseUrl, part, hasImage });
+  whatsappSendLogV436(`${part}-start`, payload);
+  const sendLock = typeof acquireWhatsappSendLockV31 === 'function'
+    ? acquireWhatsappSendLockV31({
+        leadId:item.leadId || item.id || '',
+        phone,
+        text:text || '',
+        content:text || '',
+        instance:chip.instance,
+        part
+      }, 30000)
+    : { ok:true, key:'' };
+  if (!sendLock.ok) throw new Error('Envio duplicado bloqueado por seguranca.');
+
+  try {
+    const res = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(chip.instance)}`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', apikey:chip.key },
+      body: JSON.stringify({ number:phone, options:{ delay:1000 }, textMessage:{ text:String(text || '') } })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error = (data && (data.message || data.error)) || `sendText HTTP ${res.status}`;
+      whatsappSendLogV436(`${part}-error`, { ...payload, status:res.status, error });
+      throw new Error(error);
+    }
+    whatsappSendLogV436(`${part}-success`, { ...payload, status:res.status });
+    return data;
+  } catch (error) {
+    whatsappSendLogV436(`${part}-error`, { ...payload, error:error?.message || error });
+    throw error;
+  } finally {
+    if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(sendLock.key);
+  }
+}
+
+async function sendWhatsappImagePartV436({ chip, item, phone, imageBase64, loteNum, baseUrl }) {
+  const payload = getWhatsappPartLogPayloadV436({ chip, item, phone, baseUrl, part:'image', hasImage:!!imageBase64 });
+  whatsappSendLogV436('image-start', payload);
+  const b64 = String(imageBase64 || '').split(',')[1];
+  const mimetype = String(imageBase64 || '').split(';')[0].split(':')[1] || 'image/jpeg';
+  if (!b64) {
+    const error = 'Imagem do lote invalida';
+    whatsappSendLogV436('image-error', { ...payload, error });
+    throw new Error(error);
+  }
+
+  const sendLock = typeof acquireWhatsappSendLockV31 === 'function'
+    ? acquireWhatsappSendLockV31({
+        leadId:item.leadId || item.id || '',
+        phone,
+        content:b64.slice(0, 500),
+        instance:chip.instance,
+        part:'image'
+      }, 30000)
+    : { ok:true, key:'' };
+  if (!sendLock.ok) throw new Error('Envio duplicado bloqueado por seguranca.');
+
+  try {
+    const res = await fetch(`${baseUrl}/message/sendMedia/${encodeURIComponent(chip.instance)}`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', apikey:chip.key },
+      body: JSON.stringify({
+        number:phone,
+        options:{ delay:1000 },
+        mediaMessage:{ mediatype:'image', media:b64, mimetype, fileName:`lote-${loteNum}.jpg`, caption:'' }
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error = (data && (data.message || data.error)) || `sendMedia HTTP ${res.status}`;
+      whatsappSendLogV436('image-error', { ...payload, status:res.status, error });
+      throw new Error(error);
+    }
+    whatsappSendLogV436('image-success', { ...payload, status:res.status });
+    return data;
+  } catch (error) {
+    whatsappSendLogV436('image-error', { ...payload, error:error?.message || error });
+    throw error;
+  } finally {
+    if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(sendLock.key);
+  }
 }
 
 function getDuplicateDispatchItemsV432() {
@@ -262,10 +342,11 @@ function getDuplicateDispatchItemsV432() {
 
 async function validateDispatchPreflightV432(slot, items = []) {
   const chip = getChipBySlot(slot);
+  const baseUrl = typeof getEvolutionBaseUrl === 'function' ? getEvolutionBaseUrl(chip) : String(chip?.url || '').replace(/\/+$/, '');
   if (!chip) return { ok:false, error:`Chip ${slot + 1} não configurado` };
 
   const missing = [];
-  if (!String(chip.url || '').trim()) missing.push('URL');
+  if (!baseUrl) missing.push('URL');
   if (!String(chip.instance || '').trim()) missing.push('instância');
   if (!String(chip.key || '').trim()) missing.push('API key');
   if (missing.length) {
@@ -277,10 +358,24 @@ async function validateDispatchPreflightV432(slot, items = []) {
 
   const unreachableUrlError = getEvolutionUrlReachabilityErrorV435(chip);
   if (unreachableUrlError) {
-    debugDispatchPersistV413('preflight-error', { slot, error:unreachableUrlError, chipUrl:chip.url });
+    debugDispatchPersistV413('preflight-error', { slot, error:unreachableUrlError, baseUrl });
     notify(`// ${unreachableUrlError}`, 'err');
     return { ok:false, error:unreachableUrlError };
   }
+  try { assertEvolutionBaseUrlV436(baseUrl); } catch(error) {
+    notify(`// ${error.message}`, 'err');
+    return { ok:false, error:error.message };
+  }
+  whatsappSendLogV436('base-url', {
+    leadId:'',
+    phone:'',
+    instance:chip.instance,
+    baseUrl,
+    part:'preflight',
+    hasMessage1:items.some(item => !!String(item.mensagem || '').trim()),
+    hasMessage2:items.some(item => !!String(item.mensagem2 || '').trim()),
+    hasImage:false
+  });
 
   recoverStaleSendingItemsV434(slot, chip);
   const uncertain = getFilaChipNoDia(chip.id, todayStr()).filter(item => item.status === 'enviando');
@@ -321,8 +416,7 @@ async function validateDispatchPreflightV432(slot, items = []) {
     return { ok:false, error };
   }
 
-  const url = String(chip.url).replace(/\/+$/, '');
-  const endpoint = `${url}/instance/connectionState/${encodeURIComponent(chip.instance)}`;
+  const endpoint = `${baseUrl}/instance/connectionState/${encodeURIComponent(chip.instance)}`;
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
   const timeout = setTimeout(() => controller?.abort(), 8000);
 
@@ -426,6 +520,7 @@ async function dispararLoteChip(slot) {
   const st = chipSlotState[slot];
   const chip = getChipBySlot(slot);
   if (!chip) return;
+  const baseUrl = assertEvolutionBaseUrlV436(getEvolutionBaseUrl(chip));
   st.loteAtual++;
   const lote = st.filaLotes.shift();
   const esperaMin = Math.max(60, parseInt(document.getElementById('loteEsperaMin')?.value)||60);
@@ -497,22 +592,15 @@ async function dispararLoteChip(slot) {
 
       // MSG 1 — Apresentação
       if (!item.textSent) {
-        const payload1 = { number: numero, options: { delay: 1000 }, textMessage: { text: item.mensagem } };
-        const sendLock = typeof acquireWhatsappSendLockV31 === 'function'
-          ? acquireWhatsappSendLockV31({ leadId:item.leadId || item.id || '', phone:numero, text:item.mensagem || '', instance:chip.instance }, 30000)
-          : { ok:true, key:'' };
-        if (!sendLock.ok) throw new Error('Envio duplicado bloqueado por seguranca.');
-        let res1;
-        let data1;
-        try {
-          try { console.log('[whatsapp-send]', { action:'evolution-text-start', slot, itemId:item.id, phone:numero, instance:chip.instance }); } catch(e) {}
-          res1 = await fetch(`${chip.url}/message/sendText/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload1) });
-          data1 = await res1.json().catch(() => ({}));
-          if (!res1.ok) throw new Error((data1 && (data1.message || data1.error)) || `sendText HTTP ${res1.status}`);
-          try { console.log('[whatsapp-send]', { action:'evolution-text-success', slot, itemId:item.id, phone:numero, instance:chip.instance }); } catch(e) {}
-        } finally {
-          if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(sendLock.key);
-        }
+        const data1 = await sendWhatsappTextPartV436({
+          chip,
+          item,
+          phone:numero,
+          text:item.mensagem,
+          part:'part-1',
+          baseUrl,
+          hasImage:!!getLoteImagem(chip.id, item.mediaLoteNum || st.loteAtual)
+        });
         item.textSent = true;
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-text-sent' });
         log(`  ① apresentação enviada`);
@@ -541,20 +629,15 @@ async function dispararLoteChip(slot) {
 
       // MSG 2 — Imagem do lote
       if (!item.text2Sent) {
-        const payload2 = { number: numero, options: { delay: 1000 }, textMessage: { text: item.mensagem2 } };
-        const sendLock2 = typeof acquireWhatsappSendLockV31 === 'function'
-          ? acquireWhatsappSendLockV31({ leadId:item.leadId || item.id || '', phone:numero, text:item.mensagem2 || '', instance:chip.instance }, 30000)
-          : { ok:true, key:'' };
-        if (!sendLock2.ok) throw new Error('Envio duplicado bloqueado por seguranca.');
-        let res2;
-        let data2;
-        try {
-          res2 = await fetch(`${chip.url}/message/sendText/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload2) });
-          data2 = await res2.json().catch(() => ({}));
-          if (!res2.ok) throw new Error((data2 && (data2.message || data2.error)) || `sendText HTTP ${res2.status}`);
-        } finally {
-          if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(sendLock2.key);
-        }
+        const data2 = await sendWhatsappTextPartV436({
+          chip,
+          item,
+          phone:numero,
+          text:item.mensagem2,
+          part:'part-2',
+          baseUrl,
+          hasImage:!!getLoteImagem(chip.id, item.mediaLoteNum || st.loteAtual)
+        });
         item.text2Sent = true;
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-text2-sent' });
         log(`  complemento enviado`);
@@ -587,14 +670,31 @@ async function dispararLoteChip(slot) {
         if (!b2) throw new Error('Imagem do lote inválida');
         const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: b2, mimetype: m2, fileName: `lote-${loteNum}.jpg`, caption: '' } };
         debugDispatchPersistV413('evolution-media-start', { file:'chip-slots.js', chipId:chip.id, loteNum, itemId:item.id, mimetype:m2 });
-        const res3 = await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
+        const imageLock = typeof acquireWhatsappSendLockV31 === 'function'
+          ? acquireWhatsappSendLockV31({ leadId:item.leadId || item.id || '', phone:numero, content:b2.slice(0, 500), instance:chip.instance, part:'image' }, 30000)
+          : { ok:true, key:'' };
+        if (!imageLock.ok) throw new Error('Envio duplicado bloqueado por seguranca.');
+        whatsappSendLogV436('image-start', getWhatsappPartLogPayloadV436({ chip, item, phone:numero, baseUrl, part:'image', hasImage:true }));
+        let res3;
+        try {
+          res3 = await fetch(`${baseUrl}/message/sendMedia/${encodeURIComponent(chip.instance)}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
+        } catch (error) {
+          whatsappSendLogV436('image-error', { ...getWhatsappPartLogPayloadV436({ chip, item, phone:numero, baseUrl, part:'image', hasImage:true }), error:error?.message || error });
+          if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(imageLock.key);
+          throw error;
+        }
         const data3 = await res3.json().catch(() => ({}));
         if (!res3.ok) {
           debugDispatchPersistV413('evolution-media-error', { file:'chip-slots.js', chipId:chip.id, loteNum, itemId:item.id, status:res3.status, response:data3 });
-          throw new Error((data3 && (data3.message || data3.error)) || `sendMedia HTTP ${res3.status}`);
+          const imageError = (data3 && (data3.message || data3.error)) || `sendMedia HTTP ${res3.status}`;
+          whatsappSendLogV436('image-error', { ...getWhatsappPartLogPayloadV436({ chip, item, phone:numero, baseUrl, part:'image', hasImage:true }), status:res3.status, error:imageError });
+          if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(imageLock.key);
+          throw new Error(imageError);
         }
         item.mediaSent = true;
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-media-sent' });
+        whatsappSendLogV436('image-success', { ...getWhatsappPartLogPayloadV436({ chip, item, phone:numero, baseUrl, part:'image', hasImage:true }), status:res3.status });
+        if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(imageLock.key);
         debugDispatchPersistV413('evolution-media-success', { file:'chip-slots.js', chipId:chip.id, loteNum, itemId:item.id });
         log(`  ② imagem enviada`);
       }
@@ -602,9 +702,11 @@ async function dispararLoteChip(slot) {
       item.status = 'enviado';
       atualizarStatusFilaSlot(slot, item.id, 'enviado');
       atualizarStatusEmpresa(item.id, 'Enviada');
+      whatsappSendLogV436('lead-complete', getWhatsappPartLogPayloadV436({ chip, item, phone:numero, baseUrl, part:'complete', hasImage:!!imgRedesign }));
       log(`<span style="color:${chipCor}">✓ ${escHtml(item.nome)}</span>`);
     } catch(e) {
       try { console.warn('[whatsapp-send]', { action:'error', slot, itemId:item.id, error:e?.message || e }); } catch(logError) {}
+      whatsappSendLogV436('lead-error', { ...getWhatsappPartLogPayloadV436({ chip, item, phone:normalizeDispatchPhoneV432(item.whatsapp), baseUrl, part:'lead', hasImage:false }), error:e?.message || e });
       item.status = 'erro';
       saveFilaDisparo({ delay:0, reason:'dispatch-chip-item-error' });
       atualizarStatusFilaSlot(slot, item.id, 'erro');

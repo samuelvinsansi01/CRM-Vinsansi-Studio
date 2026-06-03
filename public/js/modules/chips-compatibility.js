@@ -84,7 +84,16 @@ async function testEvolutionChipConnectionV407(form=null) {
     return { ok:false, error:msg };
   }
 
-  const endpoint = `${f.url}/instance/connectionState/${encodeURIComponent(f.instance)}`;
+  let baseUrl = f.url;
+  try {
+    baseUrl = typeof assertEvolutionBaseUrlV436 === 'function' ? assertEvolutionBaseUrlV436(f.url) : f.url;
+  } catch (err) {
+    const msg = err?.message || 'Evolution URL invalida';
+    setChipDebugV407(msg, 'err');
+    notify(msg, 'err');
+    return { ok:false, error:msg };
+  }
+  const endpoint = `${baseUrl}/instance/connectionState/${encodeURIComponent(f.instance)}`;
   setChipDebugV407(`Testando conexão...\nGET ${endpoint}\nHeader apikey: ${f.key ? 'preenchido' : 'vazio'}`);
 
   try {
@@ -238,7 +247,8 @@ function getLegacyChipFormV409() {
 }
 
 async function testarChipLegacyV409(chip) {
-  const endpoint = `${chip.url}/instance/connectionState/${encodeURIComponent(chip.instance)}`;
+  const baseUrl = typeof assertEvolutionBaseUrlV436 === 'function' ? assertEvolutionBaseUrlV436(chip.url) : chip.url;
+  const endpoint = `${baseUrl}/instance/connectionState/${encodeURIComponent(chip.instance)}`;
 
   const res = await fetch(endpoint, {
     method: 'GET',
@@ -380,9 +390,19 @@ function getAnySavedChipV4010() {
 function getEvolutionConfigForChipV405(chip = null) {
   const global = typeof getEvolutionSettings === 'function' ? getEvolutionSettings() : {};
   const selected = chip || getAnySavedChipV4010() || {};
+  const baseUrl = normalizeEvolutionBaseUrlV405(
+    selected.url ||
+    selected.baseUrl ||
+    selected.base_url ||
+    selected.evolutionUrl ||
+    selected.evolution_url ||
+    selected.baseEvolutionUrl ||
+    global.url ||
+    ''
+  );
 
   return {
-    url: normalizeEvolutionBaseUrlV405(selected.url || selected.baseUrl || selected.evolutionUrl || global.url || ''),
+    url: baseUrl,
     instance: selected.instance || selected.instanceName || selected.chipInstance || global.instance || '',
     apiKey: selected.key || selected.apiKey || selected.apikey || global.apiKey || '',
     chip: selected
@@ -496,4 +516,3 @@ async function validateActiveLeadWhatsapp() {
   if (typeof renderLeadTimeline === 'function') renderLeadTimeline(activeLeadDrawerId);
   if (typeof renderKanban === 'function') renderKanban();
 }
-

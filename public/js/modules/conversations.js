@@ -175,7 +175,7 @@ async function sendConversationReplyV38() {
   const lead = findLeadEverywhere(activeConversationLeadV38) || {};
   const text = (document.getElementById('conversationReplyTextV38')?.value || '').trim();
   const phone = normalizePhoneForEvolution(lead.whatsapp || lead.phone || lead.telefone || '');
-  const settings = getEvolutionSettings ? getEvolutionSettings() : {};
+  const settings = getEvolutionConfigForChipV405 ? getEvolutionConfigForChipV405() : (getEvolutionSettings ? getEvolutionSettings() : {});
 
   if (!text) {
     notify('Digite uma resposta.', 'warn');
@@ -202,7 +202,8 @@ async function sendConversationReplyV38() {
   }
 
   try {
-    const endpoint = `${settings.url}/message/sendText/${encodeURIComponent(instance)}`;
+    const baseUrl = typeof assertEvolutionBaseUrlV436 === 'function' ? assertEvolutionBaseUrlV436(settings.url) : settings.url;
+    const endpoint = `${baseUrl}/message/sendText/${encodeURIComponent(instance)}`;
     const res = await fetch(endpoint, {
       method:'POST',
       headers:(typeof getEvolutionHeadersV405 === 'function' ? getEvolutionHeadersV405(settings) : getEvolutionHeaders(settings)),
@@ -251,7 +252,9 @@ function updateConversationsBadgeV38() {
    Compatível com sistema antigo: chip.url + chip.instance + chip.key
 ════════════════════════════ */
 function normalizeEvolutionBaseUrlV405(url = '') {
-  return String(url || '').trim().replace(/\/$/, '');
+  return typeof getEvolutionBaseUrl === 'function'
+    ? getEvolutionBaseUrl({ url })
+    : String(url || '').trim().replace(/\/+$/, '');
 }
 
 function getPrimaryEvolutionChipV405() {
@@ -262,9 +265,19 @@ function getPrimaryEvolutionChipV405() {
 function getEvolutionConfigForChipV405(chip = null) {
   const global = typeof getEvolutionSettings === 'function' ? getEvolutionSettings() : {};
   const selected = chip || getPrimaryEvolutionChipV405() || {};
+  const baseUrl = normalizeEvolutionBaseUrlV405(
+    selected.url ||
+    selected.baseUrl ||
+    selected.base_url ||
+    selected.evolutionUrl ||
+    selected.evolution_url ||
+    selected.baseEvolutionUrl ||
+    global.url ||
+    ''
+  );
 
   return {
-    url: normalizeEvolutionBaseUrlV405(selected.url || selected.baseUrl || selected.evolutionUrl || global.url || ''),
+    url: baseUrl,
     instance: selected.instance || selected.instanceName || selected.chipInstance || global.instance || '',
     apiKey: selected.key || selected.apiKey || selected.apikey || global.apiKey || '',
     chip: selected
@@ -327,7 +340,8 @@ async function testEvolutionChipConnectionV406(chipLike = null) {
     return { ok:false, error:'Campos obrigatórios ausentes' };
   }
 
-  const endpoint = `${cfg.url}/instance/connectionState/${encodeURIComponent(cfg.instance)}`;
+  const baseUrl = typeof assertEvolutionBaseUrlV436 === 'function' ? assertEvolutionBaseUrlV436(cfg.url) : cfg.url;
+  const endpoint = `${baseUrl}/instance/connectionState/${encodeURIComponent(cfg.instance)}`;
 
   try {
     const res = await fetch(endpoint, {

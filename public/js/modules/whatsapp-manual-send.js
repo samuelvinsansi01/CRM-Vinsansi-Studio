@@ -19,14 +19,18 @@ function getManualSendEvolutionConfigV4012() {
       ? getEvolutionConfigForChipV405()
       : null;
 
-    if (cfg && cfg.url && cfg.instance && cfg.apiKey) return cfg;
+    if (cfg && cfg.url && cfg.instance && cfg.apiKey) {
+      const chipWithUrl = { ...(cfg.chip || {}), url:(cfg.chip?.url || cfg.url || '') };
+      const url = typeof getEvolutionBaseUrl === 'function' ? getEvolutionBaseUrl(chipWithUrl) : String(cfg.url || '').replace(/\/+$/, '');
+      return { ...cfg, url };
+    }
   } catch(e) {}
 
   try {
     const chip = typeof getAnySavedChipV4010 === 'function' ? getAnySavedChipV4010() : null;
     if (chip) {
       return {
-        url: String(chip.url || '').replace(/\/$/, ''),
+        url: typeof getEvolutionBaseUrl === 'function' ? getEvolutionBaseUrl(chip) : String(chip.url || '').replace(/\/+$/, ''),
         instance: chip.instance || '',
         apiKey: chip.key || chip.apiKey || '',
         chip
@@ -36,7 +40,7 @@ function getManualSendEvolutionConfigV4012() {
 
   const settings = typeof getEvolutionSettings === 'function' ? getEvolutionSettings() : {};
   return {
-    url: String(settings.url || '').replace(/\/$/, ''),
+    url: typeof getEvolutionBaseUrl === 'function' ? getEvolutionBaseUrl({ url:settings.url || '' }) : String(settings.url || '').replace(/\/+$/, ''),
     instance: settings.instance || '',
     apiKey: settings.apiKey || '',
     chip: null
@@ -72,7 +76,8 @@ async function sendActiveLeadWhatsappMessageLegacyV4012() {
   if (result) result.textContent = 'Enviando mensagem...';
 
   try {
-    const endpoint = `${cfg.url}/message/sendText/${encodeURIComponent(cfg.instance)}`;
+    const baseUrl = typeof assertEvolutionBaseUrlV436 === 'function' ? assertEvolutionBaseUrlV436(cfg.url) : cfg.url;
+    const endpoint = `${baseUrl}/message/sendText/${encodeURIComponent(cfg.instance)}`;
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -148,13 +153,36 @@ function buildEvolutionTextPayloadV4013(number, text) {
   };
 }
 
-async function sendEvolutionTextV4013({ url, instance, apiKey, number, text, leadId = '' }) {
+async function sendEvolutionTextV4013({ url, instance, apiKey, number, text, leadId = '', part = 'manual', chip = null }) {
+  const baseUrlRaw = typeof getEvolutionBaseUrl === 'function'
+    ? getEvolutionBaseUrl({ ...(chip || {}), url:(chip?.url || url || '') })
+    : String(url || '').replace(/\/+$/, '');
+  const baseUrl = typeof assertEvolutionBaseUrlV436 === 'function'
+    ? assertEvolutionBaseUrlV436(baseUrlRaw)
+    : baseUrlRaw;
+  const logPayload = {
+    leadId,
+    phone:number,
+    instance,
+    baseUrl,
+    part,
+    hasMessage1: !!String(text || '').trim(),
+    hasMessage2: false,
+    hasImage: false
+  };
+  if (typeof whatsappSendLogV436 === 'function') {
+    whatsappSendLogV436('base-url', logPayload);
+    whatsappSendLogV436(`${part}-start`, logPayload);
+  }
   const lock = typeof acquireWhatsappSendLockV31 === 'function'
-    ? acquireWhatsappSendLockV31({ leadId, phone:number, text, instance }, 10000)
+    ? acquireWhatsappSendLockV31({ leadId, phone:number, text, content:text, instance, part }, 10000)
     : { ok:true, key:'' };
+  if (!lock.ok && typeof whatsappSendLogV436 === 'function') {
+    whatsappSendLogV436(`${part}-error`, { ...logPayload, error:'duplicate-lock' });
+  }
   if (!lock.ok) throw new Error('Envio duplicado bloqueado por segurança. Aguarde alguns segundos.');
 
-  const endpoint = `${String(url || '').replace(/\/$/, '')}/message/sendText/${encodeURIComponent(instance || '')}`;
+  const endpoint = `${baseUrl}/message/sendText/${encodeURIComponent(instance || '')}`;
 
   try {
     const res = await fetch(endpoint, {
@@ -172,10 +200,15 @@ async function sendEvolutionTextV4013({ url, instance, apiKey, number, text, lea
 
     if (!res.ok) {
       const msg = data?.message || data?.error || raw || `HTTP ${res.status}`;
+      if (typeof whatsappSendLogV436 === 'function') whatsappSendLogV436(`${part}-error`, { ...logPayload, status:res.status, error:msg });
       throw new Error(msg);
     }
 
+    if (typeof whatsappSendLogV436 === 'function') whatsappSendLogV436(`${part}-success`, { ...logPayload, status:res.status });
     return data;
+  } catch (error) {
+    if (typeof whatsappSendLogV436 === 'function') whatsappSendLogV436(`${part}-error`, { ...logPayload, error:error?.message || error });
+    throw error;
   } finally {
     if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(lock.key);
   }
@@ -216,7 +249,9 @@ async function sendActiveLeadWhatsappMessageLegacyV4013() {
       apiKey: cfg.apiKey,
       number: phone,
       text,
-      leadId: activeLeadDrawerId
+      leadId: activeLeadDrawerId,
+      part:'manual',
+      chip: cfg.chip
     });
 
     const crm = ensureLeadCrm(activeLeadDrawerId, activeLeadDrawerData || {});
@@ -439,7 +474,9 @@ async function sendActiveLeadWhatsappMessage() {
       apiKey: cfg.apiKey,
       number: phone,
       text,
-      leadId: activeLeadDrawerId
+      leadId: activeLeadDrawerId,
+      part:'manual',
+      chip: cfg.chip
     });
 
     const persistence = await markLeadWhatsappSentV4014(activeLeadDrawerId, activeLeadDrawerData, {
