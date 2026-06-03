@@ -507,11 +507,22 @@ function saveInstaSched(d){ localStorage.setItem(INSTA_SCHED_KEY, JSON.stringify
 /* ════════════════════════════
    STORAGE — CHIPS
 ════════════════════════════ */
-function getChips()  { return getStoredArray(CHIPS_KEY); }
+function getChips()  {
+  const chips = getStoredArray(CHIPS_KEY);
+  if (typeof normalizeChipListForStorageV437 !== 'function') return chips;
+  const normalized = normalizeChipListForStorageV437(chips);
+  try {
+    if (JSON.stringify(normalized) !== JSON.stringify(chips)) {
+      localStorage.setItem(CHIPS_KEY, JSON.stringify(normalized));
+    }
+  } catch(e) {}
+  return normalized;
+}
 function saveChips(c){
-  localStorage.setItem(CHIPS_KEY, JSON.stringify(c));
+  const chips = typeof normalizeChipListForStorageV437 === 'function' ? normalizeChipListForStorageV437(c) : c;
+  localStorage.setItem(CHIPS_KEY, JSON.stringify(chips));
   localStorage.setItem(LEGACY_CHIPS_UPDATED_AT_KEY_V426, new Date().toISOString());
-  uiSyncLogV426('optimistic-update', { entity:'chip', action:'save-legacy-cache', count:Array.isArray(c) ? c.length : 0 });
+  uiSyncLogV426('optimistic-update', { entity:'chip', action:'save-legacy-cache', count:Array.isArray(chips) ? chips.length : 0 });
   scheduleLegacyOperationalSyncV36({ delay:0 });
 }
 function getChipById(id) { return getChips().find(c => c.id === id); }

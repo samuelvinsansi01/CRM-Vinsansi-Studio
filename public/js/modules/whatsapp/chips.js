@@ -52,9 +52,23 @@ function normalizeWhatsappChipOperationV426(chip = {}){
   const blocks = Array.isArray(chip.blocks) ? chip.blocks.map(String) : [];
   const hasLegacyDefaultBlocks = blocks.join(',') === '08:00,10:00,12:00,14:00';
   const dailyLimit = Number(chip.dailyLimit || chip.daily_limit || 0);
+  const url = typeof normalizeChipEvolutionUrlForStorageV437 === 'function'
+    ? normalizeChipEvolutionUrlForStorageV437(chip)
+    : String(chip.url || chip.baseUrl || chip.evolutionUrl || '').replace(/\/+$/, '');
+  const baseUrl = typeof normalizeEvolutionUrlForStorageV437 === 'function'
+    ? normalizeEvolutionUrlForStorageV437(chip.baseUrl || chip.base_url || url)
+    : (chip.baseUrl || chip.base_url || url);
+  const evolutionUrl = typeof normalizeEvolutionUrlForStorageV437 === 'function'
+    ? normalizeEvolutionUrlForStorageV437(chip.evolutionUrl || chip.evolution_url || url)
+    : (chip.evolutionUrl || chip.evolution_url || url);
 
   return {
     ...chip,
+    url,
+    baseUrl,
+    base_url: baseUrl,
+    evolutionUrl,
+    evolution_url: evolutionUrl,
     dailyLimit: !dailyLimit || dailyLimit === 120 ? WHATSAPP_CHIP_DAILY_LIMIT_V426 : dailyLimit,
     intervalSeconds: Number(chip.intervalSeconds || chip.interval_seconds || WHATSAPP_CHIP_INTERVAL_SECONDS_V426),
     blockSize: Number(chip.blockSize || chip.block_size || WHATSAPP_CHIP_BLOCK_SIZE_V426),
@@ -75,6 +89,8 @@ function normalizeChipRowToLocalV22(row = {}){
     blocks: Array.isArray(row.blocks) ? row.blocks : getDefaultWhatsappChipBlocksV426(),
     connectionState: row.status || row.connection_state || 'salvo no banco',
     phone: row.phone || row.number || '',
+    url: row.url || row.base_url || row.evolution_url || '',
+    _hasPersistedEvolutionUrl: !!(row.url || row.base_url || row.evolution_url),
     dbId: row.id || null
   });
 }
@@ -86,7 +102,18 @@ function mergeSupabaseWhatsappChipsWithLocalCacheV426(dbChips = []){
   const merged = dbChips.map(chip => {
     const chipId = String(chip.id || chip.instance || '');
     const cached = cachedById.get(chipId) || {};
-    const next = { ...cached, ...chip };
+    const persistedUrl = chip._hasPersistedEvolutionUrl
+      ? (chip.url || chip.baseUrl || chip.evolutionUrl || '')
+      : '';
+    const preservedUrl = persistedUrl || cached.url || cached.baseUrl || cached.evolutionUrl || chip.url || '';
+    const next = normalizeWhatsappChipOperationV426({
+      ...cached,
+      ...chip,
+      url:preservedUrl,
+      baseUrl:preservedUrl,
+      evolutionUrl:preservedUrl
+    });
+    delete next._hasPersistedEvolutionUrl;
     delete next._syncStatus;
     delete next._syncRevision;
     delete next._syncError;
@@ -119,7 +146,9 @@ function mergeWhatsappChipsIntoLegacyCacheV426(chips = []){
     const mapped = {
       id: existing?.id || chip.id,
       nome: chip.nome || chip.name || existing?.nome || instance,
-      url: chip.url || chip.baseUrl || chip.evolutionUrl || existing?.url || '',
+      url: typeof normalizeChipEvolutionUrlForStorageV437 === 'function'
+        ? normalizeChipEvolutionUrlForStorageV437({ ...existing, ...chip }, existing?.url || '')
+        : (chip.url || chip.baseUrl || chip.evolutionUrl || existing?.url || ''),
       instance,
       key: chip.key || chip.apiKey || existing?.key || '',
       status: chip.connectionState || existing?.status || 'salvo no banco'
@@ -129,7 +158,10 @@ function mergeWhatsappChipsIntoLegacyCacheV426(chips = []){
     changed = true;
   });
 
-  if (changed) localStorage.setItem(CHIPS_KEY, JSON.stringify(legacyChips));
+  if (changed) {
+    const normalizedLegacy = typeof normalizeChipListForStorageV437 === 'function' ? normalizeChipListForStorageV437(legacyChips) : legacyChips;
+    localStorage.setItem(CHIPS_KEY, JSON.stringify(normalizedLegacy));
+  }
 }
 
 async function loadWhatsappChipsFromSupabaseV22(){

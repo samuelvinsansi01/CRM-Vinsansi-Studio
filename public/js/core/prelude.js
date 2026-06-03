@@ -101,6 +101,7 @@ const SIDEBAR_KEY    = 'vs_sidebar';
 const EXCLUDED_KEY   = 'vs_excluded_domains';
 const CHIPS_KEY      = 'vs_chips_v2';
 const LEGACY_CHIPS_UPDATED_AT_KEY_V426 = 'vs_chips_v2_updated_at_v426';
+const PUBLIC_EVOLUTION_URL_V437 = 'https://evolution.samuelvinsansi.com.br';
 const WHATSAPP_CHIP_DAILY_LIMIT_V426 = 180;
 const WHATSAPP_CHIP_BLOCK_SIZE_V426 = 30;
 const WHATSAPP_CHIP_INTERVAL_SECONDS_V426 = 120;
@@ -143,9 +144,9 @@ function getLoteSize() {
 function getDefaultEvolutionUrlV436() {
   try {
     const host = window.location.hostname;
-    return (host === 'localhost' || host === '127.0.0.1' || host === '::1') ? 'http://localhost:8080' : '';
+    return (host === 'localhost' || host === '127.0.0.1' || host === '::1') ? 'http://localhost:8080' : PUBLIC_EVOLUTION_URL_V437;
   } catch {
-    return '';
+    return PUBLIC_EVOLUTION_URL_V437;
   }
 }
 
@@ -160,7 +161,7 @@ function getEvolutionBaseUrl(chip = {}) {
     window.currentEvolutionUrl ||
     getDefaultEvolutionUrlV436();
 
-  return String(url || '').trim().replace(/\/+$/, '');
+  return normalizeEvolutionUrlForStorageV437(url);
 }
 
 function isLocalPanelHostV436() {
@@ -193,6 +194,64 @@ function assertEvolutionBaseUrlV436(baseUrl = '') {
   }
   return baseUrl;
 }
+
+function normalizeEvolutionUrlForStorageV437(url = '') {
+  const cleaned = String(url || '').trim().replace(/\/+$/, '');
+  if (!cleaned) return getDefaultEvolutionUrlV436();
+  if (!isLocalPanelHostV436() && isLoopbackEvolutionBaseUrlV436(cleaned)) {
+    return PUBLIC_EVOLUTION_URL_V437;
+  }
+  return cleaned;
+}
+
+function normalizeChipEvolutionUrlForStorageV437(chip = {}, fallback = '') {
+  const raw =
+    chip?.url ||
+    chip?.baseUrl ||
+    chip?.base_url ||
+    chip?.evolutionUrl ||
+    chip?.evolution_url ||
+    chip?.baseEvolutionUrl ||
+    fallback ||
+    '';
+  return normalizeEvolutionUrlForStorageV437(raw);
+}
+
+function normalizeChipForStorageV437(chip = {}, fallback = '') {
+  if (!chip || typeof chip !== 'object') return chip;
+  const url = normalizeChipEvolutionUrlForStorageV437(chip, fallback);
+  const baseUrl = normalizeEvolutionUrlForStorageV437(chip.baseUrl || chip.base_url || url);
+  const evolutionUrl = normalizeEvolutionUrlForStorageV437(chip.evolutionUrl || chip.evolution_url || url);
+  return {
+    ...chip,
+    url,
+    baseUrl,
+    base_url: baseUrl,
+    evolutionUrl,
+    evolution_url: evolutionUrl
+  };
+}
+
+function normalizeChipListForStorageV437(list = []) {
+  return (Array.isArray(list) ? list : []).map(chip => normalizeChipForStorageV437(chip));
+}
+
+function scrubLegacyEvolutionLocalhostCacheV437() {
+  if (isLocalPanelHostV436()) return;
+  try {
+    Object.keys(localStorage).forEach(key => {
+      let raw = '';
+      try { raw = localStorage.getItem(key) || ''; } catch(e) { return; }
+      if (!raw.includes('localhost:8080') && !raw.includes('127.0.0.1:8080')) return;
+      const replaced = raw
+        .replace(/http:\/\/localhost:8080/g, PUBLIC_EVOLUTION_URL_V437)
+        .replace(/http:\/\/127\.0\.0\.1:8080/g, PUBLIC_EVOLUTION_URL_V437);
+      if (replaced !== raw) localStorage.setItem(key, replaced);
+    });
+  } catch(e) {}
+}
+
+scrubLegacyEvolutionLocalhostCacheV437();
 
 function whatsappContentHashV436(value = '') {
   const str = String(value || '');
