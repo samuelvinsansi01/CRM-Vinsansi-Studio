@@ -595,6 +595,11 @@ function removerFila(id) {
     () => {
       if (!filaDisparo[disparoChipId]) return;
       filaDisparo[disparoChipId] = filaDisparo[disparoChipId].filter(f => f.id !== id);
+      try {
+        const chips = typeof getChips === 'function' ? getChips() : [];
+        const slot = chips.findIndex(chip => chip.id === disparoChipId);
+        if (slot >= 0 && typeof removeDispatchItemFromRuntimeV439 === 'function') removeDispatchItemFromRuntimeV439(slot, id);
+      } catch(e) {}
       const data = ensureWeekData();
       Object.keys(data.days).forEach(day => {
         const emp = (data.days[day]||[]).find(e => e.id === id);

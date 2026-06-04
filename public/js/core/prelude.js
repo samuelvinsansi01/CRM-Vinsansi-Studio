@@ -138,7 +138,8 @@ function getLoteSize() {
     }
   } catch {}
   const value = inputValue || configValue || WHATSAPP_CHIP_BLOCK_SIZE_V426 || 30;
-  return Math.max(1, Number.isFinite(value) ? Math.floor(value) : 30);
+  const normalized = Math.max(1, Number.isFinite(value) ? Math.floor(value) : 30);
+  return Math.min(WHATSAPP_CHIP_BLOCK_SIZE_V426 || 30, normalized);
 }
 
 function getDefaultEvolutionUrlV436() {

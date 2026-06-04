@@ -68,13 +68,19 @@ function loadEvoConfig(){
 }
 
 function saveEvoConfig() {
+  const loteTamanho = Math.min(
+    WHATSAPP_CHIP_BLOCK_SIZE_V426 || 30,
+    Math.max(1, parseInt(document.getElementById('loteTamanho')?.value || WHATSAPP_CHIP_BLOCK_SIZE_V426 || 30, 10) || 30)
+  );
   const cfg = {
     delayMin: document.getElementById('delayMin')?.value,
     delayMax: document.getElementById('delayMax')?.value,
-    loteTamanho: document.getElementById('loteTamanho')?.value,
+    loteTamanho,
     loteEsperaMin: document.getElementById('loteEsperaMin')?.value,
     horarioInicio: document.getElementById('horarioInicio')?.value,
   };
+  const loteInput = document.getElementById('loteTamanho');
+  if (loteInput) loteInput.value = String(loteTamanho);
   localStorage.setItem(EVO_KEY, JSON.stringify(cfg));
   uiSyncLogV426('optimistic-update', { entity:'evolution-config', action:'save-local-cache' });
   scheduleLegacyOperationalSyncV36({ delay:0, reason:'evolution-config-save' });

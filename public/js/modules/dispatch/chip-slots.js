@@ -62,6 +62,37 @@ function getChipDispatchRuntimeAgeMsV434(runtime = {}) {
   return Number.isFinite(updatedAt) ? Date.now() - updatedAt : Infinity;
 }
 
+function hydrateChipSlotStateFromRuntimeV439(slot, chip) {
+  if (!chip) return null;
+  const runtime = getChipDispatchRuntimeMapV432()[chip.id] || null;
+  if (!runtime) return null;
+  const st = chipSlotState[slot];
+  if (!st) return runtime;
+  const waitUntil = Number(runtime.waitUntil || 0);
+
+  if (runtime.state === 'waiting-lot' && waitUntil > Date.now()) {
+    st.disparoEmAndamento = false;
+    st.aguardandoLote = true;
+    st.loteAtual = Number(runtime.loteAtual || st.loteAtual || 0);
+    st.lotesTotal = Number(runtime.lotesTotal || st.lotesTotal || 0);
+    st.loteEsperaFim = waitUntil;
+    st.pausado = false;
+    st.runtimeWarning = '';
+    return runtime;
+  }
+
+  if (runtime.state === 'sending' || runtime.state === 'waiting-message') {
+    st.runtimeWarning = 'sending-uncertain';
+    st.disparoEmAndamento = false;
+    st.aguardandoLote = false;
+    st.loteAtual = Number(runtime.loteAtual || st.loteAtual || 0);
+    st.lotesTotal = Number(runtime.lotesTotal || st.lotesTotal || 0);
+    return runtime;
+  }
+
+  return runtime;
+}
+
 function recoverStaleChipDispatchRuntimeV434(slot, chip, runtime) {
   if (!chip || !runtime || runtime.state !== 'sending') return false;
   const st = chipSlotState[slot] || {};
@@ -163,6 +194,7 @@ function removerFilaSlot(slot, id) {
     () => {
       const f2 = getFilaChip(chip.id).filter(f => f.id !== id);
       filaDisparo[chip.id] = f2;
+      removeDispatchItemFromRuntimeV439(slot, id);
       if (!f2.length) saveChipDispatchRuntimeV432(chip.id, null);
       const data = ensureWeekData();
       Object.keys(data.days).forEach(day => {
@@ -201,6 +233,43 @@ function limparFilaChip(slot) {
 function normalizeDispatchPhoneV432(value = '') {
   const digits = String(value || '').replace(/\D/g, '');
   return digits.startsWith('55') ? digits : '55' + digits;
+}
+
+function getLiveDispatchItemV439(chipId, id) {
+  if (!chipId || !id) return null;
+  return getFilaChip(chipId).find(item => item?.id === id) || null;
+}
+
+function removeDispatchItemFromRuntimeV439(slot, id) {
+  const st = chipSlotState[slot];
+  if (!st || !id) return;
+  st.filaLotes = (st.filaLotes || [])
+    .map(lote => (lote || []).filter(item => item?.id !== id))
+    .filter(lote => lote.length);
+  st.retryItems = (st.retryItems || []).filter(item => item?.id !== id);
+}
+
+function isDispatchItemRemovedV439(chipId, item = {}) {
+  return !!(item?.id && !getLiveDispatchItemV439(chipId, item.id));
+}
+
+function shouldSkipDispatchItemV439(chipId, item = {}) {
+  const live = getLiveDispatchItemV439(chipId, item?.id);
+  if (!live) return { skip:true, reason:'removed', item:null };
+  if (live.status === 'enviado' || isDispatchItemFullyDeliveredV438(live)) {
+    return { skip:true, reason:'already-sent', item:live };
+  }
+  return { skip:false, reason:'active', item:live };
+}
+
+function assertDispatchItemStillQueuedV439(chipId, item = {}, phase = '') {
+  const live = getLiveDispatchItemV439(chipId, item?.id);
+  if (!live) {
+    const err = new Error(`Lead removido da fila antes de ${phase || 'continuar envio'}.`);
+    err.code = 'DISPATCH_ITEM_REMOVED';
+    throw err;
+  }
+  return live;
 }
 
 function getEvolutionUrlReachabilityErrorV435(chip) {
@@ -472,7 +541,7 @@ async function iniciarDisparoChip(slot) {
   const preflight = await validateDispatchPreflightV432(slot, pendentes);
   if (!preflight.ok) return;
   pendentes.forEach((item, index) => {
-    if (!item.mediaLoteNum) item.mediaLoteNum = Math.floor(index / LOTE_SIZE) + 1;
+    item.mediaLoteNum = Math.floor(index / LOTE_SIZE) + 1;
   });
   saveFilaDisparo({ delay:0, reason:'dispatch-chip-preflight-ready' });
 
@@ -559,8 +628,17 @@ async function dispararLoteChip(slot) {
   const loteSnapshot = lote.map(i => ({ ...i }));
 
   for (let i = 0; i < lote.length; i++) {
-    const item = lote[i];
-    if (item.status === 'enviado') continue;
+    let item = lote[i];
+    const initialState = shouldSkipDispatchItemV439(chip.id, item);
+    if (initialState.skip) {
+      if (initialState.reason === 'already-sent' && initialState.item) {
+        initialState.item.status = 'enviado';
+        atualizarStatusEmpresa(initialState.item.id, 'Enviada', { phone:initialState.item.whatsapp || initialState.item.phone || '' });
+      }
+      log(`<span style="color:var(--muted)">↷ ${escHtml(item.nome || 'Lead')} ignorado (${initialState.reason === 'removed' ? 'removido da fila' : 'ja enviado'})</span>`);
+      continue;
+    }
+    item = initialState.item;
 
     // ── Verificar pausa ──
     if (st.pausado) {
@@ -573,6 +651,13 @@ async function dispararLoteChip(slot) {
       log(`<span style="color:var(--ok)">▶ Retomado</span>`);
       if (btnTxtP) btnTxtP.textContent = `Lote ${st.loteAtual}/${st.lotesTotal}...`;
     }
+
+    const resumedState = shouldSkipDispatchItemV439(chip.id, item);
+    if (resumedState.skip) {
+      log(`<span style="color:var(--muted)">↷ ${escHtml(item.nome || 'Lead')} ignorado apos pausa (${resumedState.reason === 'removed' ? 'removido da fila' : 'ja enviado'})</span>`);
+      continue;
+    }
+    item = resumedState.item;
 
     item.status = 'enviando';
     saveChipDispatchRuntimeV432(chip.id, {
@@ -591,6 +676,7 @@ async function dispararLoteChip(slot) {
       if (!item.mediaLoteNum) item.mediaLoteNum = st.loteAtual;
 
       // MSG 1 — Apresentação
+      item = assertDispatchItemStillQueuedV439(chip.id, item, 'mensagem 1');
       if (!item.textSent) {
         const data1 = await sendWhatsappTextPartV436({
           chip,
@@ -618,7 +704,10 @@ async function dispararLoteChip(slot) {
             text: item.mensagem || '',
             occurredAt: new Date().toISOString(),
             response: data1
-          }, { queueOnFailure: true });
+          }, { queueOnFailure: true }).catch(error => {
+            uiSyncLogV426('supabase-save-error', { entity:'message', leadId:item.leadId || item.id || '', part:'part-1', error:error?.message || error });
+            return { ok:false, pending:true, error };
+          });
           if (persistence?.ok) log(`  ↳ conversa salva no banco`);
           else log(`  ↳ <span style="color:var(--warning)">conversa pendente de sincronização</span>`);
         }
@@ -628,6 +717,7 @@ async function dispararLoteChip(slot) {
       }
 
       // MSG 2 — Imagem do lote
+      item = assertDispatchItemStillQueuedV439(chip.id, item, 'mensagem 2');
       if (!item.text2Sent) {
         const data2 = await sendWhatsappTextPartV436({
           chip,
@@ -653,7 +743,10 @@ async function dispararLoteChip(slot) {
             text: item.mensagem2 || '',
             occurredAt: new Date().toISOString(),
             response: data2
-          }, { queueOnFailure: true });
+          }, { queueOnFailure: true }).catch(error => {
+            uiSyncLogV426('supabase-save-error', { entity:'message', leadId:item.leadId || item.id || '', part:'part-2', error:error?.message || error });
+            return { ok:false, pending:true, error };
+          });
           if (persistence2?.ok) log(`  complemento salvo no banco`);
           else log(`  <span style="color:var(--warning)">complemento pendente de sincronizacao</span>`);
         }
@@ -662,6 +755,7 @@ async function dispararLoteChip(slot) {
         log(`  complemento ja enviado - retomando imagem pendente`);
       }
 
+      item = assertDispatchItemStillQueuedV439(chip.id, item, 'imagem');
       const loteNum = item.mediaLoteNum || st.loteAtual;
       const imgRedesign = getLoteImagem(chip.id, loteNum);
       if (!imgRedesign && !item.mediaSent) throw new Error(`Imagem do lote ${loteNum} indisponível`);
@@ -709,6 +803,19 @@ async function dispararLoteChip(slot) {
       whatsappSendLogV436('lead-complete', getWhatsappPartLogPayloadV436({ chip, item, phone:numero, baseUrl, part:'complete', hasImage:!!imgRedesign }));
       log(`<span style="color:${chipCor}">✓ ${escHtml(item.nome)}</span>`);
     } catch(e) {
+      if (e?.code === 'DISPATCH_ITEM_REMOVED') {
+        log(`<span style="color:var(--muted)">↷ ${escHtml(item.nome || 'Lead')} interrompido porque foi removido da fila</span>`);
+        continue;
+      }
+      if (isDispatchItemFullyDeliveredV438(item)) {
+        item.status = 'enviado';
+        saveFilaDisparo({ delay:0, reason:'dispatch-chip-delivered-after-error-repair' });
+        atualizarStatusFilaSlot(slot, item.id, 'enviado');
+        atualizarStatusEmpresa(item.id, 'Enviada', { phone:item.whatsapp || item.phone || '', sentAt:new Date().toISOString() });
+        whatsappSendLogV436('lead-complete', getWhatsappPartLogPayloadV436({ chip, item, phone:normalizeDispatchPhoneV432(item.whatsapp), baseUrl, part:'complete-repaired', hasImage:true }));
+        log(`<span style="color:${chipCor}">✓ ${escHtml(item.nome)} entregue e reparado</span>`);
+        continue;
+      }
       try { console.warn('[whatsapp-send]', { action:'error', slot, itemId:item.id, error:e?.message || e }); } catch(logError) {}
       whatsappSendLogV436('lead-error', { ...getWhatsappPartLogPayloadV436({ chip, item, phone:normalizeDispatchPhoneV432(item.whatsapp), baseUrl, part:'lead', hasImage:false }), error:e?.message || e });
       item.status = 'erro';

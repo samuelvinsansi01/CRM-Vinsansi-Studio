@@ -17,6 +17,9 @@ function renderChipAccordions() {
   while (chipSlotState.length < chips.length) {
     chipSlotState.push({ filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false });
   }
+  chips.forEach((chip, slot) => {
+    if (typeof hydrateChipSlotStateFromRuntimeV439 === 'function') hydrateChipSlotStateFromRuntimeV439(slot, chip);
+  });
 
   if (!chips.length) {
     zapRight.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum chip configurado</div>`;
@@ -31,7 +34,9 @@ function renderChipAccordions() {
       aguardandoLote: st ? st.aguardandoLote : false,
       loteAtual: st ? st.loteAtual : 0,
       lotesTotal: st ? st.lotesTotal : 0,
+      loteEsperaFim: st ? st.loteEsperaFim : null,
       pausado: st ? st.pausado : false,
+      runtimeWarning: st ? st.runtimeWarning : '',
       accordionAberto: document.getElementById(`chipAccordion${slot}`)?.classList.contains('open') || false,
     };
   });
@@ -126,6 +131,14 @@ function renderChipAccordions() {
       if (btnTxt) btnTxt.textContent = `⏱ Aguardando próximo lote...`;
       const panel = document.getElementById(`loteEsperaPanel${slot}`);
       if (panel) panel.style.display = 'block';
+      const remaining = Number(est.loteEsperaFim || 0) - Date.now();
+      if (remaining > 0 && typeof iniciarCountdownLoteChip === 'function') iniciarCountdownLoteChip(slot, remaining);
+    } else if (est.runtimeWarning === 'sending-uncertain') {
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.title = 'Envio interrompido em estado incerto. Confira a fila antes de reenviar.';
+      }
+      if (btnTxt) btnTxt.textContent = '⚠ Envio incerto';
     }
   });
 }
