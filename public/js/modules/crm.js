@@ -110,7 +110,7 @@ function updateLeadEverywhereV427(id, patch = {}, options = {}) {
   if (typeof getLeadBaseData === 'function' && typeof LEADS_BASE_KEY !== 'undefined') {
     const result = patchLeadArrayV427(getLeadBaseData(), id, patch);
     if (result.changed) {
-      localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(result.next));
+      if (typeof saveOperationalKeyV481 === 'function') saveOperationalKeyV481(LEADS_BASE_KEY, result.next, 'crm-permanent-base-patch'); else localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(result.next));
       touched.push('permanentBase');
     }
   }

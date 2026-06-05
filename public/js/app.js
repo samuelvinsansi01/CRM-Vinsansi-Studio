@@ -46,7 +46,7 @@
   }
   // Migrar imagens antigas do localStorage para o IDB (executa uma vez)
   try {
-    const oldCfg = JSON.parse(localStorage.getItem(LOTE_CFG_KEY)||'{}')||{};
+    const oldCfg = (typeof v48StateGetObject === 'function') ? v48StateGetObject(LOTE_CFG_KEY) : (JSON.parse(localStorage.getItem(LOTE_CFG_KEY)||'{}')||{});
     const migrKeys = Object.keys(oldCfg).filter(k => oldCfg[k] && oldCfg[k].imagem2Base64);
     if (migrKeys.length) {
       migrKeys.forEach(k => {
@@ -55,7 +55,7 @@
         delete oldCfg[k].imagem2Base64;
         delete oldCfg[k].imagem2Nome;
       });
-      localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(oldCfg));
+      if (typeof v48StateSet === 'function') v48StateSet(LOTE_CFG_KEY, oldCfg, 'migrate-batch-images-to-idb'); else localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(oldCfg));
       console.log('[migrar] ' + migrKeys.length + ' imagem(ns) movida(s) do localStorage para o IDB');
     }
   } catch(e) {}
@@ -63,8 +63,8 @@
   // O campo canal foi corrigido na v1, mas os leads ficaram na lista errada.
   // Leads com canal 'insta' (ou sem canal e sem whatsapp) devem estar em INSTA_KEY.
   try {
-    const atribRaw = JSON.parse(localStorage.getItem(ATRIBUICAO_KEY) || '[]');
-    const instaRaw = JSON.parse(localStorage.getItem(INSTA_KEY) || '[]');
+    const atribRaw = (typeof getAtribuicaoData === 'function') ? getAtribuicaoData() : JSON.parse(localStorage.getItem(ATRIBUICAO_KEY) || '[]');
+    const instaRaw = (typeof getInstaFila === 'function') ? getInstaFila() : JSON.parse(localStorage.getItem(INSTA_KEY) || '[]');
     const instaIds = new Set(instaRaw.map(i => i.id));
 
     // Determina canal correto para cada lead (incluindo legados sem canal)
@@ -93,8 +93,8 @@
           canal: 'insta',
         }));
 
-      localStorage.setItem(INSTA_KEY, JSON.stringify([...instaRaw, ...novosInsta]));
-      localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(ficamNoZap));
+      if (typeof saveInstaFila === 'function') saveInstaFila([...instaRaw, ...novosInsta]); else localStorage.setItem(INSTA_KEY, JSON.stringify([...instaRaw, ...novosInsta]));
+      if (typeof saveAtribuicaoData === 'function') saveAtribuicaoData(ficamNoZap); else localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(ficamNoZap));
       console.log(`[migração v2] ${novosInsta.length} leads → INSTA_KEY · ${ficamNoZap.length} ficam em ATRIBUICAO_KEY (ZAP)`);
     }
   } catch(e) { console.warn('[migração v2] erro:', e); }

@@ -141,8 +141,8 @@ function saveFilaDisparo({ delay = 250, reason = 'dispatch-queue-save' } = {}) {
     if (typeof repairCompletedDispatchQueueItemsV438 === 'function') {
       repairCompletedDispatchQueueItemsV438('saveFilaDisparo.beforeSave');
     }
-    localStorage.setItem(FILA_DISPARO_KEY, JSON.stringify(filaDisparo));
-    localStorage.setItem(FILA_DISPARO_UPDATED_AT_KEY_V431, updatedAt);
+    if (typeof v48StateSet === 'function') v48StateSet(FILA_DISPARO_KEY, filaDisparo, reason); else localStorage.setItem(FILA_DISPARO_KEY, JSON.stringify(filaDisparo));
+    window.__VS_FILA_DISPARO_UPDATED_AT_V481 = updatedAt;
   } catch(e) {
     console.warn('saveFilaDisparo error', e);
   }

@@ -1075,7 +1075,7 @@ function atualizarStatusEmpresa(id, status = 'Enviada', meta = {}) {
           lead.sentAt = nowIso;
           lead.whatsappStatus = 'sent';
         }
-        localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(base));
+        if (typeof saveOperationalKeyV481 === 'function') saveOperationalKeyV481(LEADS_BASE_KEY, base, 'dispatch-status-base-save'); else localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(base));
         changed = true;
       }
     }
@@ -1105,8 +1105,8 @@ function repairCompletedDispatchQueueItemsV438(source = 'dispatch-repair') {
       });
     });
     if (repaired) {
-      localStorage.setItem(FILA_DISPARO_KEY, JSON.stringify(filaDisparo));
-      localStorage.setItem(FILA_DISPARO_UPDATED_AT_KEY_V431, new Date().toISOString());
+      if (typeof v48StateSet === 'function') v48StateSet(FILA_DISPARO_KEY, filaDisparo, 'repair-completed-send'); else localStorage.setItem(FILA_DISPARO_KEY, JSON.stringify(filaDisparo));
+      window.__VS_FILA_DISPARO_UPDATED_AT_V481 = new Date().toISOString();
       uiSyncLogV426('optimistic-update', { entity:'dispatch-queue', action:'repair-completed-send', source, count:repaired });
       try { console.warn('[whatsapp-send][status-repaired]', { source, count:repaired }); } catch(e) {}
     }

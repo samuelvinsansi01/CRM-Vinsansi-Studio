@@ -950,11 +950,17 @@ function markLeadSegmentV47(lead = {}) {
 }
 
 function getLeadSentLedgerV47() {
-  try { return JSON.parse(localStorage.getItem('vs_whatsapp_sent_ledger_v47') || '{}') || {}; }
+  try {
+    if (typeof v48StateGetObject === 'function') return v48StateGetObject('vs_whatsapp_sent_ledger_v47');
+    return JSON.parse(localStorage.getItem('vs_whatsapp_sent_ledger_v47') || '{}') || {};
+  }
   catch { return {}; }
 }
 function saveLeadSentLedgerV47(ledger = {}) {
-  try { localStorage.setItem('vs_whatsapp_sent_ledger_v47', JSON.stringify(ledger || {})); } catch(e) {}
+  try {
+    if (typeof v48StateSet === 'function') v48StateSet('vs_whatsapp_sent_ledger_v47', ledger || {}, 'whatsapp-sent-ledger-save');
+    else localStorage.setItem('vs_whatsapp_sent_ledger_v47', JSON.stringify(ledger || {}));
+  } catch(e) {}
 }
 function markLeadAsDispatchedEverV47(lead = {}, meta = {}) {
   const ledger = getLeadSentLedgerV47();

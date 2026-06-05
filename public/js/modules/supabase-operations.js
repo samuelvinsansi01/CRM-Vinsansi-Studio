@@ -1,3 +1,81 @@
+
+/* ════════════════════════════
+   SUPABASE-FIRST STATE V48.1
+   Fonte oficial: operational_data.payload.data.
+   localStorage fica apenas como legado/fallback de migração.
+════════════════════════════ */
+window.__VS_OPERATIONAL_STATE_V481 = window.__VS_OPERATIONAL_STATE_V481 || {};
+window.__VS_OPERATIONAL_STATE_LOADED_V481 = window.__VS_OPERATIONAL_STATE_LOADED_V481 || false;
+window.__VS_OPERATIONAL_DIRTY_AT_V481 = window.__VS_OPERATIONAL_DIRTY_AT_V481 || '';
+
+function getOperationalMemoryV481() {
+  window.__VS_OPERATIONAL_STATE_V481 = window.__VS_OPERATIONAL_STATE_V481 || {};
+  return window.__VS_OPERATIONAL_STATE_V481;
+}
+function getOperationalKeyNameV481(storageKey) {
+  if (!storageKey || typeof OPERATIONAL_DATA_KEYS_V36 === 'undefined') return '';
+  const found = Object.entries(OPERATIONAL_DATA_KEYS_V36).find(([, key]) => key === storageKey);
+  return found ? found[0] : '';
+}
+function getOperationalStateByStorageKeyV481(storageKey, fallback = null) {
+  const name = getOperationalKeyNameV481(storageKey);
+  const mem = getOperationalMemoryV481();
+  if (name && Object.prototype.hasOwnProperty.call(mem, name)) return mem[name];
+  return fallback;
+}
+function setOperationalStateByStorageKeyV481(storageKey, value) {
+  const name = getOperationalKeyNameV481(storageKey);
+  if (!name) return false;
+  getOperationalMemoryV481()[name] = value;
+  return true;
+}
+function removeOperationalStateByStorageKeyV481(storageKey) {
+  const name = getOperationalKeyNameV481(storageKey);
+  if (!name) return false;
+  delete getOperationalMemoryV481()[name];
+  return true;
+}
+function parseJsonMaybeV481(value, fallback = null) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch(e) { return fallback; }
+}
+function readLegacyLocalStorageOnceV481(storageKey) {
+  try { return parseJsonMaybeV481(localStorage.getItem(storageKey), null); } catch(e) { return null; }
+}
+function v48StateGetArray(storageKey) {
+  const val = getOperationalStateByStorageKeyV481(storageKey, undefined);
+  if (val !== undefined) return Array.isArray(val) ? val : [];
+  const legacy = readLegacyLocalStorageOnceV481(storageKey);
+  if (Array.isArray(legacy)) {
+    setOperationalStateByStorageKeyV481(storageKey, legacy);
+    scheduleLegacyOperationalSyncV36?.({ delay:0, reason:'migrate-local-array-to-supabase-state' });
+    return legacy;
+  }
+  return [];
+}
+function v48StateGetObject(storageKey) {
+  const val = getOperationalStateByStorageKeyV481(storageKey, undefined);
+  if (val !== undefined) return val && typeof val === 'object' && !Array.isArray(val) ? val : {};
+  const legacy = readLegacyLocalStorageOnceV481(storageKey);
+  if (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) {
+    setOperationalStateByStorageKeyV481(storageKey, legacy);
+    scheduleLegacyOperationalSyncV36?.({ delay:0, reason:'migrate-local-object-to-supabase-state' });
+    return legacy;
+  }
+  return {};
+}
+function v48StateSet(storageKey, value, reason = 'state-save') {
+  if (!setOperationalStateByStorageKeyV481(storageKey, value)) return false;
+  scheduleLegacyOperationalSyncV36?.({ delay:250, reason });
+  return true;
+}
+function v48StateRemove(storageKey, reason = 'state-remove') {
+  if (!removeOperationalStateByStorageKeyV481(storageKey)) return false;
+  scheduleLegacyOperationalSyncV36?.({ delay:250, reason });
+  return true;
+}
+
 /* ════════════════════════════
    PERSISTÊNCIA SUPABASE V36
 ════════════════════════════ */
@@ -35,7 +113,8 @@ const OPERATIONAL_DATA_KEYS_V36 = {
   dispatchRuntime: 'vs_dispatch_runtime_v32',
   evolutionResponses: 'vs_evolution_responses_v34',
   whatsappOutbox: 'vs_whatsapp_outbox_v412',
-  evolutionSettings: 'vs_evolution_settings_v1'
+  evolutionSettings: 'vs_evolution_settings_v1',
+  whatsappSentLedger: 'vs_whatsapp_sent_ledger_v47'
 };
 
 function setPersistenceStatusV36(text, type = '') {
@@ -48,12 +127,14 @@ function setPersistenceStatusV36(text, type = '') {
 
 function getOperationalSnapshotV36() {
   const data = {};
+  const mem = getOperationalMemoryV481();
   Object.entries(OPERATIONAL_DATA_KEYS_V36).forEach(([name, key]) => {
-    try {
-      data[name] = JSON.parse(localStorage.getItem(key) || 'null');
-    } catch {
-      data[name] = localStorage.getItem(key);
+    if (Object.prototype.hasOwnProperty.call(mem, name)) {
+      data[name] = mem[name];
+      return;
     }
+    // Migração única: se ainda existir legado local, inclui no snapshot para não perder dados.
+    data[name] = readLegacyLocalStorageOnceV481(key);
   });
 
   if (typeof filterPersistentLeadsV433 === 'function' && Array.isArray(data.permanentLeads)) {
@@ -112,21 +193,20 @@ function getOperationalDirtyKeyV430() {
 }
 
 function getOperationalDirtyAtV430() {
-  return localStorage.getItem(getOperationalDirtyKeyV430()) || '';
+  return window.__VS_OPERATIONAL_DIRTY_AT_V481 || '';
 }
 
 function markOperationalDataDirtyV430(reason = 'local-change') {
   if (!currentUser?.id || !currentUser?.email) return '';
   const dirtyAt = new Date().toISOString();
-  localStorage.setItem(getOperationalDirtyKeyV430(), dirtyAt);
-  uiSyncLogV426('optimistic-update', { entity:'operational-data', action:'mark-dirty', reason, dirtyAt });
+  window.__VS_OPERATIONAL_DIRTY_AT_V481 = dirtyAt;
+  uiSyncLogV426('optimistic-update', { entity:'operational-data', action:'mark-dirty-memory', reason, dirtyAt });
   return dirtyAt;
 }
 
 function clearOperationalDataDirtyV430(expectedDirtyAt = '') {
-  const key = getOperationalDirtyKeyV430();
-  const currentDirtyAt = localStorage.getItem(key) || '';
-  if (!expectedDirtyAt || currentDirtyAt === expectedDirtyAt) localStorage.removeItem(key);
+  const currentDirtyAt = window.__VS_OPERATIONAL_DIRTY_AT_V481 || '';
+  if (!expectedDirtyAt || currentDirtyAt === expectedDirtyAt) window.__VS_OPERATIONAL_DIRTY_AT_V481 = '';
 }
 
 function getOperationalRemoteUpdatedAtV430(row = {}) {
@@ -163,30 +243,27 @@ function restoreOperationalSnapshotV36(snapshot = {}) {
     && (!remoteExportedAt || localDispatchQueueUpdatedAt > remoteExportedAt)
   );
 
+  const mem = getOperationalMemoryV481();
   Object.entries(OPERATIONAL_DATA_KEYS_V36).forEach(([name, key]) => {
-    if (name === 'legacyChips' && preserveLocalLegacyChips) return;
-    if (name === 'whatsappDispatchQueues' && preserveLocalDispatchQueue) return;
     if (data[name] === undefined) return;
-    if (data[name] === null) {
-      localStorage.removeItem(key);
-      return;
-    }
-    localStorage.setItem(key, JSON.stringify(data[name]));
+    if (data[name] === null) delete mem[name];
+    else mem[name] = data[name];
   });
+  window.__VS_OPERATIONAL_STATE_LOADED_V481 = true;
   if (preserveLocalLegacyChips) {
     uiSyncLogV426('optimistic-update', { entity:'chip', action:'preserve-newer-legacy-cache' });
     scheduleOperationalSyncV36({ delay:0 });
   } else if (data.legacyChips !== undefined && snapshot.exportedAt) {
-    localStorage.setItem(LEGACY_CHIPS_UPDATED_AT_KEY_V426, snapshot.exportedAt);
+    window.__VS_LEGACY_CHIPS_UPDATED_AT_V481 = snapshot.exportedAt;
   }
   if (preserveLocalDispatchQueue) {
     uiSyncLogV426('optimistic-update', { entity:'dispatch-queue', action:'preserve-newer-local-cache' });
     scheduleOperationalSyncV36({ delay:0 });
   } else if (data.whatsappDispatchQueues !== undefined && snapshot.exportedAt) {
-    localStorage.setItem(FILA_DISPARO_UPDATED_AT_KEY_V431, snapshot.exportedAt);
+    window.__VS_FILA_DISPARO_UPDATED_AT_V481 = snapshot.exportedAt;
   }
 
-  try { filaDisparo = JSON.parse(localStorage.getItem(FILA_DISPARO_KEY) || '{}') || {}; } catch {}
+  try { filaDisparo = v48StateGetObject(FILA_DISPARO_KEY); } catch {}
   if (typeof reconcilePermanentLeadBase === 'function') reconcilePermanentLeadBase({ schedule:false });
   if (typeof updateBadges === 'function') updateBadges();
   if (typeof updateWhatsappQueueBadge === 'function') updateWhatsappQueueBadge();
@@ -291,7 +368,7 @@ async function loadOperationalDataFromSupabaseV36() {
     }
 
     if (shouldPreserveLocalOperationalDataV430(data)) {
-      try { filaDisparo = JSON.parse(localStorage.getItem(FILA_DISPARO_KEY) || '{}') || {}; } catch {}
+      try { filaDisparo = v48StateGetObject(FILA_DISPARO_KEY); } catch {}
       uiSyncLogV426('optimistic-update', {
         entity:'operational-data',
         action:'preserve-newer-local-cache',

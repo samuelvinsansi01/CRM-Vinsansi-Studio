@@ -2,7 +2,7 @@
 const LOTE_CFG_KEY = 'vs_lote_cfg_v1';
 function getLoteCfg() {
   try {
-    const cfg = JSON.parse(localStorage.getItem(LOTE_CFG_KEY) || '{}');
+    const cfg = (typeof v48StateGetObject === 'function') ? v48StateGetObject(LOTE_CFG_KEY) : JSON.parse(localStorage.getItem(LOTE_CFG_KEY) || '{}');
     return cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? cfg : {};
   } catch(e) {
     return {};
@@ -10,7 +10,7 @@ function getLoteCfg() {
 }
 function saveLoteCfg(cfg) {
   try {
-    localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(cfg));
+    if (typeof v48StateSet === 'function') v48StateSet(LOTE_CFG_KEY, cfg, 'dispatch-batch-config-update'); else localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(cfg));
     uiSyncLogV426('optimistic-update', { entity:'dispatch-batch-config', action:'save-local-cache', count:Object.keys(cfg || {}).length });
     scheduleLegacyOperationalSyncV36({ delay:400, reason:'dispatch-batch-config-update' });
   } catch(e) {

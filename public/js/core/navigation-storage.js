@@ -169,6 +169,7 @@ function scheduleSupabaseLeadSync(leads = []) {
    STORAGE — EMPRESAS
 ════════════════════════════ */
 function getStoredArray(key) {
+  if (typeof v48StateGetArray === 'function') return v48StateGetArray(key);
   try {
     const data = JSON.parse(localStorage.getItem(key) || 'null');
     return Array.isArray(data) ? data : [];
@@ -177,12 +178,21 @@ function getStoredArray(key) {
   }
 }
 function getStoredObject(key) {
+  if (typeof v48StateGetObject === 'function') return v48StateGetObject(key);
   try {
     const data = JSON.parse(localStorage.getItem(key) || 'null');
     return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
   } catch {
     return {};
   }
+}
+function saveOperationalKeyV481(key, value, reason) {
+  if (typeof v48StateSet === 'function' && v48StateSet(key, value, reason)) return;
+  localStorage.setItem(key, JSON.stringify(value));
+}
+function removeOperationalKeyV481(key, reason) {
+  if (typeof v48StateRemove === 'function' && v48StateRemove(key, reason)) return;
+  localStorage.removeItem(key);
 }
 
 const PERMANENT_LEAD_STATUS_RANK = {
@@ -268,7 +278,7 @@ function mergeLeadsIntoPermanentBase(leads = [], metadata = {}, { schedule = tru
   const merged = typeof dedupeLeadArrayV31 === 'function'
     ? dedupeLeadArrayV31([...map.values()], 'permanentBase.afterMerge')
     : [...map.values()];
-  localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(merged));
+  saveOperationalKeyV481(LEADS_BASE_KEY, merged, 'permanent-leads-merge');
 
   if (schedule) {
     if (typeof scheduleSupabaseLeadSync === 'function') scheduleSupabaseLeadSync(changed);
@@ -300,18 +310,14 @@ function reconcilePermanentLeadBase({ schedule = true } = {}) {
 }
 
 function getWeekData()  {
-  try {
-    const data = JSON.parse(localStorage.getItem(EMPRESAS_KEY) || 'null');
-    return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
-  } catch {
-    return null;
-  }
+  const data = getStoredObject(EMPRESAS_KEY);
+  return data && Object.keys(data).length ? data : null;
 }
 function saveWeekData(d){
   if (typeof dedupeWeeklyLeadsV31 === 'function') {
     d = dedupeWeeklyLeadsV31(d, 'saveWeekData.beforeSave');
   }
-  localStorage.setItem(EMPRESAS_KEY, JSON.stringify(d));
+  saveOperationalKeyV481(EMPRESAS_KEY, d, 'weekly-leads-save');
   mergeLeadsIntoPermanentBase(Object.values(d?.days || {}).flat(), { source:'Agenda semanal' });
   scheduleLegacyOperationalSyncV36({ reason:'weekly-leads-save' });
 }
@@ -350,7 +356,7 @@ function ensureWeekData() {
       }
 
       // Salva histórico para compatibilidade
-      localStorage.setItem(HISTORY_KEY, JSON.stringify({ ...d, archivedAt: todayStr() }));
+      saveOperationalKeyV481(HISTORY_KEY, { ...d, archivedAt: todayStr() }, 'weekly-history-save');
 
       // ── Virada de semana Instagram: "Não contatado" voltam para fila ──
       const instaWeekData = getInstaWeek();
@@ -384,21 +390,17 @@ function ensureWeekData() {
     const after = Object.values(clean.days || {}).flat().length;
     if (after !== before) {
       d = clean;
-      try { localStorage.setItem(EMPRESAS_KEY, JSON.stringify(d)); } catch(e) {}
+      try { saveOperationalKeyV481(EMPRESAS_KEY, d, 'weekly-leads-save'); } catch(e) {}
       try { console.warn('[agenda][dedupe-render]', { totalBefore:before, totalAfter:after, removed:before-after }); } catch(e) {}
     }
   }
   return d;
 }
 function getHistoryData() {
-  try {
-    const data = JSON.parse(localStorage.getItem(HISTORY_KEY) || 'null');
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-    data.days = data.days && typeof data.days === 'object' && !Array.isArray(data.days) ? data.days : {};
-    return data;
-  } catch {
-    return null;
-  }
+  const data = getStoredObject(HISTORY_KEY);
+  if (!data || !Object.keys(data).length) return null;
+  data.days = data.days && typeof data.days === 'object' && !Array.isArray(data.days) ? data.days : {};
+  return data;
 }
 
 /* ════════════════════════════
@@ -406,7 +408,7 @@ function getHistoryData() {
 ════════════════════════════ */
 function getAcompData()  { return getStoredObject(ACOMP_KEY); }
 function saveAcompData(d){
-  localStorage.setItem(ACOMP_KEY, JSON.stringify(d));
+  saveOperationalKeyV481(ACOMP_KEY, d, 'monthly-tracking-save');
   mergeLeadsIntoPermanentBase(Object.values(d || {}).flat(), { source:'Acompanhamento' });
   scheduleLegacyOperationalSyncV36();
 }
@@ -439,7 +441,7 @@ function getAllSites(d)  { return new Set(flattenWeekData(d).map(e => extractDom
 function getValData()  { return getStoredArray(VAL_KEY); }
 function saveValData(d){
   if (typeof dedupeLeadArrayV31 === 'function') d = dedupeLeadArrayV31(d || [], 'saveValData.beforeSave');
-  localStorage.setItem(VAL_KEY, JSON.stringify(d));
+  saveOperationalKeyV481(VAL_KEY, d, 'validation-save');
   mergeLeadsIntoPermanentBase(d, { source:'Validação' });
   scheduleLegacyOperationalSyncV36({ reason:'validation-save' });
 }
@@ -450,7 +452,7 @@ function saveValData(d){
 function getAtribuicaoData()  { return getStoredArray(ATRIBUICAO_KEY); }
 function saveAtribuicaoData(d){
   if (typeof dedupeLeadArrayV31 === 'function') d = dedupeLeadArrayV31(d || [], 'saveAtribuicaoData.beforeSave');
-  localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(d));
+  saveOperationalKeyV481(ATRIBUICAO_KEY, d, 'assignment-save');
   mergeLeadsIntoPermanentBase(d, { source:'Atribuição' });
   scheduleLegacyOperationalSyncV36({ reason:'assignment-save' });
 }
@@ -459,13 +461,13 @@ function saveAtribuicaoData(d){
 function getInstaFila()  { return getStoredArray(INSTA_KEY); }
 function saveInstaFila(d){
   if (typeof dedupeLeadArrayV31 === 'function') d = dedupeLeadArrayV31(d || [], 'saveInstaFila.beforeSave');
-  localStorage.setItem(INSTA_KEY, JSON.stringify(d));
+  saveOperationalKeyV481(INSTA_KEY, d, 'instagram-queue-save');
   mergeLeadsIntoPermanentBase(d, { source:'Instagram' });
   scheduleLegacyOperationalSyncV36({ reason:'instagram-queue-save' });
 }
 
 function recuperarValidacaoZapDoDia() {
-  if (localStorage.getItem(RECUPERAR_VALIDACAO_ZAP_KEY) === '1') return 0;
+  if (window.__VS_RECUPERAR_VALIDACAO_ZAP_V481 === '1') return 0;
 
   const hoje = todayStr();
   const atribuicao = getAtribuicaoData();
@@ -494,7 +496,7 @@ function recuperarValidacaoZapDoDia() {
     saveAtribuicaoData(atribuicao.filter(lead => !recuperarIds.has(lead.id)));
   }
 
-  localStorage.setItem(RECUPERAR_VALIDACAO_ZAP_KEY, '1');
+  window.__VS_RECUPERAR_VALIDACAO_ZAP_V481 = '1';
   return devemVoltar.length;
 }
 
@@ -502,7 +504,7 @@ function recuperarValidacaoZapDoDia() {
    STORAGE — INSTA CRONOGRAMA
 ════════════════════════════ */
 function getInstaSched()  { return getStoredObject(INSTA_SCHED_KEY); }
-function saveInstaSched(d){ localStorage.setItem(INSTA_SCHED_KEY, JSON.stringify(d)); scheduleLegacyOperationalSyncV36(); }
+function saveInstaSched(d){ saveOperationalKeyV481(INSTA_SCHED_KEY, d, 'instagram-schedule-save'); scheduleLegacyOperationalSyncV36(); }
 
 /* ════════════════════════════
    STORAGE — CHIPS
@@ -513,15 +515,15 @@ function getChips()  {
   const normalized = normalizeChipListForStorageV437(chips);
   try {
     if (JSON.stringify(normalized) !== JSON.stringify(chips)) {
-      localStorage.setItem(CHIPS_KEY, JSON.stringify(normalized));
+      saveOperationalKeyV481(CHIPS_KEY, normalized, 'chips-normalize-save');
     }
   } catch(e) {}
   return normalized;
 }
 function saveChips(c){
   const chips = typeof normalizeChipListForStorageV437 === 'function' ? normalizeChipListForStorageV437(c) : c;
-  localStorage.setItem(CHIPS_KEY, JSON.stringify(chips));
-  localStorage.setItem(LEGACY_CHIPS_UPDATED_AT_KEY_V426, new Date().toISOString());
+  saveOperationalKeyV481(CHIPS_KEY, chips, 'chips-save');
+  window.__VS_LEGACY_CHIPS_UPDATED_AT_V481 = new Date().toISOString();
   uiSyncLogV426('optimistic-update', { entity:'chip', action:'save-legacy-cache', count:Array.isArray(chips) ? chips.length : 0 });
   scheduleLegacyOperationalSyncV36({ delay:0 });
 }
@@ -531,20 +533,16 @@ function getChipById(id) { return getChips().find(c => c.id === id); }
    STORAGE — RAMOS
 ════════════════════════════ */
 function getRamos()  {
-  try {
-    const data = JSON.parse(localStorage.getItem(RAMOS_KEY) || 'null');
-    return Array.isArray(data) ? data : RAMOS_DEFAULT;
-  } catch {
-    return RAMOS_DEFAULT;
-  }
+  const data = getStoredArray(RAMOS_KEY);
+  return Array.isArray(data) && data.length ? data : RAMOS_DEFAULT;
 }
-function saveRamos(r){ localStorage.setItem(RAMOS_KEY, JSON.stringify(r)); scheduleLegacyOperationalSyncV36(); }
+function saveRamos(r){ saveOperationalKeyV481(RAMOS_KEY, r, 'branches-save'); scheduleLegacyOperationalSyncV36(); }
 
 /* ════════════════════════════
    EXCLUDED DOMAINS
 ════════════════════════════ */
 function getExcludedDomains() { return getStoredArray(EXCLUDED_KEY); }
-function saveExcludedDomains(arr) { localStorage.setItem(EXCLUDED_KEY, JSON.stringify(arr)); scheduleLegacyOperationalSyncV36(); }
+function saveExcludedDomains(arr) { saveOperationalKeyV481(EXCLUDED_KEY, arr, 'excluded-domains-save'); scheduleLegacyOperationalSyncV36(); }
 function extractDomain(site) {
   try { return new URL(site.trim()).hostname.replace(/^www\./,'').toLowerCase(); } catch { return null; }
 }

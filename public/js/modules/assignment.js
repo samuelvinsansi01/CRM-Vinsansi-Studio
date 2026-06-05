@@ -309,7 +309,7 @@ function saveZapBacklog(d) {
     !(typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433(lead)) &&
     !(typeof isLeadSentOrClosedV433 === 'function' && isLeadSentOrClosedV433(lead))
   );
-  localStorage.setItem(ZAP_BACKLOG_KEY, JSON.stringify(clean));
+  if (typeof v48StateSet === 'function') v48StateSet(ZAP_BACKLOG_KEY, clean, 'whatsapp-backlog-save'); else localStorage.setItem(ZAP_BACKLOG_KEY, JSON.stringify(clean));
   if (typeof mergeLeadsIntoPermanentBase === 'function') mergeLeadsIntoPermanentBase(clean, { source:'Backlog WhatsApp' });
   scheduleLegacyOperationalSyncV36();
 }

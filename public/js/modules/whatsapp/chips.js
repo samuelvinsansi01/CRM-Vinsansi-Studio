@@ -163,7 +163,7 @@ function mergeWhatsappChipsIntoLegacyCacheV426(chips = []){
 
   if (changed) {
     const normalizedLegacy = typeof normalizeChipListForStorageV437 === 'function' ? normalizeChipListForStorageV437(legacyChips) : legacyChips;
-    localStorage.setItem(CHIPS_KEY, JSON.stringify(normalizedLegacy));
+    if (typeof saveOperationalKeyV481 === 'function') saveOperationalKeyV481(CHIPS_KEY, normalizedLegacy, 'chips-supabase-load-cache'); else localStorage.setItem(CHIPS_KEY, JSON.stringify(normalizedLegacy));
   }
 }
 

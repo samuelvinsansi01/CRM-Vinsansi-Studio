@@ -152,21 +152,21 @@ function updateWhatsappInLocalCollectionsV43(id, phone) {
     const base = typeof getLeadBaseData === 'function' ? getLeadBaseData() : [];
     if (Array.isArray(base) && base.some(lead => String(lead?.id) === String(id))) {
       const patched = base.map(patchLead);
-      localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(patched));
+      if (typeof saveOperationalKeyV481 === 'function') saveOperationalKeyV481(LEADS_BASE_KEY, patched, 'whatsapp-lead-base-patch'); else localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(patched));
     }
   } catch (err) { console.warn('[inicio][whatsapp] base local:', err); }
 
   try {
     const atrib = typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : [];
     if (Array.isArray(atrib) && atrib.some(lead => String(lead?.id) === String(id))) {
-      localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(atrib.map(patchLead)));
+      if (typeof saveAtribuicaoData === 'function') saveAtribuicaoData(atrib.map(patchLead)); else localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(atrib.map(patchLead))); 
     }
   } catch (err) { console.warn('[inicio][whatsapp] atribuição:', err); }
 
   try {
     const val = typeof getValData === 'function' ? getValData() : [];
     if (Array.isArray(val) && val.some(lead => String(lead?.id) === String(id))) {
-      localStorage.setItem(VAL_KEY, JSON.stringify(val.map(patchLead)));
+      if (typeof saveValData === 'function') saveValData(val.map(patchLead)); else localStorage.setItem(VAL_KEY, JSON.stringify(val.map(patchLead))); 
     }
   } catch (err) { console.warn('[inicio][whatsapp] validação:', err); }
 
@@ -180,7 +180,7 @@ function updateWhatsappInLocalCollectionsV43(id, phone) {
         return lead;
       });
     });
-    if (touched) localStorage.setItem(ACOMP_KEY, JSON.stringify(acomp));
+    if (touched) { if (typeof saveAcompData === 'function') saveAcompData(acomp); else localStorage.setItem(ACOMP_KEY, JSON.stringify(acomp)); }
   } catch (err) { console.warn('[inicio][whatsapp] acompanhamento:', err); }
 }
 

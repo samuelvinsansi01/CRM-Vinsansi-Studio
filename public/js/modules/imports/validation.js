@@ -260,34 +260,54 @@ function aprovarSemSiteParaZap(id) {
   const v = val.find(x => x.id === id);
   if (!v) return;
   if (v.numStatus !== 'valido') { notify('// valide o número primeiro','warn'); return; }
-  const phone = normalizePhone(v.whatsapp || '');
+  const phone = normalizePhone(v.whatsapp || v.phone || v.telefone || '');
   if (!phone || phone.length < 10) { notify('// número inválido para WhatsApp','err'); return; }
   markLeadWhatsappValidatedForQueue(v);
 
-  const data = ensureWeekData();
-  const day = v.diaDestino || todayStr();
-  if (!data.days[day]) data.days[day] = [];
+  // V48.1 — validação NÃO envia mais direto para fila/dia.
+  // O lead validado vai para Base de Atribuição preservando site/sem-site.
+  const site = v.site || v.website || v.websiteUrl || v.website_url || '';
+  const baseLead = typeof markLeadSegmentV47 === 'function' ? markLeadSegmentV47({
+    ...v,
+    id: v.id,
+    nome: v.nome,
+    site,
+    website: site,
+    whatsapp: phone,
+    phone,
+    telefone: phone,
+    canal: 'zap',
+    numStatus: 'valido',
+    whatsappValidationStatus: 'valid',
+    status: 'validado_para_atribuicao',
+    stage: 'assignment',
+    validadoEm: todayStr(),
+    criadoEm: v.criadoEm || v.importadoEm || todayStr()
+  }) : {
+    ...v,
+    site,
+    website: site,
+    whatsapp: phone,
+    phone,
+    telefone: phone,
+    canal: 'zap',
+    numStatus: 'valido',
+    whatsappValidationStatus: 'valid',
+    status: 'validado_para_atribuicao',
+    stage: 'assignment',
+    validadoEm: todayStr(),
+    criadoEm: v.criadoEm || v.importadoEm || todayStr()
+  };
 
-  const diasSemana = currentWeekDays();
-  let diaDestino = day;
-  let idx = diasSemana.indexOf(day);
-  while ((data.days[diaDestino]||[]).length >= getDailyLimit()) {
-    idx++;
-    if (idx >= diasSemana.length) { notify('// semana cheia','warn'); return; }
-    diaDestino = diasSemana[idx];
-    if (!data.days[diaDestino]) data.days[diaDestino] = [];
-  }
-
-  data.days[diaDestino].push({
-    id: v.id, nome: v.nome, site: '', whatsapp: v.whatsapp,
-    instagram: v.instagram, googleUrl: v.googleUrl,
-    numStatus: 'valido', whatsappValidationStatus: 'valid',
-    status: 'Não enviada', criadoEm: todayStr(), semSite: true,
-  });
-  saveWeekData(data);
+  const atrib = getAtribuicaoData();
+  const nextAtrib = typeof upsertUniqueLeadByDedupeV47 === 'function'
+    ? upsertUniqueLeadByDedupeV47(atrib, baseLead)
+    : [...atrib.filter(x => x.id !== id), baseLead];
+  saveAtribuicaoData(nextAtrib);
   saveValData(getValData().filter(x => x.id !== id));
   renderValidacao(); updateBadges();
-  notify(`✓ ${v.nome} → Fila WhatsApp (${dayLabel(diaDestino)})`);
+  const label = baseLead.siteSegment === 'com-site' ? 'Com Sites' : 'WhatsApp sem site';
+  notify(`✓ ${v.nome} → Base de Atribuição (${label})`);
 }
 
 function removerDaValidacao(id) {
