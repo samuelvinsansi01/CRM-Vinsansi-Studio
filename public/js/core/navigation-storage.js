@@ -466,6 +466,58 @@ function saveInstaFila(d){
   scheduleLegacyOperationalSyncV36({ reason:'instagram-queue-save' });
 }
 
+
+// V48.5 — preserva site/website ao devolver lead da Atribuição para Validação.
+// Alguns cards de atribuição antigos podem estar sem site por causa de versões anteriores.
+// Antes de salvar na validação, tentamos hidratar pelos campos do próprio lead e pela base permanente.
+function hydrateLeadSiteFieldsV485(lead = {}) {
+  const rawSite = String(lead.site || lead.website || lead.websiteUrl || lead.website_url || '').trim();
+  let source = rawSite ? lead : null;
+
+  if (!source && typeof getLeadBaseData === 'function') {
+    try {
+      const base = getLeadBaseData() || [];
+      const leadPhone = String(lead.whatsapp || lead.phone || lead.telefone || '').replace(/\D/g, '');
+      source = base.find(item => {
+        if (!item) return false;
+        if (lead.id && item.id === lead.id) return true;
+        const itemPhone = String(item.whatsapp || item.phone || item.telefone || '').replace(/\D/g, '');
+        return leadPhone && itemPhone && leadPhone === itemPhone;
+      }) || null;
+    } catch(e) { source = null; }
+  }
+
+  const site = String(
+    rawSite ||
+    source?.site ||
+    source?.website ||
+    source?.websiteUrl ||
+    source?.website_url ||
+    ''
+  ).trim();
+
+  const hydrated = {
+    ...lead,
+    site,
+    website: site,
+    websiteUrl: lead.websiteUrl || source?.websiteUrl || site,
+    website_url: lead.website_url || source?.website_url || site,
+    website_type: lead.website_type || source?.website_type || source?.websiteType || '',
+    website_quality: lead.website_quality || source?.website_quality || '',
+  };
+
+  const hasOwnSite = typeof leadHasOwnSiteV47 === 'function'
+    ? leadHasOwnSiteV47(hydrated)
+    : !!site;
+  const segment = hasOwnSite ? 'com-site' : 'sem-site';
+
+  hydrated.tipo = segment;
+  hydrated.templateType = segment;
+  hydrated.siteSegment = segment;
+  hydrated.hasOwnSite = hasOwnSite;
+  return hydrated;
+}
+
 function recuperarValidacaoZapDoDia() {
   if (window.__VS_RECUPERAR_VALIDACAO_ZAP_V481 === '1') return 0;
 
@@ -483,14 +535,17 @@ function recuperarValidacaoZapDoDia() {
   if (devemVoltar.length) {
     const recuperados = devemVoltar
       .filter(lead => !validacaoIds.has(lead.id))
-      .map(lead => ({
-        ...lead,
-        canal: 'pendente',
-        numStatus: 'pendente',
-        importadoEm: lead.importadoEm || lead.criadoEm || hoje,
-        diaDestino: null,
-        recuperadoDaAtribuicaoEm: hoje,
-      }));
+      .map(lead => {
+        const hydrated = typeof hydrateLeadSiteFieldsV485 === 'function' ? hydrateLeadSiteFieldsV485(lead) : lead;
+        return {
+          ...hydrated,
+          canal: 'pendente',
+          numStatus: 'pendente',
+          importadoEm: hydrated.importadoEm || hydrated.criadoEm || hoje,
+          diaDestino: null,
+          recuperadoDaAtribuicaoEm: hoje,
+        };
+      });
     const recuperarIds = new Set(devemVoltar.map(lead => lead.id));
     saveValData([...validacao, ...recuperados]);
     saveAtribuicaoData(atribuicao.filter(lead => !recuperarIds.has(lead.id)));

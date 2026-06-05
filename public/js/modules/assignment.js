@@ -413,16 +413,18 @@ function moveUnvalidatedAtribLeadsToValidationV42(leads) {
   leads.forEach(lead => {
     const canal = lead.canal && lead.canal !== 'pendente' ? lead.canal : (lead.whatsapp ? 'zap' : 'insta');
     if (canal === 'zap' && !isLeadWhatsappValidatedForQueue(lead)) {
+      const hydrated = typeof hydrateLeadSiteFieldsV485 === 'function' ? hydrateLeadSiteFieldsV485(lead) : lead;
+      const phone = normalizeManualWhatsappV42(hydrated.whatsapp || hydrated.phone || hydrated.telefone || '');
       toValidation.push({
-        ...lead,
-        whatsapp: normalizeManualWhatsappV42(lead.whatsapp || lead.phone || lead.telefone || ''),
-        phone: normalizeManualWhatsappV42(lead.whatsapp || lead.phone || lead.telefone || ''),
-        tipo: lead.tipo || 'sem-site',
+        ...hydrated,
+        whatsapp: phone,
+        phone,
+        telefone: phone,
         canal: 'zap',
-        numStatus: lead.numStatus === 'invalido' ? 'invalido' : 'pendente',
-        whatsappValidationStatus: lead.whatsappValidationStatus || 'pending',
-        importadoEm: lead.importadoEm || lead.criadoEm || todayStr(),
-        origem: lead.origem || 'Atribuição não validada'
+        numStatus: hydrated.numStatus === 'invalido' ? 'invalido' : 'pendente',
+        whatsappValidationStatus: hydrated.whatsappValidationStatus || 'pending',
+        importadoEm: hydrated.importadoEm || hydrated.criadoEm || todayStr(),
+        origem: hydrated.origem || 'Atribuição não validada'
       });
     } else {
       validAtrib.push(lead);
