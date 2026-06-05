@@ -1,7 +1,7 @@
 /* ════════════════════════════
    CRM — FICHA DO LEAD
    V1: drawer lateral com pipeline, notas e histórico.
-   Salva somente metadados no localStorage, sem mexer no fluxo atual.
+   Salva metadados no snapshot operacional do Supabase.
 ════════════════════════════ */
 const PIPELINE_STEPS = [
   { id: 'contato_enviado', label: 'Contato enviado' },
@@ -110,7 +110,7 @@ function updateLeadEverywhereV427(id, patch = {}, options = {}) {
   if (typeof getLeadBaseData === 'function' && typeof LEADS_BASE_KEY !== 'undefined') {
     const result = patchLeadArrayV427(getLeadBaseData(), id, patch);
     if (result.changed) {
-      if (typeof saveOperationalKeyV481 === 'function') saveOperationalKeyV481(LEADS_BASE_KEY, result.next, 'crm-permanent-base-patch'); else localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(result.next));
+      if (typeof saveOperationalKeyV481 === 'function') saveOperationalKeyV481(LEADS_BASE_KEY, result.next, 'crm-permanent-base-patch'); 
       touched.push('permanentBase');
     }
   }
@@ -247,7 +247,7 @@ function getLeadCrmStore() {
 }
 
 function saveLeadCrmStore(store) {
-  localStorage.setItem(LEAD_CRM_KEY, JSON.stringify(store || {}));
+  if (typeof v48StateSet === 'function') v48StateSet(LEAD_CRM_KEY, store || {}, 'lead-crm-save');
 }
 
 function crmNowLabel() {

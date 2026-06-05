@@ -7,21 +7,17 @@ function getSyncStateKeyV423(){
 }
 
 function getSyncState() {
-  try {
-    const state = JSON.parse(localStorage.getItem(getSyncStateKeyV423()) || '{}' );
-    return state && typeof state === 'object' && !Array.isArray(state) ? state : {};
-  } catch {
-    return {};
-  }
+  window.__VS_SYNC_STATE_V49 = window.__VS_SYNC_STATE_V49 || {};
+  return window.__VS_SYNC_STATE_V49;
 }
 
 function setSyncState(data = {}) {
   const prev = getSyncState();
-  localStorage.setItem(getSyncStateKeyV423(), JSON.stringify({
+  window.__VS_SYNC_STATE_V49 = {
     ...prev,
     ...data,
     updatedAt: new Date().toISOString()
-  }));
+  };
   renderSyncStatus();
 }
 

@@ -3,7 +3,7 @@
 ════════════════════════════ */
 (async function() {
   const s = document.getElementById('sidebar');
-  if (localStorage.getItem(SIDEBAR_KEY)==='1') s.classList.remove('collapsed');
+  if (sessionStorage.getItem(SIDEBAR_KEY)==='1') s.classList.remove('collapsed');
 
   // initAuth limpa caches sensiveis somente quando nao ha sessao ou quando a conta muda.
 
@@ -44,61 +44,7 @@
   if (recuperadosValidacao) {
     setTimeout(() => notify(`↩ ${recuperadosValidacao} lead(s) voltaram para Validação`), 0);
   }
-  // Migrar imagens antigas do localStorage para o IDB (executa uma vez)
-  try {
-    const oldCfg = (typeof v48StateGetObject === 'function') ? v48StateGetObject(LOTE_CFG_KEY) : (JSON.parse(localStorage.getItem(LOTE_CFG_KEY)||'{}')||{});
-    const migrKeys = Object.keys(oldCfg).filter(k => oldCfg[k] && oldCfg[k].imagem2Base64);
-    if (migrKeys.length) {
-      migrKeys.forEach(k => {
-        const b64 = oldCfg[k].imagem2Base64;
-        idbSet(k, b64).catch(()=>{});
-        delete oldCfg[k].imagem2Base64;
-        delete oldCfg[k].imagem2Nome;
-      });
-      if (typeof v48StateSet === 'function') v48StateSet(LOTE_CFG_KEY, oldCfg, 'migrate-batch-images-to-idb'); else localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(oldCfg));
-      console.log('[migrar] ' + migrKeys.length + ' imagem(ns) movida(s) do localStorage para o IDB');
-    }
-  } catch(e) {}
-  // ── Migração v2: move leads INSTA de ATRIBUICAO_KEY para INSTA_KEY ──
-  // O campo canal foi corrigido na v1, mas os leads ficaram na lista errada.
-  // Leads com canal 'insta' (ou sem canal e sem whatsapp) devem estar em INSTA_KEY.
-  try {
-    const atribRaw = (typeof getAtribuicaoData === 'function') ? getAtribuicaoData() : JSON.parse(localStorage.getItem(ATRIBUICAO_KEY) || '[]');
-    const instaRaw = (typeof getInstaFila === 'function') ? getInstaFila() : JSON.parse(localStorage.getItem(INSTA_KEY) || '[]');
-    const instaIds = new Set(instaRaw.map(i => i.id));
-
-    // Determina canal correto para cada lead (incluindo legados sem canal)
-    const atribComCanal = atribRaw.map(a => ({
-      ...a,
-      canal: (a.canal && a.canal !== 'pendente') ? a.canal : (a.whatsapp ? 'zap' : 'insta')
-    }));
-
-    const ficamNoZap  = atribComCanal.filter(a => a.canal === 'zap');
-    const vaoParaInsta = atribComCanal.filter(a => a.canal === 'insta');
-
-    if (vaoParaInsta.length > 0) {
-      // Adiciona na INSTA_KEY (sem duplicar)
-      const novosInsta = vaoParaInsta
-        .filter(a => !instaIds.has(a.id))
-        .map(a => ({
-          id: a.id,
-          nome: a.nome || '',
-          whatsapp: a.whatsapp || '',
-          instagram: a.instagram || '',
-          googleUrl: a.googleUrl || '',
-          categoria: a.categoria || '',
-          totalScore: a.totalScore || null,
-          reviewsCount: a.reviewsCount || null,
-          criadoEm: a.criadoEm || a.validadoEm || '',
-          canal: 'insta',
-        }));
-
-      if (typeof saveInstaFila === 'function') saveInstaFila([...instaRaw, ...novosInsta]); else localStorage.setItem(INSTA_KEY, JSON.stringify([...instaRaw, ...novosInsta]));
-      if (typeof saveAtribuicaoData === 'function') saveAtribuicaoData(ficamNoZap); else localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(ficamNoZap));
-      console.log(`[migração v2] ${novosInsta.length} leads → INSTA_KEY · ${ficamNoZap.length} ficam em ATRIBUICAO_KEY (ZAP)`);
-    }
-  } catch(e) { console.warn('[migração v2] erro:', e); }
-
+  // V49 CLEAN: sem migrações automáticas de localStorage. Imagens novas ficam no IndexedDB.
   // Limpeza de imagens de lotes obsoletos no IDB
   setTimeout(limparImagensOlfas, 2000);
   // Abrir o primeiro chip por padrão

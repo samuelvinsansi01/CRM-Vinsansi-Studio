@@ -5,7 +5,7 @@ const EVOLUTION_SETTINGS_KEY = 'vs_evolution_settings_v1';
 
 function getEvolutionSettings() {
   try {
-    const settings = JSON.parse(localStorage.getItem(EVOLUTION_SETTINGS_KEY) || '{}');
+    const settings = (typeof v48StateGetObject === 'function') ? v48StateGetObject(EVOLUTION_SETTINGS_KEY) : {};
     return settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
   } catch {
     return {};
@@ -19,7 +19,7 @@ function saveEvolutionSettings() {
     apiKey: (document.getElementById('evoApiKey')?.value || '').trim()
   };
 
-  localStorage.setItem(EVOLUTION_SETTINGS_KEY, JSON.stringify(settings));
+  if (typeof v48StateSet === 'function') v48StateSet(EVOLUTION_SETTINGS_KEY, settings, 'evolution-settings-save');
   renderEvolutionSettings();
   notify('Configuração da Evolution salva.');
 }

@@ -7,7 +7,7 @@ const QUEUE_TEMPLATES_V27_KEY = 'vs_queue_templates_v27';
 
 function getQueueCampaigns() {
   try {
-    const data = JSON.parse(localStorage.getItem(QUEUE_CAMPAIGNS_V27_KEY) || 'null');
+    const data = (typeof v48StateGetArray === 'function') ? v48StateGetArray(QUEUE_CAMPAIGNS_V27_KEY) : null;
     return Array.isArray(data) && data.length ? data : ['Campanha Principal'];
   } catch {
     return ['Campanha Principal'];
@@ -15,13 +15,13 @@ function getQueueCampaigns() {
 }
 
 function saveQueueCampaigns(list) {
-  localStorage.setItem(QUEUE_CAMPAIGNS_V27_KEY, JSON.stringify(list || []));
+  if (typeof v48StateSet === 'function') v48StateSet(QUEUE_CAMPAIGNS_V27_KEY, list || [], 'queue-campaigns-save');
   try { scheduleLegacyOperationalSyncV36({ delay:400, reason:'queue-campaign-update' }); } catch(e){}
 }
 
 function getQueueTemplates() {
   try {
-    const data = JSON.parse(localStorage.getItem(QUEUE_TEMPLATES_V27_KEY) || 'null');
+    const data = (typeof v48StateGetArray === 'function') ? v48StateGetArray(QUEUE_TEMPLATES_V27_KEY) : null;
     return Array.isArray(data) && data.length ? data : [
       { id:'tpl_default_1', name:'Template A', text:'Olá, tudo bem? Posso te enviar uma apresentação rápida?' },
       { id:'tpl_default_2', name:'Template B', text:'Oi! Vi sua empresa e acredito que posso ajudar com presença digital.' }
@@ -32,14 +32,14 @@ function getQueueTemplates() {
 }
 
 function saveQueueTemplates(list) {
-  localStorage.setItem(QUEUE_TEMPLATES_V27_KEY, JSON.stringify(list || []));
+  if (typeof v48StateSet === 'function') v48StateSet(QUEUE_TEMPLATES_V27_KEY, list || [], 'queue-templates-save');
   uiSyncLogV426('optimistic-update', { entity:'template', action:'save-queue-cache', count:Array.isArray(list) ? list.length : 0 });
   try { scheduleLegacyOperationalSyncV36({ delay:400, reason:'queue-template-update' }); } catch(e){}
 }
 
 function getWhatsappQueueV27() {
   try {
-    const data = JSON.parse(localStorage.getItem(WHATSAPP_QUEUE_V27_KEY) || '[]');
+    const data = (typeof v48StateGetArray === 'function') ? v48StateGetArray(WHATSAPP_QUEUE_V27_KEY) : [];
     const list = Array.isArray(data) ? data : [];
     return typeof dedupeLeadArrayV31 === 'function' ? dedupeLeadArrayV31(list, 'getWhatsappQueueV27') : list;
   } catch {
@@ -49,7 +49,7 @@ function getWhatsappQueueV27() {
 
 function saveWhatsappQueueV27(list) {
   if (typeof dedupeLeadArrayV31 === 'function') list = dedupeLeadArrayV31(list || [], 'saveWhatsappQueueV27.beforeSave');
-  localStorage.setItem(WHATSAPP_QUEUE_V27_KEY, JSON.stringify(list || []));
+  if (typeof v48StateSet === 'function') v48StateSet(WHATSAPP_QUEUE_V27_KEY, list || [], 'whatsapp-queue-save');
   uiSyncLogV426('optimistic-update', { entity:'whatsapp-queue', action:'save-local-cache', count:Array.isArray(list) ? list.length : 0 });
   try { scheduleLegacyOperationalSyncV36({ delay:400, reason:'whatsapp-queue-update' }); } catch(e){}
   updateWhatsappQueueBadge();

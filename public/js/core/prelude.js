@@ -1,5 +1,5 @@
 const CRM_DEBUG_LOGS_V434 = (() => {
-  try { return localStorage.getItem('vs_debug_logs') === '1'; }
+  try { return new URLSearchParams(window.location.search).get('debug') === '1'; }
   catch { return false; }
 })();
 (function setupQuietConsoleV434(){
@@ -59,8 +59,7 @@ function getDisparoConfigSafeV419(){
     }
   } catch {}
   try {
-    const raw = localStorage.getItem('vs_evo_config_v2') || localStorage.getItem('vs_disparo_config') || localStorage.getItem('disparoConfig') || '{}';
-    const parsed = JSON.parse(raw);
+    const parsed = (typeof v48StateGetObject === 'function') ? v48StateGetObject('vs_evo_config_v2') : {};
     return { ...defaults, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
   } catch {
     return defaults;
@@ -82,8 +81,7 @@ function getDisparoConfigSafeV418(){
     loteAtivo: 1
   };
   try {
-    const raw = localStorage.getItem('vs_evo_config_v2') || localStorage.getItem('vs_disparo_config') || localStorage.getItem('disparoConfig') || '{}';
-    const parsed = JSON.parse(raw);
+    const parsed = (typeof v48StateGetObject === 'function') ? v48StateGetObject('vs_evo_config_v2') : {};
     return { ...defaults, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
   } catch {
     return defaults;
@@ -121,8 +119,7 @@ const RECUPERAR_VALIDACAO_ZAP_KEY = 'vs_recover_validacao_zap_v1';
 const LEAD_CRM_KEY   = 'vs_lead_crm_v1'; // notas, histórico e pipeline comercial
 const LEADS_BASE_KEY = 'vs_leads_base_v1'; // inventário permanente, independente da agenda semanal
 
-// Supabase — usado primeiro apenas para login Google.
-// Ainda não mexe nos leads e ainda não substitui o localStorage.
+// Supabase — fonte oficial de autenticação e dados operacionais.
 const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
 const sbClient = window.supabase
@@ -237,20 +234,7 @@ function normalizeChipListForStorageV437(list = []) {
   return (Array.isArray(list) ? list : []).map(chip => normalizeChipForStorageV437(chip));
 }
 
-function scrubLegacyEvolutionLocalhostCacheV437() {
-  if (isLocalPanelHostV436()) return;
-  try {
-    Object.keys(localStorage).forEach(key => {
-      let raw = '';
-      try { raw = localStorage.getItem(key) || ''; } catch(e) { return; }
-      if (!raw.includes('localhost:8080') && !raw.includes('127.0.0.1:8080')) return;
-      const replaced = raw
-        .replace(/http:\/\/localhost:8080/g, PUBLIC_EVOLUTION_URL_V437)
-        .replace(/http:\/\/127\.0\.0\.1:8080/g, PUBLIC_EVOLUTION_URL_V437);
-      if (replaced !== raw) localStorage.setItem(key, replaced);
-    });
-  } catch(e) {}
-}
+function scrubLegacyEvolutionLocalhostCacheV437() { return; }
 
 scrubLegacyEvolutionLocalhostCacheV437();
 
@@ -464,9 +448,8 @@ function acquireWhatsappSendLockV31(payload = {}, ttlMs = 10000) {
   window.__whatsappSendLocksV31 = window.__whatsappSendLocksV31 || new Map();
   const now = Date.now();
   const prev = window.__whatsappSendLocksV31.get(key);
-  const storageKey = `vs_whatsapp_send_lock_v31:${key}`;
-  let storedAt = 0;
-  try { storedAt = Number(JSON.parse(localStorage.getItem(storageKey) || '{}').at || 0); } catch(e) {}
+  window.__VS_SEND_LOCKS_V49 = window.__VS_SEND_LOCKS_V49 || {};
+  const storedAt = Number(window.__VS_SEND_LOCKS_V49[key] || 0);
   const activeAt = Math.max(Number(prev || 0), storedAt);
   if (activeAt && now - activeAt < ttlMs) {
     try { console.warn('[message-send-blocked]', { reason:'duplicate-lock', key, ageMs:now - activeAt, phone:payload.phone, leadId:payload.leadId }); } catch(e) {}
@@ -475,7 +458,7 @@ function acquireWhatsappSendLockV31(payload = {}, ttlMs = 10000) {
     return { ok:false, key, ageMs:now - activeAt };
   }
   window.__whatsappSendLocksV31.set(key, now);
-  try { localStorage.setItem(storageKey, JSON.stringify({ at:now })); } catch(e) {}
+  window.__VS_SEND_LOCKS_V49[key] = now;
   try { console.log('[message-send][lock-start]', { key, phone:payload.phone, leadId:payload.leadId }); } catch(e) {}
   try { console.log('[whatsapp-send]', { action:'lock-start', key, phone:payload.phone, leadId:payload.leadId }); } catch(e) {}
   return { ok:true, key };
@@ -485,7 +468,7 @@ function releaseWhatsappSendLockV31(key = '') {
   if (!key || !window.__whatsappSendLocksV31) return;
   setTimeout(() => {
     try { window.__whatsappSendLocksV31.delete(key); } catch(e) {}
-    try { localStorage.removeItem(`vs_whatsapp_send_lock_v31:${key}`); } catch(e) {}
+    try { delete window.__VS_SEND_LOCKS_V49[key]; } catch(e) {}
   }, 10000);
 }
 
@@ -661,99 +644,21 @@ function renderAuthUser(user) {
 }
 
 function clearLocalSessionData() {
-  // Segurança multiusuário: ao deslogar/trocar conta, remover caches locais sensíveis.
-  // A fonte persistente deve ser o Supabase filtrado por user_id.
-  const exactKeys = [
-    // Leads, funis e filas operacionais
-    'vs_empresas_v2',
-    'vs_history_v2',
-    'vs_acompanhamento_v1',
-    'vs_validacao_v2',
-    'vs_atribuicao_v1',
-    'vs_insta_fila_v2',
-    'vs_insta_week_v1',
-    'vs_insta_sched_v1',
-    'vs_fila_disparo_v1',
-    'vs_fila_disparo_v1_updated_at_v431',
-    'vs_chip_dispatch_runtime_v432',
-    'vs_recover_validacao_zap_v1',
-    'vin_zap_backlog',
-    'vs_lead_crm_v1',
-    'vs_leads_base_v1',
-
-    // Configurações e caches WhatsApp/Evolution
-    'vs_chips_v2',
-    'vs_chips_v2_updated_at_v426',
-    'vs_whatsapp_chips_v29',
-    'vs_chip_usage_day_v29',
-    'vs_evolution_settings_v1',
-    'vs_evo_config_v2',
-    'vs_whatsapp_messages_cache_v412',
-    'vs_whatsapp_outbox_v412',
-    'vs_evolution_responses_v34',
-    'vs_whatsapp_conversation_meta_v421',
-    'vs_whatsapp_queue_v27',
-    'vs_queue_campaigns_v27',
-    'vs_queue_templates_v27',
-    'vs_whatsapp_queue_control_v28',
-    'vs_dispatch_v30_log',
-    'vs_dispatch_runtime_v32',
-
-    // Preferências operacionais que também podem conter dados de negócio
-    'vs_excluded_domains',
-    'vs_ramos_v2',
-    'vs_templates_v2',
-    'vs_templates_ramo_v1',
-    'vs_templates_insta_v1',
-    'vs_insta_templates_v1',
-    'vs_lote_cfg_v1',
-    'vs_disparo_config',
-    'disparoConfig',
-    'vs_supabase_sync_state_v1'
-  ];
-  exactKeys.forEach(key => { try { localStorage.removeItem(key); } catch(e){} });
-  try { localStorage.removeItem(SYNC_STATE_KEY); } catch(e){}
-
-  // Remove chaves com sufixo de usuário antigo, para impedir que outra conta enxergue dados locais.
-  try {
-    Object.keys(localStorage).forEach(key => {
-      if (
-        key.startsWith('vs_whatsapp_chips_v29:') ||
-        key.startsWith('vs_chip_usage_day_v29:') ||
-        key.startsWith('vs_whatsapp_messages_cache_v412:') ||
-        key.startsWith('vs_whatsapp_outbox_v412:') ||
-        key.startsWith('vs_evolution_responses_v34:') ||
-        key.startsWith('vs_whatsapp_conversation_meta_v421:') ||
-        key.startsWith('vs_conversation_status_v412:') ||
-        key.startsWith('vs_operational_dirty_at_v430:')
-      ) localStorage.removeItem(key);
-    });
-  } catch(e){}
-
+  // V49 CLEAN: limpa somente memória operacional da sessão atual.
+  window.__VS_OPERATIONAL_STATE_V481 = {};
+  window.__VS_OPERATIONAL_STATE_LOADED_V481 = false;
+  window.__VS_OPERATIONAL_DIRTY_AT_V481 = '';
   try { filaDisparo = {}; } catch(e){}
   try { supabaseWhatsappMessagesCacheV412 = []; } catch(e){}
   try { whatsappContactMapCacheV418 = []; } catch(e){}
-  try { localStorage.removeItem(AUTH_LOCAL_USER_KEY_V423); } catch(e){}
-  try { localStorage.removeItem(AUTH_LOCAL_EMAIL_KEY_V425); } catch(e){}
+  try { sessionStorage.removeItem(AUTH_LOCAL_USER_KEY_V423); } catch(e){}
+  try { sessionStorage.removeItem(AUTH_LOCAL_EMAIL_KEY_V425); } catch(e){}
   updateAuthGate();
   try { updateChipsBadge(); } catch(e){}
   try { renderChipsPanel(); } catch(e){}
 }
 
-function hasUnscopedLocalSessionDataV432() {
-  const legacyKeys = [
-    'vs_empresas_v2',
-    'vs_validacao_v2',
-    'vs_atribuicao_v1',
-    'vs_fila_disparo_v1',
-    'vs_lead_crm_v1',
-    'vs_leads_base_v1',
-    'vs_chips_v2'
-  ];
-  return legacyKeys.some(key => {
-    try { return Boolean(localStorage.getItem(key)); } catch(e) { return false; }
-  });
-}
+function hasUnscopedLocalSessionDataV432() { return false; }
 
 let authHydrationPromiseV436 = null;
 let authHydrationKeyV436 = '';
@@ -806,8 +711,8 @@ async function initAuth() {
   const { data, error } = await sbClient.auth.getSession();
   if (error) console.warn('[auth] getSession:', error.message);
   currentUser = data?.session?.user || null;
-  const lastLocalUserId = localStorage.getItem(AUTH_LOCAL_USER_KEY_V423) || '';
-  const lastLocalUserEmail = localStorage.getItem(AUTH_LOCAL_EMAIL_KEY_V425) || '';
+  const lastLocalUserId = sessionStorage.getItem(AUTH_LOCAL_USER_KEY_V423) || '';
+  const lastLocalUserEmail = sessionStorage.getItem(AUTH_LOCAL_EMAIL_KEY_V425) || '';
   if (currentUser?.id) {
     const currentEmail = String(currentUser.email || '').trim().toLowerCase();
     const accountChanged = (lastLocalUserId && lastLocalUserId !== currentUser.id)
@@ -817,8 +722,8 @@ async function initAuth() {
       try { console.warn('[user-isolation][cache-clear]', { accountChanged:!!accountChanged, legacyCacheWithoutOwner }); } catch(e) {}
       clearLocalSessionData();
     }
-    localStorage.setItem(AUTH_LOCAL_USER_KEY_V423, currentUser.id);
-    localStorage.setItem(AUTH_LOCAL_EMAIL_KEY_V425, currentEmail);
+    sessionStorage.setItem(AUTH_LOCAL_USER_KEY_V423, currentUser.id);
+    sessionStorage.setItem(AUTH_LOCAL_EMAIL_KEY_V425, currentEmail);
   }
   
   if (!currentUser) {
@@ -838,8 +743,8 @@ renderAuthUser(currentUser);
     }
     currentUser = session?.user || null;
     if (currentUser?.id) {
-      localStorage.setItem(AUTH_LOCAL_USER_KEY_V423, currentUser.id);
-      localStorage.setItem(AUTH_LOCAL_EMAIL_KEY_V425, String(currentUser.email || '').trim().toLowerCase());
+      sessionStorage.setItem(AUTH_LOCAL_USER_KEY_V423, currentUser.id);
+      sessionStorage.setItem(AUTH_LOCAL_EMAIL_KEY_V425, String(currentUser.email || '').trim().toLowerCase());
     }
     renderAuthUser(currentUser);
     updateAuthGate();
@@ -848,8 +753,8 @@ renderAuthUser(currentUser);
       await hydrateAuthenticatedUserDataV436();
     } else {
       if (typeof clearLocalSessionData === 'function') clearLocalSessionData();
-      localStorage.removeItem('vs_empresas_v2');
-      localStorage.removeItem('vs_lead_crm_v1');
+      
+      
       if (typeof renderInicio === 'function') renderInicio();
       if (typeof updateBadges === 'function') updateBadges();
     }
@@ -878,9 +783,9 @@ async function loginGoogle() {
 }
 
 async function logoutSupabase() {
-  localStorage.removeItem('vs_empresas_v2');
-  localStorage.removeItem('vs_lead_crm_v1');
-  localStorage.removeItem('vs_leads_base_v1');
+  
+  
+  
 
   currentUser = null;
   if (typeof clearLocalSessionData === 'function') clearLocalSessionData();
@@ -963,14 +868,14 @@ function markLeadSegmentV47(lead = {}) {
 function getLeadSentLedgerV47() {
   try {
     if (typeof v48StateGetObject === 'function') return v48StateGetObject('vs_whatsapp_sent_ledger_v47');
-    return JSON.parse(localStorage.getItem('vs_whatsapp_sent_ledger_v47') || '{}') || {};
+    return (typeof v48StateGetObject === 'function') ? v48StateGetObject('vs_whatsapp_sent_ledger_v47') : {};
   }
   catch { return {}; }
 }
 function saveLeadSentLedgerV47(ledger = {}) {
   try {
     if (typeof v48StateSet === 'function') v48StateSet('vs_whatsapp_sent_ledger_v47', ledger || {}, 'whatsapp-sent-ledger-save');
-    else localStorage.setItem('vs_whatsapp_sent_ledger_v47', JSON.stringify(ledger || {}));
+    else if (typeof v48StateSet === 'function') v48StateSet('vs_whatsapp_sent_ledger_v47', ledger || {}, 'sent-ledger-save');
   } catch(e) {}
 }
 function markLeadAsDispatchedEverV47(lead = {}, meta = {}) {

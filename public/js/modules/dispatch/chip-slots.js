@@ -23,12 +23,7 @@ function getDailyLimit() { return Math.max(1, getChips().length) * WHATSAPP_CHIP
 function getChipBySlot(slot) { return getChips()[slot] || null; }
 
 function getChipDispatchRuntimeMapV432() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(CHIP_DISPATCH_RUNTIME_KEY_V432) || '{}');
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+  return (typeof v48StateGetObject === 'function') ? v48StateGetObject(CHIP_DISPATCH_RUNTIME_KEY_V432) : {};
 }
 
 function saveChipDispatchRuntimeV432(chipId, runtime = null) {
@@ -39,11 +34,7 @@ function saveChipDispatchRuntimeV432(chipId, runtime = null) {
   } else {
     delete map[chipId];
   }
-  try {
-    localStorage.setItem(CHIP_DISPATCH_RUNTIME_KEY_V432, JSON.stringify(map));
-  } catch (e) {
-    console.warn('[dispatch][persist] runtime-save-error', e);
-  }
+  if (typeof v48StateSet === 'function') v48StateSet(CHIP_DISPATCH_RUNTIME_KEY_V432, map, 'dispatch-runtime-save');
   debugDispatchPersistV413('runtime-save', { chipId, runtime:map[chipId] || null });
 }
 
@@ -1075,7 +1066,7 @@ function atualizarStatusEmpresa(id, status = 'Enviada', meta = {}) {
           lead.sentAt = nowIso;
           lead.whatsappStatus = 'sent';
         }
-        if (typeof saveOperationalKeyV481 === 'function') saveOperationalKeyV481(LEADS_BASE_KEY, base, 'dispatch-status-base-save'); else localStorage.setItem(LEADS_BASE_KEY, JSON.stringify(base));
+        if (typeof saveOperationalKeyV481 === 'function') saveOperationalKeyV481(LEADS_BASE_KEY, base, 'dispatch-status-base-save'); 
         changed = true;
       }
     }
@@ -1105,7 +1096,7 @@ function repairCompletedDispatchQueueItemsV438(source = 'dispatch-repair') {
       });
     });
     if (repaired) {
-      if (typeof v48StateSet === 'function') v48StateSet(FILA_DISPARO_KEY, filaDisparo, 'repair-completed-send'); else localStorage.setItem(FILA_DISPARO_KEY, JSON.stringify(filaDisparo));
+      if (typeof v48StateSet === 'function') v48StateSet(FILA_DISPARO_KEY, filaDisparo, 'repair-completed-send'); 
       window.__VS_FILA_DISPARO_UPDATED_AT_V481 = new Date().toISOString();
       uiSyncLogV426('optimistic-update', { entity:'dispatch-queue', action:'repair-completed-send', source, count:repaired });
       try { console.warn('[whatsapp-send][status-repaired]', { source, count:repaired }); } catch(e) {}

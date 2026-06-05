@@ -428,7 +428,7 @@ function confirmarExcluirLead() {
   // c) validação
   saveValData(getValData().filter(e => e.id !== id));
 
-  // d) filas de disparo dos chips (in-memory + localStorage)
+  // d) filas de disparo dos chips (memória + Supabase)
   const chips = getChips();
   chips.forEach(c => {
     if (filaDisparo[c.id]) {

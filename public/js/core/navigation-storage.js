@@ -47,7 +47,7 @@ function toggleSidebar() {
   const s = document.getElementById('sidebar');
   const open = !s.classList.contains('collapsed');
   s.classList.toggle('collapsed', open);
-  localStorage.setItem(SIDEBAR_KEY, open ? '0' : '1');
+  sessionStorage.setItem(SIDEBAR_KEY, open ? '0' : '1');
 }
 const ACTIVE_PANEL_KEY_V434 = 'vs_active_panel_v434';
 const PANEL_ALIASES_V436 = {
@@ -88,7 +88,7 @@ function switchPanel(name, options = {}) {
     if (typeof renderWebhookUrlV34 === 'function') renderWebhookUrlV34();
   }
   if (options.persist !== false) {
-    try { localStorage.setItem(ACTIVE_PANEL_KEY_V434, name); } catch(e) {}
+    try { sessionStorage.setItem(ACTIVE_PANEL_KEY_V434, name); } catch(e) {}
   }
   updateBadges();
 }
@@ -96,7 +96,7 @@ function switchPanel(name, options = {}) {
 function restoreLastActivePanelV434() {
   let panel = 'inicio';
   try {
-    const saved = localStorage.getItem(ACTIVE_PANEL_KEY_V434) || '';
+    const saved = sessionStorage.getItem(ACTIVE_PANEL_KEY_V434) || '';
     const normalized = PANEL_ALIASES_V436[saved] || saved;
     if (PANELS.includes(normalized)) panel = normalized;
   } catch(e) {}
@@ -169,30 +169,16 @@ function scheduleSupabaseLeadSync(leads = []) {
    STORAGE — EMPRESAS
 ════════════════════════════ */
 function getStoredArray(key) {
-  if (typeof v48StateGetArray === 'function') return v48StateGetArray(key);
-  try {
-    const data = JSON.parse(localStorage.getItem(key) || 'null');
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  return (typeof v48StateGetArray === 'function') ? v48StateGetArray(key) : [];
 }
 function getStoredObject(key) {
-  if (typeof v48StateGetObject === 'function') return v48StateGetObject(key);
-  try {
-    const data = JSON.parse(localStorage.getItem(key) || 'null');
-    return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-  } catch {
-    return {};
-  }
+  return (typeof v48StateGetObject === 'function') ? v48StateGetObject(key) : {};
 }
 function saveOperationalKeyV481(key, value, reason) {
-  if (typeof v48StateSet === 'function' && v48StateSet(key, value, reason)) return;
-  localStorage.setItem(key, JSON.stringify(value));
+  if (typeof v48StateSet === 'function') v48StateSet(key, value, reason);
 }
 function removeOperationalKeyV481(key, reason) {
-  if (typeof v48StateRemove === 'function' && v48StateRemove(key, reason)) return;
-  localStorage.removeItem(key);
+  if (typeof v48StateRemove === 'function') v48StateRemove(key, reason);
 }
 
 const PERMANENT_LEAD_STATUS_RANK = {
@@ -439,7 +425,100 @@ function getAllSites(d)  { return new Set(flattenWeekData(d).map(e => extractDom
    STORAGE — VALIDAÇÃO FILA
 ════════════════════════════ */
 function getValData()  { return getStoredArray(VAL_KEY); }
+
+
+// V48.6 — hidratação defensiva do lead antes de salvar em qualquer etapa crítica.
+// Problema corrigido: objetos parciais entre Validação/Atribuição/Backlog perdiam site,
+// website, origem e marcadores de segmento. A fonte oficial continua sendo o snapshot
+// Supabase, mas cada save agora tenta completar o lead usando base permanente e filas.
+function getLeadIdentityKeyV486(lead = {}) {
+  const phone = String(lead.whatsapp || lead.phone || lead.telefone || '').replace(/\D/g, '');
+  const name = String(lead.nome || lead.companyName || lead.title || '').trim().toLowerCase();
+  return {
+    id: String(lead.id || '').trim(),
+    phone,
+    name
+  };
+}
+function pickFirstNonEmptyV486(...values) {
+  for (const value of values) {
+    const str = String(value || '').trim();
+    if (str) return str;
+  }
+  return '';
+}
+function collectLeadHydrationSourcesV486() {
+  const all = [];
+  const push = (items) => (Array.isArray(items) ? items : []).forEach(item => { if (item && typeof item === 'object') all.push(item); });
+  try { push(getLeadBaseData()); } catch(e) {}
+  try { push(getValData()); } catch(e) {}
+  try { push(getAtribuicaoData()); } catch(e) {}
+  try { push(getInstaFila()); } catch(e) {}
+  try { push(typeof getZapBacklog === 'function' ? getZapBacklog() : []); } catch(e) {}
+  try { push(Object.values(typeof getWeekData === 'function' ? (getWeekData()?.days || {}) : {}).flat()); } catch(e) {}
+  try { push(Object.values(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}).flat()); } catch(e) {}
+  return all;
+}
+function findLeadHydrationSourceV486(lead = {}) {
+  const key = getLeadIdentityKeyV486(lead);
+  if (!key.id && !key.phone && !key.name) return null;
+  const sources = collectLeadHydrationSourcesV486();
+  return sources.find(item => {
+    const other = getLeadIdentityKeyV486(item);
+    if (key.id && other.id && key.id === other.id) return true;
+    if (key.phone && other.phone && key.phone === other.phone) return true;
+    if (key.name && other.name && key.name === other.name) return true;
+    return false;
+  }) || null;
+}
+function normalizeLeadForCriticalPersistenceV486(lead = {}) {
+  if (!lead || typeof lead !== 'object') return lead;
+  const source = findLeadHydrationSourceV486(lead) || {};
+  const srcRaw = lead.sourceRaw || lead.rawPayload || source.sourceRaw || source.rawPayload || source.item || {};
+  const site = pickFirstNonEmptyV486(
+    lead.site, lead.website, lead.websiteUrl, lead.website_url,
+    source.site, source.website, source.websiteUrl, source.website_url,
+    srcRaw.website, srcRaw.site, srcRaw.url, srcRaw.websiteUrl, srcRaw.website_url
+  );
+  const phone = pickFirstNonEmptyV486(lead.whatsapp, lead.phone, lead.telefone, source.whatsapp, source.phone, source.telefone);
+  const instagram = pickFirstNonEmptyV486(lead.instagram, lead.instagramUrl, source.instagram, source.instagramUrl, srcRaw.instagram);
+  const maps = pickFirstNonEmptyV486(lead.googleUrl, lead.mapsUrl, lead.url, source.googleUrl, source.mapsUrl, source.url, srcRaw.googleUrl, srcRaw.googleMapsUrl, srcRaw.url);
+  const merged = {
+    ...source,
+    ...lead,
+    nome: pickFirstNonEmptyV486(lead.nome, lead.companyName, lead.title, source.nome, source.companyName, source.title, srcRaw.title, srcRaw.name) || lead.nome,
+    companyName: pickFirstNonEmptyV486(lead.companyName, lead.nome, source.companyName, source.nome, srcRaw.title, srcRaw.name),
+    whatsapp: phone,
+    phone,
+    telefone: phone,
+    instagram,
+    instagramUrl: pickFirstNonEmptyV486(lead.instagramUrl, instagram, source.instagramUrl),
+    site,
+    website: site,
+    websiteUrl: pickFirstNonEmptyV486(lead.websiteUrl, source.websiteUrl, site),
+    website_url: pickFirstNonEmptyV486(lead.website_url, source.website_url, site),
+    googleUrl: maps,
+    mapsUrl: pickFirstNonEmptyV486(lead.mapsUrl, source.mapsUrl, maps),
+    website_type: pickFirstNonEmptyV486(lead.website_type, lead.websiteType, source.website_type, source.websiteType),
+    website_quality: pickFirstNonEmptyV486(lead.website_quality, source.website_quality),
+    sourceRaw: srcRaw && Object.keys(srcRaw).length ? srcRaw : (lead.sourceRaw || source.sourceRaw)
+  };
+  const hasOwnSite = typeof leadHasOwnSiteV47 === 'function' ? leadHasOwnSiteV47(merged) : !!site;
+  if (merged.canal !== 'insta') {
+    const segment = hasOwnSite ? 'com-site' : 'sem-site';
+    merged.tipo = merged.tipo === 'instagram' ? merged.tipo : segment;
+    merged.templateType = segment;
+    merged.siteSegment = segment;
+    merged.hasOwnSite = hasOwnSite;
+  }
+  return merged;
+}
+function normalizeLeadArrayForCriticalPersistenceV486(items = []) {
+  return (Array.isArray(items) ? items : []).map(item => normalizeLeadForCriticalPersistenceV486(item));
+}
+
 function saveValData(d){
+  d = normalizeLeadArrayForCriticalPersistenceV486(d || []);
   if (typeof dedupeLeadArrayV31 === 'function') d = dedupeLeadArrayV31(d || [], 'saveValData.beforeSave');
   saveOperationalKeyV481(VAL_KEY, d, 'validation-save');
   mergeLeadsIntoPermanentBase(d, { source:'Validação' });
@@ -451,6 +530,7 @@ function saveValData(d){
 ════════════════════════════ */
 function getAtribuicaoData()  { return getStoredArray(ATRIBUICAO_KEY); }
 function saveAtribuicaoData(d){
+  d = normalizeLeadArrayForCriticalPersistenceV486(d || []);
   if (typeof dedupeLeadArrayV31 === 'function') d = dedupeLeadArrayV31(d || [], 'saveAtribuicaoData.beforeSave');
   saveOperationalKeyV481(ATRIBUICAO_KEY, d, 'assignment-save');
   mergeLeadsIntoPermanentBase(d, { source:'Atribuição' });
@@ -460,6 +540,7 @@ function saveAtribuicaoData(d){
 
 function getInstaFila()  { return getStoredArray(INSTA_KEY); }
 function saveInstaFila(d){
+  d = normalizeLeadArrayForCriticalPersistenceV486(d || []);
   if (typeof dedupeLeadArrayV31 === 'function') d = dedupeLeadArrayV31(d || [], 'saveInstaFila.beforeSave');
   saveOperationalKeyV481(INSTA_KEY, d, 'instagram-queue-save');
   mergeLeadsIntoPermanentBase(d, { source:'Instagram' });

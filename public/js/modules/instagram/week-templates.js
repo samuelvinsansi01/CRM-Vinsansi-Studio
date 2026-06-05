@@ -4,43 +4,13 @@
 // getInstaFila / saveInstaFila definidas acima — sem duplicata
 function getInstaWeek()    { return getStoredObject(INSTA_WEEK_KEY); }
 function saveInstaWeek(d)  {
-  localStorage.setItem(INSTA_WEEK_KEY, JSON.stringify(d));
+  if (typeof v48StateSet === 'function') v48StateSet(INSTA_WEEK_KEY, d, 'instagram-week-save');
   if (typeof mergeLeadsIntoPermanentBase === 'function') mergeLeadsIntoPermanentBase(Object.values(d || {}).flat(), { source:'Agenda Instagram' });
   scheduleLegacyOperationalSyncV36();
 }
 
 /* ── MIGRAÇÃO: normaliza chaves antigas para dd/mm/aaaa ── */
-function migrarChavesInstaWeek() {
-  const raw = localStorage.getItem(INSTA_WEEK_KEY);
-  if (!raw) return;
-  let data; try { data = JSON.parse(raw); } catch { return; }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    localStorage.removeItem(INSTA_WEEK_KEY);
-    return;
-  }
-
-  let alterou = false;
-  const novo = {};
-
-  for (const key of Object.keys(data)) {
-    // Formato antigo: aaaa/mm/dd  ou aaaa-mm-dd
-    const matchISO = key.match(/^(\d{4})[\/\-](\d{2})[\/\-](\d{2})$/);
-    if (matchISO) {
-      const novaChave = `${matchISO[3]}/${matchISO[2]}/${matchISO[1]}`; // → dd/mm/aaaa
-      novo[novaChave] = [...(novo[novaChave]||[]), ...(data[key]||[])];
-      alterou = true;
-    } else {
-      // Já está no formato certo ou desconhecido — mantém
-      novo[key] = [...(novo[key]||[]), ...(data[key]||[])];
-    }
-  }
-
-  if (alterou) {
-    saveInstaWeek(novo);
-    console.log('[insta] chaves migradas:', Object.keys(data), '→', Object.keys(novo));
-    notify('✓ Leads do Instagram recuperados');
-  }
-}
+function migrarChavesInstaWeek() { return; }
 
 /* ── Constantes e estado do painel Instagram (declaração única) ── */
 const INSTA_DIA_LIMIT   = 60;
@@ -85,10 +55,10 @@ Montei uma amostra do que poderia ser feito para vocês. Dá uma olhada e me fal
 ];
 
 function getInstaTemplates() {
-  try { return JSON.parse(localStorage.getItem(INSTA_TEMPLATES_KEY)||'null') || INSTA_TEMPLATES_DEFAULT; } catch { return INSTA_TEMPLATES_DEFAULT; }
+  try { const saved = (typeof v48StateGetArray === 'function') ? v48StateGetArray(INSTA_TEMPLATES_KEY) : []; return saved.length ? saved : INSTA_TEMPLATES_DEFAULT; } catch { return INSTA_TEMPLATES_DEFAULT; }
 }
 function saveInstaTemplates(t) {
-  localStorage.setItem(INSTA_TEMPLATES_KEY, JSON.stringify(t));
+  if (typeof v48StateSet === 'function') v48StateSet(INSTA_TEMPLATES_KEY, t, 'instagram-template-update');
   uiSyncLogV426('optimistic-update', { entity:'template', action:'save-instagram-cache', count:Array.isArray(t) ? t.length : 0 });
   scheduleLegacyOperationalSyncV36({ delay:400, reason:'instagram-template-update' });
 }

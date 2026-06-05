@@ -23,7 +23,7 @@ function renderHistory() {
 function toggleHistory() { historyOpen = !historyOpen; renderHistory(); }
 function archiveHistory() {
   if (!confirm('Arquivar semana anterior?')) return;
-  localStorage.removeItem(HISTORY_KEY); renderHistory(); notify('Semana arquivada');
+  if (typeof v48StateRemove === 'function') v48StateRemove(HISTORY_KEY, 'weekly-history-clear'); renderHistory(); notify('Semana arquivada');
 }
 
 /* ════════════════════════════

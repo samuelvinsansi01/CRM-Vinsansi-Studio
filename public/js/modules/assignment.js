@@ -308,11 +308,12 @@ function removerDaAtribuicao(id) {
 const ZAP_BACKLOG_KEY = 'vin_zap_backlog';
 function getZapBacklog()   { return getStoredArray(ZAP_BACKLOG_KEY); }
 function saveZapBacklog(d) {
+  d = typeof normalizeLeadArrayForCriticalPersistenceV486 === 'function' ? normalizeLeadArrayForCriticalPersistenceV486(d || []) : (d || []);
   const clean = (Array.isArray(d) ? d : []).filter(lead =>
     !(typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433(lead)) &&
     !(typeof isLeadSentOrClosedV433 === 'function' && isLeadSentOrClosedV433(lead))
   );
-  if (typeof v48StateSet === 'function') v48StateSet(ZAP_BACKLOG_KEY, clean, 'whatsapp-backlog-save'); else localStorage.setItem(ZAP_BACKLOG_KEY, JSON.stringify(clean));
+  if (typeof v48StateSet === 'function') v48StateSet(ZAP_BACKLOG_KEY, clean, 'whatsapp-backlog-save');
   if (typeof mergeLeadsIntoPermanentBase === 'function') mergeLeadsIntoPermanentBase(clean, { source:'Backlog WhatsApp' });
   scheduleLegacyOperationalSyncV36();
 }

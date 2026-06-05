@@ -49,21 +49,8 @@ function loadEvoConfig(){
   };
 
   try {
-    const supaCfg = (typeof v48StateGetObject === 'function') ? v48StateGetObject(EVO_KEY) : null;
-    if (supaCfg && Object.keys(supaCfg).length) return { ...defaults, ...supaCfg };
-    const raw =
-      localStorage.getItem(EVO_KEY) ||
-      localStorage.getItem('vs_evo_config') ||
-      localStorage.getItem('evo_config') ||
-      localStorage.getItem('vs_disparo_config') ||
-      localStorage.getItem('disparoConfig') ||
-      '{}';
-
-    const parsed = JSON.parse(raw);
-    return {
-      ...defaults,
-      ...(parsed && typeof parsed === 'object' ? parsed : {})
-    };
+    const supaCfg = (typeof v48StateGetObject === 'function') ? v48StateGetObject(EVO_KEY) : {};
+    return { ...defaults, ...(supaCfg && typeof supaCfg === 'object' ? supaCfg : {}) };
   } catch {
     return defaults;
   }
@@ -83,7 +70,7 @@ function saveEvoConfig() {
   };
   const loteInput = document.getElementById('loteTamanho');
   if (loteInput) loteInput.value = String(loteTamanho);
-  if (typeof v48StateSet === 'function') v48StateSet(EVO_KEY, cfg, 'evolution-config-save'); else localStorage.setItem(EVO_KEY, JSON.stringify(cfg));
+  if (typeof v48StateSet === 'function') v48StateSet(EVO_KEY, cfg, 'evolution-config-save');
   uiSyncLogV426('optimistic-update', { entity:'evolution-config', action:'save-local-cache' });
   scheduleLegacyOperationalSyncV36({ delay:0, reason:'evolution-config-save' });
   if (typeof atualizarStatsDisparo === 'function') atualizarStatsDisparo();

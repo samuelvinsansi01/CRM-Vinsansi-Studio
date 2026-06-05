@@ -159,8 +159,9 @@ function setValChip(id) { activeChipId = id; valPage = 1; renderValidacao(); }
 
 function editValPhone(id) {
   const val = getValData();
-  const v = val.find(x => x.id === id);
+  let v = val.find(x => x.id === id);
   if (!v) return;
+  v = typeof normalizeLeadForCriticalPersistenceV486 === 'function' ? normalizeLeadForCriticalPersistenceV486(v) : (typeof hydrateLeadSiteFieldsV485 === 'function' ? hydrateLeadSiteFieldsV485(v) : v);
   const el = document.getElementById(`val-phone-${id}`);
   if (!el) return;
   el.outerHTML = `<input id="val-phone-edit-${id}" type="text" value="${escHtml(v.whatsapp||'')}"

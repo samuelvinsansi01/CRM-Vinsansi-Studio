@@ -135,13 +135,18 @@ function getFilaChip(chipId) {
 function saveFilaDisparo({ delay = 250, reason = 'dispatch-queue-save' } = {}) {
   const updatedAt = new Date().toISOString();
   try {
+    if (typeof normalizeLeadArrayForCriticalPersistenceV486 === 'function') {
+      Object.keys(filaDisparo || {}).forEach(chipId => {
+        filaDisparo[chipId] = normalizeLeadArrayForCriticalPersistenceV486(filaDisparo[chipId] || []);
+      });
+    }
     if (typeof dedupeFilaDisparoV31 === 'function') {
       filaDisparo = dedupeFilaDisparoV31(filaDisparo, 'saveFilaDisparo.beforeSave');
     }
     if (typeof repairCompletedDispatchQueueItemsV438 === 'function') {
       repairCompletedDispatchQueueItemsV438('saveFilaDisparo.beforeSave');
     }
-    if (typeof v48StateSet === 'function') v48StateSet(FILA_DISPARO_KEY, filaDisparo, reason); else localStorage.setItem(FILA_DISPARO_KEY, JSON.stringify(filaDisparo));
+    if (typeof v48StateSet === 'function') v48StateSet(FILA_DISPARO_KEY, filaDisparo, reason);
     window.__VS_FILA_DISPARO_UPDATED_AT_V481 = updatedAt;
   } catch(e) {
     console.warn('saveFilaDisparo error', e);

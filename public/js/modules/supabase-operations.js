@@ -1,8 +1,8 @@
 
 /* ════════════════════════════
-   SUPABASE-FIRST STATE V48.1
-   Fonte oficial: operational_data.payload.data.
-   localStorage fica apenas como legado/fallback de migração.
+   SUPABASE-FIRST STATE V49 CLEAN
+   Fonte oficial única: operational_data.payload.data.
+   localStorage não é mais fonte de dados operacionais.
 ════════════════════════════ */
 window.__VS_OPERATIONAL_STATE_V481 = window.__VS_OPERATIONAL_STATE_V481 || {};
 window.__VS_OPERATIONAL_STATE_LOADED_V481 = window.__VS_OPERATIONAL_STATE_LOADED_V481 || false;
@@ -41,29 +41,17 @@ function parseJsonMaybeV481(value, fallback = null) {
   try { return JSON.parse(value); } catch(e) { return fallback; }
 }
 function readLegacyLocalStorageOnceV481(storageKey) {
-  try { return parseJsonMaybeV481(localStorage.getItem(storageKey), null); } catch(e) { return null; }
+  // V49 CLEAN: não migrar nem restaurar dados de localStorage.
+  // A base será reimportada quando necessário e o Supabase é a fonte oficial.
+  return null;
 }
 function v48StateGetArray(storageKey) {
   const val = getOperationalStateByStorageKeyV481(storageKey, undefined);
-  if (val !== undefined) return Array.isArray(val) ? val : [];
-  const legacy = readLegacyLocalStorageOnceV481(storageKey);
-  if (Array.isArray(legacy)) {
-    setOperationalStateByStorageKeyV481(storageKey, legacy);
-    scheduleLegacyOperationalSyncV36?.({ delay:0, reason:'migrate-local-array-to-supabase-state' });
-    return legacy;
-  }
-  return [];
+  return Array.isArray(val) ? val : [];
 }
 function v48StateGetObject(storageKey) {
   const val = getOperationalStateByStorageKeyV481(storageKey, undefined);
-  if (val !== undefined) return val && typeof val === 'object' && !Array.isArray(val) ? val : {};
-  const legacy = readLegacyLocalStorageOnceV481(storageKey);
-  if (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) {
-    setOperationalStateByStorageKeyV481(storageKey, legacy);
-    scheduleLegacyOperationalSyncV36?.({ delay:0, reason:'migrate-local-object-to-supabase-state' });
-    return legacy;
-  }
-  return {};
+  return val && typeof val === 'object' && !Array.isArray(val) ? val : {};
 }
 function v48StateSet(storageKey, value, reason = 'state-save') {
   if (!setOperationalStateByStorageKeyV481(storageKey, value)) return false;
@@ -117,6 +105,29 @@ const OPERATIONAL_DATA_KEYS_V36 = {
   whatsappSentLedger: 'vs_whatsapp_sent_ledger_v47'
 };
 
+function getOperationalDefaultValueV49(name = '') {
+  const arrayNames = new Set([
+    'leadCrmArrayPlaceholder', 'weeklyHistory', 'validationQueue', 'assignmentQueue',
+    'instagramQueue', 'instagramWeek', 'instagramSchedule', 'whatsappBacklog',
+    'legacyChips', 'excludedDomains', 'branches', 'legacyTemplates',
+    'branchTemplates', 'instagramTemplates', 'whatsappQueue', 'queueCampaigns',
+    'queueTemplates', 'whatsappChips', 'evolutionResponses', 'whatsappOutbox'
+  ]);
+  if (name === 'leadCrm' || name === 'permanentLeads' || name === 'weeklyLeads' ||
+      name === 'monthlyTracking' || name === 'whatsappDispatchQueues' ||
+      name === 'legacyEvolutionSettings' || name === 'batchConfig' ||
+      name === 'chipUsage' || name === 'queueControl' || name === 'dispatchLogs' ||
+      name === 'dispatchRuntime' || name === 'evolutionSettings' ||
+      name === 'whatsappSentLedger') {
+    if (name === 'permanentLeads') return [];
+    if (name === 'weeklyLeads') return null;
+    if (name === 'whatsappDispatchQueues') return {};
+    return {};
+  }
+  return arrayNames.has(name) ? [] : null;
+}
+
+
 function setPersistenceStatusV36(text, type = '') {
   const box = document.getElementById('persistenceV36Status');
   if (!box) return;
@@ -133,8 +144,7 @@ function getOperationalSnapshotV36() {
       data[name] = mem[name];
       return;
     }
-    // Migração única: se ainda existir legado local, inclui no snapshot para não perder dados.
-    data[name] = readLegacyLocalStorageOnceV481(key);
+    data[name] = getOperationalDefaultValueV49(name);
   });
 
   if (typeof filterPersistentLeadsV433 === 'function' && Array.isArray(data.permanentLeads)) {
@@ -229,20 +239,6 @@ function restoreOperationalSnapshotV36(snapshot = {}) {
     snapshot = dedupeOperationalSnapshotV31(snapshot, 'restoreOperationalSnapshotV36');
   }
   const data = snapshot.data || {};
-  const localLegacyChipsUpdatedAt = Date.parse(localStorage.getItem(LEGACY_CHIPS_UPDATED_AT_KEY_V426) || '');
-  const localDispatchQueueUpdatedAt = Date.parse(localStorage.getItem(FILA_DISPARO_UPDATED_AT_KEY_V431) || '');
-  const remoteExportedAt = Date.parse(snapshot.exportedAt || '');
-  const preserveLocalLegacyChips = !!(
-    localStorage.getItem(CHIPS_KEY)
-    && localLegacyChipsUpdatedAt
-    && (!remoteExportedAt || localLegacyChipsUpdatedAt > remoteExportedAt)
-  );
-  const preserveLocalDispatchQueue = !!(
-    localStorage.getItem(FILA_DISPARO_KEY)
-    && localDispatchQueueUpdatedAt
-    && (!remoteExportedAt || localDispatchQueueUpdatedAt > remoteExportedAt)
-  );
-
   const mem = getOperationalMemoryV481();
   Object.entries(OPERATIONAL_DATA_KEYS_V36).forEach(([name, key]) => {
     if (data[name] === undefined) return;
@@ -250,16 +246,10 @@ function restoreOperationalSnapshotV36(snapshot = {}) {
     else mem[name] = data[name];
   });
   window.__VS_OPERATIONAL_STATE_LOADED_V481 = true;
-  if (preserveLocalLegacyChips) {
-    uiSyncLogV426('optimistic-update', { entity:'chip', action:'preserve-newer-legacy-cache' });
-    scheduleOperationalSyncV36({ delay:0 });
-  } else if (data.legacyChips !== undefined && snapshot.exportedAt) {
+  if (data.legacyChips !== undefined && snapshot.exportedAt) {
     window.__VS_LEGACY_CHIPS_UPDATED_AT_V481 = snapshot.exportedAt;
   }
-  if (preserveLocalDispatchQueue) {
-    uiSyncLogV426('optimistic-update', { entity:'dispatch-queue', action:'preserve-newer-local-cache' });
-    scheduleOperationalSyncV36({ delay:0 });
-  } else if (data.whatsappDispatchQueues !== undefined && snapshot.exportedAt) {
+  if (data.whatsappDispatchQueues !== undefined && snapshot.exportedAt) {
     window.__VS_FILA_DISPARO_UPDATED_AT_V481 = snapshot.exportedAt;
   }
 

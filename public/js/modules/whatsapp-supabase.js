@@ -47,9 +47,9 @@ async function getSupabaseAuthHeadersV423(extra = {}){
 }
 
 function clearGlobalWhatsappSensitiveCachesV423(){
-  [WHATSAPP_MESSAGES_CACHE_V412_KEY, WHATSAPP_OUTBOX_V412_KEY, 'vs_evolution_responses_v34', WHATSAPP_CONVERSATION_META_V421_KEY].forEach(key => {
-    try { localStorage.removeItem(key); } catch(e) {}
-  });
+  supabaseWhatsappMessagesCacheV412 = [];
+  window.__VS_CONVERSATION_META_V49 = {};
+  window.__VS_WHATSAPP_OUTBOX_V49 = [];
 }
 
 function normalizeWhatsappDigitsV412(value = '') {
@@ -97,18 +97,11 @@ function getFallbackContactIdentityByPhoneV416(phone = '') {
 }
 
 function loadSupabaseWhatsappMessagesCacheV412() {
-  try {
-    const data = JSON.parse(localStorage.getItem(scopedWhatsappStorageKeyV423(WHATSAPP_MESSAGES_CACHE_V412_KEY)) || '[]');
-    supabaseWhatsappMessagesCacheV412 = Array.isArray(data) ? data : [];
-  } catch {
-    supabaseWhatsappMessagesCacheV412 = [];
-  }
   return supabaseWhatsappMessagesCacheV412;
 }
 
 function saveSupabaseWhatsappMessagesCacheV412(messages = []) {
   supabaseWhatsappMessagesCacheV412 = Array.isArray(messages) ? messages.slice(0, 500) : [];
-  try { localStorage.setItem(scopedWhatsappStorageKeyV423(WHATSAPP_MESSAGES_CACHE_V412_KEY), JSON.stringify(supabaseWhatsappMessagesCacheV412)); localStorage.removeItem(WHATSAPP_MESSAGES_CACHE_V412_KEY); } catch(e) {}
 }
 
 function getSupabaseWhatsappMessagesV412() {
@@ -294,11 +287,12 @@ function getContactMapByLidV418(lid = '', instance = '') {
 const WHATSAPP_CONVERSATION_META_V421_KEY = 'vs_whatsapp_conversation_meta_v421';
 
 function getConversationMetaStoreV421() {
-  try { return JSON.parse(localStorage.getItem(scopedWhatsappStorageKeyV423(WHATSAPP_CONVERSATION_META_V421_KEY)) || '{}') || {}; } catch(e) { return {}; }
+  window.__VS_CONVERSATION_META_V49 = window.__VS_CONVERSATION_META_V49 || {};
+  return window.__VS_CONVERSATION_META_V49;
 }
 
 function saveConversationMetaStoreV421(store = {}) {
-  try { localStorage.setItem(scopedWhatsappStorageKeyV423(WHATSAPP_CONVERSATION_META_V421_KEY), JSON.stringify(store || {})); localStorage.removeItem(WHATSAPP_CONVERSATION_META_V421_KEY); } catch(e) {}
+  window.__VS_CONVERSATION_META_V49 = store || {};
 }
 
 function getConversationMetaKeyV421(conversationKey = '') {
@@ -664,17 +658,12 @@ window.associateLidConversationToLeadV417 = associateLidConversationToLeadV417;
 
 
 function getPendingOutgoingWhatsappMessagesV412() {
-  try {
-    const data = JSON.parse(localStorage.getItem(scopedWhatsappStorageKeyV423(WHATSAPP_OUTBOX_V412_KEY)) || '[]');
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  window.__VS_WHATSAPP_OUTBOX_V49 = window.__VS_WHATSAPP_OUTBOX_V49 || [];
+  return window.__VS_WHATSAPP_OUTBOX_V49;
 }
 
 function savePendingOutgoingWhatsappMessagesV412(list = []) {
-  localStorage.setItem(scopedWhatsappStorageKeyV423(WHATSAPP_OUTBOX_V412_KEY), JSON.stringify(list.slice(-500)));
-  try { localStorage.removeItem(WHATSAPP_OUTBOX_V412_KEY); } catch(e) {}
+  window.__VS_WHATSAPP_OUTBOX_V49 = Array.isArray(list) ? list.slice(-500) : [];
 }
 
 function queuePendingOutgoingWhatsappMessageV412(message = {}) {

@@ -53,7 +53,9 @@ function buildImportedLeadV430(analysis, route) {
     website_type: analysis.website.websiteType,
     website_quality: analysis.website.websiteQuality,
     qualification_reason: analysis.reason,
-    importadoEm: todayStr()
+    importadoEm: todayStr(),
+    sourceRaw: analysis.item || {},
+    rawPayload: analysis.item || {}
   };
 }
 

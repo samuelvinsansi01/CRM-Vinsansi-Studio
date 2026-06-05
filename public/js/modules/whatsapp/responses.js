@@ -8,18 +8,13 @@ function getWhatsappResponsesScopedKeyV423(){
 }
 
 function getLocalResponsesV34() {
-  try {
-    const data = JSON.parse(localStorage.getItem(getWhatsappResponsesScopedKeyV423()) || '[]');
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  window.__VS_EVOLUTION_RESPONSES_V49 = window.__VS_EVOLUTION_RESPONSES_V49 || [];
+  return window.__VS_EVOLUTION_RESPONSES_V49;
 }
 
 function saveLocalResponsesV34(list) {
+  window.__VS_EVOLUTION_RESPONSES_V49 = (list || []).slice(0, 500);
   try { scheduleOperationalSyncV36(); } catch(e){}
-  localStorage.setItem(getWhatsappResponsesScopedKeyV423(), JSON.stringify((list || []).slice(0, 500)));
-  try { localStorage.removeItem(EVOLUTION_RESPONSES_V34_KEY); } catch(e) {}
   updateResponsesBadgeV34();
 }
 
