@@ -12,8 +12,8 @@ function debugDispatchPersistV413(step, data = {}) {
 }
 /* ─── Per-chip state (indexed 0 = Chip1, 1 = Chip2) ─── */
 const chipSlotState = [
-  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false, batchLeadIds:[], sentLeadIds:[], removedLeadIds:[] },
-  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false, batchLeadIds:[], sentLeadIds:[], removedLeadIds:[] }
+  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false },
+  { filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false }
 ];
 
 /* Limite diario = 180 por chip. */
@@ -36,17 +36,6 @@ function saveChipDispatchRuntimeV432(chipId, runtime = null) {
   const map = getChipDispatchRuntimeMapV432();
   if (runtime) {
     map[chipId] = { ...runtime, updatedAt:new Date().toISOString() };
-    try {
-      const chips = typeof getChips === 'function' ? getChips() : [];
-      const slot = chips.findIndex(c => c && c.id === chipId);
-      const st = slot >= 0 ? chipSlotState[slot] : null;
-      if (st) {
-        map[chipId].batchLeadIds = Array.isArray(st.batchLeadIds) ? [...new Set(st.batchLeadIds)] : (map[chipId].batchLeadIds || []);
-        map[chipId].sentLeadIds = Array.isArray(st.sentLeadIds) ? [...new Set(st.sentLeadIds)] : (map[chipId].sentLeadIds || []);
-        map[chipId].removedLeadIds = Array.isArray(st.removedLeadIds) ? [...new Set(st.removedLeadIds)] : (map[chipId].removedLeadIds || []);
-        map[chipId].currentIndex = Number.isFinite(Number(st.currentIndex)) ? Number(st.currentIndex) : (map[chipId].currentIndex || 0);
-      }
-    } catch(e) {}
   } else {
     delete map[chipId];
   }
@@ -80,10 +69,6 @@ function hydrateChipSlotStateFromRuntimeV439(slot, chip) {
   const st = chipSlotState[slot];
   if (!st) return runtime;
   const waitUntil = Number(runtime.waitUntil || 0);
-  st.batchLeadIds = Array.isArray(runtime.batchLeadIds) ? [...new Set(runtime.batchLeadIds)] : (st.batchLeadIds || []);
-  st.sentLeadIds = Array.isArray(runtime.sentLeadIds) ? [...new Set(runtime.sentLeadIds)] : (st.sentLeadIds || []);
-  st.removedLeadIds = Array.isArray(runtime.removedLeadIds) ? [...new Set(runtime.removedLeadIds)] : (st.removedLeadIds || []);
-  st.currentIndex = Number(runtime.currentIndex || st.currentIndex || 0);
 
   if (runtime.state === 'waiting-lot' && waitUntil > Date.now()) {
     st.disparoEmAndamento = false;
@@ -238,9 +223,6 @@ function limparFilaChip(slot) {
   filaDisparo[chip.id] = [];
   st.loteHistorico = [];
   st.retryItems = [];
-  st.batchLeadIds = [];
-  st.sentLeadIds = [];
-  st.removedLeadIds = [];
   st.retryDisparado = false;
   st.ultimoLoteFimTs = null;
   saveChipDispatchRuntimeV432(chip.id, null);
@@ -261,11 +243,6 @@ function getLiveDispatchItemV439(chipId, id) {
 function removeDispatchItemFromRuntimeV439(slot, id) {
   const st = chipSlotState[slot];
   if (!st || !id) return;
-  st.removedLeadIds = Array.isArray(st.removedLeadIds) ? st.removedLeadIds : [];
-  if (!st.removedLeadIds.includes(id)) st.removedLeadIds.push(id);
-  st.batchLeadIds = (st.batchLeadIds || []).filter(x => x !== id);
-  st.sentLeadIds = (st.sentLeadIds || []).filter(x => x !== id);
-  try { console.warn('[queue-runtime][remove-lead]', { slot, leadId:id, removedCount:st.removedLeadIds.length, sentCount:(st.sentLeadIds||[]).length }); } catch(e) {}
   st.filaLotes = (st.filaLotes || [])
     .map(lote => (lote || []).filter(item => item?.id !== id))
     .filter(lote => lote.length);
@@ -277,12 +254,6 @@ function isDispatchItemRemovedV439(chipId, item = {}) {
 }
 
 function shouldSkipDispatchItemV439(chipId, item = {}) {
-  try {
-    const chips = typeof getChips === 'function' ? getChips() : [];
-    const slot = chips.findIndex(c => c && c.id === chipId);
-    const st = slot >= 0 ? chipSlotState[slot] : null;
-    if (st && Array.isArray(st.removedLeadIds) && st.removedLeadIds.includes(item?.id)) return { skip:true, reason:'removed', item:null };
-  } catch(e) {}
   const live = getLiveDispatchItemV439(chipId, item?.id);
   if (!live) return { skip:true, reason:'removed', item:null };
   if (live.status === 'enviado' || isDispatchItemFullyDeliveredV438(live)) {
@@ -292,16 +263,6 @@ function shouldSkipDispatchItemV439(chipId, item = {}) {
 }
 
 function assertDispatchItemStillQueuedV439(chipId, item = {}, phase = '') {
-  try {
-    const chips = typeof getChips === 'function' ? getChips() : [];
-    const slot = chips.findIndex(c => c && c.id === chipId);
-    const st = slot >= 0 ? chipSlotState[slot] : null;
-    if (st && Array.isArray(st.removedLeadIds) && st.removedLeadIds.includes(item?.id)) {
-      const err = new Error(`Lead removido da fila antes de ${phase || 'continuar envio'}.`);
-      err.code = 'DISPATCH_ITEM_REMOVED';
-      throw err;
-    }
-  } catch(e) { if (e?.code === 'DISPATCH_ITEM_REMOVED') throw e; }
   const live = getLiveDispatchItemV439(chipId, item?.id);
   if (!live) {
     const err = new Error(`Lead removido da fila antes de ${phase || 'continuar envio'}.`);
@@ -610,11 +571,6 @@ async function iniciarDisparoChip(slot) {
   st.filaLotes = [];
   st.loteAtual = 0;
   st.loteHistorico = st.loteHistorico || [];
-  st.batchLeadIds = pendentes.map(item => item.id).filter(Boolean);
-  st.sentLeadIds = [];
-  st.removedLeadIds = Array.isArray(st.removedLeadIds) ? st.removedLeadIds.filter(id => st.batchLeadIds.includes(id)) : [];
-  st.currentIndex = 0;
-  try { console.warn('[queue-runtime][restore]', { chipId:chip.id, batchLeadIds:st.batchLeadIds.length, sentCount:0, removedCount:st.removedLeadIds.length }); } catch(e) {}
   for (let i = 0; i < pendentes.length; i += LOTE_SIZE) {
     st.filaLotes.push(pendentes.slice(i, i + LOTE_SIZE));
   }
@@ -686,16 +642,13 @@ async function dispararLoteChip(slot) {
 
     // ── Verificar pausa ──
     if (st.pausado) {
-      const sentCountRuntime = (Array.isArray(st.sentLeadIds) ? st.sentLeadIds.length : 0);
-      log(`<span style="color:var(--warning)">⏸ Pausado após ${sentCountRuntime} envio${sentCountRuntime!==1?'s':''} — aguardando retomada...</span>`);
-      try { console.warn('[queue-runtime][pause]', { chipId:chip.id, batchId:st.loteAtual, sentCount:sentCountRuntime, removedCount:(st.removedLeadIds||[]).length, remainingCount:Math.max(0, (st.batchLeadIds||[]).length - sentCountRuntime - (st.removedLeadIds||[]).length) }); } catch(e) {}
+      log(`<span style="color:var(--warning)">⏸ Pausado após ${i} envio${i!==1?'s':''} — aguardando retomada...</span>`);
       const btnTxtP = document.getElementById(`disparoBtn${slot}`);
-      if (btnTxtP) btnTxtP.textContent = `⏸ Pausado (${sentCountRuntime}/${(st.batchLeadIds||lote).length})`;
+      if (btnTxtP) btnTxtP.textContent = `⏸ Pausado (${i}/${lote.length})`;
       while (st.pausado) {
         await new Promise(r => setTimeout(r, 500));
       }
       log(`<span style="color:var(--ok)">▶ Retomado</span>`);
-      try { console.warn('[queue-runtime][resume]', { chipId:chip.id, batchId:st.loteAtual, sentCount:(st.sentLeadIds||[]).length }); } catch(e) {}
       if (btnTxtP) btnTxtP.textContent = `Lote ${st.loteAtual}/${st.lotesTotal}...`;
     }
 
@@ -706,7 +659,6 @@ async function dispararLoteChip(slot) {
     }
     item = resumedState.item;
 
-    st.currentIndex = i;
     item.status = 'enviando';
     saveChipDispatchRuntimeV432(chip.id, {
       state:'sending',
@@ -842,9 +794,6 @@ async function dispararLoteChip(slot) {
       }
 
       item.status = 'enviado';
-      st.sentLeadIds = Array.isArray(st.sentLeadIds) ? st.sentLeadIds : [];
-      if (!st.sentLeadIds.includes(item.id)) st.sentLeadIds.push(item.id);
-      try { console.warn('[queue-runtime][counter]', { chipId:chip.id, batchId:st.loteAtual, leadId:item.id, sentCount:st.sentLeadIds.length, removedCount:(st.removedLeadIds||[]).length, remainingCount:Math.max(0, (st.batchLeadIds||[]).length - st.sentLeadIds.length - (st.removedLeadIds||[]).length) }); } catch(e) {}
       atualizarStatusFilaSlot(slot, item.id, 'enviado');
       try {
         atualizarStatusEmpresa(item.id, 'Enviada', { phone:numero, sentAt:new Date().toISOString() });
@@ -860,8 +809,6 @@ async function dispararLoteChip(slot) {
       }
       if (isDispatchItemFullyDeliveredV438(item)) {
         item.status = 'enviado';
-        st.sentLeadIds = Array.isArray(st.sentLeadIds) ? st.sentLeadIds : [];
-        if (!st.sentLeadIds.includes(item.id)) st.sentLeadIds.push(item.id);
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-delivered-after-error-repair' });
         atualizarStatusFilaSlot(slot, item.id, 'enviado');
         atualizarStatusEmpresa(item.id, 'Enviada', { phone:item.whatsapp || item.phone || '', sentAt:new Date().toISOString() });
@@ -1045,7 +992,7 @@ function cancelarLotesChip(slot) {
   const st = chipSlotState[slot];
   if (st.loteEsperaTimer)  { clearTimeout(st.loteEsperaTimer);  st.loteEsperaTimer = null; }
   if (st.loteCountdownInt) { clearInterval(st.loteCountdownInt); st.loteCountdownInt = null; }
-  st.filaLotes = []; st.loteAtual = 0; st.lotesTotal = 0; st.batchLeadIds = []; st.sentLeadIds = []; st.removedLeadIds = [];
+  st.filaLotes = []; st.loteAtual = 0; st.lotesTotal = 0;
   st.aguardandoLote = false; st.loteEsperaFim = null;
   const chip = getChipBySlot(slot);
   if (chip) saveChipDispatchRuntimeV432(chip.id, null);

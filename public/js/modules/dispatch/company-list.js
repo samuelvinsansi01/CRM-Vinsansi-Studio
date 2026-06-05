@@ -7,11 +7,12 @@ function renderDisparoEmpresas() {
   const chips    = getChips();
   const weekDays = currentWeekDays();
   if (!weekDays.includes(disparoDay)) disparoDay = todayStr();
-  if (typeof repairWhatsappDayQueueBindingsV45 === 'function' && disparoDay !== 'backlog') {
-    try { repairWhatsappDayQueueBindingsV45(disparoDay, 'render-disparo-empresas'); } catch(e) {}
+  if (typeof repairDailyAutoFillQueueLinksV46 === 'function') {
+    repairDailyAutoFillQueueLinksV46(disparoDay, { fillUnassigned:true, reason:'render-disparo-empresas' });
   }
 
-  const emps = data.days[disparoDay] || [];
+  const freshData = ensureWeekData();
+  const emps = freshData.days[disparoDay] || [];
 
   // ── Status tabs ──
   const statusTabsEl = document.getElementById('disparoStatusTabs');
