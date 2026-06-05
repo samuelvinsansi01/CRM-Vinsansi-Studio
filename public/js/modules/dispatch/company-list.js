@@ -7,6 +7,9 @@ function renderDisparoEmpresas() {
   const chips    = getChips();
   const weekDays = currentWeekDays();
   if (!weekDays.includes(disparoDay)) disparoDay = todayStr();
+  if (typeof repairWhatsappDayQueueBindingsV45 === 'function' && disparoDay !== 'backlog') {
+    try { repairWhatsappDayQueueBindingsV45(disparoDay, 'render-disparo-empresas'); } catch(e) {}
+  }
 
   const emps = data.days[disparoDay] || [];
 

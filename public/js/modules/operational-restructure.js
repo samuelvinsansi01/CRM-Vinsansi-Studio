@@ -274,6 +274,121 @@ function distributeCountsBalancedV44(total, slots) {
   return Array.from({ length:n }, (_, i) => base + (i < extra ? 1 : 0));
 }
 
+
+function getWhatsappQueueEntryForLeadV45(leadId, day = todayStr()) {
+  if (!leadId) return null;
+  const chips = typeof getChips === 'function' ? getChips() : [];
+  const data = typeof ensureWeekData === 'function' ? ensureWeekData() : { days:{} };
+  const idsNoDia = new Set(((data.days || {})[day] || []).map(item => item.id));
+  for (let slot = 0; slot < chips.length; slot++) {
+    const chip = chips[slot];
+    if (!chip?.id || typeof getFilaChip !== 'function') continue;
+    const item = getFilaChip(chip.id).find(q => q?.id === leadId && idsNoDia.has(q.id));
+    if (item) return { item, chip, slot };
+  }
+  return null;
+}
+
+function getChipQueuedCountForDayV45(chipId, day = todayStr()) {
+  try {
+    if (!chipId || typeof getFilaChipNoDia !== 'function') return 0;
+    return getFilaChipNoDia(chipId, day).filter(item => item && item.status !== 'enviado').length;
+  } catch(e) { return 0; }
+}
+
+function getNextChipWithCapacityV45(chips = [], day = todayStr(), preferredChipId = '') {
+  const limit = Number(typeof CHIP_LIMIT !== 'undefined' ? CHIP_LIMIT : (typeof WHATSAPP_CHIP_DAILY_LIMIT_V426 !== 'undefined' ? WHATSAPP_CHIP_DAILY_LIMIT_V426 : 180));
+  const ordered = [];
+  if (preferredChipId) {
+    const preferred = chips.find(chip => chip?.id === preferredChipId);
+    if (preferred) ordered.push(preferred);
+  }
+  chips.forEach(chip => { if (chip?.id && !ordered.some(c => c.id === chip.id)) ordered.push(chip); });
+  return ordered.find(chip => getChipQueuedCountForDayV45(chip.id, day) < limit) || null;
+}
+
+function setLeadQueuedVisualStateV45(lead = {}, chip = {}, queueItem = {}, meta = {}) {
+  const nowIso = new Date().toISOString();
+  const day = meta.day || (typeof todayStr === 'function' ? todayStr() : '');
+  const loteSize = Number(typeof getLoteSize === 'function' ? getLoteSize() : 30) || 30;
+  const chipCount = getChipQueuedCountForDayV45(chip.id, day);
+  const batchIndex = Math.max(1, Math.ceil(Math.max(1, chipCount) / loteSize));
+  const batchId = queueItem.batchId || lead.batchId || `day-${day}-chip-${chip.id}-lote-${batchIndex}`;
+  lead.status = 'Em fila';
+  lead.queueStatus = queueItem.status || lead.queueStatus || 'aguardando';
+  lead.chipId = chip.id;
+  lead.assignedChipId = chip.id;
+  lead.chipIdDestino = chip.id;
+  lead.chipName = chip.nome || chip.name || chip.label || '';
+  lead.chipLabel = chip.nome || chip.name || chip.label || '';
+  lead.dayAssignedAt = lead.dayAssignedAt || lead.dailyFillAt || nowIso;
+  lead.batchId = batchId;
+  lead.lote = lead.lote || batchIndex;
+  lead.diaDestino = day;
+  if (queueItem && typeof queueItem === 'object') {
+    queueItem.chipId = chip.id;
+    queueItem.assignedChipId = chip.id;
+    queueItem.chipName = lead.chipName;
+    queueItem.chipLabel = lead.chipLabel;
+    queueItem.queueStatus = queueItem.status || 'aguardando';
+    queueItem.dayAssignedAt = queueItem.dayAssignedAt || lead.dayAssignedAt;
+    queueItem.batchId = batchId;
+    queueItem.lote = queueItem.lote || batchIndex;
+  }
+  return lead;
+}
+
+function repairWhatsappDayQueueBindingsV45(day = todayStr(), source = 'repair') {
+  let repaired = 0;
+  try {
+    const chips = (typeof getChips === 'function' ? getChips() : []).filter(chip => chip && chip.active !== false);
+    if (!chips.length) return 0;
+    const data = ensureWeekData();
+    data.days[day] = data.days[day] || [];
+    data.days[day].forEach(lead => {
+      if (!lead?.id || isZapLeadSentV44(lead)) return;
+      const existing = getWhatsappQueueEntryForLeadV45(lead.id, day);
+      if (existing?.chip) {
+        setLeadQueuedVisualStateV45(lead, existing.chip, existing.item, { day });
+        repaired++;
+        return;
+      }
+      const intendedChipId = lead.chipId || lead.assignedChipId || lead.chipIdDestino || '';
+      const targetChip = getNextChipWithCapacityV45(chips, day, intendedChipId);
+      if (!targetChip) {
+        // Sem vaga: este lead permanece como Não enviada, pois ainda não entrou em fila real.
+        lead.status = lead.status === 'Em fila' ? 'Não enviada' : (lead.status || 'Não enviada');
+        lead.queueStatus = '';
+        return;
+      }
+      const fila = typeof getFilaChip === 'function' ? getFilaChip(targetChip.id) : null;
+      if (!Array.isArray(fila)) return;
+      const queueItem = typeof createDispatchQueueItemV433 === 'function'
+        ? createDispatchQueueItemV433(lead, { status:'aguardando' })
+        : { ...lead, status:'aguardando' };
+      setLeadQueuedVisualStateV45(lead, targetChip, queueItem, { day });
+      if (!fila.some(item => item?.id === lead.id)) fila.push(queueItem);
+      repaired++;
+    });
+    saveWeekData(data);
+    if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:`day-queue-binding-repair:${source}` });
+    opLogV44('[daily-schedule][queue-binding-repair]', { day, source, repaired });
+  } catch(e) { opLogV44('[daily-schedule][queue-binding-repair][error]', { day, source, error:e?.message || e }); }
+  return repaired;
+}
+
+function getWhatsappVisualStatusCountsV45(day = todayStr()) {
+  try {
+    const data = ensureWeekData();
+    const counts = { 'Não enviada':0, 'Em fila':0, 'Enviada':0, 'Respondida':0, 'Não respondida':0, 'Recusada':0, 'Fechada':0 };
+    (data.days?.[day] || []).forEach(lead => {
+      const st = lead.status || 'Não enviada';
+      counts[st] = (counts[st] || 0) + 1;
+    });
+    return counts;
+  } catch(e) { return {}; }
+}
+
 function fillWhatsappTodayFromBacklogV44(source = 'daily-fill') {
   const chips = (typeof getChips === 'function' ? getChips() : []).filter(chip => chip && (chip.active !== false));
   if (!chips.length) return 0;
@@ -282,7 +397,10 @@ function fillWhatsappTodayFromBacklogV44(source = 'daily-fill') {
   data.days[today] = data.days[today] || [];
   const existingTodayIds = new Set((data.days[today] || []).map(l => l.id));
   const hasPendingToday = (data.days[today] || []).some(l => !isZapLeadSentV44(l));
-  if (hasPendingToday) return 0;
+  if (hasPendingToday) {
+    repairWhatsappDayQueueBindingsV45(today, `${source}:existing-pending`);
+    return 0;
+  }
 
   let backlog = dedupeBacklogV44(getZapBacklog()).filter(l => !isZapLeadSentV44(l));
   if (!backlog.length) return 0;
@@ -300,10 +418,15 @@ function fillWhatsappTodayFromBacklogV44(source = 'daily-fill') {
       if (!lead?.id || existingTodayIds.has(lead.id)) return;
       const dayLead = {
         ...lead,
-        status:'Não enviada',
+        status:'Em fila',
+        queueStatus:'aguardando',
         diaDestino:today,
+        chipId:chip.id,
         chipIdDestino:chip.id,
         assignedChipId:chip.id,
+        chipName:chip.nome || chip.name || chip.label || '',
+        chipLabel:chip.nome || chip.name || chip.label || '',
+        dayAssignedAt:new Date().toISOString(),
         dailyFillAt:new Date().toISOString(),
         dailyFillSource:source
       };
@@ -311,7 +434,18 @@ function fillWhatsappTodayFromBacklogV44(source = 'daily-fill') {
       existingTodayIds.add(lead.id);
       const fila = getFilaChip(chip.id);
       if (!fila.some(item => item.id === lead.id)) {
-        fila.push(createDispatchQueueItemV433(dayLead, { status:'aguardando', dailyFillAt:dayLead.dailyFillAt }));
+        const queueItem = createDispatchQueueItemV433(dayLead, {
+          status:'aguardando',
+          queueStatus:'aguardando',
+          chipId:chip.id,
+          assignedChipId:chip.id,
+          chipName:dayLead.chipName,
+          chipLabel:dayLead.chipLabel,
+          dayAssignedAt:dayLead.dayAssignedAt,
+          dailyFillAt:dayLead.dailyFillAt
+        });
+        setLeadQueuedVisualStateV45(dayLead, chip, queueItem, { day:today });
+        fila.push(queueItem);
       }
       added++;
     });
@@ -322,7 +456,8 @@ function fillWhatsappTodayFromBacklogV44(source = 'daily-fill') {
   saveWeekData(data);
   saveZapBacklogDedupV44(backlog);
   if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'daily-fill-whatsapp' });
-  opLogV44('[day-fill]', { channel:'whatsapp', added, chips:chips.length, counts });
+  repairWhatsappDayQueueBindingsV45(today, `${source}:post-fill`);
+  opLogV44('[day-fill]', { channel:'whatsapp', added, chips:chips.length, counts, statusCounts:getWhatsappVisualStatusCountsV45(today) });
   return added;
 }
 
@@ -385,6 +520,8 @@ window.moveLeadToWhatsappBacklog = moveLeadToWhatsappBacklog;
 window.runDailyRolloverAndFillV44 = runDailyRolloverAndFillV44;
 window.fillWhatsappTodayFromBacklogV44 = fillWhatsappTodayFromBacklogV44;
 window.fillInstagramTodayFromBacklogV44 = fillInstagramTodayFromBacklogV44;
+window.repairWhatsappDayQueueBindingsV45 = repairWhatsappDayQueueBindingsV45;
+window.getWhatsappVisualStatusCountsV45 = getWhatsappVisualStatusCountsV45;
 
 setTimeout(() => {
   try {
