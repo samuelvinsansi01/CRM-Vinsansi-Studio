@@ -928,6 +928,17 @@ function getLeadSiteUrlV47(lead = {}) {
 }
 
 function leadHasOwnSiteV47(lead = {}) {
+  // V48.2 — detecção robusta para preservar a diferença operacional
+  // entre WhatsApp sem site e Com Sites. Alguns fluxos salvam apenas
+  // o segmento/tipo, outros salvam a URL. A aba Com Sites precisa
+  // respeitar ambos.
+  const explicitSegment = String(
+    lead.siteSegment || lead.templateType || lead.tipo || lead.website_type || lead.websiteType || ''
+  ).toLowerCase();
+  if (explicitSegment === WHATSAPP_SITE_SEGMENT_WITH_SITE_V47 || explicitSegment === 'commercial' || explicitSegment === 'wixsite') return true;
+  if (explicitSegment === WHATSAPP_SITE_SEGMENT_NO_SITE_V47 || explicitSegment === 'none') return false;
+  if (lead.hasOwnSite === true) return true;
+
   const site = getLeadSiteUrlV47(lead);
   if (!site) return false;
   const host = normalizeUrlHostV47(site);

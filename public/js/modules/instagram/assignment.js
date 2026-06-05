@@ -113,8 +113,10 @@ function setAtribTab(tab) {
 
 function updateAtribTabCounts() {
   const atrib = getAtribuicaoData();
-  const zapCount = atrib.filter(l => (l.canal || (l.whatsapp ? 'zap' : 'insta')) === 'zap' && !(typeof leadHasOwnSiteV47 === 'function' && leadHasOwnSiteV47(l))).length;
-  const siteCount = atrib.filter(l => (l.canal || (l.whatsapp ? 'zap' : 'insta')) === 'zap' && typeof leadHasOwnSiteV47 === 'function' && leadHasOwnSiteV47(l)).length;
+  const isZapLead = l => (l.canal && l.canal !== 'pendente' ? l.canal : (l.whatsapp ? 'zap' : 'insta')) === 'zap';
+  const hasOwnSite = l => typeof leadHasOwnSiteV47 === 'function' ? leadHasOwnSiteV47(l) : !!(l.site || l.website);
+  const zapCount = atrib.filter(l => isZapLead(l) && !hasOwnSite(l)).length;
+  const siteCount = atrib.filter(l => isZapLead(l) && hasOwnSite(l)).length;
   const instaCount = getInstaFila().length;
   const elZ = document.getElementById('atribTabZapCount');
   const elI = document.getElementById('atribTabInstaCount');

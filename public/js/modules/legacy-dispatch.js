@@ -199,16 +199,33 @@ function aprovarParaFila(id) {
   const v = val.find(x => x.id === id);
   if (!v || v.numStatus !== 'valido') { notify('// valide o número primeiro','warn'); return; }
 
-  // Manda para a Base de Atribuição (sem dia ainda)
+  // Manda para a Base de Atribuição (sem dia ainda), preservando site/sem-site.
   const atrib = getAtribuicaoData();
   if (atrib.find(a => a.id === v.id)) { notify('// já está na Base de Atribuição','warn'); return; }
   markLeadWhatsappValidatedForQueue(v);
+  const site = v.site || v.website || v.websiteUrl || v.website_url || '';
+  const hasOwnSite = typeof leadHasOwnSiteV47 === 'function'
+    ? leadHasOwnSiteV47({ ...v, site, website: site })
+    : !!site;
+  const segment = hasOwnSite ? 'com-site' : 'sem-site';
   atrib.push({
-    id: v.id, nome: v.nome, site: v.site || '', whatsapp: v.whatsapp,
-    instagram: v.instagram, googleUrl: v.googleUrl,
+    ...v,
+    id: v.id,
+    nome: v.nome,
+    site,
+    website: site,
+    whatsapp: v.whatsapp,
+    phone: v.whatsapp,
+    telefone: v.whatsapp,
+    instagram: v.instagram,
+    googleUrl: v.googleUrl,
     canal: 'zap', // número validado via WhatsApp
+    tipo: segment,
+    templateType: segment,
+    siteSegment: segment,
+    hasOwnSite,
     numStatus: 'valido', whatsappValidationStatus: 'valid',
-    status: 'Não enviada', criadoEm: v.importadoEm || todayStr(),
+    status: 'validado_para_atribuicao', stage: 'assignment', criadoEm: v.importadoEm || todayStr(),
     validadoEm: todayStr(), diaDestino: null,
   });
   saveAtribuicaoData(atrib);

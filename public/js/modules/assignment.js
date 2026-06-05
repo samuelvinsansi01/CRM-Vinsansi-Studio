@@ -16,8 +16,9 @@ function renderAtribuicao() {
   const allLeads = moveUnvalidatedAtribLeadsToValidationV42(getAtribuicaoData());
   const leads = allLeads.filter(lead => {
     const canal = lead.canal && lead.canal !== 'pendente' ? lead.canal : (lead.whatsapp ? 'zap' : 'insta');
-    if (atribActiveTab === 'com-site') return canal === 'zap' && typeof leadHasOwnSiteV47 === 'function' && leadHasOwnSiteV47(lead);
-    if (atribActiveTab === 'zap') return canal === 'zap' && !(typeof leadHasOwnSiteV47 === 'function' && leadHasOwnSiteV47(lead));
+    const hasOwnSite = typeof leadHasOwnSiteV47 === 'function' ? leadHasOwnSiteV47(lead) : !!(lead.site || lead.website);
+    if (atribActiveTab === 'com-site') return canal === 'zap' && hasOwnSite;
+    if (atribActiveTab === 'zap') return canal === 'zap' && !hasOwnSite;
     return canal === 'insta';
   });
   const weekDays = currentWeekDays();
@@ -133,6 +134,8 @@ function renderAtribuicao() {
           onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${temInsta?'1':'0.5'}'">
           → Fila Insta
         </button>
+        <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px;width:100%" onclick="openLeadDrawer('${lead.id}')">Ficha</button>
+        <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px;width:100%" onclick="openLeadDrawer('${lead.id}')">Ficha</button>
         <button class="del-btn" onclick="removerDaAtribuicao('${lead.id}')">✕</button>
       </div>`;
     } else {
@@ -594,6 +597,62 @@ function atribPromoverParaZap(id) {
   notify(`✓ ${lead.nome} promovido para ZAP`);
 }
 
+
+/* ════════════════════════════
+   V48.3 — Reclassificação operacional da Base de Atribuição
+════════════════════════════ */
+function detectOwnSiteForReassignmentV483(lead = {}) {
+  const site = String(lead.site || lead.website || lead.websiteUrl || lead.website_url || '').trim();
+  if (!site) return false;
+  const host = typeof normalizeUrlHostV47 === 'function'
+    ? normalizeUrlHostV47(site)
+    : (() => { try { return new URL(/^https?:\/\//i.test(site) ? site : `https://${site}`).hostname.replace(/^www\./,'').toLowerCase(); } catch { return ''; } })();
+  if (!host) return false;
+  const blocked = ['instagram.com','facebook.com','fb.com','m.facebook.com','web.facebook.com','wa.me','whatsapp.com','api.whatsapp.com','google.com','google.com.br','maps.google.com','goo.gl','linktr.ee','linktree.com','bit.ly','bitly.com','tiktok.com','youtube.com','youtu.be','x.com','twitter.com','linkedin.com'];
+  return !blocked.some(domain => host === domain || host.endsWith('.' + domain));
+}
+
+function reclassificarAtribuicaoPorSiteV483() {
+  const atrib = getAtribuicaoData();
+  if (!Array.isArray(atrib) || !atrib.length) {
+    notify('// não há leads na Base de Atribuição para reclassificar', 'warn');
+    return;
+  }
+  let comSite = 0;
+  let semSite = 0;
+  let instagram = 0;
+  let semUrl = 0;
+  const next = atrib.map(lead => {
+    const canal = lead.canal && lead.canal !== 'pendente' ? lead.canal : (lead.whatsapp || lead.phone || lead.telefone ? 'zap' : 'insta');
+    if (canal === 'insta') {
+      instagram++;
+      return { ...lead, canal:'insta', tipo:'instagram', stage:lead.stage || 'assignment' };
+    }
+    const site = String(lead.site || lead.website || lead.websiteUrl || lead.website_url || '').trim();
+    const hasOwnSite = detectOwnSiteForReassignmentV483({ ...lead, site, website: site });
+    if (!site) semUrl++;
+    if (hasOwnSite) comSite++; else semSite++;
+    const segment = hasOwnSite ? 'com-site' : 'sem-site';
+    return {
+      ...lead,
+      canal:'zap',
+      site,
+      website: site,
+      tipo: segment,
+      templateType: segment,
+      siteSegment: segment,
+      hasOwnSite,
+      stage: lead.stage || 'assignment'
+    };
+  });
+  saveAtribuicaoData(next);
+  atribSelecionados.clear();
+  renderAtribuicao();
+  if (typeof updateAtribTabCounts === 'function') updateAtribTabCounts();
+  updateBadges();
+  notify(`✓ Base reclassificada: ${semSite} WhatsApp sem site · ${comSite} Com Sites${semUrl ? ` · ${semUrl} sem URL salva` : ''}`);
+}
+
 /* ════════════════════════════
    FILA ZAP — RENDER BACKLOG
 ════════════════════════════ */
@@ -629,6 +688,7 @@ function renderZapBacklogPanel() {
             style="background:var(--ok);color:#fff;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:5px 11px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center">
             📲 Abrir ZAP
           </a>` : ''}
+        <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" onclick="openLeadDrawer('${item.id}')">Ficha</button>
         <button onclick="removerDoBacklogZap('${item.id}')" class="del-btn" title="Remover do backlog">✕</button>
       </div>
     </div>`).join('');

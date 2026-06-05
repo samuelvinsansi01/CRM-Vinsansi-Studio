@@ -131,6 +131,7 @@ function renderValidacao() {
           </div>
         </div>
         <div class="empresa-actions">
+          <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" onclick="openLeadDrawer('${v.id}')">Ficha</button>
           ${v.numStatus==='valido'
             ?`<button class="add-btn added" onclick="aprovarParaFila('${v.id}')">→ Atribuir</button>`
             : v.numStatus==='invalido'
@@ -267,6 +268,11 @@ function aprovarSemSiteParaZap(id) {
   // V48.1 — validação NÃO envia mais direto para fila/dia.
   // O lead validado vai para Base de Atribuição preservando site/sem-site.
   const site = v.site || v.website || v.websiteUrl || v.website_url || '';
+  // V48.3 — não considerar qualquer URL como site próprio.
+  // A decisão passa pelo helper que bloqueia Instagram, Facebook, WhatsApp, Maps, Linktree etc.
+  const hasSiteSegment = typeof leadHasOwnSiteV47 === 'function'
+    ? leadHasOwnSiteV47({ ...v, site, website: site })
+    : !!site;
   const baseLead = typeof markLeadSegmentV47 === 'function' ? markLeadSegmentV47({
     ...v,
     id: v.id,
@@ -277,6 +283,10 @@ function aprovarSemSiteParaZap(id) {
     phone,
     telefone: phone,
     canal: 'zap',
+    tipo: hasSiteSegment ? 'com-site' : 'sem-site',
+    templateType: hasSiteSegment ? 'com-site' : 'sem-site',
+    siteSegment: hasSiteSegment ? 'com-site' : 'sem-site',
+    hasOwnSite: hasSiteSegment,
     numStatus: 'valido',
     whatsappValidationStatus: 'valid',
     status: 'validado_para_atribuicao',
@@ -291,6 +301,10 @@ function aprovarSemSiteParaZap(id) {
     phone,
     telefone: phone,
     canal: 'zap',
+    tipo: hasSiteSegment ? 'com-site' : 'sem-site',
+    templateType: hasSiteSegment ? 'com-site' : 'sem-site',
+    siteSegment: hasSiteSegment ? 'com-site' : 'sem-site',
+    hasOwnSite: hasSiteSegment,
     numStatus: 'valido',
     whatsappValidationStatus: 'valid',
     status: 'validado_para_atribuicao',
