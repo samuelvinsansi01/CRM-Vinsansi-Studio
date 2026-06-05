@@ -9,7 +9,9 @@ function renderDisparoEmpresas() {
   if (!weekDays.includes(disparoDay)) disparoDay = todayStr();
   // V47: preenchimento diário é manual pelo botão no Backlog. Não auto-preencher ao renderizar.
   const freshData = ensureWeekData();
-  const emps = freshData.days[disparoDay] || [];
+  if (typeof repairWhatsappDayQueueLinksV48 === 'function') repairWhatsappDayQueueLinksV48(disparoDay, { save:true, source:'render-dispatch-companies' });
+  const repairedData = ensureWeekData();
+  const emps = repairedData.days[disparoDay] || [];
 
   // ── Status tabs ──
   const statusTabsEl = document.getElementById('disparoStatusTabs');
@@ -57,18 +59,10 @@ function renderDisparoEmpresas() {
       ? `<a href="${escHtml(googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(e.nome)}</a>`
       : escHtml(e.nome);
 
-    // Verificar em qual chip está na fila — cruza fila do chip com status real do lead
-    const empStatus = e.status || 'Não enviada';
-    const emFilaReal = empStatus === 'Em fila';
+    // Verificar em qual chip está na fila — se existir vínculo operacional, o status visual deve ser Em fila.
     const naFila = chips.map((c, slot) => {
       const fila = getFilaChip(c.id);
       const idx  = fila.findIndex(f => f.id === e.id);
-      // Se está na fila do chip mas o status do lead não é "Em fila", remove a entrada fantasma
-      if (idx >= 0 && !emFilaReal) {
-        fila.splice(idx, 1);
-        saveFilaDisparo();
-        return { slot, nome: c.nome, naFila: false };
-      }
       return { slot, nome: c.nome, naFila: idx >= 0 };
     });
 

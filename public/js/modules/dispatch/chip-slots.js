@@ -199,7 +199,7 @@ function removerFilaSlot(slot, id) {
       const data = ensureWeekData();
       Object.keys(data.days).forEach(day => {
         const emp = (data.days[day]||[]).find(e => e.id === id);
-        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+        if (emp && emp.status === 'Em fila') { if (typeof clearChipLinkFromDayLeadV48 === 'function') clearChipLinkFromDayLeadV48(emp); else emp.status = 'Não enviada'; }
       });
       saveWeekData(data); saveFilaDisparo({ delay:0, reason:'dispatch-chip-assignment-remove' }); updateBadges();
       renderDisparoEmpresas(); renderFilaSlot(slot, disparoDay);
@@ -216,7 +216,7 @@ function limparFilaChip(slot) {
   fila.forEach(f => {
     Object.keys(data.days).forEach(day => {
       const emp = (data.days[day]||[]).find(e => e.id === f.id);
-      if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+      if (emp && emp.status === 'Em fila') { if (typeof clearChipLinkFromDayLeadV48 === 'function') clearChipLinkFromDayLeadV48(emp); else emp.status = 'Não enviada'; }
     });
   });
   saveWeekData(data);

@@ -144,6 +144,7 @@ function renderChipAccordions() {
 }
 
 function renderFilaZap() {
+  if (typeof repairWhatsappDayQueueLinksV48 === 'function' && disparoDay && disparoDay !== 'backlog') repairWhatsappDayQueueLinksV48(disparoDay, { save:true, source:'render-fila-zap' });
   const devolvidos = devolverZapNaoValidadoParaValidacao();
   if (devolvidos) notify(`↩ ${devolvidos} lead(s) sem WhatsApp validado voltaram para Validação`, 'warn');
   const recovered = recoverSingleChipQueueAssignmentsV431();

@@ -355,7 +355,7 @@ function toggleFilaSlotEmpresa(slot, empId) {
     if (!emOutraFila) {
       Object.keys(data.days).forEach(day => {
         const emp = (data.days[day]||[]).find(e => e.id === empId);
-        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+        if (emp && emp.status === 'Em fila') { if (typeof clearChipLinkFromDayLeadV48 === 'function') clearChipLinkFromDayLeadV48(emp); else emp.status = 'Não enviada'; }
       });
       saveWeekData(data);
     }
@@ -450,7 +450,7 @@ function toggleFila(empId) {
     fila.splice(idx, 1);
     Object.keys(data.days).forEach(day => {
       const emp = (data.days[day]||[]).find(e => e.id === empId);
-      if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+      if (emp && emp.status === 'Em fila') { if (typeof clearChipLinkFromDayLeadV48 === 'function') clearChipLinkFromDayLeadV48(emp); else emp.status = 'Não enviada'; }
     });
     saveWeekData(data);
   } else {
@@ -627,7 +627,7 @@ function removerFila(id) {
       const data = ensureWeekData();
       Object.keys(data.days).forEach(day => {
         const emp = (data.days[day]||[]).find(e => e.id === id);
-        if (emp && emp.status === 'Em fila') emp.status = 'Não enviada';
+        if (emp && emp.status === 'Em fila') { if (typeof clearChipLinkFromDayLeadV48 === 'function') clearChipLinkFromDayLeadV48(emp); else emp.status = 'Não enviada'; }
       });
       saveWeekData(data); saveFilaDisparo({ delay:0, reason:'dispatch-chip-assignment-remove-legacy' }); updateBadges(); renderDisparoEmpresas(); renderFila();
     }
