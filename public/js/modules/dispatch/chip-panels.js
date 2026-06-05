@@ -152,9 +152,7 @@ function renderFilaZap() {
   const chips = getChips();
   const weekDays = currentWeekDays();
   const today = todayStr();
-  if (typeof repairDailyAutoFillQueueLinksV46 === 'function') {
-    weekDays.forEach(day => repairDailyAutoFillQueueLinksV46(day, { fillUnassigned:true, reason:'render-fila-zap' }));
-  }
+  // V47: preenchimento diário é manual pelo botão no Backlog.
 
   // Só reconstrói os accordions se nenhum disparo estiver em andamento
   // (evita resetar botão/spinner ao trocar de aba durante o envio)

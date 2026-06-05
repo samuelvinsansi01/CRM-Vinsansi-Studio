@@ -155,7 +155,7 @@ function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
     if (!item || item.status === 'enviado') continue;
     item.ramoId = ramoId || null;
     if (ramoId) {
-      const { text, text2, idx } = pickTemplate(item.nome, ramoId);
+      const { text, text2, idx } = pickTemplate(item.nome, ramoId, item.templateType || item.siteSegment || 'com-site');
       item.mensagem = text; item.mensagem2 = text2 || ''; item.templateIdx = idx;
     } else {
       item.mensagem = ''; item.mensagem2 = ''; item.templateIdx = -1;

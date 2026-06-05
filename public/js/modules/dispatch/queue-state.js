@@ -165,7 +165,14 @@ function createDispatchQueueItemV433(emp = {}, overrides = {}) {
     mensagem: '',
     mensagem2: '',
     templateIdx: -1,
-    ramoId: null,
+    ramoId: emp.ramoId || null,
+    templateType: (typeof getLeadTemplateTypeV47 === 'function' ? getLeadTemplateTypeV47(emp) : (emp.site ? 'com-site' : 'sem-site')),
+    siteSegment: (typeof getLeadTemplateTypeV47 === 'function' ? getLeadTemplateTypeV47(emp) : (emp.site ? 'com-site' : 'sem-site')),
+    hasOwnSite: !!(typeof leadHasOwnSiteV47 === 'function' ? leadHasOwnSiteV47(emp) : emp.site),
+    chipId: emp.chipId || emp.assignedChipId || '',
+    assignedChipId: emp.assignedChipId || emp.chipId || '',
+    chipName: emp.chipName || emp.chipLabel || '',
+    chipLabel: emp.chipLabel || emp.chipName || '',
     numStatus: emp.numStatus || '',
     whatsappValidationStatus: emp.whatsappValidationStatus || '',
     status: 'aguardando',
@@ -283,7 +290,7 @@ function hydrateRecoveredDispatchMessagesV433(chipId) {
       const loteNum = Math.floor(index / getLoteSize()) + 1;
       const ramoId = getLoteRamo(chipId, loteNum);
       if (!ramoId) return;
-      const { text, text2, idx } = pickTemplate(item.nome, ramoId);
+      const { text, text2, idx } = pickTemplate(item.nome, ramoId, item.templateType || item.siteSegment || 'com-site');
       item.ramoId = ramoId;
       if (!String(item.mensagem || '').trim()) item.mensagem = text;
       if (!String(item.mensagem2 || '').trim()) item.mensagem2 = text2 || '';
@@ -394,6 +401,11 @@ function toggleFilaSlotEmpresa(slot, empId) {
     return;
   }
 
+  if (typeof wasLeadDispatchedEverV47 === 'function' && wasLeadDispatchedEverV47(emp)) {
+    notify('// este lead já recebeu disparo anteriormente e não pode voltar para a fila', 'err');
+    return;
+  }
+
   // Chip tem vaga — adicionar normalmente
   const slotExistente = chips.findIndex((c, s) =>
     s !== slot && getFilaChip(c.id).some(item => item.id === empId && item.status !== 'enviado')
@@ -406,11 +418,19 @@ function toggleFilaSlotEmpresa(slot, empId) {
     ? isLeadSentOrClosedV433(emp)
     : ['Enviada','Respondida','Não respondida','Recusada','Fechada'].includes(emp.status||'');
   const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
-  fila.push(createDispatchQueueItemV433(emp, { status:filaStatus }));
+  fila.push(createDispatchQueueItemV433({ ...emp, chipId:chip.id, assignedChipId:chip.id, chipName:chip.name || chip.nome || chip.instance, chipLabel:chip.nome || chip.name || chip.instance }, { status:filaStatus }));
   if (!jaEnviado) {
     Object.keys(data.days).forEach(day => {
       const e = (data.days[day]||[]).find(e => e.id === empId);
-      if (e) e.status = 'Em fila';
+      if (e) {
+        e.status = 'Em fila';
+        e.queueStatus = 'aguardando';
+        e.chipId = chip.id;
+        e.assignedChipId = chip.id;
+        e.chipName = chip.name || chip.nome || chip.instance || '';
+        e.chipLabel = chip.nome || chip.name || chip.instance || '';
+        e.dayAssignedAt = e.dayAssignedAt || new Date().toISOString();
+      }
     });
     saveWeekData(data);
   }
@@ -441,11 +461,15 @@ function toggleFila(empId) {
       notify('// valide o WhatsApp antes de adicionar ao chip', 'warn');
       return;
     }
+    if (typeof wasLeadDispatchedEverV47 === 'function' && wasLeadDispatchedEverV47(emp)) {
+      notify('// este lead já recebeu disparo anteriormente e não pode voltar para a fila', 'err');
+      return;
+    }
     const jaEnviado = typeof isLeadSentOrClosedV433 === 'function'
       ? isLeadSentOrClosedV433(emp)
       : (emp.status === 'Enviada' || emp.status === 'Respondida' || emp.status === 'Não respondida' || emp.status === 'Recusada' || emp.status === 'Fechada');
     const filaStatus = jaEnviado ? 'enviado' : 'aguardando';
-    fila.push(createDispatchQueueItemV433(emp, { status:filaStatus }));
+    fila.push(createDispatchQueueItemV433({ ...emp, chipId:chip.id, assignedChipId:chip.id, chipName:chip.name || chip.nome || chip.instance, chipLabel:chip.nome || chip.name || chip.instance }, { status:filaStatus }));
     if (!jaEnviado) {
       Object.keys(data.days).forEach(day => {
         const e = (data.days[day]||[]).find(e => e.id === empId);
@@ -550,7 +574,7 @@ function onRamoFilaChange(id, ramoId) {
   item.ramoId = ramoId || null;
   saveFilaDisparo();
   // Sortear automaticamente com o novo ramo
-  const { text, text2, idx } = pickTemplate(item.nome, item.ramoId);
+  const { text, text2, idx } = pickTemplate(item.nome, item.ramoId, item.templateType || item.siteSegment || 'com-site');
   item.mensagem = text; item.mensagem2 = text2 || ''; item.templateIdx = idx;
   saveFilaDisparo();
   const el = document.getElementById(`fila-msg-${id}`);

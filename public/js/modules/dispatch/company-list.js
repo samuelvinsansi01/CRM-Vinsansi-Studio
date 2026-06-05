@@ -7,10 +7,7 @@ function renderDisparoEmpresas() {
   const chips    = getChips();
   const weekDays = currentWeekDays();
   if (!weekDays.includes(disparoDay)) disparoDay = todayStr();
-  if (typeof repairDailyAutoFillQueueLinksV46 === 'function') {
-    repairDailyAutoFillQueueLinksV46(disparoDay, { fillUnassigned:true, reason:'render-disparo-empresas' });
-  }
-
+  // V47: preenchimento diário é manual pelo botão no Backlog. Não auto-preencher ao renderizar.
   const freshData = ensureWeekData();
   const emps = freshData.days[disparoDay] || [];
 

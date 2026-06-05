@@ -162,17 +162,19 @@ function renderTemplatesConfig() {
   const ramos = getRamos();
   const el = document.getElementById('templatesList');
 
-  // Seletor de ramo apenas (sem abas de tipo)
+  // Seletor de ramo e tipo
   const ramoSel = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
     <select id="tplRamoSel" onchange="onTplRamoChange()" style="flex:1;min-width:140px;font-size:11px;padding:8px 12px">
       <option value="">— Selecione um ramo —</option>
       ${ramos.map(r => `<option value="${r.id}"${tplRamoId===r.id?' selected':''}>${escHtml(r.nome)}</option>`).join('')}
     </select>
+    <button class="btn ${tplTipo==='sem-site'?'btn-primary':'btn-ghost'}" onclick="setTplTipo('sem-site')" style="font-size:9px">Sem site</button>
+    <button class="btn ${tplTipo==='com-site'?'btn-primary':'btn-ghost'}" onclick="setTplTipo('com-site')" style="font-size:9px">Com site</button>
   </div>`;
 
   let tpls, isRamo;
   if (tplRamoId) {
-    tpls = getTemplatesForRamoTipo(tplRamoId, 'com-site');
+    tpls = getTemplatesForRamoTipo(tplRamoId, tplTipo || 'sem-site');
     isRamo = true;
   } else {
     // Sem ramo selecionado — não exibe nada
@@ -191,17 +193,17 @@ function renderTemplatesConfig() {
       : { part1:String(t || ''), part2:'' };
     return `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:8px;position:relative">
     <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">TEMPLATE ${i+1}</div>
-    <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:5px">CAMPO 1 - TEXTO INICIAL</div>
-    <textarea style="min-height:120px;font-size:10px;line-height:1.6;margin-bottom:10px" oninput="${isRamo?`saveRamoTemplate('${tplRamoId}','com-site',${i},this.value,'part1')`:`saveTemplate(${i},this.value,'part1')`}">${escHtml(tpl.part1)}</textarea>
+    <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:5px">${(tplTipo||'sem-site')==='com-site'?'COM SITE':'SEM SITE'} · CAMPO 1 - TEXTO INICIAL</div>
+    <textarea style="min-height:120px;font-size:10px;line-height:1.6;margin-bottom:10px" oninput="${isRamo?`saveRamoTemplate('${tplRamoId}',tplTipo||'sem-site',${i},this.value,'part1')`:`saveTemplate(${i},this.value,'part1')`}">${escHtml(tpl.part1)}</textarea>
     <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:5px">CAMPO 2 - TEXTO COMPLEMENTAR</div>
-    <textarea style="min-height:120px;font-size:10px;line-height:1.6" oninput="${isRamo?`saveRamoTemplate('${tplRamoId}','com-site',${i},this.value,'part2')`:`saveTemplate(${i},this.value,'part2')`}">${escHtml(tpl.part2)}</textarea>
-    ${tpls.length>1?`<button class="del-btn" style="position:absolute;top:8px;right:8px" onclick="${isRamo?`removerRamoTemplate('${tplRamoId}','com-site',${i})`:`removerTemplate(${i})`}">✕</button>`:''}
+    <textarea style="min-height:120px;font-size:10px;line-height:1.6" oninput="${isRamo?`saveRamoTemplate('${tplRamoId}',tplTipo||'sem-site',${i},this.value,'part2')`:`saveTemplate(${i},this.value,'part2')`}">${escHtml(tpl.part2)}</textarea>
+    ${tpls.length>1?`<button class="del-btn" style="position:absolute;top:8px;right:8px" onclick="${isRamo?`removerRamoTemplate('${tplRamoId}',tplTipo||'sem-site',${i})`:`removerTemplate(${i})`}">✕</button>`:''}
   </div>`;
   }).join('');
 
   const addBtn = `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
     ${limitLabel}
-    <button class="btn btn-ghost" onclick="${isRamo?`adicionarRamoTemplate('${tplRamoId}','com-site')`:`adicionarTemplate()`}" ${tpls.length>=maxTpl?'disabled':''}>+ Novo template</button>
+    <button class="btn btn-ghost" onclick="${isRamo?`adicionarRamoTemplate('${tplRamoId}',tplTipo||'sem-site')`:`adicionarTemplate()`}" ${tpls.length>=maxTpl?'disabled':''}>+ Novo template</button>
   </div>`;
 
   el.innerHTML = ramoSel + tplsHtml + addBtn;

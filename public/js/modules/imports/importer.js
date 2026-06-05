@@ -24,7 +24,8 @@ function getImportStatsV430(analyses = []) {
     outsideBranch: analyses.filter(item => !item.ramoMatch).length,
     belowQualification: analyses.filter(item => item.ramoMatch && !item.qualification.approved).length,
     noPhone: analyses.filter(item => !item.hasPhone).length,
-    noSite: analyses.filter(item => item.website.type === 'none').length
+    noSite: analyses.filter(item => item.website.type === 'none').length,
+    withSite: analyses.filter(item => item.route === 'whatsapp-validation' && item.website.type !== 'none').length
   };
 }
 
@@ -35,14 +36,18 @@ function buildImportedLeadV430(analysis, route) {
     nome: analysis.name,
     whatsapp: analysis.phone,
     instagram: analysis.instagram,
-    site: isInstagram || analysis.website.type === 'none' ? '' : analysis.website.site,
+    site: analysis.website.site || '',
+    website: analysis.website.site || '',
     googleUrl: analysis.googleUrl,
     categoria: analysis.category,
     ramoId: activeRamoId || null,
     reviewsCount: analysis.qualification.reviews,
     totalScore: analysis.qualification.rating,
     numStatus: isInstagram ? 'nao-aplicavel' : 'pendente',
-    tipo: isInstagram ? 'instagram' : 'sem-site',
+    tipo: isInstagram ? 'instagram' : (analysis.website.type === 'none' ? 'sem-site' : 'com-site'),
+    templateType: isInstagram ? '' : (analysis.website.type === 'none' ? 'sem-site' : 'com-site'),
+    siteSegment: isInstagram ? '' : (analysis.website.type === 'none' ? 'sem-site' : 'com-site'),
+    hasOwnSite: !isInstagram && analysis.website.type !== 'none',
     canal: isInstagram ? 'insta' : 'pendente',
     stage: isInstagram ? 'instagram_backlog' : 'validation',
     website_type: analysis.website.websiteType,
@@ -86,7 +91,8 @@ function importPreview() {
     <span class="err">${stats.outsideBranch}</span> fora do ramo ·
     <span class="err">${stats.belowQualification}</span> abaixo da qualificação ·
     <span class="warn">${stats.noPhone}</span> sem telefone ·
-    <span class="acc">${stats.noSite}</span> sem site
+    <span class="acc">${stats.noSite}</span> sem site ·
+    <span class="acc">${stats.withSite}</span> com site
   `;
   countEl.textContent = `· ${opportunities.length} oportunidades`;
 
@@ -110,7 +116,9 @@ function importPreview() {
       ? '<span class="q-badge insta">Instagram backlog</span>'
       : analysis.website.type === 'wixsite'
         ? '<span class="q-badge warn">Wix · site fraco</span>'
-        : '<span class="q-badge ok">✓ validar WhatsApp</span>';
+        : analysis.website.type !== 'none'
+          ? '<span class="q-badge info">Com site · validar WhatsApp</span>'
+          : '<span class="q-badge ok">Sem site · validar WhatsApp</span>';
     return `<div class="empresa-card">
       <div class="empresa-info">
         <div class="empresa-nome">${analysis.googleUrl ? `<a href="${escHtml(analysis.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(analysis.name)}</a>` : escHtml(analysis.name)}</div>
@@ -181,7 +189,8 @@ async function importarLeads() {
 
   const novaValFila = [...getValData()];
   const novaInstaFila = [...getInstaFila()];
-  [...novaValFila, ...novaInstaFila, ...(typeof getLeadBaseData === 'function' ? getLeadBaseData() : [])].forEach(lead => {
+  const novaAtribuicao = [...getAtribuicaoData()];
+  [...novaValFila, ...novaInstaFila, ...novaAtribuicao, ...(typeof getLeadBaseData === 'function' ? getLeadBaseData() : [])].forEach(lead => {
     const phone = normalizeImportedLeadPhoneV432(lead.whatsapp || lead.phone || lead.telefone || '');
     if (phone && !existingPhones.has(phone)) existingPhones.set(phone, lead.id || 'local-cache');
   });

@@ -3,6 +3,9 @@
 ════════════════════════════ */
 const WHATSAPP_CHIPS_V29_KEY = 'vs_whatsapp_chips_v29';
 const CHIP_USAGE_DAY_KEY = 'vs_chip_usage_day_v29';
+const WHATSAPP_CHIPS_DELETED_KEY_V47 = 'vs_whatsapp_chips_deleted_v47';
+function getDeletedWhatsappChipIdsV47(){ try { return new Set(JSON.parse(localStorage.getItem(WHATSAPP_CHIPS_DELETED_KEY_V47)||'[]')); } catch { return new Set(); } }
+function saveDeletedWhatsappChipIdsV47(set){ try { localStorage.setItem(WHATSAPP_CHIPS_DELETED_KEY_V47, JSON.stringify([...set])); } catch(e){} }
 
 /* V22 — isolamento multiusuário dos chips
    O localStorage é apenas cache por usuário. A fonte persistente é public.whatsapp_instances. */
@@ -184,7 +187,8 @@ async function loadWhatsappChipsFromSupabaseV22(){
 
     const rows = (Array.isArray(data) ? data : [])
       .filter(isChipAllowedForCurrentUserV24)
-      .filter(row => row.active !== false);
+      .filter(row => row.active !== false)
+      .filter(row => !getDeletedWhatsappChipIdsV47().has(String(row.chip_id || row.id || row.instance || '')));
     const dbChips = rows.map(normalizeChipRowToLocalV22).filter(chip => chip.instance);
     const chips = mergeSupabaseWhatsappChipsWithLocalCacheV426(dbChips);
 
@@ -388,7 +392,21 @@ function addWhatsappChip(){
 }
 
 function removeWhatsappChip(id){
-  saveWhatsappChipsV29(getWhatsappChipsV29().filter(chip => chip.id !== id));
+  const deleted = getDeletedWhatsappChipIdsV47();
+  deleted.add(String(id));
+  const chip = getWhatsappChipsV29().find(c => String(c.id) === String(id));
+  if (chip?.instance) deleted.add(String(chip.instance));
+  saveDeletedWhatsappChipIdsV47(deleted);
+  saveWhatsappChipsV29(getWhatsappChipsV29().filter(chip => String(chip.id) !== String(id) && String(chip.instance) !== String(id)));
+  try {
+    if (sbClient && currentUser?.id) {
+      sbClient.from('whatsapp_instances')
+        .update({ active:false, updated_at:new Date().toISOString() })
+        .eq('user_id', currentUser.id)
+        .or(`chip_id.eq.${id},instance.eq.${chip?.instance || id}`)
+        .then(({ error }) => { if (error) console.warn('[chips][remove-persist-error]', error.message); });
+    }
+  } catch(e) {}
   renderChipsPanel();
 }
 

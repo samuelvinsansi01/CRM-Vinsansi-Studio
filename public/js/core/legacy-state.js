@@ -190,10 +190,17 @@ function ensureMessageTemplateDefaultsV434(force = false) {
 }
 
 function getRamoTemplatesDefault(ramoId, tipo) {
+  let base = null;
   if (RAMO_TEMPLATES_DEFAULT[ramoId] && RAMO_TEMPLATES_DEFAULT[ramoId][tipo]) {
-    return cloneTemplateListV434(RAMO_TEMPLATES_DEFAULT[ramoId][tipo]);
+    base = cloneTemplateListV434(RAMO_TEMPLATES_DEFAULT[ramoId][tipo]);
+  } else {
+    base = cloneTemplateListV434(tipo === 'com-site' ? TEMPLATES_DEFAULT : TEMPLATES_DEFAULT);
   }
-  return cloneTemplateListV434(tipo === 'com-site' ? TEMPLATES_DEFAULT : TEMPLATES_DEFAULT.slice(0, 3));
+  if (tipo === 'sem-site' && base.length && base.length < 10) {
+    const seed = [...base];
+    while (base.length < 10) base.push({ ...seed[base.length % seed.length] });
+  }
+  return base;
 }
 
 function getRamoTemplates() {
@@ -227,7 +234,7 @@ function adicionarRamoTemplate(ramoId, tipo) {
   const all = getRamoTemplates();
   const key = `${ramoId}__${tipo}`;
   if (!all[key]) all[key] = [...getRamoTemplatesDefault(ramoId, tipo)];
-  const maxTpl = tipo === 'sem-site' ? 3 : 10;
+  const maxTpl = 10;
   if (all[key].length >= maxTpl) { notify(`// máximo de ${maxTpl} templates para ${tipo}`,'warn'); return; }
   all[key].push({
     part1: `Olá, tudo bem?\n\nMe chamo Samuel.\n\nVi a {EMPRESA} e acredito que pode existir uma oportunidade de melhorar a presença digital de vocês.`,
@@ -379,14 +386,14 @@ function saveTemplates(t) {
   scheduleLegacyOperationalSyncV36({ delay:400, reason:'default-template-update' });
 }
 
-function pickTemplate(nome, ramoId) {
-  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, 'com-site') : getTemplates();
+function pickTemplate(nome, ramoId, tipo = 'com-site') {
+  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, tipo || 'com-site') : getTemplates();
   if (!tpl || !tpl.length) return { text: '', text2: '', idx: 0 };
   const idx = Math.floor(Math.random() * tpl.length);
   return { ...renderPickedTemplateV434(tpl[idx], nome), idx };
 }
-function pickOtherTemplate(nome, cur, ramoId) {
-  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, 'com-site') : getTemplates();
+function pickOtherTemplate(nome, cur, ramoId, tipo = 'com-site') {
+  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, tipo || 'com-site') : getTemplates();
   if (!tpl || !tpl.length) return { text: '', text2: '', idx: 0 };
   let idx; do { idx = Math.floor(Math.random() * tpl.length); } while (idx === cur && tpl.length > 1);
   return { ...renderPickedTemplateV434(tpl[idx], nome), idx };

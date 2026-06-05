@@ -794,6 +794,7 @@ async function dispararLoteChip(slot) {
       }
 
       item.status = 'enviado';
+      if (typeof markLeadAsDispatchedEverV47 === 'function') markLeadAsDispatchedEverV47(item, { source:'dispatch-success', chipId:chip.id || chip.instance || '', instance:chip.instance || '' });
       atualizarStatusFilaSlot(slot, item.id, 'enviado');
       try {
         atualizarStatusEmpresa(item.id, 'Enviada', { phone:numero, sentAt:new Date().toISOString() });
@@ -809,6 +810,7 @@ async function dispararLoteChip(slot) {
       }
       if (isDispatchItemFullyDeliveredV438(item)) {
         item.status = 'enviado';
+        if (typeof markLeadAsDispatchedEverV47 === 'function') markLeadAsDispatchedEverV47(item, { source:'dispatch-repair' });
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-delivered-after-error-repair' });
         atualizarStatusFilaSlot(slot, item.id, 'enviado');
         atualizarStatusEmpresa(item.id, 'Enviada', { phone:item.whatsapp || item.phone || '', sentAt:new Date().toISOString() });

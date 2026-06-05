@@ -110,7 +110,7 @@ function classifyWebsiteOpportunityV430(item = {}) {
   if (typeof isSiteBlocklisted === 'function' && isSiteBlocklisted(site)) {
     return { type:'blocked-link', websiteType:'blocked-link', websiteQuality:'blocked', route:'skip', site, reason:'link nao elegivel (somente Instagram e Wix passam)' };
   }
-  return { type:'commercial', websiteType:'commercial', websiteQuality:'commercial', route:'skip', site, reason:'site nao elegivel (somente sem site, Instagram ou Wix passam)' };
+  return { type:'commercial', websiteType:'commercial', websiteQuality:'commercial', route:'whatsapp-validation', site, reason:'site proprio/comercial elegivel para abordagem com site' };
 }
 
 function getApifyQualificationV430(item = {}) {
@@ -232,8 +232,8 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     analysis.route = 'skip';
     analysis.reason = analysis.website.reason;
   } else if (!analysis.hasPhone) {
-    analysis.route = 'skip';
-    analysis.reason = 'sem telefone';
+    analysis.route = 'instagram-backlog';
+    analysis.reason = 'sem WhatsApp validavel; enviar para backlog Instagram';
   } else {
     analysis.route = 'whatsapp-validation';
     analysis.reason = analysis.website.reason;

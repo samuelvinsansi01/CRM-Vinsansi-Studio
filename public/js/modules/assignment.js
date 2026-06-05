@@ -13,7 +13,13 @@ function diasEmEspera(criadoEm) {
 }
 
 function renderAtribuicao() {
-  const leads = moveUnvalidatedAtribLeadsToValidationV42(getAtribuicaoData());
+  const allLeads = moveUnvalidatedAtribLeadsToValidationV42(getAtribuicaoData());
+  const leads = allLeads.filter(lead => {
+    const canal = lead.canal && lead.canal !== 'pendente' ? lead.canal : (lead.whatsapp ? 'zap' : 'insta');
+    if (atribActiveTab === 'com-site') return canal === 'zap' && typeof leadHasOwnSiteV47 === 'function' && leadHasOwnSiteV47(lead);
+    if (atribActiveTab === 'zap') return canal === 'zap' && !(typeof leadHasOwnSiteV47 === 'function' && leadHasOwnSiteV47(lead));
+    return canal === 'insta';
+  });
   const weekDays = currentWeekDays();
   const today = todayStr();
   if (!atribDiaLote || !weekDays.includes(atribDiaLote)) atribDiaLote = today;
@@ -22,9 +28,10 @@ function renderAtribuicao() {
   const totalEl = document.getElementById('atribTotalBadge');
   if (totalEl) totalEl.textContent = leads.length ? `(${leads.length} lead${leads.length!==1?'s':''})` : '';
 
-  // day tabs para lote
+  // V47: atribuição agora vai para backlog; datas da semana ficam ocultas.
   const loteTabsEl = document.getElementById('atribLoteDayTabs');
-  if (loteTabsEl) {
+  if (loteTabsEl) { loteTabsEl.innerHTML = '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">Backlog</span>'; }
+  if (false && loteTabsEl) {
     loteTabsEl.innerHTML = weekDays.map(day => {
       const data = ensureWeekData();
       const count = (data.days[day]||[]).length;
@@ -134,7 +141,7 @@ function renderAtribuicao() {
         <button onclick="mandarParaBacklogZap('${lead.id}')"
           style="background:var(--accent);color:#0a0a0d;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:5px 12px;cursor:pointer;white-space:nowrap;transition:opacity 0.18s"
           onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
-          → Fila Zap
+          → Backlog Zap
         </button>
         <button class="del-btn" onclick="removerDaAtribuicao('${lead.id}')">✕</button>
       </div>`;
@@ -207,7 +214,13 @@ document.addEventListener('click', e => {
   }
 });
 
-function atribuirParaDia(ids, day) {
+function atribuirParaDia(ids, day) { /* V47 legado: agora envia para backlog, não para dia */
+  let n = 0;
+  (ids || []).forEach(id => { const before = getZapBacklog().length; mandarParaBacklogZap(id); if (getZapBacklog().length > before) n++; });
+  return n;
+}
+
+function atribuirParaDiaLegacyV46(ids, day) {
   const data = ensureWeekData();
   if (!data.days[day]) data.days[day] = [];
   const atrib = getAtribuicaoData();
@@ -267,10 +280,10 @@ function atribuirIndividual(id, day) {
 
 function atribuirLote() {
   if (!atribSelecionados.size) { notify('// selecione ao menos 1 lead','warn'); return; }
-  if (!atribDiaLote) { notify('// selecione um dia','warn'); return; }
   const ids = [...atribSelecionados];
-  const n = atribuirParaDia(ids, atribDiaLote);
-  if (n > 0) notify(`✓ ${n} lead${n!==1?'s':''} → ${dayLabel(atribDiaLote)}`);
+  let n = 0;
+  ids.forEach(id => { const before = getZapBacklog().length; mandarParaBacklogZap(id); if (getZapBacklog().length > before) n++; });
+  if (n > 0) notify(`✓ ${n} lead${n!==1?'s':''} → Backlog WhatsApp`);
 }
 
 function removerDaAtribuicao(id) {
@@ -310,21 +323,24 @@ function mandarParaBacklogZap(id) {
     return;
   }
 
-  const backlog = getZapBacklog();
-  if (backlog.find(b => b.id === id)) { notify('// já está no Backlog ZAP','warn'); return; }
-
-  backlog.push({
+  let backlog = getZapBacklog();
+  const leadForBacklog = typeof markLeadSegmentV47 === 'function' ? markLeadSegmentV47({
+    ...lead,
     id: lead.id, nome: lead.nome, whatsapp: lead.whatsapp || '',
+    phone: lead.phone || lead.whatsapp || '',
     instagram: lead.instagram || '', googleUrl: lead.googleUrl || '',
-    canal: 'zap', criadoEm: lead.criadoEm || todayStr(),
-    entradaBacklogEm: todayStr(),
-  });
+    site: lead.site || lead.website || '', website: lead.website || lead.site || '',
+    ramoId: lead.ramoId || null,
+    canal: 'zap', status:'backlog_whatsapp', criadoEm: lead.criadoEm || todayStr(),
+    entradaBacklogEm: lead.entradaBacklogEm || todayStr(),
+  }) : lead;
+  backlog = typeof upsertUniqueLeadByDedupeV47 === 'function' ? upsertUniqueLeadByDedupeV47(backlog, leadForBacklog) : [...backlog.filter(b => b.id !== id), leadForBacklog];
   saveZapBacklog(backlog);
   saveAtribuicaoData(atrib.filter(a => a.id !== id));
   atribSelecionados.delete(id);
   renderAtribuicao(); updateBadges();
   addLeadHistory(lead.id, 'Movido para Fila WhatsApp', lead);
-  notify(`✓ ${lead.nome} → Backlog Fila Zap`);
+  notify(`✓ ${lead.nome} → Backlog WhatsApp`);
 }
 function moverParaBacklogZapDoDia(id, day) {
   const data = ensureWeekData();
@@ -338,15 +354,17 @@ function moverParaBacklogZapDoDia(id, day) {
     notify('// valide o WhatsApp antes de enviar para a fila Zap', 'warn');
     return;
   }
-  const backlog = getZapBacklog();
-  if (backlog.find(b => b.id === id)) { notify('// já está no Backlog ZAP','warn'); return; }
-  backlog.push({
+  let backlog = getZapBacklog();
+  const leadForBacklog = typeof markLeadSegmentV47 === 'function' ? markLeadSegmentV47({
+    ...lead,
     id: lead.id, nome: lead.nome, whatsapp: lead.whatsapp || '',
     instagram: lead.instagram || '', googleUrl: lead.googleUrl || '',
-    site: lead.site || '', ramoId: lead.ramoId || null,
-    canal: 'zap', criadoEm: lead.criadoEm || todayStr(),
+    site: lead.site || lead.website || '', website: lead.website || lead.site || '',
+    ramoId: lead.ramoId || null,
+    canal: 'zap', status:'backlog_whatsapp', criadoEm: lead.criadoEm || todayStr(),
     entradaBacklogEm: todayStr(),
-  });
+  }) : lead;
+  backlog = typeof upsertUniqueLeadByDedupeV47 === 'function' ? upsertUniqueLeadByDedupeV47(backlog, leadForBacklog) : [...backlog.filter(b => b.id !== id), leadForBacklog];
   saveZapBacklog(backlog);
   data.days[day] = data.days[day].filter(e => e.id !== id);
   saveWeekData(data);
@@ -585,7 +603,7 @@ function renderZapBacklogPanel() {
   const statsEl  = document.getElementById('disparoStats');
   const listEl   = document.getElementById('disparoEmpresasList');
 
-  if (statusEl) statusEl.innerHTML = '';
+  if (statusEl) statusEl.innerHTML = '<button class="btn btn-primary" onclick="preencherDiaWhatsappDoBacklogV47()">Preencher o dia</button><span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);margin-left:10px">usa backlog · 180 por chip · FIFO</span>';
   if (statsEl)  statsEl.innerHTML  = '';
   if (!listEl)  return;
 

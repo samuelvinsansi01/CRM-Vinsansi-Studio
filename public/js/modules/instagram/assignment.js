@@ -47,7 +47,7 @@ function salvarInstaLeadInline() {
 /* ════════════════════════════
    BASE DE ATRIBUIÇÃO — ABAS
 ════════════════════════════ */
-let atribActiveTab = 'zap'; // 'zap' | 'insta'
+let atribActiveTab = 'zap'; // 'zap' | 'insta' | 'com-site'
 
 function salvarZapLeadManual() {
   const nome     = (document.getElementById('zapLeadNome')?.value||'').trim();
@@ -84,38 +84,44 @@ function setAtribTab(tab) {
   atribActiveTab = tab;
   const tabZap   = document.getElementById('atribTabZap');
   const tabInsta = document.getElementById('atribTabInsta');
+  const tabSite  = document.getElementById('atribTabComSite');
   const panelZap   = document.getElementById('atribPanelZap');
   const panelInsta = document.getElementById('atribPanelInsta');
 
-  if (tab === 'zap') {
-    tabZap.style.borderBottomColor   = 'var(--accent)';
-    tabZap.style.color               = 'var(--accent)';
-    tabInsta.style.borderBottomColor = 'transparent';
-    tabInsta.style.color             = 'var(--muted)';
-    panelZap.style.display   = 'flex';
-    panelInsta.style.display = 'none';
-    renderAtribuicao();
-  } else {
-    tabInsta.style.borderBottomColor = 'var(--insta)';
-    tabInsta.style.color             = 'var(--insta)';
-    tabZap.style.borderBottomColor   = 'transparent';
-    tabZap.style.color               = 'var(--muted)';
-    panelInsta.style.display = 'flex';
-    panelZap.style.display   = 'none';
+  [tabZap, tabInsta, tabSite].forEach(btn => {
+    if (!btn) return;
+    btn.style.borderBottomColor = 'transparent';
+    btn.style.color = 'var(--muted)';
+  });
+
+  if (tab === 'insta') {
+    if (tabInsta) { tabInsta.style.borderBottomColor = 'var(--insta)'; tabInsta.style.color = 'var(--insta)'; }
+    if (panelInsta) panelInsta.style.display = 'flex';
+    if (panelZap) panelZap.style.display = 'none';
     renderAtribInstaFila();
     updateAtribInstaCorteInfo();
     setTimeout(() => document.getElementById('instaLeadNome')?.focus(), 60);
+  } else {
+    const activeBtn = tab === 'com-site' ? tabSite : tabZap;
+    if (activeBtn) { activeBtn.style.borderBottomColor = 'var(--accent)'; activeBtn.style.color = 'var(--accent)'; }
+    if (panelZap) panelZap.style.display = 'flex';
+    if (panelInsta) panelInsta.style.display = 'none';
+    renderAtribuicao();
   }
   updateAtribTabCounts();
 }
 
 function updateAtribTabCounts() {
-  const zapCount   = getAtribuicaoData().length;
+  const atrib = getAtribuicaoData();
+  const zapCount = atrib.filter(l => (l.canal || (l.whatsapp ? 'zap' : 'insta')) === 'zap' && !(typeof leadHasOwnSiteV47 === 'function' && leadHasOwnSiteV47(l))).length;
+  const siteCount = atrib.filter(l => (l.canal || (l.whatsapp ? 'zap' : 'insta')) === 'zap' && typeof leadHasOwnSiteV47 === 'function' && leadHasOwnSiteV47(l)).length;
   const instaCount = getInstaFila().length;
   const elZ = document.getElementById('atribTabZapCount');
   const elI = document.getElementById('atribTabInstaCount');
+  const elS = document.getElementById('atribTabComSiteCount');
   if (elZ) elZ.textContent = zapCount ? `(${zapCount})` : '';
   if (elI) elI.textContent = instaCount ? `(${instaCount})` : '';
+  if (elS) elS.textContent = siteCount ? `(${siteCount})` : '';
 }
 
 /* ── Info de corte horário ── */

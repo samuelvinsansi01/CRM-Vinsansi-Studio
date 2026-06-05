@@ -910,3 +910,75 @@ async function logoutSupabase() {
     notify('Sessão local encerrada. Recarregue se necessário.', 'warn');
   }
 }
+
+
+/* V47 — regras de negócio: site/sem site, bloqueio anti-reenvio e helpers de backlog */
+const WHATSAPP_SITE_SEGMENT_WITH_SITE_V47 = 'com-site';
+const WHATSAPP_SITE_SEGMENT_NO_SITE_V47 = 'sem-site';
+
+function normalizeUrlHostV47(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try { return new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`).hostname.replace(/^www\./,'').toLowerCase(); }
+  catch { return ''; }
+}
+
+function getLeadSiteUrlV47(lead = {}) {
+  return String(lead.site || lead.website || lead.websiteUrl || lead.website_url || '').trim();
+}
+
+function leadHasOwnSiteV47(lead = {}) {
+  const site = getLeadSiteUrlV47(lead);
+  if (!site) return false;
+  const host = normalizeUrlHostV47(site);
+  if (!host) return false;
+  const blocked = ['instagram.com','facebook.com','fb.com','wa.me','whatsapp.com','api.whatsapp.com','google.com','google.com.br','maps.google.com','goo.gl','linktr.ee','linktree.com'];
+  return !blocked.some(domain => host === domain || host.endsWith('.' + domain));
+}
+
+function getLeadTemplateTypeV47(lead = {}) {
+  return leadHasOwnSiteV47(lead) ? WHATSAPP_SITE_SEGMENT_WITH_SITE_V47 : WHATSAPP_SITE_SEGMENT_NO_SITE_V47;
+}
+
+function markLeadSegmentV47(lead = {}) {
+  const tipo = getLeadTemplateTypeV47(lead);
+  lead.tipo = tipo;
+  lead.templateType = tipo;
+  lead.siteSegment = tipo;
+  lead.hasOwnSite = tipo === WHATSAPP_SITE_SEGMENT_WITH_SITE_V47;
+  return lead;
+}
+
+function getLeadSentLedgerV47() {
+  try { return JSON.parse(localStorage.getItem('vs_whatsapp_sent_ledger_v47') || '{}') || {}; }
+  catch { return {}; }
+}
+function saveLeadSentLedgerV47(ledger = {}) {
+  try { localStorage.setItem('vs_whatsapp_sent_ledger_v47', JSON.stringify(ledger || {})); } catch(e) {}
+}
+function markLeadAsDispatchedEverV47(lead = {}, meta = {}) {
+  const ledger = getLeadSentLedgerV47();
+  const phone = typeof getLeadPhoneKeyV31 === 'function' ? getLeadPhoneKeyV31(lead) : String(lead.whatsapp || lead.phone || '').replace(/\D/g,'');
+  const keys = [lead.id ? `id:${lead.id}` : '', phone ? `phone:${phone}` : ''].filter(Boolean);
+  keys.forEach(key => { ledger[key] = { at:new Date().toISOString(), leadId:lead.id || '', phone, ...meta }; });
+  saveLeadSentLedgerV47(ledger);
+}
+function wasLeadDispatchedEverV47(lead = {}) {
+  if (!lead || typeof lead !== 'object') return false;
+  if (typeof isLeadSentOrClosedV433 === 'function' && isLeadSentOrClosedV433(lead)) return true;
+  const ledger = getLeadSentLedgerV47();
+  const phone = typeof getLeadPhoneKeyV31 === 'function' ? getLeadPhoneKeyV31(lead) : String(lead.whatsapp || lead.phone || '').replace(/\D/g,'');
+  if (lead.id && ledger[`id:${lead.id}`]) return true;
+  if (phone && ledger[`phone:${phone}`]) return true;
+  if (lead.status === 'Enviada' || lead.status === 'enviado' || lead.whatsappStatus === 'sent') return true;
+  return false;
+}
+
+function upsertUniqueLeadByDedupeV47(list = [], lead = {}) {
+  const arr = Array.isArray(list) ? [...list] : [];
+  const key = typeof getLeadDedupeKeyV31 === 'function' ? getLeadDedupeKeyV31(lead) : (lead.id || '');
+  const idx = arr.findIndex(item => item?.id === lead.id || (key && typeof getLeadDedupeKeyV31 === 'function' && getLeadDedupeKeyV31(item) === key));
+  if (idx >= 0) arr[idx] = { ...arr[idx], ...lead };
+  else arr.push(lead);
+  return arr;
+}
