@@ -181,6 +181,36 @@ function saveValPhone(id) {
   persistOptimisticLeadV426(v, 'validation-phone-update');
 }
 
+function parseWhatsappValidationResultV484(data = {}) {
+  const first = Array.isArray(data) ? data[0] : (data?.data?.[0] || data?.result?.[0] || data?.numbers?.[0] || data);
+  const hasExplicitFalse = first && (first.exists === false || first.isWhatsapp === false || first.numberExists === false || first.exists === 'false' || first.isWhatsapp === 'false' || first.numberExists === 'false');
+  const exists = !!(
+    first?.exists === true ||
+    first?.isWhatsapp === true ||
+    first?.numberExists === true ||
+    first?.exists === 'true' ||
+    first?.isWhatsapp === 'true' ||
+    first?.numberExists === 'true' ||
+    first?.jid ||
+    first?.waId ||
+    first?.wa_id
+  );
+  return { item:first || {}, exists, definitive: exists || hasExplicitFalse };
+}
+
+function markValidationAttemptErrorV484(lead, chip, errorMessage) {
+  if (!lead) return lead;
+  lead.validationAttemptStatus = 'error';
+  lead.lastValidationError = errorMessage || 'erro na validação';
+  lead.lastValidationChipId = chip?.id || '';
+  lead.lastValidationChipName = chip?.nome || chip?.label || chip?.instance || '';
+  lead.lastValidationAt = new Date().toISOString();
+  // Importante: erro de API/chip caído NÃO vira inválido.
+  // Mantém pendente quando ainda não havia um resultado definitivo.
+  if (lead.numStatus !== 'valido' && lead.numStatus !== 'invalido') lead.numStatus = 'pendente';
+  return lead;
+}
+
 async function validarNumeroUnico(id) {
   const chip = getChipById(activeChipId);
   if (!chip) { notify('// selecione um chip primeiro','warn'); return; }
@@ -194,31 +224,61 @@ async function validarNumeroUnico(id) {
   const card = document.getElementById(`val-card-${id}`);
   if (card) card.style.opacity = '0.6';
   try {
-    const res = await fetch(`${chip.url}/chat/whatsappNumbers/${chip.instance}`, {
+    const res = await fetch(`${chip.url}/chat/whatsappNumbers/${encodeURIComponent(chip.instance)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': chip.key },
       body: JSON.stringify({ numbers: [numero] })
     });
-    const data = await res.json();
-    const result = Array.isArray(data) ? data[0] : data;
-    v.numStatus = result?.exists ? 'valido' : 'invalido';
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || data?.error || data?.message === 'Unauthorized' || data?.status === 401) {
+      markValidationAttemptErrorV484(v, chip, data?.error || data?.message || `Evolution ${res.status}`);
+      saveValData(val); renderValidacao();
+      notify(`// falha na validação com ${chip.nome || chip.instance}. O lead continua liberado para validar com outro chip`, 'warn');
+      return;
+    }
+
+    const result = parseWhatsappValidationResultV484(data);
+    if (!result.definitive) {
+      markValidationAttemptErrorV484(v, chip, 'Resposta da Evolution sem resultado definitivo');
+      saveValData(val); renderValidacao();
+      notify('// resposta sem resultado definitivo. O lead continua pendente para tentar outro chip', 'warn');
+      return;
+    }
+
+    v.validationAttemptStatus = 'done';
+    v.lastValidationError = '';
+    v.lastValidationChipId = chip.id || '';
+    v.lastValidationChipName = chip.nome || chip.label || chip.instance || '';
+    v.lastValidationAt = new Date().toISOString();
+    v.numStatus = result.exists ? 'valido' : 'invalido';
+    v.whatsappValidationStatus = result.exists ? 'valid' : 'invalid';
     saveValData(val); renderValidacao();
-    notify(result?.exists ? `✓ ${v.nome} — número válido` : `✗ ${v.nome} — sem WhatsApp`);
+    notify(result.exists ? `✓ ${v.nome} — número válido` : `✗ ${v.nome} — sem WhatsApp`);
   } catch(e) {
-    notify('// erro ao validar número','err');
+    markValidationAttemptErrorV484(v, chip, e?.message || 'falha de conexão');
+    saveValData(val); renderValidacao();
+    notify('// falha ao conectar na Evolution. O lead continua liberado para validar com outro chip','err');
     if (card) card.style.opacity = '1';
   }
 }
 
-async function validarTodosNumeros() {
+async function validarTodosNumeros(options = {}) {
+  const retryAll = options === true || options?.retryAll === true;
   const chip = getChipById(activeChipId);
   if (!chip) { notify('// selecione um chip primeiro','warn'); return; }
   const val = getValData();
-  const pendentes = val.filter(v => (v.tipo==='sem-site' || v.tipo==='com-site' || !v.tipo) && v.numStatus==='pendente');
-  if (!pendentes.length) { notify('// nenhum número pendente','warn'); return; }
+  const pendentes = val.filter(v => {
+    const isZapCandidate = (v.tipo==='sem-site' || v.tipo==='com-site' || !v.tipo);
+    if (!isZapCandidate) return false;
+    if (v.numStatus === 'valido') return false;
+    if (retryAll) return true;
+    return v.numStatus === 'pendente' || v.validationAttemptStatus === 'error';
+  });
+  if (!pendentes.length) { notify(retryAll ? '// nenhum número para revalidar' : '// nenhum número pendente','warn'); return; }
 
   document.getElementById('valSpinner').style.display = 'block';
-  let validados = 0, invalidos = 0;
+  let validados = 0, invalidos = 0, falhas = 0;
 
   for (let i = 0; i < pendentes.length; i += 10) {
     const lote = pendentes.slice(i, i + 10);
@@ -228,21 +288,53 @@ async function validarTodosNumeros() {
     }).filter(n => n.length >= 12);
     if (!numbers.length) continue;
     try {
-      const res = await fetch(`${chip.url}/chat/whatsappNumbers/${chip.instance}`, {
+      const res = await fetch(`${chip.url}/chat/whatsappNumbers/${encodeURIComponent(chip.instance)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': chip.key },
         body: JSON.stringify({ numbers })
       });
-      const data = await res.json();
-      const results = Array.isArray(data) ? data : [];
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data?.error || data?.message === 'Unauthorized' || data?.status === 401) {
+        lote.forEach(v => markValidationAttemptErrorV484(v, chip, data?.error || data?.message || `Evolution ${res.status}`));
+        falhas += lote.length;
+        continue;
+      }
+
+      const results = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+      if (!results.length) {
+        lote.forEach(v => markValidationAttemptErrorV484(v, chip, 'Resposta da Evolution sem lista de resultados'));
+        falhas += lote.length;
+        continue;
+      }
+
       lote.forEach(v => {
         const ph = normalizePhone(v.whatsapp || '');
         const numero = ph.startsWith('55') ? ph : '55' + ph;
-        const found = results.find(r => r.jid && r.jid.includes(numero));
-        v.numStatus = found?.exists ? 'valido' : 'invalido';
-        if (v.numStatus === 'valido') validados++; else invalidos++;
+        const found = results.find(r => {
+          const raw = String(r?.number || r?.jid || r?.waId || r?.wa_id || '').replace(/\D/g, '');
+          return raw.includes(numero) || numero.includes(raw);
+        }) || results.find(r => String(r?.jid || '').includes(numero));
+        const parsed = parseWhatsappValidationResultV484(found || {});
+        if (!parsed.definitive) {
+          markValidationAttemptErrorV484(v, chip, 'Resultado ausente para este número');
+          falhas++;
+          return;
+        }
+        v.validationAttemptStatus = 'done';
+        v.lastValidationError = '';
+        v.lastValidationChipId = chip.id || '';
+        v.lastValidationChipName = chip.nome || chip.label || chip.instance || '';
+        v.lastValidationAt = new Date().toISOString();
+        v.numStatus = parsed.exists ? 'valido' : 'invalido';
+        v.whatsappValidationStatus = parsed.exists ? 'valid' : 'invalid';
+        if (parsed.exists) validados++; else invalidos++;
       });
-    } catch(e) { console.error(e); }
+    } catch(e) {
+      lote.forEach(v => markValidationAttemptErrorV484(v, chip, e?.message || 'falha de conexão'));
+      falhas += lote.length;
+      console.error(e);
+    }
     await new Promise(r => setTimeout(r, 800));
   }
 
@@ -253,7 +345,7 @@ async function validarTodosNumeros() {
   saveValData(updated);
   document.getElementById('valSpinner').style.display = 'none';
   renderValidacao(); updateBadges();
-  notify(`✓ ${validados} válidos · ${invalidos} sem WhatsApp`);
+  notify(`✓ ${validados} válidos · ${invalidos} sem WhatsApp · ${falhas} falhas liberadas para outro chip`);
 }
 
 function aprovarSemSiteParaZap(id) {

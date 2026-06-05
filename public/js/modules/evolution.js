@@ -226,6 +226,10 @@ function getLeadWhatsappStatus(leadId, lead = {}) {
 
   if (stored.status === 'valid' && (!storedPhone || !phone || storedPhone === phone)) return stored;
   if (stored.status === 'invalid' && (!storedPhone || !phone || storedPhone === phone)) return stored;
+  if ((stored.status === 'error' || stored.status === 'failed' || stored.status === 'pending') && (!storedPhone || !phone || storedPhone === phone)) return {
+    ...stored,
+    label: stored.label || (stored.status === 'pending' ? 'Validação pendente' : 'Falha na validação')
+  };
 
   return {
     status: 'pending',
@@ -388,13 +392,13 @@ async function validateActiveLeadWhatsapp() {
 
     if (!res.ok) {
       setLeadWhatsappStatus(activeLeadDrawerId, {
-        status: 'invalid',
-        label: 'Erro na validação',
+        status: 'error',
+        label: 'Erro na validação — tente outro chip',
         number: phone,
         raw: data
       });
-      addLeadHistory(activeLeadDrawerId, `WhatsApp: erro na validação (${res.status})`, activeLeadDrawerData);
-      notify('Erro ao validar WhatsApp.', 'err');
+      addLeadHistory(activeLeadDrawerId, `WhatsApp: erro na validação (${res.status}) — lead liberado para tentar outro chip`, activeLeadDrawerData);
+      notify('Erro ao validar WhatsApp. O lead continua liberado para validar com outro chip.', 'err');
     } else if (exists) {
       setLeadWhatsappStatus(activeLeadDrawerId, {
         status: 'valid',
@@ -418,13 +422,13 @@ async function validateActiveLeadWhatsapp() {
     }
   } catch (err) {
     setLeadWhatsappStatus(activeLeadDrawerId, {
-      status: 'invalid',
-      label: 'Falha na conexão',
+      status: 'error',
+      label: 'Falha na conexão — tente outro chip',
       number: phone,
       error: err?.message || 'erro desconhecido'
     });
-    addLeadHistory(activeLeadDrawerId, `WhatsApp: falha na conexão (${err?.message || 'erro'})`, activeLeadDrawerData);
-    notify('Falha ao conectar na Evolution.', 'err');
+    addLeadHistory(activeLeadDrawerId, `WhatsApp: falha na conexão (${err?.message || 'erro'}) — lead liberado para tentar outro chip`, activeLeadDrawerData);
+    notify('Falha ao conectar na Evolution. O lead continua liberado para validar com outro chip.', 'err');
   }
 
   renderLeadWhatsappValidation();

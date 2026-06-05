@@ -379,7 +379,10 @@
         <div id="valChipTabs" class="chip-tabs"></div>
         <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;margin-left:auto" onclick="validarTodosNumeros()">
           <div class="spinner" id="valSpinner" style="border-top-color:#0a0a0d"></div>
-          Validar todos
+          Validar pendentes
+        </button>
+        <button class="btn btn-ghost" style="font-size:10px;padding:7px 14px" onclick="validarTodosNumeros({retryAll:true})">
+          Revalidar não válidos/falhas
         </button>
         <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="aprovarTodosParaAtribuicao()">
           → Enviar todos para Atribuição
