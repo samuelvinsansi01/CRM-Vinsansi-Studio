@@ -2,61 +2,109 @@
    INIT
 ════════════════════════════ */
 (async function() {
-  const s = document.getElementById('sidebar');
-  if (sessionStorage.getItem(SIDEBAR_KEY)==='1') s.classList.remove('collapsed');
+  try {
+    const s = document.getElementById('sidebar');
 
-  // initAuth limpa caches sensiveis somente quando nao ha sessao ou quando a conta muda.
-
-  // Inicializa login Google e recarrega os dados do usuário autenticado.
-  await initAuth();
-
-  const cfg = loadEvoConfig() || {};
-  if (cfg.delayMin)      (document.getElementById('delayMin')||{}).value      = cfg.delayMin; else (document.getElementById('delayMin')||{}).value = 120;
-  if (cfg.delayMax)      (document.getElementById('delayMax')||{}).value      = cfg.delayMax; else (document.getElementById('delayMax')||{}).value = 120;
-  // Parâmetros fixos da operação: 6 lotes de 30, com espera de 1h entre lotes.
-  (document.getElementById('loteTamanho')||{}).value   = 30;
-  (document.getElementById('loteEsperaMin')||{}).value = 60;
-  if (cfg.horarioInicio) (document.getElementById('horarioInicio')||{}).value = cfg.horarioInicio;
-
-  if (typeof atualizarStatsDisparo === 'function') atualizarStatsDisparo();
-
-  // init chips — prioridade chip 2 com final 8457
-  const chips = getChips();
-  if (chips.length) {
-    const chipPriority = chips.find(c => c.nome && c.nome.includes('8457')) || chips.find(c => c.nome && c.nome.toLowerCase().includes('ativação')) || chips[1] || chips[0];
-    disparoChipId = chipPriority.id;
-    activeChipId = chipPriority.id;
-  }
-  checkHorarioDisparo(new Date());
-  setInterval(() => checkHorarioDisparo(new Date()), 30000);
-
-  renderRamoSelect();
-  if (typeof ensureMessageTemplateDefaultsV434 === 'function') ensureMessageTemplateDefaultsV434();
-  ensureWeekData();
-  if (typeof reconcilePermanentLeadBase === 'function') reconcilePermanentLeadBase();
-  migrarChavesInstaWeek();
-  sincronizarFilaComEnviados();
-  const recuperadosValidacao = recuperarValidacaoZapDoDia();
-  renderInicio();
-  renderExcluidos();
-  updateBadges();
-  if (typeof restoreLastActivePanelV434 === 'function') restoreLastActivePanelV434();
-  if (recuperadosValidacao) {
-    setTimeout(() => notify(`↩ ${recuperadosValidacao} lead(s) voltaram para Validação`), 0);
-  }
-  // Supabase-first: sem restauração automática de dados locais. Imagens novas ficam no IndexedDB.
-  // Limpeza de imagens de lotes obsoletos no IDB
-  setTimeout(limparImagensOlfas, 2000);
-  // Abrir o primeiro chip por padrão
-  setTimeout(() => {
-    const chips = getChips();
-    if (chips.length) {
-      const acc = document.getElementById('chipAccordion0');
-      if (acc) acc.classList.add('open');
+    if (s && typeof SIDEBAR_KEY !== 'undefined' && sessionStorage.getItem(SIDEBAR_KEY) === '1') {
+      s.classList.remove('collapsed');
     }
-  }, 50);
-})();
 
+    if (typeof initAuth === 'function') {
+      await initAuth();
+    } else {
+      console.warn('[CRM] initAuth não encontrada. Login antigo não inicializado.');
+    }
+
+    const cfg = (typeof loadEvoConfig === 'function' ? loadEvoConfig() : {}) || {};
+
+    if (document.getElementById('delayMin')) {
+      document.getElementById('delayMin').value = cfg.delayMin || 120;
+    }
+
+    if (document.getElementById('delayMax')) {
+      document.getElementById('delayMax').value = cfg.delayMax || 120;
+    }
+
+    if (document.getElementById('loteTamanho')) {
+      document.getElementById('loteTamanho').value = 30;
+    }
+
+    if (document.getElementById('loteEsperaMin')) {
+      document.getElementById('loteEsperaMin').value = 60;
+    }
+
+    if (document.getElementById('horarioInicio') && cfg.horarioInicio) {
+      document.getElementById('horarioInicio').value = cfg.horarioInicio;
+    }
+
+    if (typeof atualizarStatsDisparo === 'function') atualizarStatsDisparo();
+
+    if (typeof getChips === 'function') {
+      const chips = getChips();
+
+      if (chips.length) {
+        const chipPriority =
+          chips.find(c => c.nome && c.nome.includes('8457')) ||
+          chips.find(c => c.nome && c.nome.toLowerCase().includes('ativação')) ||
+          chips[1] ||
+          chips[0];
+
+        if (typeof disparoChipId !== 'undefined') disparoChipId = chipPriority.id;
+        if (typeof activeChipId !== 'undefined') activeChipId = chipPriority.id;
+      }
+    }
+
+    if (typeof checkHorarioDisparo === 'function') {
+      checkHorarioDisparo(new Date());
+      setInterval(() => checkHorarioDisparo(new Date()), 30000);
+    }
+
+    if (typeof renderRamoSelect === 'function') renderRamoSelect();
+    if (typeof ensureMessageTemplateDefaultsV434 === 'function') ensureMessageTemplateDefaultsV434();
+    if (typeof ensureWeekData === 'function') ensureWeekData();
+    if (typeof reconcilePermanentLeadBase === 'function') reconcilePermanentLeadBase();
+    if (typeof migrarChavesInstaWeek === 'function') migrarChavesInstaWeek();
+    if (typeof sincronizarFilaComEnviados === 'function') sincronizarFilaComEnviados();
+
+    let recuperadosValidacao = 0;
+
+    if (typeof recuperarValidacaoZapDoDia === 'function') {
+      recuperadosValidacao = recuperarValidacaoZapDoDia();
+    }
+
+    if (typeof renderInicio === 'function') renderInicio();
+    if (typeof renderExcluidos === 'function') renderExcluidos();
+    if (typeof updateBadges === 'function') updateBadges();
+    if (typeof restoreLastActivePanelV434 === 'function') restoreLastActivePanelV434();
+
+    if (recuperadosValidacao && typeof notify === 'function') {
+      setTimeout(() => notify(`↩ ${recuperadosValidacao} lead(s) voltaram para Validação`), 0);
+    }
+
+    if (typeof limparImagensOlfas === 'function') {
+      setTimeout(limparImagensOlfas, 2000);
+    }
+
+    setTimeout(() => {
+      if (typeof getChips !== 'function') return;
+
+      const chips = getChips();
+
+      if (chips.length) {
+        const acc = document.getElementById('chipAccordion0');
+        if (acc) acc.classList.add('open');
+      }
+    }, 50);
+
+    if (window.CRMRebuildReconciliation?.init) {
+      await window.CRMRebuildReconciliation.init();
+    }
+
+    console.log('[CRM] App iniciado com segurança.');
+  } catch (error) {
+    console.error('[CRM] Erro ao iniciar app.js:', error);
+  }
+})();
 
 function getPipelineStats() {
   const store = getLeadCrmStore();
