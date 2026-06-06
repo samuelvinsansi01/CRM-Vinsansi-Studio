@@ -1,0 +1,5 @@
+window.CRM_ENV = {
+  SUPABASE_URL: 'https://txyknazfufashgzlxkqh.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
+  APP_ENV: 'dev'
+};
