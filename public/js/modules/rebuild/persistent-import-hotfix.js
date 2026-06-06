@@ -102,6 +102,14 @@
       user = data?.user || null;
     }
     
+    if (!user?.id && window.currentUser?.id) {
+      user = window.currentUser;
+    }
+    
+    if (!user?.id && typeof currentUser !== 'undefined' && currentUser?.id) {
+      user = currentUser;
+    }
+    
     if (!user?.id) {
       throw new Error('Usuário autenticado não encontrado. Faça login novamente.');
     }
