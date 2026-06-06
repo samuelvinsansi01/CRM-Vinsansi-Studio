@@ -1,272 +1,167 @@
-(function () {
-  'use strict';
-
-  const LOG = '[CRM 6.7 Import Persistence]';
-
-  function notifySafe(message, type) {
-    try {
-      if (typeof window.notify === 'function') return window.notify(message, type);
-      const box = document.getElementById('notify');
-      if (box) {
-        box.textContent = message;
-        box.className = `notify show ${type === 'err' ? 'err' : type === 'warn' ? 'warn' : ''}`;
-        setTimeout(() => box.classList.remove('show'), 4500);
-      } else {
-        console.log(LOG, message);
-      }
-    } catch (_) {}
+/* CRM Rebuild Fase 6.8 — Importação persistente no schema novo */
+(function(){
+  function escText(v){ return (v == null ? '' : String(v)).trim(); }
+  function onlyDigits(v){ return escText(v).replace(/\D+/g, '') || null; }
+  function isMapsUrl(url){ return /google\.[^/]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps/i.test(escText(url)); }
+  function normalizeInstagram(url){
+    const v = escText(url);
+    if (!v) return { url: null, username: null };
+    const m = v.match(/instagram\.com\/([^/?#]+)/i);
+    return { url: v, username: m ? m[1].toLowerCase() : null };
   }
-
-  function esc(value) {
-    return String(value ?? '').replace(/[&<>'"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[ch]));
-  }
-
-  function getConfigValue(...keys) {
-    for (const key of keys) {
-      if (!key) continue;
-      if (window[key]) return window[key];
-      if (window.CRM_CONFIG && window.CRM_CONFIG[key]) return window.CRM_CONFIG[key];
-      if (window.CRMConfig && window.CRMConfig[key]) return window.CRMConfig[key];
+  function pick(obj, keys){
+    for (const k of keys) {
+      if (obj && obj[k] != null && String(obj[k]).trim() !== '') return obj[k];
     }
     return null;
   }
-
-  function getSupabaseClient() {
-    const names = ['supabaseClient', 'crmSupabase', 'db', 'supabaseDb', 'SB', '_supabaseClient'];
-    for (const name of names) {
-      const candidate = window[name];
-      if (candidate && typeof candidate.from === 'function' && typeof candidate.rpc === 'function') return candidate;
-    }
-
-    for (const value of Object.values(window)) {
-      if (value && typeof value === 'object' && typeof value.from === 'function' && typeof value.rpc === 'function' && value.auth) {
-        return value;
-      }
-    }
-
-    const url = getConfigValue('SUPABASE_URL', 'supabaseUrl', 'url');
-    const key = getConfigValue('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'supabaseAnonKey', 'publishableKey', 'anonKey');
-
-    if (url && key && window.supabase && typeof window.supabase.createClient === 'function') {
-      window.supabaseClient = window.supabase.createClient(url, key);
-      return window.supabaseClient;
-    }
-
-    return null;
+  function getImportJson(){
+    const el = document.getElementById('importJsonInput');
+    if (!el) throw new Error('Campo importJsonInput não encontrado.');
+    const txt = el.value.trim();
+    if (!txt) throw new Error('Cole o JSON da Apify antes de importar.');
+    const parsed = JSON.parse(txt);
+    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed.results)) return parsed.results;
+    if (Array.isArray(parsed.data)) return parsed.data;
+    throw new Error('JSON inválido: esperado array ou objeto com results[].');
   }
 
-  function parseImportPayload() {
-    const input = document.getElementById('importJsonInput');
-    const raw = input ? input.value.trim() : '';
-    if (!raw) throw new Error('Cole o JSON da Apify antes de importar.');
-
-    const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed)
-      ? parsed
-      : Array.isArray(parsed.results)
-        ? parsed.results
-        : Array.isArray(parsed.items)
-          ? parsed.items
-          : [];
-
-    if (!list.length) throw new Error('JSON válido, mas nenhum lead foi encontrado. Use um array ou results[].');
-    return list;
-  }
-
-  function isMapsUrl(url) {
-    return /google\.com\/maps|maps\.app\.goo\.gl|query_place_id=/i.test(String(url || ''));
-  }
-
-  function pick(obj, keys) {
-    for (const key of keys) {
-      const val = key.split('.').reduce((acc, part) => acc && acc[part], obj);
-      if (val !== undefined && val !== null && String(val).trim() !== '') return val;
-    }
-    return null;
-  }
-
-  function normalizeLead(raw) {
-    const url = pick(raw, ['url', 'link']);
-    let website = pick(raw, ['website', 'site', 'url_site']);
-    let googleMapsUrl = pick(raw, ['google_maps_url', 'googleMapsUrl', 'googleMapsURL', 'placeUrl', 'mapsUrl']);
-
-    if (!googleMapsUrl && isMapsUrl(url)) googleMapsUrl = url;
-    if (!website && url && !isMapsUrl(url)) website = url;
-    if (isMapsUrl(website)) {
-      googleMapsUrl = googleMapsUrl || website;
-      website = null;
-    }
-
-    const instagramUrl = pick(raw, ['instagram_url', 'instagramUrl', 'instagram', 'insta']);
-    let instagramUsername = pick(raw, ['instagram_username', 'instagramUsername']);
-    if (!instagramUsername && instagramUrl) {
-      instagramUsername = String(instagramUrl).replace(/^.*instagram\.com\//i, '').replace(/^@/, '').split(/[/?#]/)[0] || null;
-    }
+  function normalizeLeadPayload(item){
+    const companyName = escText(pick(item, ['title','name','company_name','companyName','nome','empresa'])) || 'Empresa sem nome';
+    const rawWebsite = escText(pick(item, ['website','site','url','domain','webSite']));
+    const googleMapsUrl = escText(pick(item, ['googleMapsUrl','google_maps_url','mapsUrl','url','placeUrl','searchPageUrl']));
+    const website = rawWebsite && !isMapsUrl(rawWebsite) ? rawWebsite : null;
+    const maps = googleMapsUrl || (rawWebsite && isMapsUrl(rawWebsite) ? rawWebsite : null);
+    const phone = escText(pick(item, ['phone','phoneNumber','telefone','whatsapp','contactPhone']));
+    const insta = normalizeInstagram(pick(item, ['instagram','instagramUrl','instagram_url','instagramLink']));
 
     return {
-      company_name: pick(raw, ['company_name', 'title', 'name', 'empresa']) || 'Empresa sem nome',
-      category: pick(raw, ['category', 'categoryName', 'categoria']),
-      description: pick(raw, ['description', 'about', 'descricao']),
-      rating: pick(raw, ['rating', 'totalScore']),
-      reviews_count: pick(raw, ['reviews_count', 'reviewsCount', 'reviews']),
-      phone: pick(raw, ['phone', 'phoneNumber', 'telefone', 'whatsapp']),
-      website,
-      website_type: website ? 'own_site' : null,
-      has_own_site: !!website,
-      instagram_url: instagramUrl,
-      instagram_username: instagramUsername,
-      country: pick(raw, ['country', 'pais']),
-      country_code: pick(raw, ['country_code', 'countryCode']),
-      state: pick(raw, ['state', 'estado']),
-      state_code: pick(raw, ['state_code', 'stateCode']),
-      city: pick(raw, ['city', 'cidade']),
-      neighborhood: pick(raw, ['neighborhood', 'bairro']),
-      address: pick(raw, ['address', 'street', 'endereco']),
-      zip_code: pick(raw, ['zip_code', 'postalCode', 'cep']),
-      latitude: pick(raw, ['latitude', 'location.lat']),
-      longitude: pick(raw, ['longitude', 'location.lng']),
-      google_maps_url: googleMapsUrl,
-      place_id: pick(raw, ['place_id', 'placeId']),
-      raw_payload: raw
+      lead: {
+        company_name: companyName,
+        category: escText(pick(item, ['categoryName','category','categoria'])),
+        description: escText(pick(item, ['description','descricao','about'])),
+        rating: pick(item, ['rating','stars','nota']) ? Number(pick(item, ['rating','stars','nota'])) : null,
+        reviews_count: pick(item, ['reviewsCount','reviews','reviewCount','avaliacoes']) ? Number(pick(item, ['reviewsCount','reviews','reviewCount','avaliacoes'])) : null,
+        phone: phone || null,
+        normalized_phone: onlyDigits(phone),
+        whatsapp_status: phone ? 'pending' : 'unknown',
+        website,
+        website_type: website ? 'external' : null,
+        has_own_site: !!website,
+        instagram_url: insta.url,
+        instagram_username: insta.username,
+        current_stage: 'imported',
+        current_status: 'imported'
+      },
+      location: {
+        country: escText(pick(item, ['country','pais'])) || 'Brasil',
+        country_code: escText(pick(item, ['countryCode','country_code'])) || 'BR',
+        state: escText(pick(item, ['state','estado','region'])),
+        state_code: escText(pick(item, ['stateCode','state_code','uf'])),
+        city: escText(pick(item, ['city','cidade'])),
+        neighborhood: escText(pick(item, ['neighborhood','bairro'])),
+        address: escText(pick(item, ['address','endereco','street'])),
+        zip_code: escText(pick(item, ['postalCode','zipCode','zip_code','cep'])),
+        latitude: pick(item, ['latitude','lat']) ? Number(pick(item, ['latitude','lat'])) : null,
+        longitude: pick(item, ['longitude','lng','lon']) ? Number(pick(item, ['longitude','lng','lon'])) : null,
+        google_maps_url: maps || null,
+        place_id: escText(pick(item, ['placeId','place_id','googlePlaceId'])),
+        raw_location: item
+      },
+      original: item
     };
   }
 
-  function renderRows(tbody, leads, emptyText) {
-    if (!tbody) return;
-    if (!leads.length) {
-      tbody.innerHTML = `<tr><td colspan="7" class="table-empty">${esc(emptyText)}</td></tr>`;
-      return;
-    }
+  async function importarLeadsPersistente(){
+    const client = window.CRMResolveSupabaseClient?.();
+    const user = await window.CRMResolveCurrentUser?.(client);
+    if (!client) throw new Error('Cliente Supabase não encontrado. Verifique se crm-config.js está antes deste script e contém SUPABASE_URL/SUPABASE_ANON_KEY.');
+    if (!user?.id) throw new Error('Usuário autenticado não encontrado. Faça login novamente.');
 
-    tbody.innerHTML = leads.map(lead => {
-      const location = [lead.city, lead.state].filter(Boolean).join(', ') || '-';
-      const site = lead.website
-        ? `<a href="${esc(lead.website)}" target="_blank" rel="noopener">Site</a>`
-        : '<span class="td-missing">Sem site</span>';
-      const maps = lead.google_maps_url
-        ? `<a href="${esc(lead.google_maps_url)}" target="_blank" rel="noopener">Maps</a>`
-        : '';
-      return `
-        <tr data-lead-id="${esc(lead.id)}">
-          <td class="td-name">${esc(lead.company_name)}</td>
-          <td class="td-link">${site}</td>
-          <td class="td-link">${maps}</td>
-          <td class="empresa-phone">${esc(lead.phone || '-')}</td>
-          <td><span class="q-badge info">${esc(lead.current_stage || 'validation')}</span></td>
-          <td><span class="q-badge ${lead.has_own_site ? 'warn' : 'ok'}">${lead.has_own_site ? 'Com site' : 'Sem site'}</span></td>
-          <td></td>
-        </tr>`;
-    }).join('');
-  }
+    const rows = getImportJson().map(normalizeLeadPayload);
+    if (!rows.length) throw new Error('Nenhum lead encontrado para importar.');
 
-  async function loadPersistentLeads() {
-    const client = getSupabaseClient();
-    if (!client) return [];
+    const { data: batch, error: batchError } = await client
+      .from('import_batches')
+      .insert({
+        user_id: user.id,
+        source: 'apify_json',
+        source_file_name: 'importacao_manual_json',
+        quantity_total: rows.length,
+        raw_metadata: { source: 'frontend', version: '6.8' }
+      })
+      .select('id')
+      .single();
+    if (batchError) throw batchError;
 
-    const { data, error } = await client
-      .from('v_lead_cards_persistent')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(500);
+    let created = 0;
+    let merged = 0;
 
-    if (error) {
-      console.warn(LOG, 'falha ao carregar v_lead_cards_persistent', error);
-      return [];
-    }
+    for (const row of rows) {
+      const leadPayload = { ...row.lead, user_id: user.id };
+      let lead = null;
 
-    return Array.isArray(data) ? data : [];
-  }
+      const { data: inserted, error: insertError } = await client
+        .from('leads')
+        .insert(leadPayload)
+        .select('id')
+        .single();
 
-  async function renderPersistentImportedLeads() {
-    const leads = await loadPersistentLeads();
+      if (insertError) {
+        const phone = row.lead.normalized_phone;
+        let existingQuery = client.from('leads').select('id').eq('user_id', user.id).is('deleted_at', null).limit(1);
+        if (phone) existingQuery = existingQuery.eq('normalized_phone', phone);
+        else if (row.lead.website) existingQuery = existingQuery.eq('website', row.lead.website);
+        else if (row.lead.instagram_username) existingQuery = existingQuery.eq('instagram_username', row.lead.instagram_username);
+        else throw insertError;
 
-    renderRows(document.getElementById('leadBaseTbody'), leads, 'Nenhum lead salvo no banco ainda.');
-
-    const validationLeads = leads.filter(l => ['imported', 'validation'].includes(l.current_stage));
-    const valBox = document.getElementById('valComSiteList');
-    if (valBox) {
-      if (!validationLeads.length) {
-        valBox.innerHTML = '<div class="table-empty">// nenhum lead aguardando validação</div>';
+        const { data: existing, error: existingError } = await existingQuery.maybeSingle();
+        if (existingError || !existing?.id) throw insertError;
+        lead = existing;
+        merged++;
       } else {
-        valBox.innerHTML = validationLeads.map(lead => `
-          <div class="empresa-card" data-lead-id="${esc(lead.id)}">
-            <div class="empresa-info">
-              <div class="empresa-nome">${esc(lead.company_name)}</div>
-              <div class="empresa-meta">
-                <span class="empresa-phone">${esc(lead.phone || 'sem telefone')}</span>
-                <span class="q-badge ${lead.website ? 'warn' : 'ok'}">${lead.website ? 'Com site' : 'Sem site'}</span>
-                ${lead.google_maps_url ? `<a class="td-link" href="${esc(lead.google_maps_url)}" target="_blank" rel="noopener">Maps</a>` : ''}
-              </div>
-            </div>
-          </div>
-        `).join('');
-      }
-    }
-
-    const badge = document.getElementById('leadBaseTotalBadge');
-    if (badge) badge.textContent = `${leads.length} lead(s)`;
-
-    return leads;
-  }
-
-  async function importarLeadsPersistente() {
-    const btn = document.getElementById('importLeadsBtn');
-    const originalText = btn ? btn.innerHTML : '';
-
-    try {
-      const client = getSupabaseClient();
-      if (!client) throw new Error('Cliente Supabase não encontrado. Verifique crm-config/prelude.');
-
-      const rawList = parseImportPayload();
-      const normalized = rawList.map(normalizeLead);
-
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = 'Salvando no banco...';
+        lead = inserted;
+        created++;
       }
 
-      const { data, error } = await client.rpc('rpc_import_leads_persistent', {
-        p_source: 'apify',
-        p_file_name: 'json-colado',
-        p_leads: normalized
+      const locPayload = { ...row.location, user_id: user.id, lead_id: lead.id };
+      await client.from('lead_locations').upsert(locPayload, { onConflict: 'user_id,lead_id' });
+
+      await client.from('lead_imports').upsert({
+        user_id: user.id,
+        import_batch_id: batch.id,
+        lead_id: lead.id,
+        original_payload: row.original,
+        normalized_payload: { lead: row.lead, location: row.location }
+      }, { onConflict: 'user_id,import_batch_id,lead_id' });
+
+      await client.from('lead_snapshots').insert({
+        user_id: user.id,
+        lead_id: lead.id,
+        import_batch_id: batch.id,
+        snapshot_type: 'import',
+        snapshot: { lead: row.lead, location: row.location, original: row.original }
       });
 
-      if (error) throw error;
-
-      await renderPersistentImportedLeads();
-
-      if (typeof window.updateBadges === 'function') {
-        try { window.updateBadges(); } catch (_) {}
-      }
-
-      notifySafe(`Importação salva no banco: ${data?.created || 0} criado(s), ${data?.merged || 0} duplicado(s).`, data?.errors ? 'warn' : 'ok');
-      return data;
-    } catch (error) {
-      console.error(LOG, error);
-      notifySafe(`Erro ao importar: ${error.message || error}`, 'err');
-      throw error;
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = originalText || '↓ Importar para Validação';
-      }
+      await client.from('lead_events').insert({
+        user_id: user.id,
+        lead_id: lead.id,
+        event_type: 'LEAD_IMPORTED',
+        event_payload: { import_batch_id: batch.id, created: !!inserted }
+      });
     }
+
+    await client.from('import_batches').update({ quantity_created: created, quantity_merged: merged }).eq('id', batch.id).eq('user_id', user.id);
+
+    if (typeof notify === 'function') notify(`Importação salva: ${created} novo(s), ${merged} mesclado(s).`);
+    if (typeof loadSupabaseLeadsToLocalState === 'function') await loadSupabaseLeadsToLocalState();
+    if (typeof renderInicio === 'function') renderInicio();
+    if (typeof updateBadges === 'function') updateBadges();
+
+    return { batch_id: batch.id, created, merged, total: rows.length };
   }
 
-  function install() {
-    window.importarLeads = importarLeadsPersistente;
-    window.renderPersistentImportedLeads = renderPersistentImportedLeads;
-
-    const btn = document.getElementById('importLeadsBtn');
-    if (btn) btn.setAttribute('onclick', 'importarLeads()');
-
-    renderPersistentImportedLeads().catch(err => console.warn(LOG, err));
-    console.log(LOG, 'ativo');
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', install);
-  } else {
-    install();
-  }
+  window.importarLeadsPersistente = importarLeadsPersistente;
+  window.importarLeads = importarLeadsPersistente;
 })();
