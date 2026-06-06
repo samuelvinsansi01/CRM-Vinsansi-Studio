@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redirecionando...</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a0a;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+    }
+    .container {
+      text-align: center;
+      opacity: 0;
+      animation: fadeIn 0.4s ease forwards;
+    }
+    @keyframes fadeIn { to { opacity: 1; } }
+    .dot-loader {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #fff;
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+    p { font-size: 13px; opacity: 0.4; letter-spacing: 0.1em; }
+    .error {
+      color: #ff4444;
+      font-size: 14px;
+      max-width: 300px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="container">
+    <div class="dot-loader">
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+    <p>REDIRECIONANDO</p>
+  </div>
+
+  <script>
+    const FIGMA_BASE = 'https://www.figma.com/proto/jBad1McvznK2RnuBuRpehe/0000.-Starter-file';
+    const FIGMA_FIXED = 't=yRE1bnYqFAGolvYA-0&scaling=scale-down-width&content-scaling=fixed&show-proto-sidebar=1&hide-ui=1';
+
+    function buildFigmaUrl(nodeId) {
+      // node-id usa hífen, starting-point e page-id usam dois-pontos
+      const nodeIdColon = nodeId.replace('-', ':');
+      // page-id: último número - 1
+      const parts = nodeId.split('-');
+      const pageId = parts[0] + ':' + (parseInt(parts[1]) - 1);
+
+      return `${FIGMA_BASE}?node-id=${nodeId}&${FIGMA_FIXED}&starting-point-node-id=${encodeURIComponent(nodeIdColon)}&page-id=${encodeURIComponent(pageId)}`;
+    }
+
+    function isMobile() {
+      const ua = navigator.userAgent || navigator.vendor || window.opera;
+      const mobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua);
+      const narrowScreen = window.innerWidth < 768;
+      return mobileUA || narrowScreen;
+    }
+
+    function showError(msg) {
+      document.getElementById('container').innerHTML = `<p class="error">${msg}</p>`;
+    }
+
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const deskId = params.get('d');
+      const mobId = params.get('m');
+
+      if (!deskId || !mobId) {
+        showError('Link inválido. Parâmetros ausentes.');
+        return;
+      }
+
+      const targetId = isMobile() ? mobId : deskId;
+      const targetUrl = buildFigmaUrl(targetId);
+
+      setTimeout(() => {
+        window.location.href = targetUrl;
+      }, 300);
+    })();
+  </script>
+</body>
+</html>
