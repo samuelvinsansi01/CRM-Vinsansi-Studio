@@ -86,7 +86,7 @@
   async function rpcImport(userId, rows){
     const client = window.supabaseClient || window.crmSupabase || window.sb;
     if (client?.rpc) {
-      const { data, error } = await client.rpc('rpc_import_leads_persistent', {
+      const { data, error } = await client.rpc('rpc_import_leads_batch', {
         p_user_id: userId,
         p_rows: rows,
         p_source: 'apify_json',
@@ -96,7 +96,7 @@
       console.warn('[CRM 6.9] RPC via client falhou, tentando fetch anônimo:', error);
     }
 
-    const response = await fetch('https://txyknazfufashgzlxkqh.supabase.co/rest/v1/rpc/rpc_import_leads_persistent', {
+    const response = await fetch('https://txyknazfufashgzlxkqh.supabase.co/rest/v1/rpc/rpc_import_leads_batch', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -104,10 +104,11 @@
         'Authorization': 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
       },
         body: JSON.stringify({
-        p_source: 'apify',
-        p_file_name: 'importacao_manual_json',
-        p_leads: rows.map(r => r.original || r)
-      })
+          p_user_id: userId,
+          p_rows: rows,
+          p_source: 'apify_json',
+          p_source_file_name: 'importacao_manual_json'
+        })
     });
 
     const text = await response.text();
