@@ -4,12 +4,11 @@
 
   function createClientNow() {
     if (window.supabaseClient?.from && window.supabaseClient?.auth) {
-      console.log('[CRM] window.supabaseClient já existe.');
       return window.supabaseClient;
     }
 
     if (!window.supabase || typeof window.supabase.createClient !== 'function') {
-      console.error('[CRM] Biblioteca Supabase carregada, mas createClient não está disponível.', window.supabase);
+      console.error('[CRM] Supabase createClient indisponível.', window.supabase);
       return null;
     }
 
@@ -18,18 +17,16 @@
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storageKey: 'crm-supabase-auth'
+        storageKey: 'sb-txyknazfufashgzlxkqh-auth-token'
       }
     });
 
     window.crmSupabase = window.supabaseClient;
     window.sb = window.supabaseClient;
 
-    console.log('[CRM] Supabase client criado e exposto em window.supabaseClient.');
     return window.supabaseClient;
   }
 
   window.resolveSupabaseClient = createClientNow;
-
   createClientNow();
 })();
