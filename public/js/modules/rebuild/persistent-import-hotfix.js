@@ -100,17 +100,20 @@
       throw new Error('Usuário autenticado não encontrado.');
     }
 
-    const headers =
-      typeof getSupabaseAuthHeadersV423 === 'function'
-        ? await getSupabaseAuthHeadersV423()
-        : null;
+    let headers = null;
 
-    if (!headers?.apikey || !headers?.Authorization) {
-      throw new Error('Headers autenticados Supabase não encontrados.');
+    if (typeof getSupabaseAuthHeadersV423 === 'function') {
+      headers = await getSupabaseAuthHeadersV423();
     }
-
+    
+    if (!headers?.apikey) {
+      headers = {
+        apikey: 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
+        Authorization: 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
+      };
+    }
+    
     return { user: { id: userId }, headers };
-  }
 
   async function supabaseFetch(path, options = {}){
     const { headers } = await getAuthContext();
