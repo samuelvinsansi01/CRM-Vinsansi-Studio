@@ -128,7 +128,22 @@
     const created = Number(result?.created || 0);
     const merged = Number(result?.merged || 0);
 
-    if (typeof notify === 'function') notify(`Importação salva: ${created} novo(s), ${merged} mesclado(s).`);
+    if (typeof notify === 'function') notify(`
+      Importação concluída
+      
+      Total analisados: ${result.total || 0}
+      
+      Aprovados:
+      ${result.created || 0} salvos
+      
+      Reprovados:
+      ${result.ignored || 0} ignorados
+      ${result.rejected_low_rating || 0} abaixo da nota mínima
+      ${result.rejected_low_reviews || 0} abaixo das avaliações mínimas
+      ${result.rejected_duplicate || 0} duplicados
+      ${result.blacklisted || 0} blacklist
+      ${result.errors || 0} erros
+    `);
     if (typeof loadSupabaseLeadsToLocalState === 'function') await loadSupabaseLeadsToLocalState();
     if (typeof renderInicio === 'function') renderInicio();
     if (typeof updateBadges === 'function') updateBadges();
