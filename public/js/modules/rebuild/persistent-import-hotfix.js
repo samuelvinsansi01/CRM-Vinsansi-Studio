@@ -103,11 +103,10 @@
         'apikey': 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
         'Authorization': 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
       },
-      body: JSON.stringify({
-        p_user_id: userId,
-        p_rows: rows,
-        p_source: 'apify_json',
-        p_source_file_name: 'importacao_manual_json'
+        body: JSON.stringify({
+        p_source: 'apify',
+        p_file_name: 'importacao_manual_json',
+        p_leads: rows.map(r => r.original || r)
       })
     });
 
