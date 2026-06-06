@@ -12,21 +12,19 @@
 
   assertEnv();
 
-  const client = window.supabase.createClient(
-    window.CRM_ENV.SUPABASE_URL,
-    window.CRM_ENV.SUPABASE_ANON_KEY,
-    {
+  window.crmSupabase = window.supabase.createClient(
+  window.CRM_ENV.SUPABASE_URL,
+  window.CRM_ENV.SUPABASE_ANON_KEY,
+  {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
-        flowType: 'pkce'
+        detectSessionInUrl: true
       }
     }
   );
-
-  window.crmSupabase = client;
-  window.supabaseClient = client;
+  
+  window.supabaseClient = window.crmSupabase;
   window.CRM = window.CRM || {};
-  window.CRM.supabase = client;
+  window.CRM.supabase = window.crmSupabase;
 })();
