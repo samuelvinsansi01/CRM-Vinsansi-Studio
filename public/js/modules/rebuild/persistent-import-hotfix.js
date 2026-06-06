@@ -1,6 +1,7 @@
-/* CRM Rebuild Fase 6.9 — Importação persistente no schema novo via headers autenticados */
+/* CRM Rebuild Fase 6.9 — Importação persistente no schema novo */
 (function(){
   const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
 
   function escText(v){ return (v == null ? '' : String(v)).trim(); }
   function onlyDigits(v){ return escText(v).replace(/\D+/g, '') || null; }
@@ -25,10 +26,13 @@
     if (!el) throw new Error('Campo importJsonInput não encontrado.');
     const txt = el.value.trim();
     if (!txt) throw new Error('Cole o JSON da Apify antes de importar.');
+
     const parsed = JSON.parse(txt);
+
     if (Array.isArray(parsed)) return parsed;
     if (Array.isArray(parsed.results)) return parsed.results;
     if (Array.isArray(parsed.data)) return parsed.data;
+
     throw new Error('JSON inválido: esperado array ou objeto com results[].');
   }
 
@@ -39,10 +43,7 @@
     const rawUrl = escText(pick(item, ['url']));
     const googleMapsUrl = escText(pick(item, ['googleMapsUrl','google_maps_url','mapsUrl','placeUrl','searchPageUrl']));
 
-    const website =
-      rawWebsite && !isMapsUrl(rawWebsite)
-        ? rawWebsite
-        : null;
+    const website = rawWebsite && !isMapsUrl(rawWebsite) ? rawWebsite : null;
 
     const maps =
       googleMapsUrl ||
@@ -105,15 +106,19 @@
     if (typeof getSupabaseAuthHeadersV423 === 'function') {
       headers = await getSupabaseAuthHeadersV423();
     }
-    
+
     if (!headers?.apikey) {
       headers = {
-        apikey: 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
-        Authorization: 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
       };
     }
-    
-    return { user: { id: userId }, headers };
+
+    return {
+      user: { id: userId },
+      headers
+    };
+  }
 
   async function supabaseFetch(path, options = {}){
     const { headers } = await getAuthContext();
@@ -155,8 +160,7 @@
 
   async function selectRows(table, query){
     return supabaseFetch(`${table}?${query}`, {
-      method: 'GET',
-      prefer: 'return=representation'
+      method: 'GET'
     });
   }
 
@@ -259,7 +263,10 @@
       `id=eq.${encodeURIComponent(batch.id)}&user_id=eq.${encodeURIComponent(user.id)}`
     );
 
-    if (typeof notify === 'function') notify(`Importação salva: ${created} novo(s), ${merged} mesclado(s).`);
+    if (typeof notify === 'function') {
+      notify(`Importação salva: ${created} novo(s), ${merged} mesclado(s).`);
+    }
+
     if (typeof loadSupabaseLeadsToLocalState === 'function') await loadSupabaseLeadsToLocalState();
     if (typeof renderInicio === 'function') renderInicio();
     if (typeof updateBadges === 'function') updateBadges();
