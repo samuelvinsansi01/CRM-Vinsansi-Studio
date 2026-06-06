@@ -74,11 +74,38 @@
   }
 
   async function importarLeadsPersistente(){
-    const client = window.CRMResolveSupabaseClient?.();
-    const user = await window.CRMResolveCurrentUser?.(client);
-    if (!client) throw new Error('Cliente Supabase não encontrado. Verifique se crm-config.js está antes deste script e contém SUPABASE_URL/SUPABASE_ANON_KEY.');
-    if (!user?.id) throw new Error('Usuário autenticado não encontrado. Faça login novamente.');
-
+    let client = null;
+    if (window.supabaseClient?.from && window.supabaseClient?.auth) {
+      client = window.supabaseClient;
+    } else if (typeof window.resolveSupabaseClient === 'function') {
+      client = window.resolveSupabaseClient();
+    } else if (window.crmSupabase?.from && window.crmSupabase?.auth) {
+      client = window.crmSupabase;
+    } else if (window.sb?.from && window.sb?.auth) {
+      client = window.sb;
+    } else if (typeof window.CRMResolveSupabaseClient === 'function') {
+      client = window.CRMResolveSupabaseClient();
+    }
+    
+    if (!client?.from || !client?.auth) {
+      throw new Error('Cliente Supabase não encontrado.');
+    }
+    
+    let user = null;
+    
+    if (typeof window.CRMResolveCurrentUser === 'function') {
+      user = await window.CRMResolveCurrentUser(client);
+    }
+    
+    if (!user?.id) {
+      const { data } = await client.auth.getUser();
+      user = data?.user || null;
+    }
+    
+    if (!user?.id) {
+      throw new Error('Usuário autenticado não encontrado. Faça login novamente.');
+    }
+    
     const rows = getImportJson().map(normalizeLeadPayload);
     if (!rows.length) throw new Error('Nenhum lead encontrado para importar.');
 
