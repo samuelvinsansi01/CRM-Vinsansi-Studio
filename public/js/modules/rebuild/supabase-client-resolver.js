@@ -1,51 +1,38 @@
-/* CRM Rebuild Fase 6.8 — Supabase client resolver */
-(function(){
-  function looksLikeClient(client){
-    return !!client && typeof client.from === 'function' && typeof client.auth === 'object';
+(function () {
+  function getUrl() {
+    return window.SUPABASE_URL || window.supabaseUrl || 'https://txyknazfufashgzlxkqh.supabase.co';
   }
 
-  function resolveSupabaseClient(){
-    const candidates = [
-      window.supabaseClient,
-      window.crmSupabase,
-      window.sb,
-      window.supabaseDb,
-      window.__supabaseClient,
-      window.supabase && typeof window.supabase.from === 'function' ? window.supabase : null,
-      window._supabase
-    ];
+  function getKey() {
+    return window.SUPABASE_ANON_KEY ||
+      window.SUPABASE_PUBLISHABLE_KEY ||
+      window.supabaseAnonKey ||
+      window.supabaseKey ||
+      'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
+  }
 
-    for (const candidate of candidates) {
-      if (looksLikeClient(candidate)) return candidate;
+  function resolveSupabaseClient() {
+    if (window.supabaseClient?.from && window.supabaseClient?.auth) return window.supabaseClient;
+    if (window.crmSupabase?.from && window.crmSupabase?.auth) return (window.supabaseClient = window.crmSupabase);
+    if (window.sb?.from && window.sb?.auth) return (window.supabaseClient = window.sb);
+
+    if (window.supabase?.createClient) {
+      window.supabaseClient = window.supabase.createClient(getUrl(), getKey(), {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true
+        }
+      });
+
+      console.log('[CRM] Supabase client criado pelo resolver.');
+      return window.supabaseClient;
     }
 
-    if (window.supabase && typeof window.supabase.createClient === 'function') {
-      const cfg = window.CRM_CONFIG || window.crmConfig || window.__CRM_CONFIG || {};
-      const url = cfg.SUPABASE_URL || cfg.supabaseUrl || window.SUPABASE_URL;
-      const key = cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_PUBLISHABLE_KEY || cfg.supabaseAnonKey || cfg.supabasePublishableKey || window.SUPABASE_ANON_KEY || window.SUPABASE_PUBLISHABLE_KEY;
-      if (url && key) {
-        const created = window.supabase.createClient(url, key);
-        window.supabaseClient = created;
-        window.crmSupabase = created;
-        return created;
-      }
-    }
-
+    console.warn('[CRM] Biblioteca Supabase não encontrada.');
     return null;
   }
 
-  async function resolveCurrentUser(client){
-    if (window.currentUser?.id) return window.currentUser;
-    if (!client?.auth?.getUser) return null;
-    const { data, error } = await client.auth.getUser();
-    if (error) return null;
-    if (data?.user) {
-      window.currentUser = data.user;
-      return data.user;
-    }
-    return null;
-  }
-
-  window.CRMResolveSupabaseClient = resolveSupabaseClient;
-  window.CRMResolveCurrentUser = resolveCurrentUser;
+  window.resolveSupabaseClient = resolveSupabaseClient;
+  resolveSupabaseClient();
 })();
