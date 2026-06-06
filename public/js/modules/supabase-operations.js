@@ -401,3 +401,39 @@ function scheduleOperationalSync(options = {}) {
   const delay = reason === 'operational-change' ? Math.max(Number(options.delay || 0), 3000) : options.delay;
   scheduleOperationalSyncTimer({ ...options, delay });
 }
+
+
+/* ════════════════════════════
+   FASE 6.6 — DESATIVAR LEGADO crm_* NO FRONTEND
+   O banco novo usa leads, queue_items, dispatch_ledger, settings etc.
+   Este arquivo mantém o estado em memória do CRM antigo e impede chamadas
+   para tabelas removidas: crm_leads, crm_queue_items, crm_dispatch_queues,
+   crm_settings e crm_sent_ledger.
+════════════════════════════ */
+async function syncOperationalDataToSupabase({ silent = false } = {}) {
+  clearOperationalDataDirtyV430?.();
+  setPersistenceStatus?.('Estado operacional legado mantido apenas em memória. Banco novo ativo.', 'ok');
+  return { ok:true, skipped:true, reason:'legacy-crm-tables-disabled' };
+}
+
+async function loadOperationalDataFromSupabase() {
+  window.__VS_OPERATIONAL_STATE_LOADED = true;
+  setPersistenceStatus?.('Banco novo ativo. Carga das tabelas crm_* foi desativada.', 'ok');
+  return true;
+}
+
+function scheduleOperationalSyncTimer({ delay = 1500 } = {}) {
+  window.__operationalSyncTimer = null;
+  window.__operationalSyncDueAt = 0;
+  return false;
+}
+
+function scheduleOperationalSync(options = {}) {
+  markOperationalDataDirtyV430?.(options.reason || 'memory-change');
+  return false;
+}
+
+function showPersistenceSchema() {
+  setPersistenceStatus?.('Schema novo ativo. Use as fases SQL do rebuild, não o SQL V51 legado.', 'warn');
+  notify?.('Schema novo ativo. SQL V51 legado não é mais usado.', 'warn');
+}

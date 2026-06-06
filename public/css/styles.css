@@ -2983,3 +2983,7 @@ body.auth-locked .app{
 .lead-channel .lead-channel-actions a:hover,
 .lead-channel .lead-channel-actions button:hover,
 .lead-channel .lead-channel-edit:hover { color: var(--accent); border-color: rgba(178,255,74,.35); }
+
+
+/* Fase 6.6 — ajuste solicitado */
+.sidebar-final-title{font-size:12px !important;}

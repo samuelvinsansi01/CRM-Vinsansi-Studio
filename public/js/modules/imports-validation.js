@@ -7,8 +7,38 @@ function qualificationLogV430(tag, payload = {}) {
   try { console.log(`[${tag}]`, payload); } catch (_) {}
 }
 
+function isGoogleMapsLikeUrlV66(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  try {
+    const u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+    const path = (u.pathname || '').toLowerCase();
+    return host === 'google.com' || host === 'google.com.br' || host === 'maps.google.com' || host.endsWith('.google.com') || host.endsWith('.google.com.br') || path.includes('/maps') || raw.toLowerCase().includes('google.com/maps');
+  } catch {
+    return /google\.[a-z.]+\/maps|maps\.google\./i.test(raw);
+  }
+}
+
 function extractSite(item) {
-  return String(item.website || item.site || item.webSite || item.websiteUrl || item.website_url || '').trim();
+  const candidates = [
+    item.website,
+    item.site,
+    item.webSite,
+    item.websiteUrl,
+    item.website_url,
+    item.companyWebsite,
+    item.urlWebsite
+  ];
+
+  for (const value of candidates) {
+    const site = String(value || '').trim();
+    if (!site) continue;
+    if (isGoogleMapsLikeUrlV66(site)) continue;
+    return site;
+  }
+
+  return '';
 }
 function extractPhone(item) { return String(item.phone || item.whatsapp || item.phoneNumber || item.telefone || '').trim(); }
 function extractName(item)  { return capitalizeName(String(item.title || item.name || item.nome || '').trim()); }
