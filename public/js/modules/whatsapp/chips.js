@@ -71,7 +71,7 @@ function normalizeWhatsappChipOperationV426(chip = {}){
     base_url: baseUrl,
     evolutionUrl,
     evolution_url: evolutionUrl,
-    dailyLimit: !dailyLimit || dailyLimit === 120 ? WHATSAPP_CHIP_DAILY_LIMIT_V426 : dailyLimit,
+    dailyLimit: !dailyLimit || dailyLimit === 180 ? WHATSAPP_CHIP_DAILY_LIMIT_V426 : dailyLimit,
     intervalSeconds: Number(chip.intervalSeconds || chip.interval_seconds || WHATSAPP_CHIP_INTERVAL_SECONDS_V426),
     blockSize: Number(chip.blockSize || chip.block_size || WHATSAPP_CHIP_BLOCK_SIZE_V426),
     blocks: !blocks.length || hasOldDefaultBlocks ? getDefaultWhatsappChipBlocksV426() : blocks
@@ -490,7 +490,7 @@ function renderChipsOperationSummary(){
     Chips ativos: ${active.length}<br>
     Capacidade diária total: ${totalDaily}<br>
     Capacidade restante hoje: ${totalCapacity}<br>
-    Padrão recomendado: 180 por chip · 6 blocos de 30 · 120s · espera 1h entre blocos
+    Padrão recomendado: 120 por chip · 4 blocos de 30 · 120s · espera 1h entre blocos
   `;
 }
 

@@ -880,32 +880,6 @@
   }
 })();
 
-/* CRM Rebuild Fase 6.25 - Finalizador chips da Validacao */
-(function () {
-  function refresh625() {
-    try {
-      if (typeof window.refreshValidationChipsRebuild625 === 'function') {
-        window.refreshValidationChipsRebuild625();
-      }
-    } catch (error) {
-      console.warn('[rebuild625] finalizador falhou:', error);
-    }
-  }
-
-  function boot() {
-    refresh625();
-    setTimeout(refresh625, 500);
-    setTimeout(refresh625, 1500);
-    setTimeout(refresh625, 3000);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
-})();
-
 /* CRM Rebuild Fase 6.25 - Chips na Validacao WhatsApp */
 (function () {
   const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
@@ -998,13 +972,12 @@
   }
 
   async function getHeaders(content = false) {
-    let headers = null;
+    let headers = {};
     try {
       if (typeof getSupabaseAuthHeadersV423 === 'function') headers = await getSupabaseAuthHeadersV423();
     } catch (_) {}
-    if (!headers?.apikey) {
-      headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
-    }
+    headers = { ...(headers || {}), apikey: headers?.apikey || SUPABASE_KEY };
+    if (!headers.Authorization) headers.Authorization = `Bearer ${SUPABASE_KEY}`;
     return content ? { ...headers, 'Content-Type': 'application/json' } : headers;
   }
 
@@ -1022,8 +995,7 @@
     try {
       if (typeof window.CRMHydrateChipsCache === 'function') {
         const hydrated = await window.CRMHydrateChipsCache();
-        const merged = dedupeChips([...(hydrated || []), ...cached]);
-        if (merged.length) return merged;
+        if (Array.isArray(hydrated)) return dedupeChips(hydrated);
       }
     } catch (error) {
       console.warn('[rebuild625] hydrate chips falhou:', error);
@@ -1043,7 +1015,7 @@
       });
       const data = await readJson(response);
       if (!response.ok) throw data || new Error(`Falha ao carregar chips (${response.status}).`);
-      return dedupeChips([...(Array.isArray(data) ? data : []), ...cached]);
+      return dedupeChips(Array.isArray(data) ? data : []);
     } catch (error) {
       console.warn('[rebuild625] fetch chips falhou:', error);
       return cached;
@@ -1100,7 +1072,10 @@
   }
 
   function leadPhone(lead = {}) {
-    return normalizePhone(lead.phone || lead.whatsapp || lead.telefone || lead.normalized_phone || '');
+    const candidates = [lead.normalized_phone, lead.phone, lead.whatsapp, lead.telefone]
+      .map(normalizePhone)
+      .filter(Boolean);
+    return candidates.find((phone) => phone.length >= 12) || candidates[0] || '';
   }
 
   function parseValidationResult(data = {}) {
@@ -1141,7 +1116,7 @@
     }) || list[0] || null;
   }
 
-  async function callEvolutionValidation(chip, numbers) {
+  async function callEvolutionDirect(chip, numbers) {
     const response = await fetch(`${chip.url}/chat/whatsappNumbers/${encodeURIComponent(chip.instance)}`, {
       method: 'POST',
       headers: {
@@ -1155,6 +1130,32 @@
       throw new Error(data?.error || data?.message || `Evolution ${response.status}`);
     }
     return data;
+  }
+
+  async function callEvolutionValidation(chip, numbers) {
+    const payload = {
+      numbers,
+      chipUrl: chip.url,
+      instance: chip.instance,
+      apikey: chip.key
+    };
+
+    try {
+      const response = await fetch('/api/prospeccao/validar-numero', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok && !data?.error) return data;
+      if (![404, 405].includes(response.status)) {
+        throw new Error(data?.error || data?.message || `Proxy validacao ${response.status}`);
+      }
+    } catch (error) {
+      if (!/Failed to fetch|404|405/i.test(error?.message || '')) throw error;
+    }
+
+    return callEvolutionDirect(chip, numbers);
   }
 
   async function rpcValidationChipAction(lead, action, payload = {}) {
@@ -1384,32 +1385,6 @@
       install();
       refreshValidationChips();
     }, 1000);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
-})();
-
-/* CRM Rebuild Fase 6.24 - Finalizador de ordem dos hooks */
-(function () {
-  function reinstall624() {
-    try {
-      if (window.CRMRebuild624 && typeof window.CRMRebuild624.install === 'function') {
-        window.CRMRebuild624.install();
-      }
-    } catch (error) {
-      console.warn('[rebuild624] finalizador falhou:', error);
-    }
-  }
-
-  function boot() {
-    reinstall624();
-    setTimeout(reinstall624, 300);
-    setTimeout(reinstall624, 900);
-    setTimeout(reinstall624, 1800);
   }
 
   if (document.readyState === 'loading') {
@@ -3414,10 +3389,10 @@
       status,
       connectionState: clean(row.connectionState || row.connection_state || status, status),
       active: row.active !== false,
-      dailyLimit: Number(row.dailyLimit || row.daily_limit || 180),
+      dailyLimit: Number(row.dailyLimit || row.daily_limit || 120),
       blockSize: Number(row.blockSize || row.block_size || 30),
       intervalSeconds: Number(row.intervalSeconds || row.interval_seconds || 120),
-      blocks: Array.isArray(row.blocks) ? row.blocks : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00']
+      blocks: Array.isArray(row.blocks) ? row.blocks : ['08:00', '10:00', '12:00', '14:00']
     };
   }
 
@@ -3501,7 +3476,8 @@
     state.hydrating = true;
     try {
       const remote = await fetchPersistedChips();
-      const merged = publishChips([...localChips(), ...remote]);
+      window.__crmChipsAuthoritativeV626 = true;
+      const merged = publishChips(remote);
       return merged;
     } catch (error) {
       console.warn('[rebuild623] falha ao hidratar chips:', error);
@@ -3650,6 +3626,7 @@
   async function removeChip(chipId) {
     const current = dedupeChips([...localChips(), ...state.chips]);
     const chip = current.find((item) => item.id === chipId || item.instance === chipId);
+    window.__crmChipsAuthoritativeV626 = true;
     publishChips(current.filter((item) => item.id !== chipId && item.instance !== chipId));
 
     try {
@@ -3714,6 +3691,8 @@
       try {
         oldList = typeof previous === 'function' ? previous.apply(this, arguments) || [] : [];
       } catch (_) {}
+      const authoritative = dedupeChips([...(window.__crmChipsCache || []), ...state.chips]);
+      if (window.__crmChipsAuthoritativeV626) return authoritative;
       return dedupeChips([...oldList, ...(window.__crmChipsCache || []), ...state.chips]);
     };
     patched.__chips623 = true;

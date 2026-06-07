@@ -43,6 +43,10 @@ async function getSupabaseAuthHeadersV423(extra = {}){
     if (currentUser?.id) headers['x-supabase-user-id'] = currentUser.id;
     if (currentUser?.email) headers['x-supabase-user-email'] = String(currentUser.email).trim().toLowerCase();
   } catch(e) {}
+  try {
+    if (!headers.apikey && typeof SUPABASE_PUBLISHABLE_KEY !== 'undefined') headers.apikey = SUPABASE_PUBLISHABLE_KEY;
+    if (!headers.Authorization && typeof SUPABASE_PUBLISHABLE_KEY !== 'undefined') headers.Authorization = `Bearer ${SUPABASE_PUBLISHABLE_KEY}`;
+  } catch(e) {}
   return headers;
 }
 

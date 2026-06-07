@@ -665,7 +665,7 @@ function renderZapBacklogPanel() {
   const statsEl  = document.getElementById('disparoStats');
   const listEl   = document.getElementById('disparoEmpresasList');
 
-  if (statusEl) statusEl.innerHTML = '<button class="btn btn-primary" onclick="preencherDiaWhatsappDoBacklogV47()">Preencher o dia</button><span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);margin-left:10px">usa backlog · 180 por chip · FIFO</span>';
+  if (statusEl) statusEl.innerHTML = '<button class="btn btn-primary" onclick="preencherDiaWhatsappDoBacklogV47()">Preencher o dia</button><span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted);margin-left:10px">usa backlog · 120 por chip · FIFO</span>';
   if (statsEl)  statsEl.innerHTML  = '';
   if (!listEl)  return;
 

@@ -214,13 +214,13 @@ function authGateSelfTest() {
 function getDispatchConfigTextV33() {
   return {
     dailyLimitTitle: 'LIMITE DIÁRIO POR CHIP',
-    dailyLimitValue: '180 msg',
-    dailyLimitHint: '6 lotes × 30 · espera 1h',
+    dailyLimitValue: '120 msg',
+    dailyLimitHint: '4 lotes × 30 · espera 1h',
     batchValue: '30 msg',
-    batchHint: 'por chip · 6 lotes por dia',
+    batchHint: 'por chip · 4 lotes por dia',
     intervalValue: '2 min',
     intervalHint: '120 seg fixo entre cada lead',
-    blocks: ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00']
+    blocks: ['08:00', '10:00', '12:00', '14:00']
   };
 }
 
