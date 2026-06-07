@@ -1682,7 +1682,8 @@
       dbId: row.id || null,
       name: row.name || row.nome || row.label || row.instance || `Chip ${index + 1}`,
       instance: row.instance || row.name || '',
-      status: row.status || row.connection_state || 'active'
+      status: row.status || row.connection_state || 'active',
+      dailyLimit: Number(row.dailyLimit || row.daily_limit || 120)
     };
   }
 
@@ -1765,8 +1766,8 @@
       chipName: data.chip_name || data.chipName || chip.name || '',
       chipInstance: data.chip_instance || chip.instance || '',
       current_stage: row.queue_type === QUEUE_TYPES.today ? 'dispatch' : 'assignment',
-      current_status: row.queue_type === QUEUE_TYPES.today ? 'queued_dispatch' : 'chip_assigned',
-      status: row.queue_type === QUEUE_TYPES.today ? 'queued_dispatch' : 'chip_assigned',
+      current_status: row.queue_type === QUEUE_TYPES.today ? 'queued_dispatch' : 'backlog_whatsapp',
+      status: row.queue_type === QUEUE_TYPES.today ? 'queued_dispatch' : 'backlog_whatsapp',
       bucket: row.bucket || data.bucket || '',
       queueType: row.queue_type,
       queueItemId: row.id,
@@ -1838,7 +1839,7 @@
     }
   }
 
-  async function rpcQueueAction(leadId, action) {
+  async function rpcQueueAction(leadId, action, extraPayload = {}) {
     const userId = await getCurrentUserId();
     if (!userId) throw new Error('Usuario autenticado nao encontrado.');
 
@@ -1853,13 +1854,14 @@
         p_payload: {
           source: 'fase-6.21',
           queued_from: 'crm_rebuild',
+          ...extraPayload,
           lead: lead ? {
             id: lead.id,
             nome: lead.nome,
             whatsapp: lead.whatsapp,
             site: lead.site,
-            chip_id: lead.chipId,
-            chip_name: lead.chipName
+            chip_id: extraPayload.chip_id || lead.chipId,
+            chip_name: extraPayload.chip_name || lead.chipName
           } : null
         }
       })
@@ -1901,7 +1903,7 @@
     if (statusTabs) {
       statusTabs.innerHTML = `
         <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
-        <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="queueAllBacklogRebuild621()">Colocar backlog na fila</button>
+        <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="queueAllBacklogRebuild621()">Preencher o dia</button>
       `;
     }
 
@@ -2072,11 +2074,48 @@
       if (typeof notify === 'function') notify('// nenhum lead no backlog para colocar na fila', 'warn');
       return;
     }
+    const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
+    if (!activeChips.length) {
+      if (typeof notify === 'function') notify('// configure pelo menos um chip ativo antes de preencher o dia', 'warn');
+      return;
+    }
+
+    const usage = new Map(activeChips.map((chip) => [String(chip.id), 0]));
+    state.rows.filter((row) => row.inTodayQueue).forEach((row) => {
+      const chip = activeChips.find((item) => String(item.id) === String(row.chipId) || String(item.name) === String(row.chipName));
+      if (!chip) return;
+      usage.set(String(chip.id), (usage.get(String(chip.id)) || 0) + 1);
+    });
+
+    const limits = new Map(activeChips.map((chip) => [String(chip.id), Number(chip.dailyLimit || 120)]));
+    let chipCursor = 0;
+
+    function nextAvailableChip() {
+      for (let attempt = 0; attempt < activeChips.length; attempt++) {
+        const chip = activeChips[(chipCursor + attempt) % activeChips.length];
+        const key = String(chip.id);
+        if ((usage.get(key) || 0) < (limits.get(key) || 120)) {
+          chipCursor = (chipCursor + attempt + 1) % activeChips.length;
+          usage.set(key, (usage.get(key) || 0) + 1);
+          return chip;
+        }
+      }
+      return null;
+    }
 
     let moved = 0;
     for (const row of backlog) {
+      const chip = nextAvailableChip();
+      if (!chip) break;
       try {
-        await rpcQueueAction(row.id, 'queue_today');
+        await rpcQueueAction(row.id, 'queue_today', {
+          source: 'fase-6.26',
+          queued_from: 'manual_backlog_fill',
+          chip_id: chip.id,
+          chip_name: chip.name,
+          chip_instance: chip.instance,
+          filled_day_at: new Date().toISOString()
+        });
         moved++;
       } catch (error) {
         console.warn('[rebuild621] falha ao colocar lead em lote:', row.id, error);
@@ -2544,22 +2583,7 @@
   }
 
   function chipControlsHtml(lead) {
-    if (!isLeadInAssignmentStage(lead)) return '';
-    if (bucketForLead(lead) === 'insta') return '<span class="q-badge insta">Instagram na 6.21</span>';
-    if (!isWhatsappLead(lead)) return '<span class="q-badge warn">Sem WhatsApp</span>';
-    if (!state.chips.length) return '<span class="q-badge warn">Nenhum chip ativo</span>';
-
-    const current = state.assignments.get(String(lead.id));
-    const currentChipId = String(current?.chip?.id || current?.chip_id || current?.chipId || '');
-    const currentName = current?.chip?.name || current?.chip_name || current?.chipName || '';
-    const buttons = state.chips.map((chip, index) => {
-      const active = currentChipId && (currentChipId === String(chip.id) || currentChipId === String(chip.dbId));
-      const label = active ? `Chip ${index + 1} OK` : `Chip ${index + 1}`;
-      const title = active ? `Vinculado a ${chip.name}` : `Vincular a ${chip.name}`;
-      return `<button class="add-btn ${active ? 'added' : ''}" type="button" title="${esc(title)}" data-chip620-lead="${esc(lead.id)}" onclick="assignLeadToChipRebuild620('${esc(lead.id)}','${esc(chip.id)}')">${esc(label)}</button>`;
-    }).join('');
-    const badge = current ? `<span class="q-badge ok">Chip: ${esc(currentName || currentChipId || 'vinculado')}</span>` : '';
-    return `<div class="crm620-chip-actions">${badge}${buttons}</div>`;
+    return '';
   }
 
   function enhanceAssignmentCards() {
@@ -2717,7 +2741,8 @@
     rows: [],
     activeTab: 'zap',
     page: 1,
-    loading: false
+    loading: false,
+    selected: new Set()
   };
 
   const assignmentLeadCache = new Map();
@@ -2755,6 +2780,10 @@
 
   function isInAssignment(row) {
     return row.current_stage === 'assignment';
+  }
+
+  function isBacklogStatus(row = {}) {
+    return ['backlog_whatsapp', 'backlog_instagram', 'chip_assigned', 'queued_dispatch'].includes(clean(row.current_status || row.status));
   }
 
   function bucketFor(row) {
@@ -2840,7 +2869,7 @@
       if (row?.id && !byId.has(String(row.id))) byId.set(String(row.id), row);
     });
 
-    return [...byId.values()];
+    return [...byId.values()].filter((row) => !isBacklogStatus(row));
   }
 
   async function rpcAssignmentAction(leadId, action = 'send_to_assignment', bucket = null) {
@@ -2953,6 +2982,29 @@
     return state.rows.filter((row) => bucketFor(row) === bucket);
   }
 
+  function visibleRowsForActiveTab() {
+    let rows = rowsForBucket(getActiveTab());
+    const searchId = getActiveTab() === 'insta' ? 'atribInstaBusca' : 'atribBusca';
+    const query = clean(document.getElementById(searchId)?.value).toLowerCase();
+    if (!query) return rows;
+    return rows.filter((row) => [
+      row.company_name,
+      row.phone,
+      row.website,
+      row.instagram_url,
+      row.city,
+      row.category
+    ].some((value) => clean(value).toLowerCase().includes(query)));
+  }
+
+  function updateBulkActions() {
+    const selectedCount = state.selected.size;
+    const actions = document.getElementById('atribAcoesLote');
+    const label = document.getElementById('atribLoteLabel');
+    if (actions) actions.style.display = selectedCount ? 'flex' : 'none';
+    if (label) label.textContent = `${selectedCount} selecionado${selectedCount !== 1 ? 's' : ''}`;
+  }
+
   function renderCounts() {
     const zap = rowsForBucket('zap').length;
     const site = rowsForBucket('com-site').length;
@@ -2973,6 +3025,7 @@
 
     const sidebarBadge = document.getElementById('badge-atribuicao');
     if (sidebarBadge) sidebarBadge.textContent = String(total);
+    updateBulkActions();
   }
 
   function paintAssignmentTabs() {
@@ -3023,13 +3076,24 @@
     const title = row.company_name || 'Empresa sem nome';
     const location = [row.city, row.state_code || row.state].filter(Boolean).join(' - ') || 'Local nao informado';
     const phone = row.phone || row.normalized_phone || '';
-    const moveButton = isReadyForAssignment(row)
-      ? `<button class="add-btn added" type="button" data-assignment-action-id="${esc(row.id)}" onclick="sendLeadToAssignmentRebuild619('${esc(row.id)}')">Mover para Atribuicao</button>`
-      : '<span class="q-badge warn">Chip na 6.20</span>';
+    const selected = state.selected.has(String(row.id));
+    const canBacklog = isReadyForAssignment(row) || isInAssignment(row);
+    const actionLabel = bucket === 'insta' ? 'Enviar ao Backlog Instagram' : 'Enviar ao Backlog Zap';
+    const moveButton = canBacklog
+      ? `<button class="add-btn added" type="button" data-assignment-action-id="${esc(row.id)}" onclick="sendLeadToBacklogRebuild626('${esc(row.id)}')">${esc(actionLabel)}</button>`
+      : `<span class="q-badge warn">${esc(row.current_status || 'pendente')}</span>`;
     const bucketLabel = bucket === 'com-site' ? 'Com site' : bucket === 'insta' ? 'Instagram' : 'WhatsApp sem site';
 
     return `
       <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:flex-start">
+        <div style="flex-shrink:0;margin-right:4px">
+          <button type="button" aria-label="Selecionar lead" onclick="toggleAtribSel('${esc(row.id)}')"
+            style="width:18px;height:18px;border-radius:4px;border:2px solid ${selected ? 'var(--accent)' : 'var(--border2)'};
+            background:${selected ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;
+            transition:all 0.15s;flex-shrink:0;padding:0">
+            ${selected ? `<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="#0a0a0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}
+          </button>
+        </div>
         <div class="empresa-info">
           <div class="empresa-nome">${esc(title)}</div>
           <div class="empresa-meta">
@@ -3085,20 +3149,7 @@
     const target = document.getElementById(targetId);
     if (!target) return;
 
-    let rows = rowsForBucket(active);
-    const searchId = active === 'insta' ? 'atribInstaBusca' : 'atribBusca';
-    const query = clean(document.getElementById(searchId)?.value).toLowerCase();
-
-    if (query) {
-      rows = rows.filter((row) => [
-        row.company_name,
-        row.phone,
-        row.website,
-        row.instagram_url,
-        row.city,
-        row.category
-      ].some((value) => clean(value).toLowerCase().includes(query)));
-    }
+    const rows = visibleRowsForActiveTab();
 
     if (!rows.length) {
       target.innerHTML = '<div class="table-empty">// nenhum lead aguardando atribuicao nesta aba</div>';
@@ -3168,6 +3219,94 @@
     }
   }
 
+  function mirrorInstagramBacklog(row = {}) {
+    if (typeof getInstaFila !== 'function' || typeof saveInstaFila !== 'function') return;
+    const lead = normalizeLeadForDrawer(row);
+    const existing = getInstaFila();
+    const nextLead = {
+      ...lead,
+      nome: lead.nome || lead.company_name || '',
+      instagram: lead.instagram || lead.instagram_url || '',
+      instagramUrl: lead.instagram || lead.instagram_url || '',
+      canal: 'insta',
+      status: 'backlog_instagram',
+      entradaBacklogEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0, 10)
+    };
+    saveInstaFila([...existing.filter((item) => String(item.id) !== String(row.id)), nextLead]);
+  }
+
+  async function sendLeadToBacklog(leadId, options = {}) {
+    const row = state.rows.find((item) => String(item.id) === String(leadId));
+    if (!row) {
+      if (!options.silent && typeof notify === 'function') notify('// lead nao encontrado na Atribuicao', 'warn');
+      return false;
+    }
+
+    const bucket = bucketFor(row);
+    setAssignmentButtonsDisabled(leadId, true);
+
+    try {
+      await rpcAssignmentAction(leadId, 'send_to_backlog', bucket);
+      if (bucket === 'insta') mirrorInstagramBacklog(row);
+
+      state.rows = state.rows.filter((item) => String(item.id) !== String(leadId));
+      state.selected.delete(String(leadId));
+
+      if (!options.silent && typeof notify === 'function') {
+        notify(bucket === 'insta' ? 'Lead enviado ao Backlog Instagram.' : 'Lead enviado ao Backlog Zap.');
+      }
+
+      renderAssignmentList();
+      if (bucket === 'insta' && typeof renderInstagram === 'function') renderInstagram();
+      if (bucket !== 'insta' && typeof renderQueueStageFromSupabase621 === 'function') renderQueueStageFromSupabase621();
+      if (typeof updateBadges === 'function') updateBadges();
+      return true;
+    } catch (error) {
+      console.error('[rebuild626] erro ao enviar lead ao backlog:', error);
+      if (!options.silent && typeof notify === 'function') notify(error?.message || 'Falha ao enviar lead ao backlog. Reexecute o SQL 6.19 atualizado.', 'err');
+      return false;
+    } finally {
+      setAssignmentButtonsDisabled(leadId, false);
+    }
+  }
+
+  async function sendSelectedToBacklog() {
+    if (!state.selected.size) {
+      if (typeof notify === 'function') notify('// selecione ao menos 1 lead', 'warn');
+      return;
+    }
+
+    const ids = [...state.selected];
+    let moved = 0;
+    for (const id of ids) {
+      if (await sendLeadToBacklog(id, { silent: true })) moved++;
+    }
+
+    state.selected.clear();
+    renderAssignmentList();
+    if (typeof notify === 'function') notify(`${moved} lead${moved !== 1 ? 's' : ''} enviado${moved !== 1 ? 's' : ''} ao backlog.`);
+    if (typeof renderQueueStageFromSupabase621 === 'function') renderQueueStageFromSupabase621();
+    if (typeof renderInstagram === 'function') renderInstagram();
+  }
+
+  function toggleAssignmentSelection(leadId) {
+    const key = String(leadId || '');
+    if (!key) return;
+    if (state.selected.has(key)) state.selected.delete(key);
+    else state.selected.add(key);
+    renderAssignmentList();
+  }
+
+  function selectAllVisibleAssignmentRows() {
+    visibleRowsForActiveTab().forEach((row) => state.selected.add(String(row.id)));
+    renderAssignmentList();
+  }
+
+  function clearAssignmentSelection() {
+    state.selected.clear();
+    renderAssignmentList();
+  }
+
   async function sendAllValidatedToAssignment() {
     if (!state.rows.length) await renderAssignmentStageFromSupabase();
     const ready = state.rows.filter(isReadyForAssignment);
@@ -3225,6 +3364,10 @@
     };
 
     window.aprovarTodosParaAtribuicao = sendAllValidatedToAssignment;
+    window.toggleAtribSel = toggleAssignmentSelection;
+    window.selecionarTodos = selectAllVisibleAssignmentRows;
+    window.deselecionarTodos = clearAssignmentSelection;
+    window.atribuirLote = sendSelectedToBacklog;
 
     const oldSwitchPanel = window.switchPanel;
     if (typeof oldSwitchPanel === 'function' && !oldSwitchPanel.__assignment619) {
@@ -3243,6 +3386,7 @@
 
   window.renderAssignmentStageFromSupabase = renderAssignmentStageFromSupabase;
   window.sendLeadToAssignmentRebuild619 = sendLeadToAssignment;
+  window.sendLeadToBacklogRebuild626 = sendLeadToBacklog;
   window.openAssignmentLeadDrawerRebuild619 = openAssignmentLeadDrawer;
   window.goAssignmentPageRebuild619 = (page) => {
     state.page = Number(page) || 1;
