@@ -160,3 +160,54 @@
     return result;
   };
 })();
+
+/* PATCH — alternância correta das abas da Validação */
+(function () {
+  function setupValidationTabs() {
+    const buttons = document.querySelectorAll('[data-valtab]');
+    if (!buttons.length) return;
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-valtab');
+
+        buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const waitPanel = document.getElementById('valPanelComSite');
+        const validPanel =
+          document.getElementById('valPanelComZap') ||
+          document.getElementById('valPanelZap') ||
+          document.getElementById('valPanelValidado');
+
+        if (waitPanel) {
+          waitPanel.style.display =
+            tab === 'com-site' || tab === 'sem-zap' || tab === 'aguardando'
+              ? ''
+              : 'none';
+        }
+
+        if (validPanel) {
+          validPanel.style.display =
+            tab === 'zap' || tab === 'com-zap' || tab === 'validado'
+              ? ''
+              : 'none';
+        }
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', setupValidationTabs);
+
+  const oldRender = window.renderValidationStageFromSupabase;
+
+  window.renderValidationStageFromSupabase = async function patchedValidationRenderWithTabs() {
+    const result = typeof oldRender === 'function'
+      ? await oldRender.apply(this, arguments)
+      : undefined;
+
+    setupValidationTabs();
+
+    return result;
+  };
+})();
