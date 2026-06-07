@@ -110,7 +110,12 @@
     let headers = null;
     if (typeof getSupabaseAuthHeadersV423 === 'function') headers = await getSupabaseAuthHeadersV423();
 
-    if (!headers?.apikey) throw new Error('Headers autenticados Supabase não encontrados.');
+    if (!headers?.apikey) {
+      headers = {
+        apikey: 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
+        Authorization: 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
+      };
+    }
 
     return { user: { id: userId }, headers };
   }
