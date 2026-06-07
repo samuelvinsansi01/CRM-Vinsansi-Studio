@@ -2544,3 +2544,503 @@
     boot();
   }
 })();
+
+/* CRM Rebuild Fase 6.23 - Persistencia e conexao dos chips */
+(function () {
+  const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
+  const MAX_HYDRATE_ATTEMPTS = 18;
+
+  const state = {
+    chips: [],
+    hydrating: false
+  };
+
+  function clean(value, fallback = '') {
+    const text = String(value ?? '').trim();
+    return text || fallback;
+  }
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char]));
+  }
+
+  function normalizeEvolutionUrl(value = '') {
+    let url = clean(value).replace(/\/+$/, '');
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    return url.replace(/\/+$/, '');
+  }
+
+  function stableChipId(instance = '', name = '') {
+    const base = clean(instance) || clean(name) || String(Date.now());
+    return 'chip_' + base
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 64);
+  }
+
+  function getClient() {
+    try {
+      if (typeof sbClient !== 'undefined' && sbClient?.from) return sbClient;
+    } catch (_) {}
+    return window.supabaseClient || window.crmSupabase || window.sb || null;
+  }
+
+  async function getCurrentUser() {
+    try {
+      const client = getClient();
+      if (client?.auth?.getUser) {
+        const { data } = await client.auth.getUser();
+        if (data?.user?.id) return data.user;
+      }
+    } catch (_) {}
+    try {
+      if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser;
+    } catch (_) {}
+    return window.currentUser || null;
+  }
+
+  async function getHeaders(content = false) {
+    let headers = {};
+    try {
+      if (typeof getSupabaseAuthHeadersV423 === 'function') {
+        headers = await getSupabaseAuthHeadersV423(content ? { 'Content-Type': 'application/json' } : {});
+      }
+    } catch (_) {}
+
+    try {
+      const client = getClient();
+      if (!headers.Authorization && client?.auth?.getSession) {
+        const { data } = await client.auth.getSession();
+        const token = data?.session?.access_token || '';
+        if (token) headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (_) {}
+
+    headers = {
+      ...headers,
+      apikey: headers.apikey || SUPABASE_KEY
+    };
+    if (!headers.Authorization) headers.Authorization = `Bearer ${SUPABASE_KEY}`;
+    if (content && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    return headers;
+  }
+
+  async function readJson(response) {
+    const body = await response.text();
+    return body ? JSON.parse(body) : null;
+  }
+
+  function normalizeChip(row = {}) {
+    const instance = clean(row.instance || row.instance_name || row.instanceName || row.name);
+    const name = clean(row.name || row.nome || row.label || row.phone || instance, 'Chip');
+    const id = clean(row.chip_id || row.chipId || row.id || instance, stableChipId(instance, name));
+    const url = normalizeEvolutionUrl(row.url || row.base_url || row.baseUrl || row.evolution_url || row.evolutionUrl);
+    const key = clean(row.api_key || row.apiKey || row.key || row.apikey || row.token);
+    const status = row.active === false ? 'disabled' : clean(row.status || row.connection_state || row.connectionState, 'saved');
+
+    return {
+      ...row,
+      id: String(id),
+      chip_id: String(id),
+      dbId: row.dbId || row.id || null,
+      name,
+      nome: name,
+      label: name,
+      instance,
+      instance_name: instance,
+      url,
+      baseUrl: url,
+      base_url: url,
+      evolutionUrl: url,
+      evolution_url: url,
+      key,
+      apiKey: key,
+      api_key: key,
+      status,
+      connectionState: clean(row.connectionState || row.connection_state || status, status),
+      active: row.active !== false,
+      dailyLimit: Number(row.dailyLimit || row.daily_limit || 180),
+      blockSize: Number(row.blockSize || row.block_size || 30),
+      intervalSeconds: Number(row.intervalSeconds || row.interval_seconds || 120),
+      blocks: Array.isArray(row.blocks) ? row.blocks : ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00']
+    };
+  }
+
+  function dedupeChips(chips = []) {
+    const byKey = new Map();
+    chips.map(normalizeChip).forEach((chip) => {
+      const key = clean(chip.id || chip.instance || chip.name);
+      if (!key || !chip.instance) return;
+      const existing = byKey.get(key) || {};
+      byKey.set(key, { ...existing, ...chip });
+    });
+    return [...byKey.values()];
+  }
+
+  function localChips() {
+    try {
+      if (window.getChips?.__chips623) return window.getChips.__previous();
+      if (typeof window.getChips === 'function') return window.getChips() || [];
+    } catch (_) {}
+    return [];
+  }
+
+  function publishChips(chips = []) {
+    const normalized = dedupeChips(chips);
+    state.chips = normalized;
+    window.__crmChipsCache = normalized.map(normalizeChip);
+
+    try {
+      if (typeof storeWhatsappChipsCacheV426 === 'function') {
+        storeWhatsappChipsCacheV426(normalized);
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof saveOperationalKey === 'function' && typeof CHIPS_KEY !== 'undefined') {
+        saveOperationalKey(CHIPS_KEY, normalized.map(normalizeChip), 'chips-623-hydrate');
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof updateChipsBadge === 'function') updateChipsBadge();
+      if (typeof renderConfiguracoes === 'function') renderConfiguracoes();
+      if (typeof renderChipsPanel === 'function') renderChipsPanel();
+      if (document.getElementById('panel-fila-zap')?.classList.contains('active') && typeof renderFilaZap === 'function') renderFilaZap();
+    } catch (_) {}
+
+    return normalized;
+  }
+
+  async function fetchPersistedChips() {
+    const user = await getCurrentUser();
+    if (!user?.id) return [];
+
+    const params = new URLSearchParams({
+      select: '*',
+      user_id: `eq.${user.id}`,
+      order: 'updated_at.desc'
+    });
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_instances?${params.toString()}`, {
+      headers: await getHeaders()
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw data || new Error(`Falha ao carregar chips (${response.status}).`);
+
+    const email = clean(user.email).toLowerCase();
+    return (Array.isArray(data) ? data : [])
+      .filter((row) => row.active !== false)
+      .filter((row) => {
+        const rowEmail = clean(row.user_email).toLowerCase();
+        return !rowEmail || !email || rowEmail === email;
+      })
+      .map(normalizeChip);
+  }
+
+  async function hydrateChips() {
+    if (state.hydrating) return state.chips;
+    const user = await getCurrentUser();
+    if (!user?.id) return state.chips;
+
+    state.hydrating = true;
+    try {
+      const remote = await fetchPersistedChips();
+      const merged = publishChips([...localChips(), ...remote]);
+      return merged;
+    } catch (error) {
+      console.warn('[rebuild623] falha ao hidratar chips:', error);
+      return publishChips(localChips());
+    } finally {
+      state.hydrating = false;
+    }
+  }
+
+  async function rpcUpsertChip(chip) {
+    const user = await getCurrentUser();
+    if (!user?.id) throw new Error('Usuario autenticado nao encontrado.');
+
+    const normalized = normalizeChip(chip);
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_whatsapp_instance_upsert`, {
+      method: 'POST',
+      headers: await getHeaders(true),
+      body: JSON.stringify({
+        p_user_id: user.id,
+        p_user_email: clean(user.email).toLowerCase(),
+        p_chip_id: normalized.id,
+        p_name: normalized.name,
+        p_instance: normalized.instance,
+        p_url: normalized.url,
+        p_api_key: normalized.key,
+        p_payload: {
+          dailyLimit: normalized.dailyLimit,
+          blockSize: normalized.blockSize,
+          intervalSeconds: normalized.intervalSeconds,
+          blocks: normalized.blocks,
+          status: normalized.status,
+          source: 'fase-6.23'
+        }
+      })
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw data || new Error(`Falha ao salvar chip (${response.status}).`);
+    return normalizeChip(data?.chip || data || normalized);
+  }
+
+  async function rpcDeleteChip(chipId) {
+    const user = await getCurrentUser();
+    if (!user?.id) throw new Error('Usuario autenticado nao encontrado.');
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_whatsapp_instance_delete`, {
+      method: 'POST',
+      headers: await getHeaders(true),
+      body: JSON.stringify({
+        p_user_id: user.id,
+        p_chip_id: chipId
+      })
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw data || new Error(`Falha ao remover chip (${response.status}).`);
+    return data;
+  }
+
+  function chipFromModal() {
+    const name = clean(document.getElementById('chipNome')?.value);
+    const url = normalizeEvolutionUrl(document.getElementById('chipUrl')?.value);
+    const instance = clean(document.getElementById('chipInstance')?.value);
+    const key = clean(document.getElementById('chipKey')?.value);
+    const existing = [...localChips(), ...state.chips].find((chip) => chip.instance === instance || chip.name === name);
+
+    return normalizeChip({
+      ...(existing || {}),
+      id: existing?.id || stableChipId(instance, name),
+      chip_id: existing?.id || stableChipId(instance, name),
+      name,
+      nome: name,
+      label: name,
+      url,
+      baseUrl: url,
+      evolutionUrl: url,
+      instance,
+      instance_name: instance,
+      key,
+      apiKey: key,
+      status: existing?.status || 'saved',
+      connectionState: existing?.connectionState || 'saved',
+      active: true,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  async function testEvolutionConnection(chip) {
+    const normalized = normalizeChip(chip);
+    if (!normalized.url || !normalized.instance || !normalized.key) {
+      return { ok: false, error: 'dados incompletos' };
+    }
+
+    try {
+      const response = await fetch(`${normalized.url}/instance/connectionState/${encodeURIComponent(normalized.instance)}`, {
+        method: 'GET',
+        headers: { apikey: normalized.key }
+      });
+      const data = await response.json().catch(() => ({}));
+      const connection = data?.instance?.state || data?.state || data?.connectionState || '';
+      return { ok: response.ok, state: connection || (response.ok ? 'reachable' : ''), data, status: response.status };
+    } catch (error) {
+      return { ok: false, error: error?.message || 'falha ao testar conexao' };
+    }
+  }
+
+  async function saveChipFromModal() {
+    const chip = chipFromModal();
+    if (!chip.name || !chip.url || !chip.instance || !chip.key) {
+      if (typeof notify === 'function') notify('// preencha todos os campos do chip', 'err');
+      return;
+    }
+
+    const optimistic = publishChips([...localChips().filter((item) => item.id !== chip.id && item.instance !== chip.instance), { ...chip, _syncStatus: 'saving' }]);
+    try {
+      if (typeof fecharChipModal === 'function') fecharChipModal();
+      if (typeof notify === 'function') notify('Salvando chip no Supabase...');
+      const saved = await rpcUpsertChip(chip);
+      const test = await testEvolutionConnection(saved);
+      const connectedStatus = test.ok ? (test.state || 'reachable') : 'saved';
+      const finalChip = normalizeChip({ ...saved, status: connectedStatus, connectionState: connectedStatus });
+      publishChips([...optimistic.filter((item) => item.id !== finalChip.id && item.instance !== finalChip.instance), finalChip]);
+      await hydrateChips();
+      if (typeof notify === 'function') {
+        notify(test.ok ? `Chip salvo e acessivel: ${connectedStatus}` : 'Chip salvo. Abra o QR Code para conectar a instancia.', test.ok ? '' : 'warn');
+      }
+    } catch (error) {
+      console.error('[rebuild623] erro ao salvar chip:', error);
+      publishChips(optimistic.map((item) => item.id === chip.id ? { ...item, _syncStatus: 'pending', _syncError: error?.message || error } : item));
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao salvar chip. Rode o SQL 6.23.', 'err');
+    }
+  }
+
+  async function loadWhatsappChipsCompat() {
+    return hydrateChips();
+  }
+
+  async function persistWhatsappChipsCompat(list = []) {
+    const chips = dedupeChips(list);
+    const saved = [];
+    for (const chip of chips) {
+      saved.push(await rpcUpsertChip(chip));
+    }
+    publishChips(saved);
+    return { ok: true, count: saved.length };
+  }
+
+  async function removeChip(chipId) {
+    const current = dedupeChips([...localChips(), ...state.chips]);
+    const chip = current.find((item) => item.id === chipId || item.instance === chipId);
+    publishChips(current.filter((item) => item.id !== chipId && item.instance !== chipId));
+
+    try {
+      await rpcDeleteChip(chip?.id || chipId);
+      if (typeof notify === 'function') notify('Chip removido.');
+    } catch (error) {
+      console.error('[rebuild623] erro ao remover chip:', error);
+      if (chip) publishChips([...state.chips, chip]);
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao remover chip.', 'err');
+    }
+  }
+
+  async function renderQrForChip(chip) {
+    const normalized = normalizeChip(chip);
+    const qrWrap = document.getElementById('qrWrap');
+    if (!qrWrap) return;
+    qrWrap.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted)">Verificando instancia...</div>';
+
+    const stateCheck = await testEvolutionConnection(normalized);
+    if (stateCheck.ok && ['open', 'connected'].includes(String(stateCheck.state || '').toLowerCase())) {
+      qrWrap.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--ok)">Instancia ja conectada.</div>';
+      await rpcUpsertChip({ ...normalized, status: stateCheck.state, connectionState: stateCheck.state }).catch(() => {});
+      return;
+    }
+
+    try {
+      const response = await fetch(`${normalized.url}/instance/connect/${encodeURIComponent(normalized.instance)}`, {
+        headers: { apikey: normalized.key }
+      });
+      const data = await response.json().catch(() => ({}));
+      const qr = data.qrcode?.base64 || data.base64 || data.qr || data.code || '';
+      if (qr) {
+        qrWrap.innerHTML = `<img src="${qr.startsWith('data:') ? qr : 'data:image/png;base64,' + qr}" alt="QR Code"/>`;
+      } else {
+        qrWrap.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--warning)">QR nao retornado. Confira a instancia na Evolution API.</div>';
+      }
+    } catch (error) {
+      qrWrap.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--error)">Erro ao gerar QR Code: ${esc(error?.message || error)}</div>`;
+    }
+  }
+
+  async function verQrChipCompat(id) {
+    const chip = dedupeChips([...localChips(), ...state.chips]).find((item) => item.id === id || item.instance === id);
+    if (!chip) {
+      if (typeof notify === 'function') notify('Chip nao encontrado. Atualize a lista.', 'warn');
+      await hydrateChips();
+      return;
+    }
+    window.qrChipIdAtivo = chip.id;
+    const title = document.getElementById('qrChipNome');
+    if (title) title.textContent = chip.name;
+    const modal = document.getElementById('qrModal');
+    if (modal) modal.classList.add('open');
+    await renderQrForChip(chip);
+  }
+
+  function installGetChipsPatch() {
+    if (window.getChips?.__chips623) return;
+    const previous = window.getChips;
+    const patched = function getChipsRebuild623() {
+      let oldList = [];
+      try {
+        oldList = typeof previous === 'function' ? previous.apply(this, arguments) || [] : [];
+      } catch (_) {}
+      return dedupeChips([...oldList, ...(window.__crmChipsCache || []), ...state.chips]);
+    };
+    patched.__chips623 = true;
+    patched.__previous = previous;
+    window.getChips = patched;
+  }
+
+  function installSaveChipsPatch() {
+    if (window.saveChips?.__chips623) return;
+    const previous = window.saveChips;
+    const patched = function saveChipsRebuild623(list) {
+      const normalized = publishChips(list || []);
+      try {
+        if (typeof previous === 'function') previous.call(this, normalized);
+      } catch (error) {
+        console.warn('[rebuild623] saveChips legado falhou:', error);
+      }
+      persistWhatsappChipsCompat(normalized).catch((error) => {
+        console.warn('[rebuild623] persistencia async falhou:', error);
+      });
+    };
+    patched.__chips623 = true;
+    patched.__previous = previous;
+    window.saveChips = patched;
+  }
+
+  function installHooks() {
+    installGetChipsPatch();
+    installSaveChipsPatch();
+
+    window.CRMListWhatsappInstances = fetchPersistedChips;
+    window.CRMHydrateChipsCache = hydrateChips;
+    window.loadWhatsappChipsFromSupabaseV22 = loadWhatsappChipsCompat;
+    window.persistWhatsappChipsToSupabaseV22 = persistWhatsappChipsCompat;
+    window.salvarChip = saveChipFromModal;
+    window.verQRChip = verQrChipCompat;
+    window.carregarQR = renderQrForChip;
+    window.deletarChip = removeChip;
+    window.persistWhatsappChipRebuild623 = rpcUpsertChip;
+    window.hydrateWhatsappChipsRebuild623 = hydrateChips;
+
+    const previousHydrate = window.hydrateAuthenticatedUserDataV436;
+    if (typeof previousHydrate === 'function' && !previousHydrate.__chips623) {
+      const patchedHydrate = async function hydrateAuthenticatedUserDataChips623() {
+        const result = await previousHydrate.apply(this, arguments);
+        await hydrateChips();
+        return result;
+      };
+      patchedHydrate.__chips623 = true;
+      patchedHydrate.__previous = previousHydrate;
+      window.hydrateAuthenticatedUserDataV436 = patchedHydrate;
+    }
+  }
+
+  function boot() {
+    installHooks();
+    let attempts = 0;
+    const retry = async () => {
+      attempts++;
+      installHooks();
+      const user = await getCurrentUser();
+      if (user?.id) {
+        await hydrateChips();
+        return;
+      }
+      if (attempts < MAX_HYDRATE_ATTEMPTS) setTimeout(retry, 500);
+    };
+    retry();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
