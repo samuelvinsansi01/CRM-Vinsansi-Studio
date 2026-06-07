@@ -63,24 +63,33 @@
   async function renderValidationStageFromSupabase() {
     const box = document.getElementById('valComSiteList');
     if (!box) return;
-
-    box.innerHTML = '<div class="table-empty">Carregando leads em validação...</div>';
-
+  
     try {
       const leads = await fetchValidationLeads();
-
+  
+      const waiting = leads.filter(l => l.current_status === 'pending_validation');
+      const validated = leads.filter(l => l.current_status === 'whatsapp_validated');
+  
       const countA = document.getElementById('valCountSemZap');
       const countB = document.getElementById('valCountComZap');
-
-      if (countA) countA.textContent = String(leads.length);
-      if (countB) countB.textContent = String(leads.filter(l => l.phone).length);
-
-      if (!leads.length) {
-        box.innerHTML = '<div class="table-empty">// nenhum lead aguardando validação</div>';
-        return;
+  
+      const waitBox = document.getElementById('valComSiteList');
+      const validBox = document.getElementById('valZapList') || document.getElementById('valComZapList');
+  
+      if (countA) countA.textContent = String(waiting.length);
+      if (countB) countB.textContent = String(validated.length);
+  
+      if (waitBox) {
+        waitBox.innerHTML = waiting.length
+          ? waiting.map(renderValidationLeadCard).join('')
+          : '<div class="table-empty">// nenhum lead aguardando validação</div>';
       }
-
-      box.innerHTML = leads.map(renderValidationLeadCard).join('');
+  
+      if (validBox) {
+        validBox.innerHTML = validated.length
+          ? validated.map(renderValidationLeadCard).join('')
+          : '<div class="table-empty">// nenhum número validado ainda</div>';
+      }
     } catch (err) {
       console.error('[Validação] erro ao carregar leads:', err);
       box.innerHTML = '<div class="table-empty">Erro ao carregar leads da validação.</div>';
