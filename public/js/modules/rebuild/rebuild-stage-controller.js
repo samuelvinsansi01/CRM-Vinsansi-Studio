@@ -161,80 +161,63 @@
   };
 })();
 
-/* PATCH — abas da Validação usando a mesma lista */
+/* PATCH — abas Validação usando um único painel e trocando conteúdo */
 (function () {
   let validationCache = {
-    waiting: [],
-    validated: []
+    waitingHtml: '',
+    validatedHtml: '',
+    waitingCount: 0,
+    validatedCount: 0
   };
 
-  function renderValidationListByTab(tab) {
-    const box = document.getElementById('valComSiteList');
-    if (!box) return;
+  const oldRenderValidation = window.renderValidationStageFromSupabase;
 
-    const list = tab === 'validated'
-      ? validationCache.validated
-      : validationCache.waiting;
+  window.renderValidationStageFromSupabase = async function patchedValidationTabsSinglePanel() {
+    await oldRenderValidation.apply(this, arguments);
 
-    box.innerHTML = list.length
-      ? list.map(renderValidationLeadCard).join('')
-      : `<div class="table-empty">${
-          tab === 'validated'
-            ? '// nenhum número validado ainda'
-            : '// nenhum lead aguardando validação'
-        }</div>`;
-  }
+    const list = document.getElementById('valComSiteList');
+    if (!list) return;
 
-  function getActiveValidationTab() {
-    const validatedBtn = document.getElementById('valResultTabValidados');
-    return validatedBtn?.classList.contains('active') ? 'validated' : 'waiting';
-  }
+    validationCache.waitingHtml = list.innerHTML;
+    validationCache.waitingCount = Number(document.getElementById('valCountSemZap')?.textContent || 0);
+    validationCache.validatedCount = Number(document.getElementById('valCountComZap')?.textContent || 0);
 
-  const oldRender = window.renderValidationStageFromSupabase;
-
-  window.renderValidationStageFromSupabase = async function patchedValidationRenderTabs() {
-    try {
-      const leads = await fetchValidationLeads();
-
-      validationCache.waiting = leads.filter(l => l.current_status === 'pending_validation');
-      validationCache.validated = leads.filter(l => l.current_status === 'whatsapp_validated');
-
-      const countA = document.getElementById('valCountSemZap');
-      const countB = document.getElementById('valCountComZap');
-
-      if (countA) countA.textContent = String(validationCache.waiting.length);
-      if (countB) countB.textContent = String(validationCache.validated.length);
-
-      renderValidationListByTab(getActiveValidationTab());
-    } catch (err) {
-      console.error('[Validação] erro ao carregar leads:', err);
-      const box = document.getElementById('valComSiteList');
-      if (box) box.innerHTML = '<div class="table-empty">Erro ao carregar leads da validação.</div>';
+    if (validationCache.validatedCount === 0) {
+      validationCache.validatedHtml = '<div class="table-empty">// nenhum número validado ainda</div>';
     }
   };
 
-  function bindValidationTabs() {
-    const waitBtn = document.getElementById('valResultTabPendentes');
-    const validBtn = document.getElementById('valResultTabValidados');
+  function showWaiting() {
+    const list = document.getElementById('valComSiteList');
+    if (!list) return;
 
-    if (waitBtn) {
-      waitBtn.onclick = () => {
-        waitBtn.classList.add('active');
-        validBtn?.classList.remove('active');
-        renderValidationListByTab('waiting');
-      };
-    }
+    document.getElementById('valResultTabPendentes')?.classList.add('active');
+    document.getElementById('valResultTabValidados')?.classList.remove('active');
 
-    if (validBtn) {
-      validBtn.onclick = () => {
-        validBtn.classList.add('active');
-        waitBtn?.classList.remove('active');
-        renderValidationListByTab('validated');
-      };
-    }
+    list.innerHTML = validationCache.waitingHtml || '<div class="table-empty">// nenhum lead aguardando validação</div>';
   }
 
-  document.addEventListener('DOMContentLoaded', bindValidationTabs);
+  function showValidated() {
+    const list = document.getElementById('valComSiteList');
+    if (!list) return;
 
-  setTimeout(bindValidationTabs, 500);
+    document.getElementById('valResultTabValidados')?.classList.add('active');
+    document.getElementById('valResultTabPendentes')?.classList.remove('active');
+
+    list.innerHTML = validationCache.validatedHtml || '<div class="table-empty">// nenhum número validado ainda</div>';
+  }
+
+  function setupTabs() {
+    const waitTab = document.getElementById('valResultTabPendentes');
+    const validTab = document.getElementById('valResultTabValidados');
+
+    if (waitTab) waitTab.onclick = showWaiting;
+    if (validTab) validTab.onclick = showValidated;
+  }
+
+  document.addEventListener('DOMContentLoaded', setupTabs);
+  setTimeout(setupTabs, 500);
+
+  window.showValidationWaiting = showWaiting;
+  window.showValidationValidated = showValidated;
 })();
