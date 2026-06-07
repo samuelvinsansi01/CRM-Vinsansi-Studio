@@ -26,11 +26,10 @@
     const headers = await getHeaders();
 
     const url =
-      `${SUPABASE_URL}/rest/v1/v_lead_cards_persistent` +
-      `?select=*` +
-      `&user_id=eq.${encodeURIComponent(userId)}` +
-      `&current_stage=eq.validation` +
-      `&order=created_at.desc`;
+        `${SUPABASE_URL}/rest/v1/v_lead_cards_persistent` +
+        `?select=*` +
+        `&current_stage=eq.validation` +
+        `&order=created_at.desc`;
 
     const res = await fetch(url, { headers });
 
