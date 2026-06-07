@@ -3113,8 +3113,15 @@
     return !!row.has_own_site && !!clean(row.website);
   }
 
+  function hasValidatedWhatsapp(row = {}) {
+    return row.current_status === 'whatsapp_validated'
+      || row.whatsapp_status === 'valid'
+      || row.whatsappValidationStatus === 'valid'
+      || row.numStatus === 'valido';
+  }
+
   function isReadyForAssignment(row) {
-    return row.current_stage === 'validation' && row.current_status === 'whatsapp_validated';
+    return row.current_stage === 'validation';
   }
 
   function isInAssignment(row) {
@@ -3126,10 +3133,9 @@
   }
 
   function bucketFor(row) {
-    if (!hasUsefulPhone(row) && clean(row.instagram_url)) return 'insta';
-    if (hasUsefulPhone(row) && hasOwnSite(row)) return 'com-site';
-    if (hasUsefulPhone(row)) return 'zap';
-    return clean(row.instagram_url) ? 'insta' : 'zap';
+    if (!hasValidatedWhatsapp(row)) return 'insta';
+    if (hasOwnSite(row)) return 'com-site';
+    return 'zap';
   }
 
   async function getCurrentUserId() {
@@ -3193,10 +3199,9 @@
   }
 
   async function fetchAssignmentRows() {
-    const [ready, assigned] = await Promise.all([
+    const [validation, assigned] = await Promise.all([
       fetchLeadCardsBy({
-        current_stage: 'eq.validation',
-        current_status: 'eq.whatsapp_validated'
+        current_stage: 'eq.validation'
       }),
       fetchLeadCardsBy({
         current_stage: 'eq.assignment'
@@ -3204,7 +3209,7 @@
     ]);
 
     const byId = new Map();
-    [...ready, ...assigned].forEach((row) => {
+    [...validation, ...assigned].forEach((row) => {
       if (row?.id && !byId.has(String(row.id))) byId.set(String(row.id), row);
     });
 
@@ -3227,7 +3232,12 @@
     });
     const data = await readJson(response);
 
-    if (!response.ok) throw data || new Error(`Falha na acao de atribuicao (${response.status}).`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('RPC rpc_assignment_lead_action nao encontrado. Execute o SQL 6.27 no Supabase e recarregue a pagina.');
+      }
+      throw new Error(data?.message || data?.details || `Falha na acao de atribuicao (${response.status}).`);
+    }
     return data;
   }
 
@@ -3254,8 +3264,8 @@
       phone: row.phone || '',
       normalized_phone: row.normalized_phone || '',
       whatsapp_status: row.whatsapp_status || '',
-      whatsappValidationStatus: row.current_status === 'whatsapp_validated' || row.whatsapp_status === 'valid' ? 'valid' : '',
-      numStatus: row.current_status === 'whatsapp_validated' || row.whatsapp_status === 'valid' ? 'valido' : '',
+      whatsappValidationStatus: hasValidatedWhatsapp(row) ? 'valid' : '',
+      numStatus: hasValidatedWhatsapp(row) ? 'valido' : '',
       site: row.website || '',
       website: row.website || '',
       hasOwnSite: !!row.has_own_site,
@@ -3406,7 +3416,8 @@
 
   function rowStatusBadge(row) {
     if (isInAssignment(row)) return '<span class="q-badge ok">Na atribuicao</span>';
-    if (isReadyForAssignment(row)) return '<span class="q-badge info">Validado</span>';
+    if (hasValidatedWhatsapp(row)) return '<span class="q-badge info">WhatsApp validado</span>';
+    if (isReadyForAssignment(row)) return '<span class="q-badge insta">Sem WhatsApp validado</span>';
     return `<span class="q-badge warn">${esc(row.current_status || 'pendente')}</span>`;
   }
 
@@ -3544,7 +3555,7 @@
       await rpcAssignmentAction(leadId, 'send_to_assignment', bucket);
       if (row) {
         row.current_stage = 'assignment';
-        row.current_status = 'pending_assignment';
+        row.current_status = bucket === 'insta' ? 'pending_assignment_instagram' : 'pending_assignment';
       }
       if (typeof notify === 'function') notify('Lead movido para Atribuicao.');
       renderAssignmentList();
@@ -3660,7 +3671,7 @@
       try {
         await rpcAssignmentAction(row.id, 'send_to_assignment', bucketFor(row));
         row.current_stage = 'assignment';
-        row.current_status = 'pending_assignment';
+        row.current_status = bucketFor(row) === 'insta' ? 'pending_assignment_instagram' : 'pending_assignment';
         moved++;
       } catch (error) {
         console.warn('[rebuild619] falha ao mover lead em lote:', row.id, error);

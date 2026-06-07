@@ -195,22 +195,43 @@
 
   function metric(label, value, tone = '') {
     const className = tone ? ` ${tone}` : '';
-    return `<div class="import-metric${className}"><span>${escHtml(label)}</span><strong>${escHtml(value)}</strong></div>`;
+    return `
+      <div class="import-metric${className}" style="display:grid;grid-template-columns:minmax(3ch,max-content) auto;column-gap:4px;align-items:baseline;justify-content:start">
+        <strong style="min-width:3ch;text-align:right;font-variant-numeric:tabular-nums">${escHtml(value)}</strong>
+        <span>- ${escHtml(label)}</span>
+      </div>
+    `;
+  }
+
+  function numberValue(value) {
+    const number = Number(value || 0);
+    return Number.isFinite(number) ? number : 0;
   }
 
   function renderSeparatedImportSummary(summary) {
     const target = document.getElementById('importSummary');
     if (!target || !summary) return;
 
+    const approved = numberValue(summary.approved || summary.created || (numberValue(summary.withWhatsapp) + numberValue(summary.instagram)));
+    const rejectedLowRating = numberValue(summary.rejectedLowRating || summary.rejected_low_rating);
+    const rejectedLowReviews = numberValue(summary.rejectedLowReviews || summary.rejected_low_reviews);
+    const duplicates = numberValue(summary.duplicates || summary.rejected_duplicate);
+    const blacklist = numberValue(summary.blacklist || summary.blacklisted);
+    const errors = numberValue(summary.errors);
+    const rejected = rejectedLowRating + rejectedLowReviews + duplicates + blacklist + errors;
+    const total = numberValue(summary.total) || approved + rejected;
+
     target.innerHTML = `
       <div class="import-summary-blocks" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
         <div class="import-summary-section" style="border:1px solid var(--border2);border-radius:8px;padding:10px;background:var(--surface2)">
-          <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:800;color:var(--text);margin-bottom:6px">Total analisado</div>
-          ${metric('Empresas', summary.total || 0, 'acc')}
+          <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:800;color:var(--text);margin-bottom:6px">Totais</div>
+          ${metric('Empresas', total, 'acc')}
+          ${metric('Aprovadas', approved, 'acc')}
+          ${metric('Recusadas', rejected, 'err')}
         </div>
         <div class="import-summary-section" style="border:1px solid var(--accent-border);border-radius:8px;padding:10px;background:var(--accent-dim)">
           <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:800;color:var(--text);margin-bottom:6px">Aprovados</div>
-          ${metric('Enviados para Validacao', summary.approved || summary.created || 0, 'acc')}
+          ${metric('Enviados para Validacao', approved, 'acc')}
           ${metric('Com WhatsApp', summary.withWhatsapp || 0)}
           ${metric('Com site proprio', summary.withOwnSite || 0)}
           ${metric('Sem site', summary.withoutSite || 0)}
@@ -219,11 +240,11 @@
         </div>
         <div class="import-summary-section" style="border:1px solid rgba(255,92,92,0.28);border-radius:8px;padding:10px;background:rgba(255,92,92,0.05)">
           <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:800;color:var(--text);margin-bottom:6px">Reprovados</div>
-          ${metric('Abaixo da nota', summary.rejectedLowRating || summary.rejected_low_rating || 0, 'err')}
-          ${metric('Abaixo das avaliacoes', summary.rejectedLowReviews || summary.rejected_low_reviews || 0, 'err')}
-          ${metric('Duplicados', summary.duplicates || summary.rejected_duplicate || 0, 'warn')}
-          ${metric('Blacklist', summary.blacklist || summary.blacklisted || 0, 'warn')}
-          ${metric('Erros', summary.errors || 0, 'err')}
+          ${metric('Abaixo da nota', rejectedLowRating, 'err')}
+          ${metric('Abaixo das avaliacoes', rejectedLowReviews, 'err')}
+          ${metric('Duplicados', duplicates, 'warn')}
+          ${metric('Blacklist', blacklist, 'warn')}
+          ${metric('Erros', errors, 'err')}
         </div>
       </div>
     `;
@@ -328,6 +349,10 @@
     if (typeof renderValidationStageFromSupabase === 'function') await renderValidationStageFromSupabase();
     if (typeof renderInicio === 'function') renderInicio();
     if (typeof updateBadges === 'function') updateBadges();
+
+    const input = document.getElementById('importJsonInput');
+    if (input) input.value = '';
+    lastPreviewStats = null;
 
     return result;
   }
