@@ -11,28 +11,22 @@
   }
 
   async function fetchValidationLeads() {
-    const userId =
-      (typeof getCurrentSupabaseUserIdV412 === 'function' ? await getCurrentSupabaseUserIdV412() : null) ||
-      window.currentUser?.id ||
-      (typeof currentUser !== 'undefined' ? currentUser?.id : null);
-
-    if (!userId) throw new Error('Usuário não encontrado para carregar validação.');
-
-    const headers = await getHeaders();
-
+    const headers = {
+      apikey: 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
+      Authorization: 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
+    };
+  
     const url =
-        `${SUPABASE_URL}/rest/v1/v_lead_cards_persistent` +
-        `?select=*` +
-        `&current_stage=eq.validation` +
-        `&order=created_at.desc`;
-
+      `${SUPABASE_URL}/rest/v1/v_lead_cards_persistent` +
+      `?select=*` +
+      `&current_stage=eq.validation` +
+      `&order=created_at.desc`;
+  
     const res = await fetch(url, { headers });
-
-    const text = await res.text();
-    const data = text ? JSON.parse(text) : [];
-
+    const data = await res.json();
+  
     if (!res.ok) throw data;
-
+  
     return Array.isArray(data) ? data : [];
   }
 
@@ -47,30 +41,20 @@
   }
 
   function renderValidationLeadCard(lead) {
-    const site = lead.website
-      ? `<a href="${esc(lead.website)}" target="_blank">Site</a>`
-      : 'Sem site';
-
-    const maps = lead.google_maps_url
-      ? `<a href="${esc(lead.google_maps_url)}" target="_blank">Maps</a>`
-      : 'Sem Maps';
-
     return `
       <div class="empresa-card" data-lead-id="${esc(lead.id)}">
         <div class="empresa-info">
-          <div class="empresa-nome">${esc(lead.company_name)}</div>
+          <div class="empresa-nome">${esc(lead.company_name || 'Empresa sem nome')}</div>
           <div class="empresa-meta">
             <span class="q-badge info">⭐ ${esc(lead.rating || '-')}</span>
             <span class="q-badge info">💬 ${esc(lead.reviews_count || 0)} avaliações</span>
             <span class="q-badge ${lead.phone ? 'ok' : 'warn'}">${lead.phone ? esc(lead.phone) : 'Sem telefone'}</span>
-            <span class="q-badge">${esc(lead.city || '')} ${esc(lead.state || '')}</span>
-            <span class="q-badge">${site}</span>
-            <span class="q-badge">${maps}</span>
+            <span class="q-badge">${esc([lead.city, lead.state].filter(Boolean).join(' - '))}</span>
+            <span class="q-badge">${lead.website ? 'Com site' : 'Sem site'}</span>
           </div>
         </div>
-
         <div class="empresa-actions">
-          <button class="add-btn" onclick="openLeadFicha && openLeadFicha('${esc(lead.id)}')">Ficha</button>
+          <button class="add-btn" type="button">Ficha</button>
         </div>
       </div>
     `;
