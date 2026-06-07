@@ -310,6 +310,9 @@
     const approveButton = !validated
       ? `<button class="add-btn" type="button" data-validation-action-id="${esc(row.id)}" onclick="approveLeadWhatsappRebuild('${esc(row.id)}')">Aprovar</button>`
       : '';
+    const validateButton = !validated
+      ? `<button class="add-btn added" type="button" data-validation-chip-action-id="${esc(row.id)}" onclick="validarNumeroUnico('${esc(row.id)}')">Validar</button>`
+      : '';
 
     return `
       <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:flex-start">
@@ -330,6 +333,7 @@
         </div>
         <div class="empresa-actions">
           ${statusBadge}
+          ${validateButton}
           <button class="add-btn" type="button" onclick="openValidationLeadDrawerRebuild('${esc(row.id)}')">Ficha</button>
           ${approveButton}
           <button class="add-btn" type="button" style="border-color:rgba(255,92,92,0.32);color:var(--error)" data-validation-action-id="${esc(row.id)}" onclick="rejectLeadValidationRebuild('${esc(row.id)}')">Reprovar</button>
@@ -867,6 +871,519 @@
     if (document.getElementById('panel-fila-zap')?.classList.contains('active')) {
       refreshBatches();
     }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+/* CRM Rebuild Fase 6.25 - Finalizador chips da Validacao */
+(function () {
+  function refresh625() {
+    try {
+      if (typeof window.refreshValidationChipsRebuild625 === 'function') {
+        window.refreshValidationChipsRebuild625();
+      }
+    } catch (error) {
+      console.warn('[rebuild625] finalizador falhou:', error);
+    }
+  }
+
+  function boot() {
+    refresh625();
+    setTimeout(refresh625, 500);
+    setTimeout(refresh625, 1500);
+    setTimeout(refresh625, 3000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+/* CRM Rebuild Fase 6.25 - Chips na Validacao WhatsApp */
+(function () {
+  const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
+
+  const state = {
+    chips: [],
+    activeChipId: '',
+    validating: false
+  };
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char]));
+  }
+
+  function clean(value, fallback = '') {
+    const text = String(value ?? '').trim();
+    return text || fallback;
+  }
+
+  function digits(value) {
+    return clean(value).replace(/\D+/g, '');
+  }
+
+  function notifyUser(message, type = '') {
+    if (typeof notify === 'function') notify(message, type);
+  }
+
+  function normalizeEvolutionUrl(value = '') {
+    return clean(value).replace(/\/+$/, '');
+  }
+
+  function normalizeChip(row = {}) {
+    const instance = clean(row.instance || row.instance_name || row.instanceName || row.name);
+    const name = clean(row.name || row.nome || row.label || row.phone || instance, 'Chip');
+    const id = clean(row.chip_id || row.chipId || row.id || instance, name);
+    const url = normalizeEvolutionUrl(row.url || row.base_url || row.baseUrl || row.evolution_url || row.evolutionUrl);
+    const key = clean(row.api_key || row.apiKey || row.key || row.apikey || row.token);
+
+    return {
+      ...row,
+      id: String(id),
+      chip_id: String(id),
+      dbId: row.dbId || row.id || null,
+      name,
+      nome: name,
+      label: name,
+      instance,
+      instance_name: instance,
+      url,
+      baseUrl: url,
+      evolutionUrl: url,
+      key,
+      apiKey: key,
+      api_key: key,
+      status: row.active === false ? 'disabled' : clean(row.status || row.connection_state || row.connectionState, 'saved'),
+      active: row.active !== false
+    };
+  }
+
+  function dedupeChips(chips = []) {
+    const map = new Map();
+    chips.map(normalizeChip).forEach((chip) => {
+      if (!chip.id && !chip.instance) return;
+      const key = chip.id || chip.instance;
+      const existing = map.get(key) || {};
+      map.set(key, { ...existing, ...chip });
+    });
+    return [...map.values()].filter((chip) => chip.active !== false && chip.status !== 'disabled' && chip.url && chip.instance && chip.key);
+  }
+
+  async function getCurrentUserId() {
+    try {
+      if (typeof getCurrentSupabaseUserIdV412 === 'function') {
+        const maybe = await getCurrentSupabaseUserIdV412();
+        if (maybe) return maybe;
+      }
+    } catch (_) {}
+    if (window.currentUser?.id) return window.currentUser.id;
+    try {
+      if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id;
+    } catch (_) {}
+    return null;
+  }
+
+  async function getHeaders(content = false) {
+    let headers = null;
+    try {
+      if (typeof getSupabaseAuthHeadersV423 === 'function') headers = await getSupabaseAuthHeadersV423();
+    } catch (_) {}
+    if (!headers?.apikey) {
+      headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+    }
+    return content ? { ...headers, 'Content-Type': 'application/json' } : headers;
+  }
+
+  async function readJson(response) {
+    const body = await response.text();
+    return body ? JSON.parse(body) : null;
+  }
+
+  async function fetchPersistedChips() {
+    const cached = dedupeChips([
+      ...(Array.isArray(window.__crmChipsCache) ? window.__crmChipsCache : []),
+      ...(typeof window.getChips === 'function' ? window.getChips() || [] : [])
+    ]);
+
+    try {
+      if (typeof window.CRMHydrateChipsCache === 'function') {
+        const hydrated = await window.CRMHydrateChipsCache();
+        const merged = dedupeChips([...(hydrated || []), ...cached]);
+        if (merged.length) return merged;
+      }
+    } catch (error) {
+      console.warn('[rebuild625] hydrate chips falhou:', error);
+    }
+
+    const userId = await getCurrentUserId();
+    if (!userId) return cached;
+
+    try {
+      const params = new URLSearchParams({
+        select: '*',
+        user_id: `eq.${userId}`,
+        order: 'updated_at.desc'
+      });
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_instances?${params.toString()}`, {
+        headers: await getHeaders()
+      });
+      const data = await readJson(response);
+      if (!response.ok) throw data || new Error(`Falha ao carregar chips (${response.status}).`);
+      return dedupeChips([...(Array.isArray(data) ? data : []), ...cached]);
+    } catch (error) {
+      console.warn('[rebuild625] fetch chips falhou:', error);
+      return cached;
+    }
+  }
+
+  function getActiveChip() {
+    return state.chips.find((chip) => String(chip.id) === String(state.activeChipId) || String(chip.instance) === String(state.activeChipId)) || state.chips[0] || null;
+  }
+
+  function renderChipTabs() {
+    const targets = ['valChipTabs', 'manualValChipTabs']
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+
+    if (!targets.length) return;
+
+    if (!state.chips.length) {
+      targets.forEach((target) => {
+        target.innerHTML = '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">Nenhum chip configurado em Configuracoes > Chips</span>';
+      });
+      return;
+    }
+
+    if (!state.activeChipId || !state.chips.some((chip) => String(chip.id) === String(state.activeChipId))) {
+      state.activeChipId = state.chips[0].id;
+    }
+
+    const html = state.chips.map((chip, index) => {
+      const active = String(chip.id) === String(state.activeChipId);
+      const status = chip.connectionState || chip.status || 'salvo';
+      return `
+        <div class="chip-tab${active ? ' active' : ''}" title="${esc(chip.instance)} · ${esc(status)}" onclick="setValChip('${esc(chip.id)}')">
+          ${esc(chip.name || `Chip ${index + 1}`)}
+        </div>
+      `;
+    }).join('');
+
+    targets.forEach((target) => { target.innerHTML = html; });
+  }
+
+  async function refreshValidationChips() {
+    state.chips = await fetchPersistedChips();
+    renderChipTabs();
+    return state.chips;
+  }
+
+  function normalizePhone(value = '') {
+    const raw = digits(value);
+    if (!raw) return '';
+    if (raw.startsWith('55')) return raw;
+    if (raw.length === 10 || raw.length === 11) return `55${raw}`;
+    return raw;
+  }
+
+  function leadPhone(lead = {}) {
+    return normalizePhone(lead.phone || lead.whatsapp || lead.telefone || lead.normalized_phone || '');
+  }
+
+  function parseValidationResult(data = {}) {
+    const item = Array.isArray(data)
+      ? data[0]
+      : (data?.data?.[0] || data?.result?.[0] || data?.numbers?.[0] || data);
+    const explicitFalse = item && (
+      item.exists === false ||
+      item.isWhatsapp === false ||
+      item.numberExists === false ||
+      item.exists === 'false' ||
+      item.isWhatsapp === 'false' ||
+      item.numberExists === 'false'
+    );
+    const exists = !!(
+      item?.exists === true ||
+      item?.isWhatsapp === true ||
+      item?.numberExists === true ||
+      item?.exists === 'true' ||
+      item?.isWhatsapp === 'true' ||
+      item?.numberExists === 'true' ||
+      item?.jid ||
+      item?.waId ||
+      item?.wa_id
+    );
+
+    return { item: item || {}, exists, definitive: exists || explicitFalse };
+  }
+
+  function findResultForPhone(results, phone) {
+    const list = Array.isArray(results)
+      ? results
+      : (Array.isArray(results?.data) ? results.data : (Array.isArray(results?.result) ? results.result : []));
+    if (!list.length) return null;
+    return list.find((item) => {
+      const raw = digits(item?.number || item?.phone || item?.jid || item?.waId || item?.wa_id || item?.id || '');
+      return raw && (raw.includes(phone) || phone.includes(raw));
+    }) || list[0] || null;
+  }
+
+  async function callEvolutionValidation(chip, numbers) {
+    const response = await fetch(`${chip.url}/chat/whatsappNumbers/${encodeURIComponent(chip.instance)}`, {
+      method: 'POST',
+      headers: {
+        apikey: chip.key,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ numbers })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data?.error || data?.message === 'Unauthorized' || data?.status === 401) {
+      throw new Error(data?.error || data?.message || `Evolution ${response.status}`);
+    }
+    return data;
+  }
+
+  async function rpcValidationChipAction(lead, action, payload = {}) {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Usuario autenticado nao encontrado.');
+    const chip = payload.chip || getActiveChip() || {};
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_validation_chip_action`, {
+      method: 'POST',
+      headers: await getHeaders(true),
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_lead_id: lead.id,
+        p_action: action,
+        p_reason: payload.reason || null,
+        p_chip_id: chip.id || chip.chip_id || chip.instance || null,
+        p_chip_name: chip.name || chip.nome || chip.label || chip.instance || null,
+        p_phone: payload.phone || lead.phone || lead.whatsapp || lead.normalized_phone || null,
+        p_exists_whatsapp: typeof payload.exists === 'boolean' ? payload.exists : null,
+        p_raw_payload: payload.raw || {}
+      })
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw data || new Error(`Falha ao salvar validacao (${response.status}). Rode o SQL 6.25.`);
+    return data;
+  }
+
+  function setValidationChipButtonsDisabled(leadId, disabled) {
+    document.querySelectorAll('[data-validation-chip-action-id]').forEach((button) => {
+      if (button.getAttribute('data-validation-chip-action-id') === String(leadId)) {
+        button.disabled = disabled;
+      }
+    });
+  }
+
+  async function validateLeadWithChip(leadId, options = {}) {
+    if (!state.chips.length) await refreshValidationChips();
+    const chip = getActiveChip();
+    if (!chip) {
+      notifyUser('// cadastre ou selecione um chip antes de validar', 'warn');
+      return { ok: false, skipped: true };
+    }
+
+    const lead = (window.rebuildValidationLeads || []).find((item) => String(item.id) === String(leadId));
+    if (!lead) {
+      notifyUser('// lead nao encontrado na validacao atual', 'warn');
+      return { ok: false, skipped: true };
+    }
+
+    const phone = leadPhone(lead);
+    if (!phone || phone.length < 12) {
+      await rpcValidationChipAction(lead, 'validation_error', {
+        chip,
+        phone: phone || '',
+        reason: 'Numero ausente ou invalido para consulta Evolution',
+        raw: { source: 'fase-6.25', reason: 'invalid_phone' }
+      }).catch((error) => console.warn('[rebuild625] tentativa invalida nao registrada:', error));
+      notifyUser(`// ${lead.nome || lead.company_name}: numero ausente ou invalido`, 'warn');
+      return { ok: false, invalidPhone: true };
+    }
+
+    setValidationChipButtonsDisabled(leadId, true);
+
+    try {
+      const raw = await callEvolutionValidation(chip, [phone]);
+      const parsed = parseValidationResult(findResultForPhone(raw, phone) || raw);
+
+      if (!parsed.definitive) {
+        await rpcValidationChipAction(lead, 'validation_error', {
+          chip,
+          phone,
+          reason: 'Resposta da Evolution sem resultado definitivo',
+          raw
+        });
+        if (!options.silent) notifyUser('// resposta sem resultado definitivo. Lead continua pendente.', 'warn');
+        return { ok: false, error: true };
+      }
+
+      await rpcValidationChipAction(lead, parsed.exists ? 'approve_whatsapp' : 'reject_validation', {
+        chip,
+        phone,
+        exists: parsed.exists,
+        reason: parsed.exists ? null : 'Numero sem WhatsApp pela Evolution',
+        raw
+      });
+
+      if (!options.silent) {
+        notifyUser(parsed.exists ? `Numero validado: ${lead.nome || lead.company_name}` : `Sem WhatsApp: ${lead.nome || lead.company_name}`, parsed.exists ? '' : 'warn');
+      }
+
+      return { ok: true, exists: parsed.exists };
+    } catch (error) {
+      await rpcValidationChipAction(lead, 'validation_error', {
+        chip,
+        phone,
+        reason: error?.message || 'Falha ao consultar Evolution',
+        raw: { source: 'fase-6.25', error: error?.message || String(error) }
+      }).catch((rpcError) => console.warn('[rebuild625] erro nao registrado:', rpcError));
+      if (!options.silent) notifyUser(error?.message || 'Falha ao validar numero.', 'err');
+      return { ok: false, error: true };
+    } finally {
+      setValidationChipButtonsDisabled(leadId, false);
+    }
+  }
+
+  async function validarNumeroUnico(leadId) {
+    const result = await validateLeadWithChip(leadId);
+    if (result && !result.skipped && typeof window.renderValidationStageFromSupabase === 'function') {
+      await window.renderValidationStageFromSupabase();
+    }
+    if (typeof window.refreshCRMRebuild624 === 'function') window.refreshCRMRebuild624();
+  }
+
+  function setSpinner(visible) {
+    const spinner = document.getElementById('valSpinner');
+    if (spinner) spinner.style.display = visible ? 'inline-block' : 'none';
+  }
+
+  async function validarTodosNumeros(options = {}) {
+    if (state.validating) {
+      notifyUser('// validacao ja em andamento', 'warn');
+      return;
+    }
+
+    const retryAll = options === true || options?.retryAll === true;
+    if (!state.chips.length) await refreshValidationChips();
+    const chip = getActiveChip();
+    if (!chip) {
+      notifyUser('// cadastre ou selecione um chip antes de validar', 'warn');
+      return;
+    }
+
+    if (typeof window.renderValidationStageFromSupabase === 'function') {
+      await window.renderValidationStageFromSupabase();
+    }
+
+    const rows = (window.rebuildValidationLeads || [])
+      .filter((lead) => lead.current_stage === 'validation')
+      .filter((lead) => retryAll ? lead.current_status !== 'whatsapp_validated' : lead.current_status === 'pending_validation');
+
+    if (!rows.length) {
+      notifyUser(retryAll ? '// nenhum numero para revalidar' : '// nenhum numero pendente', 'warn');
+      return;
+    }
+
+    state.validating = true;
+    setSpinner(true);
+
+    let valid = 0;
+    let invalid = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    try {
+      for (const lead of rows) {
+        const result = await validateLeadWithChip(lead.id, { silent: true });
+        if (result?.skipped || result?.invalidPhone) skipped++;
+        else if (result?.ok && result.exists) valid++;
+        else if (result?.ok && !result.exists) invalid++;
+        else failed++;
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+
+      notifyUser(`${valid} valido(s) · ${invalid} sem WhatsApp · ${failed} falha(s) · ${skipped} ignorado(s)`);
+      if (typeof window.renderValidationStageFromSupabase === 'function') {
+        await window.renderValidationStageFromSupabase();
+      }
+      if (typeof window.refreshCRMRebuild624 === 'function') window.refreshCRMRebuild624();
+    } finally {
+      state.validating = false;
+      setSpinner(false);
+    }
+  }
+
+  function setValChip(chipId) {
+    state.activeChipId = chipId;
+    renderChipTabs();
+  }
+
+  function patchRenderValidation() {
+    const previous = window.renderValidationStageFromSupabase;
+    if (typeof previous !== 'function' || previous.__chips625) return;
+
+    const patched = async function renderValidationStageChips625() {
+      const result = await previous.apply(this, arguments);
+      await refreshValidationChips();
+      return result;
+    };
+
+    patched.__chips625 = true;
+    patched.__previous = previous;
+    window.renderValidationStageFromSupabase = patched;
+    window.renderValidacao = patched;
+  }
+
+  function patchSwitchPanel() {
+    const previous = window.switchPanel;
+    if (typeof previous !== 'function' || previous.__chips625) return;
+
+    const patched = function switchPanelValidationChips625(panel) {
+      const result = previous.apply(this, arguments);
+      if (['validacao', 'validation', 'panel-validacao', 'importar', 'panel-importar'].includes(panel)) {
+        setTimeout(refreshValidationChips, 180);
+      }
+      return result;
+    };
+
+    patched.__chips625 = true;
+    patched.__previous = previous;
+    window.switchPanel = patched;
+  }
+
+  function install() {
+    patchRenderValidation();
+    patchSwitchPanel();
+    window.refreshValidationChipsRebuild625 = refreshValidationChips;
+    window.setValChip = setValChip;
+    window.validarNumeroUnico = validarNumeroUnico;
+    window.validarTodosNumeros = validarTodosNumeros;
+  }
+
+  function boot() {
+    install();
+    refreshValidationChips();
+    setTimeout(install, 300);
+    setTimeout(() => {
+      install();
+      refreshValidationChips();
+    }, 1000);
   }
 
   if (document.readyState === 'loading') {
@@ -3291,6 +3808,32 @@
     setTimeout(reinstall624, 300);
     setTimeout(reinstall624, 900);
     setTimeout(reinstall624, 1800);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+/* CRM Rebuild Fase 6.25 - Finalizador apos chips persistidos */
+(function () {
+  function refresh625() {
+    try {
+      if (typeof window.refreshValidationChipsRebuild625 === 'function') {
+        window.refreshValidationChipsRebuild625();
+      }
+    } catch (error) {
+      console.warn('[rebuild625] finalizador final falhou:', error);
+    }
+  }
+
+  function boot() {
+    refresh625();
+    setTimeout(refresh625, 500);
+    setTimeout(refresh625, 1500);
+    setTimeout(refresh625, 3000);
   }
 
   if (document.readyState === 'loading') {
