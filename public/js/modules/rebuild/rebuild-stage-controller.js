@@ -876,6 +876,235 @@
   }
 })();
 
+/* CRM Rebuild Fase 6.24 - Finalizador de ordem dos hooks */
+(function () {
+  function reinstall624() {
+    try {
+      if (window.CRMRebuild624 && typeof window.CRMRebuild624.install === 'function') {
+        window.CRMRebuild624.install();
+      }
+    } catch (error) {
+      console.warn('[rebuild624] finalizador falhou:', error);
+    }
+  }
+
+  function boot() {
+    reinstall624();
+    setTimeout(reinstall624, 300);
+    setTimeout(reinstall624, 900);
+    setTimeout(reinstall624, 1800);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+/* CRM Rebuild Fase 6.24 - Estabilizacao ponta a ponta */
+(function () {
+  const state = {
+    refreshing: false,
+    installedAt: ''
+  };
+
+  function isActivePanel(id) {
+    return !!document.getElementById(id)?.classList.contains('active');
+  }
+
+  function safeCall(name, args = []) {
+    try {
+      const fn = window[name];
+      if (typeof fn === 'function') return fn.apply(window, args);
+    } catch (error) {
+      console.warn(`[rebuild624] ${name} falhou:`, error);
+    }
+    return null;
+  }
+
+  async function refreshMaybe(result) {
+    if (result && typeof result.then === 'function') return result.catch((error) => {
+      console.warn('[rebuild624] refresh async falhou:', error);
+      return null;
+    });
+    return result;
+  }
+
+  async function refreshFlowSurfaces() {
+    if (state.refreshing) return;
+    state.refreshing = true;
+
+    try {
+      const tasks = [];
+
+      if (isActivePanel('panel-validacao')) {
+        tasks.push(refreshMaybe(safeCall('renderValidationStageFromSupabase')));
+      }
+
+      if (isActivePanel('panel-atribuicao')) {
+        tasks.push(refreshMaybe(safeCall('renderAssignmentStageFromSupabase')));
+        tasks.push(refreshMaybe(safeCall('refreshChipsRebuild620')));
+      }
+
+      if (isActivePanel('panel-fila-zap')) {
+        tasks.push(refreshMaybe(safeCall('renderQueueStageFromSupabase621')));
+      } else if (typeof window.refreshDispatchBatchesRebuild622 === 'function') {
+        tasks.push(refreshMaybe(safeCall('refreshDispatchBatchesRebuild622')));
+      }
+
+      if (typeof window.updateBadges === 'function') {
+        tasks.push(refreshMaybe(safeCall('updateBadges')));
+      }
+
+      await Promise.all(tasks);
+    } finally {
+      state.refreshing = false;
+    }
+  }
+
+  function scheduleFlowRefresh(delay = 120) {
+    clearTimeout(window.__crm624RefreshTimer);
+    window.__crm624RefreshTimer = setTimeout(() => {
+      refreshFlowSurfaces().catch((error) => {
+        console.warn('[rebuild624] refresh geral falhou:', error);
+      });
+    }, delay);
+  }
+
+  function patchAsyncAction(name, delay = 120) {
+    const previous = window[name];
+    if (typeof previous !== 'function' || previous.__flow624) return false;
+
+    const patched = async function actionRebuild624() {
+      try {
+        return await previous.apply(this, arguments);
+      } finally {
+        scheduleFlowRefresh(delay);
+      }
+    };
+
+    patched.__flow624 = true;
+    patched.__previous = previous;
+    window[name] = patched;
+    return true;
+  }
+
+  function patchSwitchPanel() {
+    const previous = window.switchPanel;
+    if (typeof previous !== 'function' || previous.__flow624) return false;
+
+    const patched = function switchPanelFlow624(panel) {
+      const result = previous.apply(this, arguments);
+      if (['validacao', 'validation', 'panel-validacao', 'atribuicao', 'assignment', 'panel-atribuicao', 'fila-zap', 'whatsapp', 'panel-fila-zap'].includes(panel)) {
+        scheduleFlowRefresh(220);
+      }
+      return result;
+    };
+
+    patched.__flow624 = true;
+    patched.__previous = previous;
+    window.switchPanel = patched;
+    return true;
+  }
+
+  function installActionPatches() {
+    [
+      'approveLeadWhatsappRebuild',
+      'rejectLeadValidationRebuild',
+      'sendLeadToAssignmentRebuild619',
+      'assignLeadToChipRebuild620',
+      'queueLeadTodayRebuild621',
+      'backToBacklogRebuild621',
+      'queueAllBacklogRebuild621',
+      'generateDispatchBatchesRebuild622',
+      'startDispatchBatchRebuild622',
+      'completeDispatchBatchRebuild622',
+      'salvarChip',
+      'deletarChip'
+    ].forEach((name) => patchAsyncAction(name, 180));
+
+    patchSwitchPanel();
+  }
+
+  function smokeCheck() {
+    const requiredFunctions = [
+      'importarLeads',
+      'renderValidationStageFromSupabase',
+      'approveLeadWhatsappRebuild',
+      'sendLeadToAssignmentRebuild619',
+      'assignLeadToChipRebuild620',
+      'renderQueueStageFromSupabase621',
+      'queueLeadTodayRebuild621',
+      'generateDispatchBatchesRebuild622',
+      'completeDispatchBatchRebuild622',
+      'hydrateWhatsappChipsRebuild623'
+    ];
+
+    const requiredElements = [
+      'importJsonInput',
+      'importSummary',
+      'valComSiteList',
+      'atribList',
+      'disparoEmpresasList',
+      'zapRight',
+      'chipNome',
+      'qrModal'
+    ];
+
+    const report = {
+      phase: '6.24',
+      checkedAt: new Date().toISOString(),
+      functions: requiredFunctions.map((name) => ({ name, ok: typeof window[name] === 'function' })),
+      elements: requiredElements.map((id) => ({ id, ok: !!document.getElementById(id) }))
+    };
+
+    try {
+      console.table(report.functions);
+      console.table(report.elements);
+    } catch (_) {}
+
+    const missingFunctions = report.functions.filter((item) => !item.ok).length;
+    const missingElements = report.elements.filter((item) => !item.ok).length;
+    if (typeof notify === 'function') {
+      notify(
+        missingFunctions || missingElements
+          ? `Diagnostico 6.24: ${missingFunctions} funcao(oes) e ${missingElements} elemento(s) ausente(s).`
+          : 'Diagnostico 6.24 OK: funcoes e elementos principais carregados.',
+        missingFunctions || missingElements ? 'warn' : ''
+      );
+    }
+
+    return report;
+  }
+
+  function boot() {
+    installActionPatches();
+    state.installedAt = new Date().toISOString();
+    window.CRMRebuild624 = {
+      refresh: refreshFlowSurfaces,
+      install: installActionPatches,
+      smokeCheck
+    };
+    window.refreshCRMRebuild624 = refreshFlowSurfaces;
+    window.runCRMRebuild624SmokeCheck = smokeCheck;
+
+    setTimeout(installActionPatches, 400);
+    setTimeout(installActionPatches, 1200);
+    setTimeout(() => {
+      if (isActivePanel('panel-validacao') || isActivePanel('panel-atribuicao') || isActivePanel('panel-fila-zap')) {
+        scheduleFlowRefresh(0);
+      }
+    }, 500);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
 /* CRM Rebuild Fase 6.21 - Backlog e Fila WhatsApp persistentes */
 (function () {
   const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
@@ -3036,6 +3265,32 @@
       if (attempts < MAX_HYDRATE_ATTEMPTS) setTimeout(retry, 500);
     };
     retry();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+/* CRM Rebuild Fase 6.24 - Finalizador apos todos os blocos */
+(function () {
+  function reinstall624() {
+    try {
+      if (window.CRMRebuild624 && typeof window.CRMRebuild624.install === 'function') {
+        window.CRMRebuild624.install();
+      }
+    } catch (error) {
+      console.warn('[rebuild624] finalizador final falhou:', error);
+    }
+  }
+
+  function boot() {
+    reinstall624();
+    setTimeout(reinstall624, 300);
+    setTimeout(reinstall624, 900);
+    setTimeout(reinstall624, 1800);
   }
 
   if (document.readyState === 'loading') {
