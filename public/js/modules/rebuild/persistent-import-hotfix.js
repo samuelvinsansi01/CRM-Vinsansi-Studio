@@ -1,25 +1,21 @@
-/* CRM Rebuild Fase 6.16 — Importação persistente via RPC + classificação correta de links */
+/* CRM Rebuild Fase 6.17 — Importação persistente sem salvar rejeitados */
 (function(){
+  const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
+
   function escText(v){ return (v == null ? '' : String(v)).trim(); }
   function onlyDigits(v){ return escText(v).replace(/\D+/g, '') || null; }
+  function isInstagramUrl(url){ return /(^|\.)instagram\.com\//i.test(escText(url)); }
+  function isMapsUrl(url){ return /google\.[^/]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|query_place_id=/i.test(escText(url)); }
+  function isRealWebsite(url){ return !!escText(url) && !isInstagramUrl(url) && !isMapsUrl(url); }
 
-  function normalizeUrl(v){
-    const s = escText(v);
-    if (!s) return '';
-    return s;
-  }
-
-  function isInstagramUrl(url){
-    return /(^|\.)instagram\.com\//i.test(normalizeUrl(url).replace(/^https?:\/\//i, '').replace(/^www\./i, ''));
-  }
-
-  function isMapsUrl(url){
-    const v = normalizeUrl(url);
-    return /(google\.[^/]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|query_place_id=|\/place\/|\/search\/?api=1)/i.test(v);
-  }
-
-  function isBlockedAsWebsite(url){
-    return isInstagramUrl(url) || isMapsUrl(url) || /(^|\.)facebook\.com\//i.test(url) || /(^|\.)wa\.me\//i.test(url) || /api\.whatsapp\.com/i.test(url);
+  function normalizeInstagram(url){
+    const v = escText(url);
+    if (!v || !isInstagramUrl(v)) return { url: null, username: null };
+    const m = v.match(/instagram\.com\/([^/?#]+)/i);
+    const username = m && !['invites','p','reel','stories','explore'].includes(String(m[1]).toLowerCase())
+      ? String(m[1]).replace('@','').toLowerCase()
+      : null;
+    return { url: v, username };
   }
 
   function pick(obj, keys){
@@ -27,25 +23,6 @@
       if (obj && obj[k] != null && String(obj[k]).trim() !== '') return obj[k];
     }
     return null;
-  }
-
-  function pickFirstUrl(item, keys, predicate){
-    for (const k of keys) {
-      const v = normalizeUrl(item?.[k]);
-      if (v && (!predicate || predicate(v))) return v;
-    }
-    return null;
-  }
-
-  function normalizeInstagramFromAny(item){
-    const direct = pick(item, ['instagram','instagramUrl','instagram_url','instagramLink','instagram_link','insta']);
-    const fromUrl = pickFirstUrl(item, ['website','site','url','domain','webSite','googleMapsUrl','google_maps_url','mapsUrl','placeUrl','searchPageUrl'], isInstagramUrl);
-    const url = normalizeUrl(direct) || fromUrl;
-    if (!url) return { url: null, username: null };
-    const m = url.match(/instagram\.com\/([^/?#]+)/i);
-    const raw = m ? m[1] : '';
-    const username = raw && !['invites','p','reel','stories','explore'].includes(raw.toLowerCase()) ? raw.toLowerCase().replace('@','') : null;
-    return { url, username };
   }
 
   function getImportJson(){
@@ -60,48 +37,46 @@
     throw new Error('JSON inválido: esperado array ou objeto com results[].');
   }
 
-  function parseNumber(v){
-    const s = escText(v).replace(',', '.');
-    return /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : null;
-  }
-
-  function parseInteger(v){
-    const s = escText(v).replace(/\D+/g, '');
-    return s ? Number(s) : null;
-  }
-
   function normalizeLeadPayload(item){
     const companyName = escText(pick(item, ['title','name','company_name','companyName','nome','empresa'])) || 'Empresa sem nome';
 
-    const maps =
-      pickFirstUrl(item, ['googleMapsUrl','google_maps_url','googleMapsURL','mapsUrl','placeUrl','searchPageUrl','url','website','site','domain','webSite'], isMapsUrl) || null;
+    const candidates = [
+      escText(pick(item, ['website','site','domain','webSite','url_site'])),
+      escText(pick(item, ['url'])),
+      escText(pick(item, ['googleMapsUrl','google_maps_url','mapsUrl','placeUrl','searchPageUrl'])),
+      escText(pick(item, ['instagram','instagramUrl','instagram_url','instagramLink']))
+    ].filter(Boolean);
 
-    const instagram = normalizeInstagramFromAny(item);
+    let website = null;
+    let googleMapsUrl = null;
+    let instagramUrl = null;
 
-    const rawWebsite =
-      pickFirstUrl(item, ['website','site','domain','webSite','url'], function(url){
-        return !!url && !isBlockedAsWebsite(url);
-      }) || null;
+    for (const c of candidates) {
+      if (!instagramUrl && isInstagramUrl(c)) instagramUrl = c;
+      else if (!googleMapsUrl && isMapsUrl(c)) googleMapsUrl = c;
+      else if (!website && isRealWebsite(c)) website = c;
+    }
 
+    const directInsta = normalizeInstagram(instagramUrl || pick(item, ['instagram','instagramUrl','instagram_url','instagramLink']));
     const phone = escText(pick(item, ['phone','phoneNumber','telefone','whatsapp','contactPhone']));
-    const rating = parseNumber(pick(item, ['rating','totalScore','stars','nota']));
-    const reviewsCount = parseInteger(pick(item, ['reviews_count','reviewsCount','reviews','reviewCount','avaliacoes']));
+    const rating = pick(item, ['rating','totalScore','stars','nota']);
+    const reviews = pick(item, ['reviewsCount','reviews','reviewCount','reviews_count','avaliacoes']);
 
     return {
       lead: {
         company_name: companyName,
         category: escText(pick(item, ['categoryName','category','categoria'])),
         description: escText(pick(item, ['description','descricao','about'])),
-        rating,
-        reviews_count: reviewsCount,
+        rating: rating != null && String(rating).trim() !== '' ? Number(String(rating).replace(',', '.')) : null,
+        reviews_count: reviews != null && String(reviews).trim() !== '' ? Number(String(reviews).replace(/\D+/g, '')) : null,
         phone: phone || null,
         normalized_phone: onlyDigits(phone),
         whatsapp_status: phone ? 'pending' : 'unknown',
-        website: rawWebsite,
-        website_type: rawWebsite ? 'own_site' : null,
-        has_own_site: !!rawWebsite,
-        instagram_url: instagram.url,
-        instagram_username: instagram.username,
+        website,
+        website_type: website ? 'external' : null,
+        has_own_site: !!website,
+        instagram_url: directInsta.url,
+        instagram_username: directInsta.username,
         current_stage: 'validation',
         current_status: 'pending_validation'
       },
@@ -114,9 +89,9 @@
         neighborhood: escText(pick(item, ['neighborhood','bairro'])),
         address: escText(pick(item, ['address','endereco','street'])),
         zip_code: escText(pick(item, ['postalCode','zipCode','zip_code','cep'])),
-        latitude: parseNumber(pick(item, ['latitude','lat'])),
-        longitude: parseNumber(pick(item, ['longitude','lng','lon'])),
-        google_maps_url: maps,
+        latitude: pick(item, ['latitude','lat']) ? Number(String(pick(item, ['latitude','lat'])).replace(',', '.')) : null,
+        longitude: pick(item, ['longitude','lng','lon']) ? Number(String(pick(item, ['longitude','lng','lon'])).replace(',', '.')) : null,
+        google_maps_url: googleMapsUrl,
         place_id: escText(pick(item, ['placeId','place_id','googlePlaceId'])),
         raw_location: item
       },
@@ -124,72 +99,65 @@
     };
   }
 
-  function getCurrentUserId(){
-    return (typeof getCurrentSupabaseUserIdV412 === 'function' ? getCurrentSupabaseUserIdV412() : null) ||
+  async function getAuthContext(){
+    const userId =
+      (typeof getCurrentSupabaseUserIdV412 === 'function' ? await getCurrentSupabaseUserIdV412() : null) ||
       window.currentUser?.id ||
       (typeof currentUser !== 'undefined' ? currentUser?.id : null);
+
+    if (!userId) throw new Error('Usuário autenticado não encontrado.');
+
+    let headers = null;
+    if (typeof getSupabaseAuthHeadersV423 === 'function') headers = await getSupabaseAuthHeadersV423();
+
+    if (!headers?.apikey) throw new Error('Headers autenticados Supabase não encontrados.');
+
+    return { user: { id: userId }, headers };
   }
 
-  async function rpcImport(userId, rows){
-    const client = window.supabaseClient || window.crmSupabase || window.sb;
-    if (client?.rpc) {
-      const { data, error } = await client.rpc('rpc_import_leads_batch', {
-        p_user_id: userId,
-        p_rows: rows,
-        p_source: 'apify_json',
-        p_source_file_name: 'importacao_manual_json'
-      });
-      if (!error) return data;
-      console.warn('[CRM 6.16] RPC via client falhou, tentando fetch:', error);
-    }
-
-    const response = await fetch('https://txyknazfufashgzlxkqh.supabase.co/rest/v1/rpc/rpc_import_leads_batch', {
+  async function rpcImport(payload){
+    const { headers } = await getAuthContext();
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_import_leads_batch`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'apikey': 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
-        'Authorization': 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
+        ...headers,
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        p_user_id: userId,
-        p_rows: rows,
-        p_source: 'apify_json',
-        p_source_file_name: 'importacao_manual_json'
-      })
+      body: JSON.stringify(payload)
     });
 
     const text = await response.text();
     const json = text ? JSON.parse(text) : null;
-    if (!response.ok) throw json || new Error('Falha na RPC de importação.');
+    if (!response.ok) throw json || new Error(`Erro Supabase ${response.status}`);
     return json;
   }
 
-  function buildImportSummary(result){
-    const total = Number(result?.total || 0);
-    const created = Number(result?.created || 0);
-    const merged = Number(result?.merged || 0);
-    const ignored = Number(result?.ignored || 0);
-    const lowRating = Number(result?.rejected_low_rating || 0);
-    const lowReviews = Number(result?.rejected_low_reviews || 0);
-    const duplicate = Number(result?.rejected_duplicate || 0);
-    const blacklisted = Number(result?.blacklisted || 0);
-    const errors = Number(result?.errors || 0);
-
-    return `Importação analisada\n\nTotal: ${total}\n\nAprovados:\n${created} salvos\n${merged} mesclados\n\nReprovados/Ignorados:\n${ignored} ignorados\n${lowRating} abaixo da nota mínima\n${lowReviews} abaixo das avaliações mínimas\n${duplicate} duplicados\n${blacklisted} blacklist\n${errors} erros`;
-  }
-
   async function importarLeadsPersistente(){
-    const userId = await getCurrentUserId();
-    if (!userId) throw new Error('Usuário autenticado não encontrado. Faça login novamente.');
-
+    const { user } = await getAuthContext();
     const rows = getImportJson().map(normalizeLeadPayload);
-    if (!rows.length) throw new Error('Nenhum lead encontrado para importar.');
 
-    const result = await rpcImport(userId, rows);
+    const result = await rpcImport({
+      p_user_id: user.id,
+      p_rows: rows,
+      p_source: 'apify_json',
+      p_source_file_name: 'importacao_manual_json'
+    });
 
-    if (typeof notify === 'function') notify(buildImportSummary(result));
+    const total = result.total || 0;
+    const created = result.created || 0;
+    const ignored = result.ignored || 0;
+    const lowRating = result.rejected_low_rating || 0;
+    const lowReviews = result.rejected_low_reviews || 0;
+    const duplicates = result.rejected_duplicate || 0;
+    const blacklisted = result.blacklisted || 0;
+    const errors = result.errors || 0;
+
+    if (typeof notify === 'function') {
+      notify(`Importação analisada: ${total} total · ${created} aprovado(s) · ${ignored} ignorado(s) · nota ${lowRating} · avaliações ${lowReviews} · duplicados ${duplicates} · blacklist ${blacklisted} · erros ${errors}`);
+    }
+
     if (typeof loadSupabaseLeadsToLocalState === 'function') await loadSupabaseLeadsToLocalState();
-    if (typeof window.renderValidationStageFromSupabase === 'function') await window.renderValidationStageFromSupabase();
+    if (typeof renderValidationStageFromSupabase === 'function') await renderValidationStageFromSupabase();
     if (typeof renderInicio === 'function') renderInicio();
     if (typeof updateBadges === 'function') updateBadges();
 
