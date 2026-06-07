@@ -60,14 +60,7 @@ function v48StateRemove(storageKey, reason = 'state-remove') {
   return true;
 }
 
-const DB_TABLES_V51 = {
-  leads: 'crm_leads',
-  queueItems: 'queue_items',
-  dispatchQueues: 'crm_dispatch_queues',
-  settings: 'crm_settings',
-  sentLedger: 'crm_sent_ledger',
-  notes: 'crm_notes'
-};
+const DB_TABLES_V51 = Object.freeze({});
 const OPERATIONAL_DIRTY_AT_KEY_V430 = 'crm_db_dirty_at_v51';
 
 const OPERATIONAL_DATA_KEYS = {
@@ -210,6 +203,9 @@ function pushQueueRowsV51(rows, queueType, items, bucket = '') {
   });
 }
 async function saveOperationalSnapshotToDatabaseV51(snapshot) {
+  clearOperationalDataDirtyV430?.();
+  return { ok:true, skipped:true, reason:'legacy-v51-snapshot-disabled' };
+
   const data = snapshot.data || {};
   const now = new Date().toISOString();
   await Promise.all(Object.values(DB_TABLES_V51).map(deleteUserRowsV51));
@@ -276,6 +272,8 @@ function insertWeeklyLeadsRowsV51(rows, weeklyLeads, now) {
   });
 }
 async function loadOperationalSnapshotFromDatabaseV51() {
+  return createOperationalSnapshot();
+
   const [leadsRes, queueRes, dispatchRes, settingsRes, ledgerRes, notesRes] = await Promise.all([
     sbClient.from(DB_TABLES_V51.leads).select('lead_id,source,status,data,updated_at').eq('user_id', currentUser.id).order('updated_at', { ascending:true }),
     sbClient.from(DB_TABLES_V51.queueItems).select('queue_type,bucket,lead_id,position,data').eq('user_id', currentUser.id).order('position', { ascending:true }),
@@ -407,8 +405,7 @@ function scheduleOperationalSync(options = {}) {
    FASE 6.6 — DESATIVAR LEGADO crm_* NO FRONTEND
    O banco novo usa leads, queue_items, dispatch_ledger, settings etc.
    Este arquivo mantém o estado em memória do CRM antigo e impede chamadas
-   para tabelas removidas: crm_leads, crm_queue_items, crm_dispatch_queues,
-   crm_settings e crm_sent_ledger.
+   para tabelas operacionais legadas removidas.
 ════════════════════════════ */
 async function syncOperationalDataToSupabase({ silent = false } = {}) {
   clearOperationalDataDirtyV430?.();

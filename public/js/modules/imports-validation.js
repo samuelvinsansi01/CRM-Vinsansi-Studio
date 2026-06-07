@@ -61,7 +61,7 @@ function extractCategory(item) {
   return String(item.categoryName || item.category || item.categoria || item.type || '').trim();
 }
 function extractGoogleUrl(item) {
-  return String(item.url || item.googleUrl || item.google_url || item.maps_url || item.link || '').trim();
+  return String(item.url || item.googleUrl || item.google_url || item.google_maps_url || item.maps_url || item.link || '').trim();
 }
 function hasValidSiteRaw(item) {
   const site = extractSite(item);
@@ -192,8 +192,24 @@ function findLeadIdentityDuplicateV430(index, item = {}) {
 }
 
 function getDatabaseLeadCacheV430() {
-  try { return typeof getLeadBaseData === 'function' ? getLeadBaseData() : []; }
-  catch { return []; }
+  const map = new Map();
+  const add = (lead) => {
+    if (!lead || typeof lead !== 'object') return;
+    const key = String(lead.id || lead.lead_id || lead.place_id || lead.google_maps_url || lead.googleUrl || lead.phone || lead.whatsapp || Math.random()).trim();
+    if (!key || map.has(key)) return;
+    map.set(key, lead);
+  };
+
+  try { (typeof getLeadBaseData === 'function' ? getLeadBaseData() : []).forEach(add); } catch (_) {}
+  try { (Array.isArray(window.rebuildNewSchemaLeads) ? window.rebuildNewSchemaLeads : []).forEach(add); } catch (_) {}
+  try { (Array.isArray(window.leadsRebuild) ? window.leadsRebuild : []).forEach(add); } catch (_) {}
+  try { (Array.isArray(window.leadsBaseRebuild) ? window.leadsBaseRebuild : []).forEach(add); } catch (_) {}
+  try { (typeof getValData === 'function' ? getValData() : []).forEach(add); } catch (_) {}
+  try { (typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : []).forEach(add); } catch (_) {}
+  try { (typeof getInstaFila === 'function' ? getInstaFila() : []).forEach(add); } catch (_) {}
+  try { Object.values(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}).flat().forEach(add); } catch (_) {}
+
+  return Array.from(map.values());
 }
 
 function logApifyAnalysisV430(analysis, phase = 'preview') {
@@ -324,4 +340,3 @@ function renderRamoSelect() {
   sel.innerHTML = '<option value="">Selecionar ramo...</option>' +
     ramos.map(r => `<option value="${r.id}"${activeRamoId===r.id?' selected':''}>${escHtml(r.nome)}</option>`).join('');
 }
-

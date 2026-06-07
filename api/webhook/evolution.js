@@ -37,6 +37,7 @@ function extractMessage(payload={}){
     direction: fromMe ? 'out' : 'in',
     body: getTextMessage(data),
     occurredAt: data.messageTimestamp ? new Date(Number(data.messageTimestamp) * 1000).toISOString() : new Date().toISOString(),
+    instance: payload.instance || payload.instanceName || data.instance || data.instanceName || '',
     rawPayload: payload
   };
 }
@@ -70,15 +71,25 @@ export default async function handler(req,res){
       user_id:userId,
       lead_id:lead?.id || null,
       whatsapp_instance_id:null,
+      instance:message.instance || null,
       direction:message.direction,
       external_message_id:message.externalId,
+      external_id:message.externalId,
       remote_jid:message.remoteJid || null,
       sender_jid:message.senderJid || null,
+      phone,
+      phone_normalized:phone,
       body:message.body || '',
+      message_type:'text',
       payload_original:message.rawPayload || payload,
+      raw_payload:message.rawPayload || payload,
       occurred_at:message.occurredAt
     };
-    const data=await supabaseFetch('whatsapp_messages', { method:'POST', headers:{ Prefer:'return=representation' }, body:JSON.stringify(record) });
+    const data=await supabaseFetch('whatsapp_messages?on_conflict=user_id,external_message_id', {
+      method:'POST',
+      headers:{ Prefer:'resolution=merge-duplicates,return=representation' },
+      body:JSON.stringify(record)
+    });
     const stored=Array.isArray(data)?data[0]:data;
     return res.status(200).json({ success:true, id:stored?.id||null, external_message_id:stored?.external_message_id||null, lead_id:stored?.lead_id||null });
   }catch(error){ console.error('[webhook-evolution]', error); return res.status(500).json({ success:false, error:error?.message||'erro interno' }); }

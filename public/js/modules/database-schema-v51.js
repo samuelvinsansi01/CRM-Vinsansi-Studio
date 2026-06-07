@@ -1,7 +1,7 @@
 window.V51_DATABASE_REAL_SQL = `
 -- Schema legado desativado.
 --
--- A fila operacional nao usa mais crm_queue_items.
+-- A fila operacional nao usa mais a tabela legada de snapshots.
 -- Execute sql/00627_queue_items_fk_restructure.sql para manter:
 --
 -- leads

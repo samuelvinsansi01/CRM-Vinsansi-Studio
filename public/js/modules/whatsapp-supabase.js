@@ -15,6 +15,7 @@ function debugWhatsappPersistV413(step, data = {}) {
   }
 }
 let supabaseWhatsappMessagesCacheV412 = [];
+let supabaseWhatsappLeadCacheV428 = new Map();
 
 function getCurrentUserIdForWhatsappStorageV423(){
   try { return currentUser?.id ? String(currentUser.id) : ''; } catch(e) { return ''; }
@@ -52,6 +53,7 @@ async function getSupabaseAuthHeadersV423(extra = {}){
 
 function clearGlobalWhatsappSensitiveCachesV423(){
   supabaseWhatsappMessagesCacheV412 = [];
+  supabaseWhatsappLeadCacheV428 = new Map();
   window.__VS_CONVERSATION_META_V49 = {};
   window.__VS_WHATSAPP_OUTBOX_V49 = [];
 }
@@ -65,10 +67,98 @@ function normalizeWhatsappDigitsV412(value = '') {
   return digits;
 }
 
+function normalizeLeadForWhatsappCacheV428(lead = {}) {
+  const id = String(lead.id || lead.lead_id || lead.leadId || '').trim();
+  if (!id) return null;
+  const phone = normalizeWhatsappDigitsV412(lead.normalized_phone || lead.phone || lead.whatsapp || lead.telefone || '');
+  return {
+    ...lead,
+    id,
+    lead_id: id,
+    nome: String(lead.nome || lead.company_name || lead.companyName || lead.name || 'Lead').trim(),
+    company_name: lead.company_name || lead.nome || lead.name || 'Lead',
+    whatsapp: phone || lead.whatsapp || lead.phone || '',
+    phone: lead.phone || phone,
+    normalized_phone: phone,
+    telefone: lead.telefone || lead.phone || phone,
+    site: lead.site || lead.website || '',
+    website: lead.website || lead.site || '',
+    instagram: lead.instagram || lead.instagram_url || '',
+    instagram_url: lead.instagram_url || lead.instagram || ''
+  };
+}
+
+function cacheSupabaseWhatsappLeadV428(lead = {}) {
+  const normalized = normalizeLeadForWhatsappCacheV428(lead);
+  if (!normalized) return null;
+  supabaseWhatsappLeadCacheV428.set(normalized.id, normalized);
+  if (normalized.normalized_phone) supabaseWhatsappLeadCacheV428.set(`phone:${normalized.normalized_phone}`, normalized);
+  return normalized;
+}
+
+function getSupabaseWhatsappLeadByIdV428(id = '') {
+  return supabaseWhatsappLeadCacheV428.get(String(id || '').trim()) || null;
+}
+
+function findSupabaseWhatsappLeadByPhoneV428(phone = '') {
+  const normalized = normalizeWhatsappDigitsV412(phone);
+  return normalized ? (supabaseWhatsappLeadCacheV428.get(`phone:${normalized}`) || null) : null;
+}
+
+async function fetchLeadRowsForWhatsappCacheV428(table, column, values = []) {
+  if (!sbClient || !currentUser?.id || !values.length) return [];
+  const fields = 'id,user_id,company_name,category,phone,normalized_phone,website,instagram_url,current_stage,current_status,whatsapp_status';
+  const rows = [];
+  for (let index = 0; index < values.length; index += 80) {
+    const chunk = values.slice(index, index + 80).filter(Boolean);
+    if (!chunk.length) continue;
+    const { data, error } = await sbClient
+      .from(table)
+      .select(fields)
+      .eq('user_id', currentUser.id)
+      .in(column, chunk);
+    if (error) throw error;
+    rows.push(...(data || []));
+  }
+  return rows;
+}
+
+async function hydrateWhatsappConversationLeadCacheV428(rows = []) {
+  if (!sbClient || !currentUser?.id) return;
+  const ids = [...new Set((rows || []).map(row => String(row.lead_id || row.leadId || '').trim()).filter(Boolean))];
+  const phones = [...new Set((rows || []).map(row => normalizeWhatsappDigitsV412(
+    row.phone_normalized || row.phone || row.remote_jid || row.sender_jid || ''
+  )).filter(Boolean))];
+
+  const fetched = [];
+  async function tryFetch(table, column, values) {
+    try {
+      fetched.push(...await fetchLeadRowsForWhatsappCacheV428(table, column, values));
+      return true;
+    } catch (error) {
+      console.warn(`[whatsapp_messages] cache leads ${table}.${column}:`, error?.message || error);
+      return false;
+    }
+  }
+
+  if (ids.length) {
+    const ok = await tryFetch('v_lead_ficha_rebuild', 'id', ids);
+    if (!ok) await tryFetch('leads', 'id', ids);
+  }
+  if (phones.length) {
+    const ok = await tryFetch('v_lead_ficha_rebuild', 'normalized_phone', phones);
+    if (!ok) await tryFetch('leads', 'normalized_phone', phones);
+  }
+
+  fetched.forEach(cacheSupabaseWhatsappLeadV428);
+}
+
 function getWhatsappConversationKeyV412(message = {}) {
   const leadId = String(message.leadId || message.lead_id || '').trim();
   if (leadId) return leadId;
   const phone = normalizeWhatsappDigitsV412(message.phone_normalized || message.phone || '');
+  const lead = phone ? findLeadByPhoneV412(phone) : null;
+  if (lead?.id) return String(lead.id);
   return phone ? `phone:${phone}` : '';
 }
 
@@ -138,7 +228,7 @@ function upsertLocalOutgoingWhatsappMessageV426(message = {}, options = {}) {
   saveSupabaseWhatsappMessagesCacheV412(cache.sort((a,b) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || ''))));
 
   if (localMessage.leadId && options.skipCrm !== true) {
-    const lead = findLeadEverywhere(localMessage.leadId) || {};
+    const lead = findLeadEverywhere(localMessage.leadId) || getSupabaseWhatsappLeadByIdV428(localMessage.leadId) || {};
     const crm = ensureLeadCrm(localMessage.leadId, lead);
     crm.messages = Array.isArray(crm.messages) ? crm.messages : [];
     const crmIndex = crm.messages.findIndex(item => item.id === id);
@@ -173,7 +263,7 @@ function updateLocalOutgoingWhatsappMessageStatusV426(id = '', status = '', patc
 
   const leadId = String(patch.leadId || cached?.leadId || '').trim();
   if (leadId) {
-    const crm = ensureLeadCrm(leadId, findLeadEverywhere(leadId) || {});
+    const crm = ensureLeadCrm(leadId, findLeadEverywhere(leadId) || getSupabaseWhatsappLeadByIdV428(leadId) || {});
     const local = (crm.messages || []).find(item => item.id === id);
     if (local) Object.assign(local, patch, { status });
     saveLeadCrm(leadId, crm);
@@ -184,7 +274,7 @@ function updateLocalOutgoingWhatsappMessageStatusV426(id = '', status = '', patc
 function removeLocalOutgoingWhatsappMessageV426(id = '', leadId = '') {
   saveSupabaseWhatsappMessagesCacheV412(getSupabaseWhatsappMessagesV412().filter(item => item.id !== id));
   if (leadId) {
-    const crm = ensureLeadCrm(leadId, findLeadEverywhere(leadId) || {});
+    const crm = ensureLeadCrm(leadId, findLeadEverywhere(leadId) || getSupabaseWhatsappLeadByIdV428(leadId) || {});
     crm.messages = (crm.messages || []).filter(item => item.id !== id);
     saveLeadCrm(leadId, crm);
   }
@@ -246,7 +336,8 @@ function getAllKnownLeadsForWhatsappMapV417() {
   try { (typeof getInstaFila === 'function' ? getInstaFila() : []).forEach(add); } catch(e) {}
   try { Object.values(typeof getWeekData === 'function' ? (getWeekData()?.days || {}) : {}).flat().forEach(add); } catch(e) {}
   try { Object.values(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}).flat().forEach(add); } catch(e) {}
-  try { (typeof getWhatsappQueueV27 === 'function' ? getWhatsappQueueV27() : []).forEach(item => { add(item); if (item.leadId) add(findLeadEverywhere(item.leadId)); }); } catch(e) {}
+  try { (typeof getWhatsappQueueV27 === 'function' ? getWhatsappQueueV27() : []).forEach(item => { add(item); if (item.leadId) add(findLeadEverywhere(item.leadId) || getSupabaseWhatsappLeadByIdV428(item.leadId)); }); } catch(e) {}
+  try { Array.from(new Set(supabaseWhatsappLeadCacheV428.values())).forEach(add); } catch(e) {}
   return Array.from(map.values());
 }
 
@@ -407,7 +498,7 @@ function getRecentLeadSuggestionsForContactMapV418() {
     getSupabaseWhatsappMessagesV412()
       .filter(msg => msg.direction === 'out' && msg.leadId)
       .sort((a,b) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
-      .forEach(msg => addLead(findLeadEverywhere(msg.leadId), 'Enviado recentemente'));
+      .forEach(msg => addLead(findLeadEverywhere(msg.leadId) || getSupabaseWhatsappLeadByIdV428(msg.leadId), 'Enviado recentemente'));
   } catch(e) {}
 
   try {
@@ -415,7 +506,7 @@ function getRecentLeadSuggestionsForContactMapV418() {
       .filter(item => item.status === 'Enviado' || item.status === 'Pendente' || item.status === 'Na fila')
       .slice(-60)
       .reverse()
-      .forEach(item => addLead(item.leadId ? (findLeadEverywhere(item.leadId) || item) : item, 'Fila WhatsApp'));
+      .forEach(item => addLead(item.leadId ? (findLeadEverywhere(item.leadId) || getSupabaseWhatsappLeadByIdV428(item.leadId) || item) : item, 'Fila WhatsApp'));
   } catch(e) {}
 
   try {
@@ -582,7 +673,7 @@ function handleContactMapSearchInputV418(value = '') {
 
 async function associateContactMapLeadV418(leadId = '') {
   const state = contactMapDrawerStateV418;
-  const lead = (state.results || []).find(item => String(item.id) === String(leadId)) || normalizeLeadForContactMapV418(findLeadEverywhere(leadId));
+  const lead = (state.results || []).find(item => String(item.id) === String(leadId)) || normalizeLeadForContactMapV418(findLeadEverywhere(leadId) || getSupabaseWhatsappLeadByIdV428(leadId));
   if (!lead) { notify('Lead não encontrado.', 'warn'); return; }
   const phoneReal = normalizeWhatsappDigitsV412(lead.whatsapp || lead.phone || lead.telefone || '');
   if (!phoneReal) { notify('Lead selecionado está sem telefone.', 'warn'); return; }
@@ -703,7 +794,7 @@ function buildOutgoingWhatsappExternalIdV412(prefix = 'out', response = {}) {
 }
 
 function getWhatsappRawPayloadV416(rowOrMessage = {}) {
-  const raw = rowOrMessage.raw_payload || rowOrMessage.rawPayload || null;
+  const raw = rowOrMessage.payload_original || rowOrMessage.raw_payload || rowOrMessage.rawPayload || null;
   if (!raw) return null;
   if (typeof raw === 'object') return raw;
   try { return JSON.parse(raw); } catch(e) { return null; }
@@ -742,19 +833,31 @@ function isWhatsappLidMessageV416(rowOrMessage = {}) {
 
 function normalizeSupabaseWhatsappMessageV412(row = {}) {
   const rawPayload = getWhatsappRawPayloadV416(row);
+  const externalId = row.external_message_id || row.external_id || row.id || '';
+  const phone = normalizeWhatsappDigitsV412(
+    row.phone_normalized ||
+    row.phone ||
+    row.remote_jid ||
+    row.sender_jid ||
+    rawPayload?.phone ||
+    rawPayload?.phone_normalized ||
+    ''
+  );
+  const text = row.body || rawPayload?.body || rawPayload?.text || rawPayload?.message || '';
+  const occurredAt = row.occurred_at || row.created_at || row.updated_at || '';
   return {
-    id: row.external_id || row.id,
+    id: externalId,
     dbId: row.id || '',
     leadId: row.lead_id || '',
-    instance: String(row.instance || '').trim(),
-    phone: row.phone_normalized || row.phone || '',
+    instance: String(row.instance || row.whatsapp_instance_id || rawPayload?.instance || '').trim(),
+    phone,
     direction: row.direction === 'out' ? 'out' : 'in',
-    text: row.body || '',
+    text,
     messageType: row.message_type || 'text',
     status: row.status || '',
-    receivedAt: row.occurred_at || row.created_at || '',
+    receivedAt: occurredAt,
     readAt: row.read_at || '',
-    read: !!row.read_at,
+    read: row.direction === 'out' ? true : !!row.read_at,
     rawPayload,
     pushName: getWhatsappPushNameV416(row),
     remoteJid: getWhatsappRemoteJidV416(row),
@@ -775,6 +878,9 @@ function findLeadByPhoneV412(phone) {
     if (foundByPhone) return foundByPhone;
   } catch(e) {}
 
+  const cachedLead = findSupabaseWhatsappLeadByPhoneV428(phone);
+  if (cachedLead) return cachedLead;
+
   const candidates = [];
   try { candidates.push(...(typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : [])); } catch(e) {}
   try { candidates.push(...(typeof getValData === 'function' ? getValData() : [])); } catch(e) {}
@@ -784,13 +890,13 @@ function findLeadByPhoneV412(phone) {
     (typeof getWhatsappQueueV27 === 'function' ? getWhatsappQueueV27() : []).forEach(item => {
       candidates.push(item);
       if (item.leadId) {
-        const lead = findLeadEverywhere(item.leadId);
+        const lead = findLeadEverywhere(item.leadId) || getSupabaseWhatsappLeadByIdV428(item.leadId);
         if (lead) candidates.push(lead);
       }
     });
   } catch(e) {}
 
-  return candidates.find(lead => phonesMatchV412(phone, lead.whatsapp || lead.phone || lead.telefone || '')) || null;
+  return candidates.find(lead => phonesMatchV412(phone, lead.whatsapp || lead.phone || lead.telefone || lead.normalized_phone || '')) || null;
 }
 
 async function linkSupabaseWhatsappMessageV412(dbId, leadId) {
@@ -805,7 +911,7 @@ async function linkSupabaseWhatsappMessageV412(dbId, leadId) {
 
 function mergeSupabaseWhatsappMessageV412(message) {
   const lead = message.leadId
-    ? findLeadEverywhere(message.leadId)
+    ? (findLeadEverywhere(message.leadId) || getSupabaseWhatsappLeadByIdV428(message.leadId))
     : findLeadByPhoneV412(message.phone);
   const leadId = message.leadId || lead?.id || '';
 
@@ -853,18 +959,20 @@ async function fetchEvolutionResponsesV34(options = {}) {
     await fetchContactMapsV418();
     const { data, error } = await sbClient
       .from('whatsapp_messages')
-      .select('id,external_id,lead_id,instance,phone,phone_normalized,direction,message_type,body,status,occurred_at,read_at,created_at,raw_payload')
+      .select('*')
       .eq('user_id', currentUser.id)
       .order('occurred_at', { ascending: false })
       .limit(500);
 
     if (error) throw error;
+    await hydrateWhatsappConversationLeadCacheV428(data || []);
 
     const localMap = new Map(getLocalResponsesV34().map(item => [item.id, item]));
-    const allMessages = [];
+    const allMessages = new Map();
     (data || []).forEach(row => {
       const message = mergeSupabaseWhatsappMessageV412(applyContactMapToMessageV418(normalizeSupabaseWhatsappMessageV412(row)));
-      allMessages.push(message);
+      const messageKey = message.dbId || `${message.instance || 'prospecto'}:${message.id}` || `${message.direction}:${message.receivedAt}:${message.text}`;
+      allMessages.set(messageKey, message);
       if (message.direction !== 'in') return;
       localMap.set(message.id, {
         ...(localMap.get(message.id) || {}),
@@ -872,8 +980,9 @@ async function fetchEvolutionResponsesV34(options = {}) {
         applied: !!message.leadId
       });
     });
+    const uniqueMessages = Array.from(allMessages.values());
     saveSupabaseWhatsappMessagesCacheV412(
-      mergeUnsavedOutgoingWhatsappMessagesV426(allMessages)
+      mergeUnsavedOutgoingWhatsappMessagesV426(uniqueMessages)
         .sort((a,b) => String(b.receivedAt || '').localeCompare(String(a.receivedAt || '')))
     );
 
@@ -905,7 +1014,7 @@ async function markConversationReadV412(conversationKey) {
   const phone = resolved.phone;
 
   if (leadId) {
-    const crm = ensureLeadCrm(leadId, findLeadEverywhere(leadId) || {});
+    const crm = ensureLeadCrm(leadId, findLeadEverywhere(leadId) || getSupabaseWhatsappLeadByIdV428(leadId) || {});
     (crm.messages || []).forEach(item => { if (item.direction === 'in') item.read = true; });
     saveLeadCrm(leadId, crm);
   }
@@ -1001,7 +1110,7 @@ function getConversationLeadFromKeyV412(key = '') {
     const fallbackIdentity = getFallbackContactIdentityByPhoneV416(phone);
     const contactMap = getContactMapByLidV418(phone, 'prospecto') || getContactMapByLidV418(phone, '');
     if (contactMap?.lead_id) {
-      const mappedLead = findLeadEverywhere(contactMap.lead_id) || { id:contactMap.lead_id, nome:contactMap.push_name || fallbackIdentity.name || 'Lead associado' };
+      const mappedLead = findLeadEverywhere(contactMap.lead_id) || getSupabaseWhatsappLeadByIdV428(contactMap.lead_id) || { id:contactMap.lead_id, nome:contactMap.push_name || fallbackIdentity.name || 'Lead associado' };
       const phoneReal = normalizeWhatsappDigitsV412(contactMap.phone_real || mappedLead.whatsapp || mappedLead.phone || mappedLead.telefone || '');
       return {
         leadId: contactMap.lead_id,
@@ -1029,7 +1138,7 @@ function getConversationLeadFromKeyV412(key = '') {
       subtitle: fallbackIdentity.subtitle || phone
     };
   }
-  const lead = findLeadEverywhere(key) || { id:key, nome:'Lead' };
+  const lead = findLeadEverywhere(key) || getSupabaseWhatsappLeadByIdV428(key) || { id:key, nome:'Lead' };
   const phone = normalizeWhatsappDigitsV412(lead.whatsapp || lead.phone || lead.telefone || '');
   return { leadId:key, lead, phone };
 }
@@ -1057,7 +1166,7 @@ function getAllConversationLeads() {
     const hasMessages = Array.isArray(data.messages) && data.messages.length;
     const hasResponse = !!data.lastResponseAt || data.pipelineStatus === 'respondeu';
     if (!hasMessages && !hasResponse) return;
-    const lead = findLeadEverywhere(leadId) || { id: leadId, nome: data.nome || 'Lead' };
+    const lead = findLeadEverywhere(leadId) || getSupabaseWhatsappLeadByIdV428(leadId) || { id: leadId, nome: data.nome || 'Lead' };
     const lastAt = data.lastResponseAt || data.lastWhatsappMessage?.sentAt || '';
     const current = map.get(leadId) || { leadId, lead, crm:data, lastAt:'' };
     current.lead = lead;
@@ -1069,7 +1178,7 @@ function getAllConversationLeads() {
   try {
     (typeof getWhatsappQueueV27 === 'function' ? getWhatsappQueueV27() : []).forEach(item => {
       if (!item.leadId || item.status !== 'Enviado') return;
-      const lead = findLeadEverywhere(item.leadId) || { id:item.leadId, nome:item.nome || 'Lead' };
+      const lead = findLeadEverywhere(item.leadId) || getSupabaseWhatsappLeadByIdV428(item.leadId) || { id:item.leadId, nome:item.nome || 'Lead' };
       const crmData = crm[item.leadId] || {};
       const lastAt = item.sentAt || item.updatedAt || item.createdAt || '';
       const current = map.get(item.leadId) || { leadId:item.leadId, lead, crm:crmData, lastAt:'' };
@@ -1112,7 +1221,7 @@ function getConversationMessages(conversationKey) {
 
   if (realLeadId) {
     try {
-      const crm = ensureLeadCrm(realLeadId, findLeadEverywhere(realLeadId) || {});
+      const crm = ensureLeadCrm(realLeadId, findLeadEverywhere(realLeadId) || getSupabaseWhatsappLeadByIdV428(realLeadId) || {});
       (crm.messages || []).forEach(msg => messages.push(msg));
       if (crm.lastWhatsappMessage) {
         messages.push({
@@ -1280,11 +1389,13 @@ async function persistOutgoingWhatsappMessageViaApiV412(payload = {}) {
       headers: await getSupabaseAuthHeadersV423({ 'Content-Type':'application/json' }),
       body: JSON.stringify({
         id: payload.id,
+        external_message_id: payload.id,
         external_id: payload.id,
         user_id: payload.userId,
         lead_id: payload.leadId || null,
         instance: payload.instance,
         phone: payload.phone,
+        phone_normalized: normalizeWhatsappDigitsV412(payload.phone),
         body: payload.text,
         text: payload.text,
         status: 'sent',
@@ -1337,26 +1448,30 @@ async function persistOutgoingWhatsappMessageV412(message = {}, options = {}) {
   }
 
   if (sbClient && currentUser?.id === payload.userId) {
-    debugWhatsappPersistV413('client:insert:start', { external_id: payload.id, user_id: payload.userId, lead_id: payload.leadId || null, instance: payload.instance, phone: payload.phone, body: payload.text, occurred_at: payload.occurredAt });
+    debugWhatsappPersistV413('client:insert:start', { external_message_id: payload.id, user_id: payload.userId, lead_id: payload.leadId || null, instance: payload.instance, phone: payload.phone, body: payload.text, occurred_at: payload.occurredAt });
     const { error } = await sbClient
       .from('whatsapp_messages')
       .upsert({
+        external_message_id: payload.id,
         external_id: payload.id,
         user_id: payload.userId,
         lead_id: payload.leadId || null,
         instance: payload.instance,
         phone: payload.phone,
+        phone_normalized: normalizeWhatsappDigitsV412(payload.phone),
+        remote_jid: payload.phone ? `${normalizeWhatsappDigitsV412(payload.phone)}@s.whatsapp.net` : null,
         direction: 'out',
         message_type: 'text',
         body: payload.text,
         status: 'sent',
         occurred_at: payload.occurredAt,
         updated_at: new Date().toISOString(),
-        raw_payload: payload.response || null
-      }, { onConflict:'instance,external_id' });
+        raw_payload: payload.response || null,
+        payload_original: payload.response || null
+      }, { onConflict:'user_id,external_message_id' });
 
     if (!error) {
-      debugWhatsappPersistV413('client:insert:success', { external_id: payload.id });
+      debugWhatsappPersistV413('client:insert:success', { external_message_id: payload.id });
       uiSyncLog('supabase-save-success', { entity:'message', id:payload.id, via:'supabase' });
       return { ok:true, pending:false, via:'supabase' };
     }

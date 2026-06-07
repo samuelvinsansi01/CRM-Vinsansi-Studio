@@ -311,7 +311,28 @@
 
   async function importarLeadsPersistente() {
     const { user } = await getAuthContext();
-    const rows = getImportJson().map(normalizeLeadPayload);
+    const rawRows = getImportJson();
+    const analyses = typeof analyzeApifyRowsV430 === 'function'
+      ? analyzeApifyRowsV430(rawRows, 'import')
+      : rawRows.map((item) => ({ item, route: '', reason: '', qualification: {}, website: {}, ramoMatch: true }));
+    const rows = rawRows.map((item, index) => {
+      const analysis = analyses[index] || {};
+      return {
+        ...normalizeLeadPayload(item),
+        route: analysis.route || '',
+        reason: analysis.reason || '',
+        analysis: {
+          route: analysis.route || '',
+          reason: analysis.reason || '',
+          ramoMatch: analysis.ramoMatch !== false,
+          hasPhone: !!analysis.hasPhone,
+          qualification: analysis.qualification || {},
+          website: analysis.website || {},
+          duplicate: analysis.duplicate || null
+        }
+      };
+    });
+    lastPreviewStats = getSeparatedPreviewStats(analyses);
 
     const result = await rpcImport({
       p_user_id: user.id,
