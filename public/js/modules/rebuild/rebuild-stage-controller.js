@@ -615,19 +615,55 @@
     const userId = await getCurrentUserId();
     if (!userId) return [];
 
+    const today = new Date();
+    const localDate = new Date(today.getTime() - (today.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
     const params = new URLSearchParams({
-      select: 'id,lead_id,position,data,updated_at',
+      select: 'id,lead_id,position,status,chip_id,chip_name,batch_id,batch_index,batch_position,template_type,updated_at',
       user_id: `eq.${userId}`,
-      queue_type: 'eq.whatsapp_batch',
-      order: 'position.asc'
+      channel: 'eq.whatsapp',
+      scheduled_for: `eq.${localDate}`,
+      batch_id: 'not.is.null',
+      order: 'batch_id.asc,batch_position.asc,position.asc'
     });
 
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/crm_queue_items?${params.toString()}`, {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/queue_items?${params.toString()}`, {
       headers: await getHeaders()
     });
     const data = await readJson(response);
     if (!response.ok) throw data || new Error(`Falha ao carregar lotes (${response.status}).`);
-    return Array.isArray(data) ? data : [];
+    const groups = new Map();
+    (Array.isArray(data) ? data : []).forEach((row) => {
+      const batchId = row.batch_id || '';
+      if (!batchId) return;
+      if (!groups.has(batchId)) {
+        groups.set(batchId, {
+          id: row.id,
+          lead_id: batchId,
+          position: row.batch_index || row.position || 0,
+          updated_at: row.updated_at,
+          data: {
+            batch_id: batchId,
+            batch_index: row.batch_index || 1,
+            chip_id: row.chip_id || '',
+            chip_name: row.chip_name || row.chip_id || 'Chip',
+            status: 'ready',
+            items: []
+          }
+        });
+      }
+      const group = groups.get(batchId);
+      group.updated_at = row.updated_at || group.updated_at;
+      if (row.status === 'batch_sending') group.data.status = 'sending';
+      if (row.status === 'sent' && group.data.status !== 'sending') group.data.status = 'completed';
+      group.data.items.push({
+        queue_item_id: row.id,
+        lead_id: row.lead_id,
+        queue_position: row.position,
+        template_type: row.template_type || ''
+      });
+      group.data.item_count = group.data.items.length;
+    });
+    return [...groups.values()].sort((a, b) => (a.position || 0) - (b.position || 0));
   }
 
   async function rpcBatchAction(action, batchId = null) {
@@ -641,7 +677,7 @@
         p_user_id: userId,
         p_action: action,
         p_batch_id: batchId,
-        p_payload: { source: 'fase-6.22' }
+        p_payload: { source: 'fase-6.27' }
       })
     });
     const data = await readJson(response);
@@ -780,7 +816,7 @@
       await refreshBatches();
     } catch (error) {
       console.error('[rebuild622] erro ao gerar lotes:', error);
-      if (typeof notify === 'function') notify(error?.message || 'Falha ao gerar lotes. Verifique o SQL 6.22.', 'err');
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao gerar lotes. Verifique o SQL 6.27.', 'err');
     }
   }
 
@@ -1601,13 +1637,11 @@
 (function () {
   const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
-  const QUEUE_TYPES = {
-    backlog: 'chip_assignment',
-    today: 'whatsapp_today'
-  };
+  const QUEUE_CHANNEL = 'whatsapp';
 
   const state = {
     activeTab: 'backlog',
+    openChipKeys: new Set(),
     chips: [],
     rows: [],
     loading: false
@@ -1725,73 +1759,212 @@
     }
   }
 
-  async function fetchQueueItems() {
-    const userId = await getCurrentUserId();
-    if (!userId) return [];
+  function localDateISO(date = new Date()) {
+    return new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+  }
 
+  function chunks(list, size = 120) {
+    const output = [];
+    for (let index = 0; index < list.length; index += size) output.push(list.slice(index, index + size));
+    return output;
+  }
+
+  async function runQueueRollover() {
+    const userId = await getCurrentUserId();
+    if (!userId) return null;
+
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_queue_day_rollover`, {
+        method: 'POST',
+        headers: await getHeaders(true),
+        body: JSON.stringify({ p_user_id: userId })
+      });
+      const data = await readJson(response);
+      if (!response.ok) throw data || new Error(`Falha no rollover da fila (${response.status}).`);
+      return data;
+    } catch (error) {
+      console.warn('[rebuild621] rollover indisponivel:', error);
+      return null;
+    }
+  }
+
+  async function fetchBacklogItems(userId) {
     const params = new URLSearchParams({
-      select: 'id,queue_type,bucket,lead_id,position,data,updated_at',
+      select: 'id,lead_id,channel,bucket,status,position,moved_to_queue_item_id,created_at,updated_at',
       user_id: `eq.${userId}`,
-      queue_type: 'in.(chip_assignment,whatsapp_today)',
+      channel: `eq.${QUEUE_CHANNEL}`,
+      status: 'not.in.(removed,sent,completed)',
       order: 'position.asc'
     });
 
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/crm_queue_items?${params.toString()}`, {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/backlog_items?${params.toString()}`, {
       headers: await getHeaders()
     });
     const data = await readJson(response);
 
-    if (!response.ok) throw data || new Error(`Falha ao carregar backlog/fila (${response.status}).`);
+    if (!response.ok) throw data || new Error(`Falha ao carregar backlog (${response.status}).`);
     return Array.isArray(data) ? data : [];
   }
 
-  function rowLead(row = {}) {
-    const data = row.data || {};
-    const lead = data.lead || data;
-    const chip = data.chip || {};
+  async function fetchTodayQueueItems(userId) {
+    const params = new URLSearchParams({
+      select: 'id,lead_id,source_backlog_item_id,channel,bucket,status,position,chip_id,chip_name,chip_instance,scheduled_for,batch_id,batch_index,batch_position,template_type,template_index,template_part1,template_part2,created_at,updated_at',
+      user_id: `eq.${userId}`,
+      channel: `eq.${QUEUE_CHANNEL}`,
+      scheduled_for: `eq.${localDateISO()}`,
+      status: 'not.in.(removed)',
+      order: 'position.asc'
+    });
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/queue_items?${params.toString()}`, {
+      headers: await getHeaders()
+    });
+    const data = await readJson(response);
+
+    if (!response.ok) throw data || new Error(`Falha ao carregar fila de hoje (${response.status}).`);
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function fetchLeadsByIds(ids = []) {
+    const userId = await getCurrentUserId();
+    const uniqueIds = [...new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))];
+    const leads = new Map();
+    if (!uniqueIds.length) return leads;
+
+    async function fetchFrom(table, idChunk) {
+      const params = new URLSearchParams({
+        select: '*',
+        id: `in.(${idChunk.join(',')})`
+      });
+      if (userId) params.set('user_id', `eq.${userId}`);
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params.toString()}`, {
+        headers: await getHeaders()
+      });
+      const data = await readJson(response);
+      if (!response.ok) throw data || new Error(`Falha ao carregar leads (${response.status}).`);
+      return Array.isArray(data) ? data : [];
+    }
+
+    for (const idChunk of chunks(uniqueIds)) {
+      let rows = [];
+      try {
+        rows = await fetchFrom('v_lead_ficha_rebuild', idChunk);
+      } catch (error) {
+        console.warn('[rebuild621] view da ficha indisponivel, usando leads:', error);
+        rows = await fetchFrom('leads', idChunk);
+      }
+      rows.forEach((lead) => {
+        if (lead?.id) leads.set(String(lead.id), lead);
+      });
+    }
+
+    return leads;
+  }
+
+  function normalizeForMatch(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  function inferRamoId(lead = {}) {
+    const explicit = lead.ramoId || lead.ramo_id || lead.segment_id || '';
+    if (explicit) return explicit;
+    const haystack = normalizeForMatch([
+      lead.company_name,
+      lead.nome,
+      lead.category,
+      lead.description
+    ].filter(Boolean).join(' '));
+
+    try {
+      const ramos = typeof RAMOS_DEFAULT !== 'undefined' && Array.isArray(RAMOS_DEFAULT) ? RAMOS_DEFAULT : [];
+      const found = ramos.find((ramo) => (ramo.keywords || []).some((keyword) => haystack.includes(normalizeForMatch(keyword))));
+      return found?.id || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function rowLead(row = {}, lead = {}, source = 'backlog') {
+    const companyName = lead.company_name || lead.nome || lead.name || 'Empresa sem nome';
+    const phone = lead.phone || lead.whatsapp || lead.telefone || lead.normalized_phone || '';
+    const site = lead.website || lead.site || '';
+    const hasSite = !!(lead.has_own_site || lead.hasOwnSite || site);
+    const bucket = row.bucket || (hasSite ? 'com-site' : 'zap');
+    const templateType = row.template_type || (bucket === 'com-site' || hasSite ? 'com-site' : 'sem-site');
+    const status = row.status || (source === 'today' ? 'queued_dispatch' : 'backlog');
+    const inToday = source === 'today';
+
     return {
+      ...lead,
       id: String(row.lead_id || lead.id || ''),
-      nome: lead.nome || lead.name || lead.company_name || 'Empresa sem nome',
-      empresa: lead.nome || lead.name || lead.company_name || 'Empresa sem nome',
-      company_name: lead.nome || lead.name || lead.company_name || 'Empresa sem nome',
-      whatsapp: lead.whatsapp || lead.phone || lead.telefone || '',
-      phone: lead.whatsapp || lead.phone || lead.telefone || '',
-      telefone: lead.whatsapp || lead.phone || lead.telefone || '',
-      site: lead.site || lead.website || '',
-      website: lead.site || lead.website || '',
-      instagram: lead.instagram || lead.instagram_url || '',
-      instagram_url: lead.instagram || lead.instagram_url || '',
-      chipId: data.chip_id || data.chipId || chip.id || '',
-      assignedChipId: data.chip_id || data.chipId || chip.id || '',
-      chipName: data.chip_name || data.chipName || chip.name || '',
-      chipInstance: data.chip_instance || chip.instance || '',
-      current_stage: row.queue_type === QUEUE_TYPES.today ? 'dispatch' : 'assignment',
-      current_status: row.queue_type === QUEUE_TYPES.today ? 'queued_dispatch' : 'backlog_whatsapp',
-      status: row.queue_type === QUEUE_TYPES.today ? 'queued_dispatch' : 'backlog_whatsapp',
-      bucket: row.bucket || data.bucket || '',
-      queueType: row.queue_type,
+      nome: companyName,
+      empresa: companyName,
+      company_name: companyName,
+      categoria: lead.category || '',
+      category: lead.category || '',
+      whatsapp: phone,
+      phone,
+      telefone: phone,
+      normalized_phone: lead.normalized_phone || digits(phone),
+      site,
+      website: site,
+      hasOwnSite: hasSite,
+      has_own_site: hasSite,
+      instagram: lead.instagram_url || lead.instagram || '',
+      instagram_url: lead.instagram_url || lead.instagram || '',
+      chipId: row.chip_id || '',
+      assignedChipId: row.chip_id || '',
+      chipName: row.chip_name || '',
+      chipInstance: row.chip_instance || '',
+      current_stage: inToday ? 'dispatch' : 'assignment',
+      current_status: inToday ? status : 'backlog_whatsapp',
+      status,
+      statusRaw: status,
+      bucket,
+      templateType,
+      siteSegment: templateType,
+      templateIdx: Number.isFinite(Number(row.template_index)) ? Number(row.template_index) : null,
+      mensagem: row.template_part1 || '',
+      mensagem2: row.template_part2 || '',
+      ramoId: inferRamoId(lead),
+      queueType: inToday ? 'queue_items' : 'backlog_items',
       queueItemId: row.id,
       queuePosition: row.position || 0,
+      scheduledFor: row.scheduled_for || '',
+      batchId: row.batch_id || '',
+      batchIndex: row.batch_index || null,
+      batchPosition: row.batch_position || null,
       updated_at: row.updated_at,
-      baseSource: 'Supabase fila 6.21'
+      baseSource: 'Supabase fila 6.27'
     };
   }
 
-  function mergeQueueRows(items = []) {
+  function mergeQueueRows(backlogItems = [], queueItems = [], leadsById = new Map()) {
     const byLead = new Map();
 
-    items.forEach((row) => {
-      const leadId = String(row.lead_id || row.data?.lead?.id || '');
-      if (!leadId) return;
+    backlogItems.forEach((row) => {
+      const leadId = String(row.lead_id || '');
+      if (!leadId || !leadsById.has(leadId)) return;
       const current = byLead.get(leadId) || {};
-      if (row.queue_type === QUEUE_TYPES.backlog) current.backlog = row;
-      if (row.queue_type === QUEUE_TYPES.today) current.today = row;
+      current.backlog = row;
+      byLead.set(leadId, current);
+    });
+
+    queueItems.forEach((row) => {
+      const leadId = String(row.lead_id || '');
+      if (!leadId || !leadsById.has(leadId)) return;
+      const current = byLead.get(leadId) || {};
+      current.today = row;
       byLead.set(leadId, current);
     });
 
     return [...byLead.entries()].map(([leadId, group]) => {
+      if (!group.today && group.backlog?.status === 'moved_to_queue') return null;
       const source = group.today || group.backlog;
-      const lead = rowLead(source);
+      const lead = rowLead(source, leadsById.get(leadId), group.today ? 'today' : 'backlog');
       lead.id = leadId;
       lead.inTodayQueue = !!group.today;
       lead.backlogRowId = group.backlog?.id || '';
@@ -1799,7 +1972,7 @@
       lead.backlogPosition = group.backlog?.position ?? 0;
       lead.todayPosition = group.today?.position ?? 0;
       return lead;
-    }).sort((a, b) => {
+    }).filter(Boolean).sort((a, b) => {
       const pa = state.activeTab === 'today' ? a.todayPosition : a.backlogPosition;
       const pb = state.activeTab === 'today' ? b.todayPosition : b.backlogPosition;
       return pa - pb;
@@ -1826,12 +1999,28 @@
   async function fetchQueueState() {
     state.loading = true;
     try {
-      const [chips, items] = await Promise.all([
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        state.chips = localChipsFallback();
+        state.rows = [];
+        publishQueueLeads(state.rows);
+        return state.rows;
+      }
+
+      await runQueueRollover();
+
+      const [chips, backlogItems, queueItems] = await Promise.all([
         fetchWhatsappChips(),
-        fetchQueueItems()
+        fetchBacklogItems(userId),
+        fetchTodayQueueItems(userId)
       ]);
+      const leadIds = [
+        ...backlogItems.map((row) => row.lead_id),
+        ...queueItems.map((row) => row.lead_id)
+      ];
+      const leadsById = await fetchLeadsByIds(leadIds);
       state.chips = chips;
-      state.rows = mergeQueueRows(items);
+      state.rows = mergeQueueRows(backlogItems, queueItems, leadsById);
       publishQueueLeads(state.rows);
       return state.rows;
     } finally {
@@ -1843,7 +2032,6 @@
     const userId = await getCurrentUserId();
     if (!userId) throw new Error('Usuario autenticado nao encontrado.');
 
-    const lead = state.rows.find((item) => String(item.id) === String(leadId));
     const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_backlog_queue_action`, {
       method: 'POST',
       headers: await getHeaders(true),
@@ -1852,17 +2040,9 @@
         p_lead_id: leadId,
         p_action: action,
         p_payload: {
-          source: 'fase-6.21',
+          source: 'fase-6.27',
           queued_from: 'crm_rebuild',
-          ...extraPayload,
-          lead: lead ? {
-            id: lead.id,
-            nome: lead.nome,
-            whatsapp: lead.whatsapp,
-            site: lead.site,
-            chip_id: extraPayload.chip_id || lead.chipId,
-            chip_name: extraPayload.chip_name || lead.chipName
-          } : null
+          ...extraPayload
         }
       })
     });
@@ -1880,12 +2060,95 @@
     if (element) element.textContent = String(value);
   }
 
+  function statusLabelForRow(row = {}) {
+    if (!row.inTodayQueue) return 'Nao enviado';
+    if (row.statusRaw === 'batch_sending') return 'Em disparo';
+    if (row.statusRaw === 'batch_ready' || row.statusRaw === 'queued_dispatch') return 'Em fila';
+    if (row.statusRaw === 'sent' || row.statusRaw === 'completed' || row.statusRaw === 'batch_completed') return 'Enviado';
+    if (row.statusRaw === 'error') return 'Erro';
+    return row.inTodayQueue ? 'Em fila' : 'Nao enviado';
+  }
+
+  function statusClassForRow(row = {}) {
+    if (row.statusRaw === 'sent' || row.statusRaw === 'completed' || row.statusRaw === 'batch_completed') return 'ok';
+    if (row.statusRaw === 'batch_sending') return 'info';
+    if (row.statusRaw === 'error') return 'err';
+    return row.inTodayQueue ? 'ok' : 'warn';
+  }
+
+  function templateTypeLabel(row = {}) {
+    return row.templateType === 'com-site' ? 'Com site' : 'Sem site';
+  }
+
+  function pickTemplatePayload(row = {}) {
+    const templateType = row.templateType || row.siteSegment || (row.site ? 'com-site' : 'sem-site');
+    let picked = { text: '', text2: '', idx: null };
+    try {
+      if (typeof pickTemplate === 'function') picked = pickTemplate(row.nome || row.company_name || 'Lead', row.ramoId || null, templateType);
+    } catch (error) {
+      console.warn('[rebuild621] falha ao sortear template:', error);
+    }
+    return {
+      template_type: templateType,
+      template_index: Number.isFinite(Number(picked.idx)) ? Number(picked.idx) : null,
+      template_part1: picked.text || '',
+      template_part2: picked.text2 || ''
+    };
+  }
+
+  function chipMatchesRow(chip, row = {}) {
+    return String(row.chipId || '') === String(chip.id || '')
+      || String(row.chipId || '') === String(chip.dbId || '')
+      || (!!row.chipName && row.chipName === chip.name);
+  }
+
+  function buildChipUsage(activeChips = []) {
+    const usage = new Map(activeChips.map((chip) => [String(chip.id), 0]));
+    state.rows.filter((row) => row.inTodayQueue).forEach((row) => {
+      const chip = activeChips.find((item) => chipMatchesRow(item, row));
+      if (!chip) return;
+      usage.set(String(chip.id), (usage.get(String(chip.id)) || 0) + 1);
+    });
+    return usage;
+  }
+
+  function chooseNextAvailableChip(activeChips = [], usage = null, startIndex = 0) {
+    const currentUsage = usage || buildChipUsage(activeChips);
+    const limits = new Map(activeChips.map((chip) => [String(chip.id), Number(chip.dailyLimit || 120)]));
+    for (let attempt = 0; attempt < activeChips.length; attempt++) {
+      const chip = activeChips[(startIndex + attempt) % activeChips.length];
+      const key = String(chip.id);
+      if ((currentUsage.get(key) || 0) < (limits.get(key) || 120)) {
+        currentUsage.set(key, (currentUsage.get(key) || 0) + 1);
+        return { chip, nextIndex: (startIndex + attempt + 1) % activeChips.length };
+      }
+    }
+    return { chip: null, nextIndex: startIndex };
+  }
+
+  function queuePayloadFor(row, chip, reason = 'manual') {
+    return {
+      source: 'fase-6.27',
+      queued_from: reason,
+      chip_id: chip.id,
+      chip_name: chip.name,
+      chip_instance: chip.instance,
+      filled_day_at: new Date().toISOString(),
+      ...pickTemplatePayload(row)
+    };
+  }
+
   function renderTabs() {
     const dayTabs = document.getElementById('disparoDayTabs');
     const statusTabs = document.getElementById('disparoStatusTabs');
     const stats = document.getElementById('disparoStats');
     const backlogCount = state.rows.filter((row) => !row.inTodayQueue).length;
     const todayCount = state.rows.filter((row) => row.inTodayQueue).length;
+    const notSent = state.rows.filter((row) => !row.inTodayQueue).length;
+    const queued = state.rows.filter((row) => row.inTodayQueue && ['queued_dispatch', 'batch_ready'].includes(row.statusRaw)).length;
+    const sending = state.rows.filter((row) => row.statusRaw === 'batch_sending').length;
+    const sent = state.rows.filter((row) => row.inTodayQueue && ['sent', 'completed', 'batch_completed'].includes(row.statusRaw)).length;
+    const errors = state.rows.filter((row) => row.statusRaw === 'error').length;
 
     setBadge('badge-fila-zap', todayCount || backlogCount);
 
@@ -1902,6 +2165,11 @@
 
     if (statusTabs) {
       statusTabs.innerHTML = `
+        <span class="q-badge warn">${notSent} nao enviados</span>
+        <span class="q-badge ok">${queued} em fila</span>
+        <span class="q-badge info">${sending} em disparo</span>
+        <span class="q-badge ok">${sent} enviados</span>
+        ${errors ? `<span class="q-badge err">${errors} erro(s)</span>` : ''}
         <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
         <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="queueAllBacklogRebuild621()">Preencher o dia</button>
       `;
@@ -1920,8 +2188,11 @@
   function actionButtons(row) {
     const whats = digits(row.whatsapp);
     const wa = whats ? linkButton(`https://wa.me/${whats}`, 'Abrir ZAP') : '';
+    const locked = ['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw);
     const queueButton = row.inTodayQueue
-      ? `<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`
+      ? locked
+        ? `<span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>`
+        : `<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`
       : `<button class="add-btn added" type="button" data-queue621-lead="${esc(row.id)}" onclick="queueLeadTodayRebuild621('${esc(row.id)}')">Entrar na fila</button>`;
 
     return `
@@ -1934,8 +2205,11 @@
   function rowCard(row) {
     const phone = row.whatsapp || 'Sem WhatsApp';
     const chip = row.chipName || row.chipId || 'Chip nao definido';
-    const status = row.inTodayQueue ? 'Fila de hoje' : 'Backlog';
-    const statusClass = row.inTodayQueue ? 'ok' : 'warn';
+    const status = statusLabelForRow(row);
+    const statusClass = statusClassForRow(row);
+    const messageBadge = row.inTodayQueue
+      ? (row.mensagem || row.mensagem2 ? '<span class="q-badge ok">Mensagem sorteada</span>' : '<span class="q-badge warn">Sem mensagem</span>')
+      : '';
 
     return `
       <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:flex-start">
@@ -1943,7 +2217,9 @@
           <div class="empresa-nome">${esc(row.nome)}</div>
           <div class="empresa-meta">
             <span class="q-badge ${statusClass}">${esc(status)}</span>
-            <span class="q-badge info">${esc(chip)}</span>
+            <span class="q-badge info">${esc(templateTypeLabel(row))}</span>
+            <span class="q-badge ${row.chipId ? 'ok' : 'warn'}">${esc(chip)}</span>
+            ${messageBadge}
             <span class="empresa-phone">${esc(phone)}</span>
             ${row.site ? `<span class="empresa-site">${esc(row.site)}</span>` : ''}
           </div>
@@ -2010,6 +2286,103 @@
     }).join('');
   }
 
+  function renderRightPanel() {
+    const right = document.getElementById('zapRight');
+    if (!right) return;
+
+    const unassignedRows = state.rows.filter((row) => !row.chipId);
+    const chipGroups = state.chips.map((chip, index) => ({
+      key: String(chip.id || chip.dbId || index),
+      title: `CHIP ${index + 1}`,
+      subtitle: chip.name,
+      rows: state.rows.filter((row) => chipMatchesRow(chip, row))
+    }));
+    const groups = [
+      {
+        key: 'sem-chip',
+        title: 'SEM CHIP',
+        subtitle: 'Aguardando preencher o dia',
+        rows: unassignedRows
+      },
+      ...chipGroups
+    ].filter((group) => group.rows.length || group.key !== 'sem-chip' || !state.chips.length);
+
+    if (!groups.length) {
+      right.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum lead na fila/backlog</div>`;
+      return;
+    }
+
+    if (!state.openChipKeys.size) groups.forEach((group) => state.openChipKeys.add(group.key));
+
+    function messageBlock(row) {
+      const first = row.mensagem || '';
+      const second = row.mensagem2 || '';
+      if (!first && !second) {
+        return `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.6;margin-top:7px">// mensagem ainda nao sorteada. Ela sera definida ao entrar na fila do dia.</div>`;
+      }
+      return `
+        <details style="margin-top:8px">
+          <summary style="cursor:pointer;font-family:'DM Mono',monospace;font-size:8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em">Mensagem sorteada</summary>
+          <div style="margin-top:7px;display:grid;gap:7px">
+            ${first ? `<div style="white-space:pre-wrap;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:8px;padding:8px 9px;font-family:'DM Mono',monospace;font-size:8px;line-height:1.55;color:var(--text2)">${esc(first)}</div>` : ''}
+            ${second ? `<div style="white-space:pre-wrap;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:8px;padding:8px 9px;font-family:'DM Mono',monospace;font-size:8px;line-height:1.55;color:var(--text2)">${esc(second)}</div>` : ''}
+          </div>
+        </details>
+      `;
+    }
+
+    function queueMiniCard(row) {
+      const chip = row.chipName || row.chipId || 'Sem chip';
+      return `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:9px 10px;background:var(--surface2)">
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:10px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${esc(row.nome)}</div>
+            <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
+          </div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
+            <span class="q-badge info">${esc(templateTypeLabel(row))}</span>
+            <span class="q-badge ${row.chipId ? 'ok' : 'warn'}">${esc(chip)}</span>
+            ${row.batchId ? `<span class="q-badge info">Lote ${esc(row.batchIndex || '')}</span>` : ''}
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px;display:flex;gap:7px;flex-wrap:wrap">
+            <span>${esc(row.whatsapp || 'Sem WhatsApp')}</span>
+            ${row.site ? `<span>${esc(row.site)}</span>` : ''}
+          </div>
+          ${messageBlock(row)}
+          <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;flex-wrap:wrap">
+            <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
+            ${!row.inTodayQueue ? `<button class="add-btn added" type="button" data-queue621-lead="${esc(row.id)}" onclick="queueLeadTodayRebuild621('${esc(row.id)}')">Entrar na fila</button>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    right.innerHTML = groups.map((group, index) => {
+      const open = state.openChipKeys.has(group.key);
+      const today = group.rows.filter((row) => row.inTodayQueue).length;
+      const backlog = group.rows.length - today;
+
+      return `
+        <div class="chip-accordion${open ? ' open' : ''}" data-slot="${index}">
+          <div class="chip-accordion-header" style="border-color:rgba(184,240,89,0.25);cursor:pointer" onclick="toggleQueueChipAccordion621('${esc(group.key)}')">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+              <span style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--accent)">${esc(group.title)}</span>
+              <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(group.subtitle || '')}</span>
+              <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-left:auto;white-space:nowrap">${today} fila - ${backlog} backlog</span>
+            </div>
+          </div>
+          <div class="chip-accordion-body" style="display:${open ? 'block' : 'none'}">
+            <div class="chip-fila-scroll">
+              <div class="fila-items" style="display:flex;padding:10px 12px;gap:6px;flex-direction:column">
+                ${group.rows.length ? group.rows.map(queueMiniCard).join('') : '<div class="fila-empty">Sem leads neste chip.</div>'}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
   function renderQueueView() {
     renderTabs();
     renderLeftList();
@@ -2028,7 +2401,7 @@
       return state.rows;
     } catch (error) {
       console.error('[rebuild621] erro ao carregar backlog/fila:', error);
-      if (list) list.innerHTML = '<div class="fila-empty">// erro ao carregar backlog/fila. Verifique o SQL 6.21.</div>';
+      if (list) list.innerHTML = '<div class="fila-empty">// erro ao carregar backlog/fila. Verifique o SQL 6.27.</div>';
       return [];
     }
   }
@@ -2042,7 +2415,14 @@
   async function queueLeadToday(leadId) {
     setButtonsDisabled(leadId, true);
     try {
-      await rpcQueueAction(leadId, 'queue_today');
+      if (!state.rows.length) await fetchQueueState();
+      const row = state.rows.find((item) => String(item.id) === String(leadId));
+      if (!row) throw new Error('Lead nao encontrado no backlog.');
+      const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
+      if (!activeChips.length) throw new Error('Configure pelo menos um chip ativo antes de preencher a fila.');
+      const { chip } = chooseNextAvailableChip(activeChips);
+      if (!chip) throw new Error('Todos os chips atingiram o limite diario de 120 leads.');
+      await rpcQueueAction(leadId, 'queue_today', queuePayloadFor(row, chip, 'manual_single'));
       if (typeof notify === 'function') notify('Lead entrou na fila de hoje.');
       await renderQueueStageFromSupabase();
     } catch (error) {
@@ -2080,42 +2460,17 @@
       return;
     }
 
-    const usage = new Map(activeChips.map((chip) => [String(chip.id), 0]));
-    state.rows.filter((row) => row.inTodayQueue).forEach((row) => {
-      const chip = activeChips.find((item) => String(item.id) === String(row.chipId) || String(item.name) === String(row.chipName));
-      if (!chip) return;
-      usage.set(String(chip.id), (usage.get(String(chip.id)) || 0) + 1);
-    });
-
-    const limits = new Map(activeChips.map((chip) => [String(chip.id), Number(chip.dailyLimit || 120)]));
+    const usage = buildChipUsage(activeChips);
     let chipCursor = 0;
-
-    function nextAvailableChip() {
-      for (let attempt = 0; attempt < activeChips.length; attempt++) {
-        const chip = activeChips[(chipCursor + attempt) % activeChips.length];
-        const key = String(chip.id);
-        if ((usage.get(key) || 0) < (limits.get(key) || 120)) {
-          chipCursor = (chipCursor + attempt + 1) % activeChips.length;
-          usage.set(key, (usage.get(key) || 0) + 1);
-          return chip;
-        }
-      }
-      return null;
-    }
 
     let moved = 0;
     for (const row of backlog) {
-      const chip = nextAvailableChip();
+      const result = chooseNextAvailableChip(activeChips, usage, chipCursor);
+      const chip = result.chip;
+      chipCursor = result.nextIndex;
       if (!chip) break;
       try {
-        await rpcQueueAction(row.id, 'queue_today', {
-          source: 'fase-6.26',
-          queued_from: 'manual_backlog_fill',
-          chip_id: chip.id,
-          chip_name: chip.name,
-          chip_instance: chip.instance,
-          filled_day_at: new Date().toISOString()
-        });
+        await rpcQueueAction(row.id, 'queue_today', queuePayloadFor(row, chip, 'manual_backlog_fill'));
         moved++;
       } catch (error) {
         console.warn('[rebuild621] falha ao colocar lead em lote:', row.id, error);
@@ -2140,6 +2495,14 @@
     renderQueueView();
   }
 
+  function toggleChipAccordion(key) {
+    const normalized = String(key || '');
+    if (!normalized) return;
+    if (state.openChipKeys.has(normalized)) state.openChipKeys.delete(normalized);
+    else state.openChipKeys.add(normalized);
+    renderRightPanel();
+  }
+
   function installHooks() {
     window.renderFilaZap = renderQueueStageFromSupabase;
     window.renderQueueStageFromSupabase621 = renderQueueStageFromSupabase;
@@ -2148,6 +2511,7 @@
     window.queueAllBacklogRebuild621 = queueAllBacklog;
     window.openQueueLeadDrawerRebuild621 = openQueueLeadDrawer;
     window.setQueueTabRebuild621 = setQueueTab;
+    window.toggleQueueChipAccordion621 = toggleChipAccordion;
     window.setDisparoDay = function setDisparoDayRebuild621(day) {
       state.activeTab = day === 'today' || day !== 'backlog' ? 'today' : 'backlog';
       renderQueueView();
@@ -2468,32 +2832,7 @@
   }
 
   async function fetchChipAssignments() {
-    const userId = await getCurrentUserId();
-    const map = new Map();
-    if (!userId) return map;
-
-    const params = new URLSearchParams({
-      select: 'lead_id,data,updated_at',
-      user_id: `eq.${userId}`,
-      queue_type: 'eq.chip_assignment',
-      order: 'updated_at.desc'
-    });
-
-    try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/crm_queue_items?${params.toString()}`, {
-        headers: await getHeaders()
-      });
-      const data = await readJson(response);
-      if (!response.ok) throw data || new Error(`Falha ao carregar vinculos de chip (${response.status}).`);
-      (Array.isArray(data) ? data : []).forEach((row) => {
-        if (!row?.lead_id || map.has(String(row.lead_id))) return;
-        map.set(String(row.lead_id), { ...(row.data || {}), updated_at: row.updated_at });
-      });
-    } catch (error) {
-      console.warn('[rebuild620] falha ao carregar vinculos de chip:', error);
-    }
-
-    return map;
+    return new Map();
   }
 
   async function refreshChipState() {
@@ -3183,7 +3522,7 @@
       return state.rows;
     } catch (error) {
       console.error('[rebuild619] erro ao carregar Atribuicao:', error);
-      if (target) target.innerHTML = '<div class="table-empty">Erro ao carregar Atribuicao. Verifique o SQL 6.19.</div>';
+      if (target) target.innerHTML = '<div class="table-empty">Erro ao carregar Atribuicao. Verifique o SQL 6.27.</div>';
       return [];
     } finally {
       state.loading = false;
@@ -3263,7 +3602,7 @@
       return true;
     } catch (error) {
       console.error('[rebuild626] erro ao enviar lead ao backlog:', error);
-      if (!options.silent && typeof notify === 'function') notify(error?.message || 'Falha ao enviar lead ao backlog. Reexecute o SQL 6.19 atualizado.', 'err');
+      if (!options.silent && typeof notify === 'function') notify(error?.message || 'Falha ao enviar lead ao backlog. Reexecute o SQL 6.27.', 'err');
       return false;
     } finally {
       setAssignmentButtonsDisabled(leadId, false);

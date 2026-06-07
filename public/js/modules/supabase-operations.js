@@ -62,7 +62,7 @@ function v48StateRemove(storageKey, reason = 'state-remove') {
 
 const DB_TABLES_V51 = {
   leads: 'crm_leads',
-  queueItems: 'crm_queue_items',
+  queueItems: 'queue_items',
   dispatchQueues: 'crm_dispatch_queues',
   settings: 'crm_settings',
   sentLedger: 'crm_sent_ledger',

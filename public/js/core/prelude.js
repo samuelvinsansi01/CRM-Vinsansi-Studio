@@ -782,10 +782,15 @@ async function loginGoogle() {
   }
 }
 
-async function logoutSupabase() {
-  
-  
-  
+async function logoutSupabase(confirmed = false) {
+  if (!confirmed) {
+    const message = 'Sair da conta?';
+    if (typeof abrirModalConfirm === 'function') {
+      abrirModalConfirm(message, () => { logoutSupabase(true); });
+      return;
+    }
+    if (typeof window !== 'undefined' && typeof window.confirm === 'function' && !window.confirm(message)) return;
+  }
 
   currentUser = null;
   if (typeof clearLocalSessionData === 'function') clearLocalSessionData();
