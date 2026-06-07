@@ -30,7 +30,6 @@
       `?select=*` +
       `&user_id=eq.${encodeURIComponent(userId)}` +
       `&current_stage=eq.validation` +
-      `&deleted_at=is.null` +
       `&order=created_at.desc`;
 
     const res = await fetch(url, { headers });
