@@ -161,53 +161,80 @@
   };
 })();
 
-/* PATCH — alternância correta das abas da Validação */
+/* PATCH — abas da Validação usando a mesma lista */
 (function () {
-  function setupValidationTabs() {
-    const buttons = document.querySelectorAll('[data-valtab]');
-    if (!buttons.length) return;
+  let validationCache = {
+    waiting: [],
+    validated: []
+  };
 
-    buttons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.getAttribute('data-valtab');
+  function renderValidationListByTab(tab) {
+    const box = document.getElementById('valComSiteList');
+    if (!box) return;
 
-        buttons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+    const list = tab === 'validated'
+      ? validationCache.validated
+      : validationCache.waiting;
 
-        const waitPanel = document.getElementById('valPanelComSite');
-        const validPanel =
-          document.getElementById('valPanelComZap') ||
-          document.getElementById('valPanelZap') ||
-          document.getElementById('valPanelValidado');
-
-        if (waitPanel) {
-          waitPanel.style.display =
-            tab === 'com-site' || tab === 'sem-zap' || tab === 'aguardando'
-              ? ''
-              : 'none';
-        }
-
-        if (validPanel) {
-          validPanel.style.display =
-            tab === 'zap' || tab === 'com-zap' || tab === 'validado'
-              ? ''
-              : 'none';
-        }
-      });
-    });
+    box.innerHTML = list.length
+      ? list.map(renderValidationLeadCard).join('')
+      : `<div class="table-empty">${
+          tab === 'validated'
+            ? '// nenhum número validado ainda'
+            : '// nenhum lead aguardando validação'
+        }</div>`;
   }
 
-  document.addEventListener('DOMContentLoaded', setupValidationTabs);
+  function getActiveValidationTab() {
+    const validatedBtn = document.getElementById('valResultTabValidados');
+    return validatedBtn?.classList.contains('active') ? 'validated' : 'waiting';
+  }
 
   const oldRender = window.renderValidationStageFromSupabase;
 
-  window.renderValidationStageFromSupabase = async function patchedValidationRenderWithTabs() {
-    const result = typeof oldRender === 'function'
-      ? await oldRender.apply(this, arguments)
-      : undefined;
+  window.renderValidationStageFromSupabase = async function patchedValidationRenderTabs() {
+    try {
+      const leads = await fetchValidationLeads();
 
-    setupValidationTabs();
+      validationCache.waiting = leads.filter(l => l.current_status === 'pending_validation');
+      validationCache.validated = leads.filter(l => l.current_status === 'whatsapp_validated');
 
-    return result;
+      const countA = document.getElementById('valCountSemZap');
+      const countB = document.getElementById('valCountComZap');
+
+      if (countA) countA.textContent = String(validationCache.waiting.length);
+      if (countB) countB.textContent = String(validationCache.validated.length);
+
+      renderValidationListByTab(getActiveValidationTab());
+    } catch (err) {
+      console.error('[Validação] erro ao carregar leads:', err);
+      const box = document.getElementById('valComSiteList');
+      if (box) box.innerHTML = '<div class="table-empty">Erro ao carregar leads da validação.</div>';
+    }
   };
+
+  function bindValidationTabs() {
+    const waitBtn = document.getElementById('valResultTabPendentes');
+    const validBtn = document.getElementById('valResultTabValidados');
+
+    if (waitBtn) {
+      waitBtn.onclick = () => {
+        waitBtn.classList.add('active');
+        validBtn?.classList.remove('active');
+        renderValidationListByTab('waiting');
+      };
+    }
+
+    if (validBtn) {
+      validBtn.onclick = () => {
+        validBtn.classList.add('active');
+        waitBtn?.classList.remove('active');
+        renderValidationListByTab('validated');
+      };
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', bindValidationTabs);
+
+  setTimeout(bindValidationTabs, 500);
 })();
