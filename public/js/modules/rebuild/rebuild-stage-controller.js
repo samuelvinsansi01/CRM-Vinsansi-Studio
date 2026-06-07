@@ -549,6 +549,333 @@
   }
 })();
 
+/* CRM Rebuild Fase 6.22 - Lotes de disparo persistentes */
+(function () {
+  const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
+
+  const state = {
+    batches: [],
+    loading: false
+  };
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char]));
+  }
+
+  function clean(value, fallback = '') {
+    const text = String(value ?? '').trim();
+    return text || fallback;
+  }
+
+  async function getCurrentUserId() {
+    try {
+      if (typeof getCurrentSupabaseUserIdV412 === 'function') {
+        const maybe = await getCurrentSupabaseUserIdV412();
+        if (maybe) return maybe;
+      }
+    } catch (_) {}
+    if (window.currentUser?.id) return window.currentUser.id;
+    try {
+      if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id;
+    } catch (_) {}
+    return null;
+  }
+
+  async function getHeaders(content = false) {
+    let headers = null;
+    try {
+      if (typeof getSupabaseAuthHeadersV423 === 'function') headers = await getSupabaseAuthHeadersV423();
+    } catch (_) {}
+    if (!headers?.apikey) {
+      headers = {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`
+      };
+    }
+    return content ? { ...headers, 'Content-Type': 'application/json' } : headers;
+  }
+
+  async function readJson(response) {
+    const body = await response.text();
+    return body ? JSON.parse(body) : null;
+  }
+
+  async function fetchBatches() {
+    const userId = await getCurrentUserId();
+    if (!userId) return [];
+
+    const params = new URLSearchParams({
+      select: 'id,lead_id,position,data,updated_at',
+      user_id: `eq.${userId}`,
+      queue_type: 'eq.whatsapp_batch',
+      order: 'position.asc'
+    });
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/crm_queue_items?${params.toString()}`, {
+      headers: await getHeaders()
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw data || new Error(`Falha ao carregar lotes (${response.status}).`);
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function rpcBatchAction(action, batchId = null) {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Usuario autenticado nao encontrado.');
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_dispatch_batch_action`, {
+      method: 'POST',
+      headers: await getHeaders(true),
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_action: action,
+        p_batch_id: batchId,
+        p_payload: { source: 'fase-6.22' }
+      })
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw data || new Error(`Falha na acao de lote (${response.status}).`);
+    return data;
+  }
+
+  function normalizeBatch(row = {}) {
+    const data = row.data || {};
+    const items = Array.isArray(data.items) ? data.items : [];
+    return {
+      id: row.lead_id || data.batch_id || row.id,
+      rowId: row.id,
+      position: row.position || 0,
+      status: data.status || 'ready',
+      chipId: data.chip_id || '',
+      chipName: data.chip_name || data.chip_id || 'Chip',
+      batchIndex: data.batch_index || row.position || 1,
+      itemCount: Number(data.item_count || items.length || 0),
+      items,
+      createdAt: data.created_at || row.updated_at || '',
+      startedAt: data.started_at || '',
+      completedAt: data.completed_at || ''
+    };
+  }
+
+  function statusLabel(status) {
+    if (status === 'sending') return 'Em disparo';
+    if (status === 'completed') return 'Concluido';
+    return 'Pronto';
+  }
+
+  function statusClass(status) {
+    if (status === 'completed') return 'ok';
+    if (status === 'sending') return 'info';
+    return 'warn';
+  }
+
+  function batchCard(batch) {
+    const actions = batch.status === 'completed'
+      ? '<span class="q-badge ok">Lote concluido</span>'
+      : batch.status === 'sending'
+        ? `<button class="add-btn added" type="button" data-batch622-id="${esc(batch.id)}" onclick="completeDispatchBatchRebuild622('${esc(batch.id)}')">Concluir lote</button>`
+        : `<button class="add-btn added" type="button" data-batch622-id="${esc(batch.id)}" onclick="startDispatchBatchRebuild622('${esc(batch.id)}')">Iniciar lote</button>`;
+
+    return `
+      <div style="border:1px solid var(--border);border-radius:8px;background:var(--surface2);padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">
+          <div style="font-size:11px;font-weight:700;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            Lote ${esc(batch.batchIndex)} - ${esc(batch.chipName)}
+          </div>
+          <span class="q-badge ${statusClass(batch.status)}">${esc(statusLabel(batch.status))}</span>
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px">
+          <span>${esc(batch.itemCount)} leads</span>
+          <span>ID ${esc(batch.id)}</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${actions}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderBatchPanel() {
+    const right = document.getElementById('zapRight');
+    if (!right) return;
+
+    const oldPanel = document.getElementById('dispatchBatchesPanel622');
+    if (oldPanel) oldPanel.remove();
+
+    const batches = state.batches.map(normalizeBatch);
+    const ready = batches.filter((batch) => batch.status === 'ready').length;
+    const sending = batches.filter((batch) => batch.status === 'sending').length;
+    const completed = batches.filter((batch) => batch.status === 'completed').length;
+
+    const panel = document.createElement('div');
+    panel.id = 'dispatchBatchesPanel622';
+    panel.style.cssText = 'border-bottom:1px solid var(--border);padding:12px 14px;background:rgba(255,255,255,0.015);flex-shrink:0';
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--accent);text-transform:uppercase;font-weight:700">Lotes de disparo</div>
+        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-left:auto">${ready} pronto(s) / ${sending} em disparo / ${completed} concluido(s)</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="generateDispatchBatchesRebuild622()">Gerar lotes</button>
+        <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="refreshDispatchBatchesRebuild622()">Atualizar lotes</button>
+      </div>
+      <div>
+        ${batches.length ? batches.map(batchCard).join('') : '<div class="fila-empty">// nenhum lote gerado ainda.</div>'}
+      </div>
+    `;
+
+    right.prepend(panel);
+  }
+
+  function enhanceQueueControls() {
+    const statusTabs = document.getElementById('disparoStatusTabs');
+    if (!statusTabs || document.getElementById('generateBatchesBtn622')) return;
+    const button = document.createElement('button');
+    button.id = 'generateBatchesBtn622';
+    button.className = 'btn btn-ghost';
+    button.type = 'button';
+    button.style.cssText = 'font-size:10px;padding:7px 12px';
+    button.textContent = 'Gerar lotes';
+    button.onclick = () => generateBatches();
+    statusTabs.appendChild(button);
+  }
+
+  async function refreshBatches() {
+    state.loading = true;
+    try {
+      state.batches = await fetchBatches();
+      enhanceQueueControls();
+      renderBatchPanel();
+      return state.batches;
+    } catch (error) {
+      console.error('[rebuild622] erro ao carregar lotes:', error);
+      return [];
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  function setBatchButtonsDisabled(batchId, disabled) {
+    document.querySelectorAll('[data-batch622-id]').forEach((button) => {
+      if (button.getAttribute('data-batch622-id') === String(batchId)) button.disabled = disabled;
+    });
+  }
+
+  async function generateBatches() {
+    try {
+      const result = await rpcBatchAction('generate_batches');
+      if (typeof notify === 'function') notify(`${result?.batches_created || 0} lote(s) gerado(s).`);
+      if (typeof window.renderQueueStageFromSupabase621 === 'function') await window.renderQueueStageFromSupabase621();
+      await refreshBatches();
+    } catch (error) {
+      console.error('[rebuild622] erro ao gerar lotes:', error);
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao gerar lotes. Verifique o SQL 6.22.', 'err');
+    }
+  }
+
+  async function startBatch(batchId) {
+    setBatchButtonsDisabled(batchId, true);
+    try {
+      await rpcBatchAction('start_batch', batchId);
+      if (typeof notify === 'function') notify('Lote iniciado.');
+      await refreshBatches();
+    } catch (error) {
+      console.error('[rebuild622] erro ao iniciar lote:', error);
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao iniciar lote.', 'err');
+    } finally {
+      setBatchButtonsDisabled(batchId, false);
+    }
+  }
+
+  async function completeBatch(batchId) {
+    setBatchButtonsDisabled(batchId, true);
+    try {
+      await rpcBatchAction('complete_batch', batchId);
+      if (typeof notify === 'function') notify('Lote concluido.');
+      await refreshBatches();
+    } catch (error) {
+      console.error('[rebuild622] erro ao concluir lote:', error);
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao concluir lote.', 'err');
+    } finally {
+      setBatchButtonsDisabled(batchId, false);
+    }
+  }
+
+  function installHooks() {
+    window.generateDispatchBatchesRebuild622 = generateBatches;
+    window.refreshDispatchBatchesRebuild622 = refreshBatches;
+    window.startDispatchBatchRebuild622 = startBatch;
+    window.completeDispatchBatchRebuild622 = completeBatch;
+
+    const previousRenderQueue = window.renderQueueStageFromSupabase621;
+    if (typeof previousRenderQueue === 'function' && !previousRenderQueue.__batches622) {
+      const patched = async function renderQueueStageBatches622() {
+        const result = await previousRenderQueue.apply(this, arguments);
+        await refreshBatches();
+        return result;
+      };
+      patched.__batches622 = true;
+      patched.__previous = previousRenderQueue;
+      window.renderQueueStageFromSupabase621 = patched;
+      window.renderFilaZap = patched;
+    }
+
+    const previousSetQueueTab = window.setQueueTabRebuild621;
+    if (typeof previousSetQueueTab === 'function' && !previousSetQueueTab.__batches622) {
+      const patchedSetTab = function setQueueTabBatches622() {
+        const result = previousSetQueueTab.apply(this, arguments);
+        setTimeout(refreshBatches, 120);
+        return result;
+      };
+      patchedSetTab.__batches622 = true;
+      patchedSetTab.__previous = previousSetQueueTab;
+      window.setQueueTabRebuild621 = patchedSetTab;
+    }
+
+    const previousSwitchPanel = window.switchPanel;
+    if (typeof previousSwitchPanel === 'function' && !previousSwitchPanel.__batches622) {
+      const patchedSwitchPanel = function switchPanelBatches622(panel) {
+        const result = previousSwitchPanel.apply(this, arguments);
+        if (panel === 'fila-zap' || panel === 'whatsapp' || panel === 'panel-fila-zap') {
+          setTimeout(refreshBatches, 180);
+        }
+        return result;
+      };
+      patchedSwitchPanel.__batches622 = true;
+      patchedSwitchPanel.__previous = previousSwitchPanel;
+      window.switchPanel = patchedSwitchPanel;
+    }
+  }
+
+  function boot() {
+    installHooks();
+    let attempts = 0;
+    const retry = () => {
+      attempts++;
+      installHooks();
+      if (!window.renderQueueStageFromSupabase621?.__batches622 && attempts < 12) setTimeout(retry, 120);
+    };
+    if (!window.renderQueueStageFromSupabase621?.__batches622) setTimeout(retry, 120);
+
+    if (document.getElementById('panel-fila-zap')?.classList.contains('active')) {
+      refreshBatches();
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
 /* CRM Rebuild Fase 6.21 - Backlog e Fila WhatsApp persistentes */
 (function () {
   const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
