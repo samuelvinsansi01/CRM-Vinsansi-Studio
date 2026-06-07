@@ -549,6 +549,570 @@
   }
 })();
 
+/* CRM Rebuild Fase 6.20 - Chips e interface estavel */
+(function () {
+  const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
+
+  const state = {
+    chips: [],
+    assignments: new Map(),
+    loading: false
+  };
+
+  const CP1252_REVERSE = {
+    0x20ac: 0x80, 0x201a: 0x82, 0x0192: 0x83, 0x201e: 0x84,
+    0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02c6: 0x88,
+    0x2030: 0x89, 0x0160: 0x8a, 0x2039: 0x8b, 0x0152: 0x8c,
+    0x017d: 0x8e, 0x2018: 0x91, 0x2019: 0x92, 0x201c: 0x93,
+    0x201d: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97,
+    0x02dc: 0x98, 0x2122: 0x99, 0x0161: 0x9a, 0x203a: 0x9b,
+    0x0153: 0x9c, 0x017e: 0x9e, 0x0178: 0x9f
+  };
+
+  const MOJIBAKE_RE = /(\u00c3[\u00a0-\u00bf]|\u00c2[\u00a0-\u00bf]|\u00e2[\u0080-\u00bf]|\u00f0\u0178|\ufffd)/g;
+
+  function esc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char]));
+  }
+
+  function clean(value, fallback = '') {
+    const text = String(value ?? '').trim();
+    return text || fallback;
+  }
+
+  function badScore(value) {
+    return (String(value ?? '').match(MOJIBAKE_RE) || []).length;
+  }
+
+  function encodeAsCp1252Bytes(text) {
+    const bytes = [];
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code <= 0xff) {
+        bytes.push(code);
+      } else if (Object.prototype.hasOwnProperty.call(CP1252_REVERSE, code)) {
+        bytes.push(CP1252_REVERSE[code]);
+      } else {
+        return null;
+      }
+    }
+    return new Uint8Array(bytes);
+  }
+
+  function fixMojibakeText(value) {
+    const text = String(value ?? '');
+    if (!badScore(text) || typeof TextDecoder === 'undefined') return text;
+    const bytes = encodeAsCp1252Bytes(text);
+    if (!bytes) return text;
+    try {
+      const decoded = new TextDecoder('utf-8').decode(bytes);
+      return badScore(decoded) < badScore(text) ? decoded : text;
+    } catch (_) {
+      return text;
+    }
+  }
+
+  function repairDomText() {
+    if (!document.body) return;
+
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        if (!badScore(node.nodeValue)) return NodeFilter.FILTER_REJECT;
+        const tag = node.parentElement?.tagName;
+        if (tag && ['SCRIPT', 'STYLE', 'TEXTAREA', 'CODE', 'PRE'].includes(tag)) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((node) => {
+      const fixed = fixMojibakeText(node.nodeValue);
+      if (fixed !== node.nodeValue) node.nodeValue = fixed;
+    });
+
+    const attrs = ['title', 'aria-label', 'placeholder', 'data-label', 'alt'];
+    document.querySelectorAll(attrs.map((attr) => `[${attr}]`).join(',')).forEach((element) => {
+      attrs.forEach((attr) => {
+        const current = element.getAttribute(attr);
+        if (!current || !badScore(current)) return;
+        const fixed = fixMojibakeText(current);
+        if (fixed !== current) element.setAttribute(attr, fixed);
+      });
+    });
+  }
+
+  function iconSvg(name) {
+    const paths = {
+      search: '<circle cx="11" cy="11" r="7"></circle><path d="m20 20-4.2-4.2"></path>',
+      chart: '<path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M8 16V9"></path><path d="M12 16V7"></path><path d="M16 16v-4"></path>',
+      inbox: '<path d="M4 4h16l-2 10H6L4 4Z"></path><path d="M6 14l2 4h8l2-4"></path>',
+      users: '<path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path><circle cx="9.5" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.8"></path><path d="M16 3.2a4 4 0 0 1 0 7.6"></path>',
+      check: '<path d="M20 6 9 17l-5-5"></path>',
+      folder: '<path d="M3 7h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"></path>',
+      send: '<path d="m22 2-7 20-4-9-9-4 20-7Z"></path><path d="M22 2 11 13"></path>',
+      message: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8Z"></path>',
+      camera: '<path d="M5 7h3l2-2h4l2 2h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2Z"></path><circle cx="12" cy="13" r="4"></circle>',
+      clipboard: '<path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 10h6"></path><path d="M9 14h6"></path>',
+      clock: '<circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>',
+      columns: '<path d="M4 5h16v14H4z"></path><path d="M9 5v14"></path><path d="M15 5v14"></path>',
+      trend: '<path d="M3 17 9 11l4 4 8-8"></path><path d="M14 7h7v7"></path>',
+      wrench: '<path d="M14.7 6.3a4 4 0 0 0-5 5L4 17l3 3 5.7-5.7a4 4 0 0 0 5-5l-3 3-3-3 3-3Z"></path>',
+      link: '<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1.2 1.2"></path><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1.2-1.2"></path>',
+      user: '<circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path>',
+      settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a8 8 0 0 0 .1-6l2-1.5-2-3.4-2.4 1a8 8 0 0 0-5.2-3l-.4-2.6h-4l-.4 2.6a8 8 0 0 0-5.2 3l-2.4-1-2 3.4 2 1.5a8 8 0 0 0 .1 6l-2 1.5 2 3.4 2.4-1a8 8 0 0 0 5.2 3l.4 2.6h4l.4-2.6a8 8 0 0 0 5.2-3l2.4 1 2-3.4-2-1.5Z"></path>',
+      logout: '<path d="M10 17 15 12l-5-5"></path><path d="M15 12H3"></path><path d="M21 3v18h-8"></path>',
+      menu: '<path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h16"></path>'
+    };
+    return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.folder}</svg>`;
+  }
+
+  function iconKey(value) {
+    return fixMojibakeText(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function installIconStyles() {
+    if (document.getElementById('crm620-icon-style')) return;
+    const style = document.createElement('style');
+    style.id = 'crm620-icon-style';
+    style.textContent = [
+      '.nav-icon svg,.sidebar-hamburger svg{width:16px;height:16px;display:block;stroke:currentColor}',
+      '.nav-icon{display:inline-flex;align-items:center;justify-content:center;min-width:18px}',
+      '.sidebar-hamburger{display:inline-flex;align-items:center;justify-content:center}',
+      '.crm620-chip-actions{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}',
+      '.crm620-chip-actions .add-btn{font-size:9px;padding:5px 9px;white-space:nowrap}'
+    ].join('\n');
+    document.head.appendChild(style);
+  }
+
+  function installSvgIcons() {
+    installIconStyles();
+    const map = {
+      busca: 'search',
+      inicio: 'chart',
+      'caixa de entrada': 'inbox',
+      leads: 'users',
+      importar: 'inbox',
+      validacao: 'check',
+      atribuicao: 'folder',
+      envios: 'send',
+      whatsapp: 'message',
+      instagram: 'camera',
+      conversas: 'message',
+      gerenciamento: 'clipboard',
+      'follow-ups': 'clock',
+      kanban: 'columns',
+      acompanhamentos: 'trend',
+      ferramentas: 'wrench',
+      redirecionamentos: 'link',
+      auditoria: 'chart',
+      'minha conta': 'user',
+      configuracoes: 'settings',
+      sair: 'logout'
+    };
+
+    document.querySelectorAll('.nav-item').forEach((item) => {
+      const label = item.getAttribute('data-label') || item.querySelector('.nav-label')?.textContent || item.textContent || '';
+      const name = map[iconKey(label)];
+      const icon = item.querySelector('.nav-icon');
+      if (!name || !icon || icon.getAttribute('data-crm620-icon') === name) return;
+      icon.innerHTML = iconSvg(name);
+      icon.setAttribute('data-crm620-icon', name);
+    });
+
+    document.querySelectorAll('.menu-arrow-final').forEach((arrow) => {
+      if (arrow.getAttribute('data-crm620-arrow')) return;
+      arrow.innerHTML = '&rsaquo;';
+      arrow.setAttribute('data-crm620-arrow', '1');
+    });
+
+    document.querySelectorAll('.sidebar-hamburger').forEach((button) => {
+      if (button.getAttribute('data-crm620-icon') === 'menu') return;
+      button.innerHTML = iconSvg('menu');
+      button.setAttribute('data-crm620-icon', 'menu');
+    });
+  }
+
+  function localChipsFallback() {
+    try {
+      return (typeof getChips === 'function' ? getChips() : [])
+        .filter((chip) => chip && chip.id && chip.instance && chip.status !== 'disabled' && chip.active !== false)
+        .map((chip, index) => ({
+          id: String(chip.id || chip.instance || `chip_${index + 1}`),
+          dbId: chip.dbId || null,
+          name: chip.nome || chip.name || chip.label || chip.instance || `Chip ${index + 1}`,
+          instance: chip.instance || '',
+          status: chip.status || 'active',
+          source: 'runtime'
+        }));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  async function getCurrentUserId() {
+    try {
+      if (typeof getCurrentSupabaseUserIdV412 === 'function') {
+        const maybe = await getCurrentSupabaseUserIdV412();
+        if (maybe) return maybe;
+      }
+    } catch (_) {}
+    if (window.currentUser?.id) return window.currentUser.id;
+    try {
+      if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id;
+    } catch (_) {}
+    return null;
+  }
+
+  async function getHeaders(content = false) {
+    let headers = null;
+    try {
+      if (typeof getSupabaseAuthHeadersV423 === 'function') headers = await getSupabaseAuthHeadersV423();
+    } catch (_) {}
+    if (!headers?.apikey) {
+      headers = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` };
+    }
+    return content ? { ...headers, 'Content-Type': 'application/json' } : headers;
+  }
+
+  async function readJson(response) {
+    const body = await response.text();
+    return body ? JSON.parse(body) : null;
+  }
+
+  function normalizeChip(row = {}, index = 0) {
+    const id = String(row.chip_id || row.id || row.instance || `chip_${index + 1}`);
+    return {
+      id,
+      dbId: row.id || null,
+      name: row.name || row.nome || row.label || row.instance || `Chip ${index + 1}`,
+      instance: row.instance || row.name || '',
+      status: row.status || row.connection_state || 'active',
+      phone: row.phone || row.number || '',
+      source: 'supabase'
+    };
+  }
+
+  async function fetchWhatsappChips() {
+    const fallback = localChipsFallback();
+    const userId = await getCurrentUserId();
+    if (!userId) return fallback;
+
+    const params = new URLSearchParams({
+      select: '*',
+      user_id: `eq.${userId}`,
+      order: 'created_at.desc'
+    });
+
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_instances?${params.toString()}`, {
+        headers: await getHeaders()
+      });
+      const data = await readJson(response);
+      if (!response.ok) throw data || new Error(`Falha ao carregar chips (${response.status}).`);
+      const rows = Array.isArray(data) ? data : [];
+      const chips = rows
+        .filter((row) => row.active !== false)
+        .map(normalizeChip)
+        .filter((chip) => chip.id && chip.instance);
+      return chips.length ? chips : fallback;
+    } catch (error) {
+      console.warn('[rebuild620] falha ao carregar chips:', error);
+      return fallback;
+    }
+  }
+
+  async function fetchChipAssignments() {
+    const userId = await getCurrentUserId();
+    const map = new Map();
+    if (!userId) return map;
+
+    const params = new URLSearchParams({
+      select: 'lead_id,data,updated_at',
+      user_id: `eq.${userId}`,
+      queue_type: 'eq.chip_assignment',
+      order: 'updated_at.desc'
+    });
+
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/crm_queue_items?${params.toString()}`, {
+        headers: await getHeaders()
+      });
+      const data = await readJson(response);
+      if (!response.ok) throw data || new Error(`Falha ao carregar vinculos de chip (${response.status}).`);
+      (Array.isArray(data) ? data : []).forEach((row) => {
+        if (!row?.lead_id || map.has(String(row.lead_id))) return;
+        map.set(String(row.lead_id), { ...(row.data || {}), updated_at: row.updated_at });
+      });
+    } catch (error) {
+      console.warn('[rebuild620] falha ao carregar vinculos de chip:', error);
+    }
+
+    return map;
+  }
+
+  async function refreshChipState() {
+    state.loading = true;
+    try {
+      const [chips, assignments] = await Promise.all([
+        fetchWhatsappChips(),
+        fetchChipAssignments()
+      ]);
+      state.chips = chips;
+      state.assignments = assignments;
+      return state;
+    } finally {
+      state.loading = false;
+    }
+  }
+
+  function findAssignmentLead(leadId) {
+    const id = String(leadId || '');
+    return (window.rebuildAssignmentLeads || []).find((lead) => String(lead.id) === id) || null;
+  }
+
+  function bucketForLead(lead = {}) {
+    const bucket = lead.assignmentBucket || lead.bucket || lead.siteSegment || lead.templateType || '';
+    if (bucket) return bucket;
+    if (!clean(lead.whatsapp || lead.phone || lead.telefone) && clean(lead.instagram || lead.instagram_url)) return 'insta';
+    if (lead.hasOwnSite || lead.has_own_site) return 'com-site';
+    return 'zap';
+  }
+
+  function assignmentPayload(lead, chip, bucket) {
+    return {
+      source: 'fase-6.20',
+      bucket,
+      channel: 'whatsapp',
+      assigned_at: new Date().toISOString(),
+      lead: {
+        id: lead.id,
+        nome: lead.nome || lead.empresa || lead.company_name || '',
+        whatsapp: lead.whatsapp || lead.phone || lead.telefone || '',
+        site: lead.site || lead.website || '',
+        instagram: lead.instagram || lead.instagram_url || ''
+      },
+      chip: {
+        id: chip.id,
+        db_id: chip.dbId || null,
+        name: chip.name,
+        instance: chip.instance
+      }
+    };
+  }
+
+  async function rpcChipAction(leadId, chipId) {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Usuario autenticado nao encontrado.');
+
+    const lead = findAssignmentLead(leadId);
+    if (!lead) throw new Error('Lead nao encontrado na Atribuicao.');
+    const chip = state.chips.find((item) => String(item.id) === String(chipId) || String(item.dbId) === String(chipId));
+    if (!chip) throw new Error('Chip nao encontrado.');
+
+    const bucket = bucketForLead(lead);
+    const payload = assignmentPayload(lead, chip, bucket);
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_chip_lead_action`, {
+      method: 'POST',
+      headers: await getHeaders(true),
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_lead_id: lead.id,
+        p_chip_id: chip.id,
+        p_action: 'assign_chip',
+        p_bucket: bucket,
+        p_payload: payload
+      })
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw data || new Error(`Falha ao vincular chip (${response.status}).`);
+    return { data, payload, chip, lead };
+  }
+
+  function isWhatsappLead(lead = {}) {
+    return clean(lead.whatsapp || lead.phone || lead.telefone).replace(/\D+/g, '').length >= 10;
+  }
+
+  function isLeadInAssignmentStage(lead = {}) {
+    return lead.current_stage === 'assignment' || lead.stage === 'assignment';
+  }
+
+  function chipControlsHtml(lead) {
+    if (!isLeadInAssignmentStage(lead)) return '';
+    if (bucketForLead(lead) === 'insta') return '<span class="q-badge insta">Instagram na 6.21</span>';
+    if (!isWhatsappLead(lead)) return '<span class="q-badge warn">Sem WhatsApp</span>';
+    if (!state.chips.length) return '<span class="q-badge warn">Nenhum chip ativo</span>';
+
+    const current = state.assignments.get(String(lead.id));
+    const currentChipId = String(current?.chip?.id || current?.chip_id || current?.chipId || '');
+    const currentName = current?.chip?.name || current?.chip_name || current?.chipName || '';
+    const buttons = state.chips.map((chip, index) => {
+      const active = currentChipId && (currentChipId === String(chip.id) || currentChipId === String(chip.dbId));
+      const label = active ? `Chip ${index + 1} OK` : `Chip ${index + 1}`;
+      const title = active ? `Vinculado a ${chip.name}` : `Vincular a ${chip.name}`;
+      return `<button class="add-btn ${active ? 'added' : ''}" type="button" title="${esc(title)}" data-chip620-lead="${esc(lead.id)}" onclick="assignLeadToChipRebuild620('${esc(lead.id)}','${esc(chip.id)}')">${esc(label)}</button>`;
+    }).join('');
+    const badge = current ? `<span class="q-badge ok">Chip: ${esc(currentName || currentChipId || 'vinculado')}</span>` : '';
+    return `<div class="crm620-chip-actions">${badge}${buttons}</div>`;
+  }
+
+  function enhanceAssignmentCards() {
+    const cards = document.querySelectorAll('#atribList .empresa-card[data-lead-id],#atribInstaList .empresa-card[data-lead-id]');
+    cards.forEach((card) => {
+      const leadId = card.getAttribute('data-lead-id');
+      const lead = findAssignmentLead(leadId);
+      const actions = card.querySelector('.empresa-actions');
+      if (!lead || !actions) return;
+
+      actions.querySelectorAll('.q-badge.warn').forEach((badge) => {
+        if (clean(badge.textContent).toLowerCase().includes('chip na 6.20')) badge.remove();
+      });
+
+      let host = actions.querySelector('[data-crm620-chip-host]');
+      if (!host) {
+        host = document.createElement('div');
+        host.setAttribute('data-crm620-chip-host', '1');
+        actions.appendChild(host);
+      }
+      host.innerHTML = chipControlsHtml(lead);
+    });
+  }
+
+  function setChipButtonsDisabled(leadId, disabled) {
+    document.querySelectorAll('[data-chip620-lead]').forEach((button) => {
+      if (button.getAttribute('data-chip620-lead') === String(leadId)) button.disabled = disabled;
+    });
+  }
+
+  async function assignLeadToChip(leadId, chipId) {
+    setChipButtonsDisabled(leadId, true);
+    try {
+      if (!state.chips.length) await refreshChipState();
+      const result = await rpcChipAction(leadId, chipId);
+      const lead = result.lead;
+      const payload = result.payload;
+      state.assignments.set(String(leadId), payload);
+      lead.current_status = 'chip_assigned';
+      lead.status = 'chip_assigned';
+      lead.assignedChipId = result.chip.id;
+      lead.chipName = result.chip.name;
+      enhanceAssignmentCards();
+      if (typeof notify === 'function') notify(`Lead vinculado ao ${result.chip.name}.`);
+    } catch (error) {
+      console.error('[rebuild620] erro ao vincular chip:', error);
+      const message = error?.message || error?.details || 'Falha ao vincular chip. Verifique o SQL 6.20.';
+      if (typeof notify === 'function') notify(message, 'err');
+    } finally {
+      setChipButtonsDisabled(leadId, false);
+    }
+  }
+
+  function scheduleVisualRepair() {
+    clearTimeout(window.__crm620VisualTimer);
+    window.__crm620VisualTimer = setTimeout(() => {
+      repairDomText();
+      installSvgIcons();
+      enhanceAssignmentCards();
+    }, 80);
+  }
+
+  function installHooks() {
+    const previousRenderAssignment = window.renderAssignmentStageFromSupabase;
+    if (typeof previousRenderAssignment === 'function' && !previousRenderAssignment.__chips620) {
+      const patched = async function renderAssignmentStageChips620() {
+        const result = await previousRenderAssignment.apply(this, arguments);
+        await refreshChipState();
+        enhanceAssignmentCards();
+        return result;
+      };
+      patched.__chips620 = true;
+      patched.__previous = previousRenderAssignment;
+      window.renderAssignmentStageFromSupabase = patched;
+      window.renderAtribuicao = patched;
+    }
+
+    const previousSetTab = window.setAtribTab;
+    if (typeof previousSetTab === 'function' && !previousSetTab.__chips620) {
+      const patchedSetTab = function setAtribTabChips620() {
+        const result = previousSetTab.apply(this, arguments);
+        setTimeout(enhanceAssignmentCards, 120);
+        return result;
+      };
+      patchedSetTab.__chips620 = true;
+      patchedSetTab.__previous = previousSetTab;
+      window.setAtribTab = patchedSetTab;
+    }
+
+    const previousSwitchPanel = window.switchPanel;
+    if (typeof previousSwitchPanel === 'function' && !previousSwitchPanel.__chips620) {
+      const patchedSwitchPanel = function switchPanelChips620(panel) {
+        const result = previousSwitchPanel.apply(this, arguments);
+        if (['atribuicao', 'assignment', 'panel-atribuicao'].includes(panel)) {
+          setTimeout(async () => {
+            await refreshChipState();
+            enhanceAssignmentCards();
+          }, 160);
+        }
+        scheduleVisualRepair();
+        return result;
+      };
+      patchedSwitchPanel.__chips620 = true;
+      patchedSwitchPanel.__previous = previousSwitchPanel;
+      window.switchPanel = patchedSwitchPanel;
+    }
+  }
+
+  function boot() {
+    repairDomText();
+    installSvgIcons();
+    installHooks();
+    let hookAttempts = 0;
+    const retryHooks = () => {
+      hookAttempts++;
+      installHooks();
+      if (!window.renderAssignmentStageFromSupabase?.__chips620 && hookAttempts < 12) {
+        setTimeout(retryHooks, 120);
+      }
+    };
+    if (!window.renderAssignmentStageFromSupabase?.__chips620) setTimeout(retryHooks, 120);
+
+    window.assignLeadToChipRebuild620 = assignLeadToChip;
+    window.refreshChipsRebuild620 = refreshChipState;
+    window.repairInterfaceEncodingRebuild620 = function repairInterfaceEncodingRebuild620() {
+      repairDomText();
+      installSvgIcons();
+      enhanceAssignmentCards();
+    };
+
+    if (!window.__crm620Observer && document.body) {
+      window.__crm620Observer = new MutationObserver(scheduleVisualRepair);
+      window.__crm620Observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    if (document.getElementById('panel-atribuicao')?.classList.contains('active')) {
+      refreshChipState().then(enhanceAssignmentCards);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
 /* CRM Rebuild Fase 6.19 - Atribuicao lendo Supabase */
 (function () {
   const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';

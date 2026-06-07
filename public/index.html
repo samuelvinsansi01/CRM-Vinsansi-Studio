@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8"/>
@@ -16,9 +16,9 @@
 <!-- AUTH GATE -->
 <div id="authGate" class="auth-gate open">
   <div class="auth-gate-card">
-    <div class="auth-gate-badge">CRM DE PROSPECÃ‡ÃƒO</div>
+    <div class="auth-gate-badge">CRM DE PROSPECÇÃO</div>
     <h1>Entre para acessar seu painel.</h1>
-    <p>Seus leads, notas, follow-ups e histÃ³rico ficam sincronizados com sua conta.</p>
+    <p>Seus leads, notas, follow-ups e histórico ficam sincronizados com sua conta.</p>
 
     <button class="auth-gate-button" onclick="loginGoogle()">
       <span>G</span>
@@ -26,7 +26,7 @@
     </button>
 
     <div class="auth-gate-footer">
-      Acesso privado Â· Dados sincronizados no Supabase
+      Acesso privado · Dados sincronizados no Supabase
     </div>
   </div>
 </div>
@@ -36,104 +36,104 @@
 <!-- SIDEBAR FINAL -->
 <aside class="sidebar collapsed sidebar-final-v414" id="sidebar" data-menu-final="v41.4">
   <div class="sidebar-final-head">
-    <button class="sidebar-hamburger" onclick="toggleSidebar()" aria-label="Alternar menu">â˜°</button>
+    <button class="sidebar-hamburger" onclick="toggleSidebar()" aria-label="Alternar menu">☰</button>
     <div>
-      <div class="sidebar-final-title">OlÃ¡, Samuel ðŸ‘‹</div>
-      <div class="sidebar-final-sub">CRM de ProspecÃ§Ã£o</div>
+      <div class="sidebar-final-title">Olá, Samuel 👋</div>
+      <div class="sidebar-final-sub">CRM de Prospecção</div>
     </div>
   </div>
 
   <nav class="sidebar-final-nav">
     <button class="nav-item" onclick="openGlobalSearch()" data-label="Busca">
-      <div class="nav-icon">ðŸ”Ž</div><span class="nav-label">Busca</span><span class="nav-badge">âŒ˜K</span>
+      <div class="nav-icon">🔎</div><span class="nav-label">Busca</span><span class="nav-badge">⌘K</span>
     </button>
 
-    <button class="nav-item active" onclick="switchPanel('inicio')" data-label="InÃ­cio">
-      <div class="nav-icon">ðŸ“Š</div><span class="nav-label">InÃ­cio</span><span class="nav-badge" id="badge-inicio">0</span>
+    <button class="nav-item active" onclick="switchPanel('inicio')" data-label="Início">
+      <div class="nav-icon">📊</div><span class="nav-label">Início</span><span class="nav-badge" id="badge-inicio">0</span>
     </button>
 
     <button class="nav-item" onclick="switchPanel('inbox')" data-label="Caixa de Entrada">
-      <div class="nav-icon">ðŸ“¥</div><span class="nav-label">Caixa de Entrada</span><span class="nav-badge" id="badge-inbox">0</span>
+      <div class="nav-icon">📥</div><span class="nav-label">Caixa de Entrada</span><span class="nav-badge" id="badge-inbox">0</span>
     </button>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Leads">
-        <div class="nav-icon">ðŸ‘¥</div>
+        <div class="nav-icon">👥</div>
         <span class="nav-label">Leads</span>
-        <span class="menu-arrow-final">â€º</span>
+        <span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('importar')" data-label="Importar">
-        <div class="nav-icon">ðŸ“¥</div><span class="nav-label">Importar</span><span class="nav-badge" id="badge-importar">0</span>
+        <div class="nav-icon">📥</div><span class="nav-label">Importar</span><span class="nav-badge" id="badge-importar">0</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('validacao')" data-label="ValidaÃ§Ã£o">
-        <div class="nav-icon">âœ…</div><span class="nav-label">ValidaÃ§Ã£o</span><span class="nav-badge" id="badge-validacao">0</span>
+      <button class="nav-item sub" onclick="switchPanel('validacao')" data-label="Validação">
+        <div class="nav-icon">✅</div><span class="nav-label">Validação</span><span class="nav-badge" id="badge-validacao">0</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('atribuicao')" data-label="AtribuiÃ§Ã£o">
-        <div class="nav-icon">ðŸ—‚ï¸</div><span class="nav-label">AtribuiÃ§Ã£o</span><span class="nav-badge" id="badge-atribuicao">0</span>
+      <button class="nav-item sub" onclick="switchPanel('atribuicao')" data-label="Atribuição">
+        <div class="nav-icon">🗂️</div><span class="nav-label">Atribuição</span><span class="nav-badge" id="badge-atribuicao">0</span>
       </button>
     </details>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Envios">
-        <div class="nav-icon">ðŸ“¨</div>
+        <div class="nav-icon">📨</div>
         <span class="nav-label">Envios</span>
-        <span class="menu-arrow-final">â€º</span>
+        <span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('fila-zap')" data-label="WhatsApp">
-        <div class="nav-icon">ðŸ’¬</div><span class="nav-label">WhatsApp</span><span class="nav-badge" id="badge-fila-zap">0</span>
+        <div class="nav-icon">💬</div><span class="nav-label">WhatsApp</span><span class="nav-badge" id="badge-fila-zap">0</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
-        <div class="nav-icon">ðŸ“¸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
+        <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
       </button>
     </details>
 
     <button class="nav-item" onclick="switchPanel('conversations')" data-label="Conversas">
-      <div class="nav-icon">ðŸ’¬</div><span class="nav-label">Conversas</span>
+      <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
     </button>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Gerenciamento">
-        <div class="nav-icon">ðŸ“‹</div>
+        <div class="nav-icon">📋</div>
         <span class="nav-label">Gerenciamento</span>
-        <span class="menu-arrow-final">â€º</span>
+        <span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('followups')" data-label="Follow-ups">
-        <div class="nav-icon">â°</div><span class="nav-label">Follow-ups</span><span class="nav-badge" id="badge-followups">0</span>
+        <div class="nav-icon">⏰</div><span class="nav-label">Follow-ups</span><span class="nav-badge" id="badge-followups">0</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('kanban')" data-label="Kanban">
-        <div class="nav-icon">ðŸ“‹</div><span class="nav-label">Kanban</span>
+        <div class="nav-icon">📋</div><span class="nav-label">Kanban</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('acompanhamento')" data-label="Acompanhamentos">
-        <div class="nav-icon">ðŸ“ˆ</div><span class="nav-label">Acompanhamentos</span><span class="nav-badge" id="badge-acompanhamento">0</span>
+        <div class="nav-icon">📈</div><span class="nav-label">Acompanhamentos</span><span class="nav-badge" id="badge-acompanhamento">0</span>
       </button>
     </details>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Ferramentas">
-        <div class="nav-icon">ðŸ› ï¸</div>
+        <div class="nav-icon">🛠️</div>
         <span class="nav-label">Ferramentas</span>
-        <span class="menu-arrow-final">â€º</span>
+        <span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('redirecionamentos')" data-label="Redirecionamentos">
-        <div class="nav-icon">ðŸ”—</div><span class="nav-label">Redirecionamentos</span>
+        <div class="nav-icon">🔗</div><span class="nav-label">Redirecionamentos</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('audit')" data-label="Auditoria">
-        <div class="nav-icon">ðŸ“Š</div><span class="nav-label">Auditoria</span><span class="nav-badge" id="badge-audit">LOG</span>
+        <div class="nav-icon">📊</div><span class="nav-label">Auditoria</span><span class="nav-badge" id="badge-audit">LOG</span>
       </button>
     </details>
 
     <button class="nav-item" onclick="switchPanel('conta')" data-label="Minha conta">
-      <div class="nav-icon">ðŸ‘¤</div><span class="nav-label">Minha conta</span>
+      <div class="nav-icon">👤</div><span class="nav-label">Minha conta</span>
     </button>
 
-    <button class="nav-item" onclick="switchPanel('configuracoes')" data-label="ConfiguraÃ§Ãµes">
-      <div class="nav-icon">âš™ï¸</div><span class="nav-label">ConfiguraÃ§Ãµes</span>
+    <button class="nav-item" onclick="switchPanel('configuracoes')" data-label="Configurações">
+      <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
     </button>
   </nav>
 
   <div class="sidebar-final-footer">
     <button class="nav-item logout" onclick="logoutSupabase()" data-label="Sair">
-      <div class="nav-icon">ðŸšª</div><span class="nav-label">Sair</span>
+      <div class="nav-icon">🚪</div><span class="nav-label">Sair</span>
     </button>
   </div>
 </aside>
@@ -148,7 +148,7 @@
         <div class="global-search-title">Busca global</div>
         <div class="global-search-sub">// pesquise por empresa, telefone, site ou Instagram</div>
       </div>
-      <button class="global-search-close" onclick="closeGlobalSearch()">Ã—</button>
+      <button class="global-search-close" onclick="closeGlobalSearch()">×</button>
     </div>
     <input id="globalSearchInput" class="global-search-input" type="text" placeholder="Digite para buscar..." oninput="renderGlobalSearchResults()" />
     <div id="globalSearchResults" class="global-search-results">
@@ -159,13 +159,13 @@
 
 <main class="main">
 
-<!-- â”€â”€ INÃCIO â”€â”€ -->
+<!-- ── INÍCIO ── -->
 <div class="panel active" id="panel-inicio">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Empresas da <span>semana.</span></div>
-    <div class="page-sub">// leads validados Â· prontos para prospecÃ§Ã£o</div>
+    <div class="page-sub">// leads validados · prontos para prospecção</div>
   </div>
-  <!-- BARRA DE AÃ‡Ã•ES DO INÃCIO -->
+  <!-- BARRA DE AÇÕES DO INÍCIO -->
   <div class="btn-row" style="margin-bottom:16px;flex-shrink:0">
 
     <button class="btn btn-excel" onclick="exportExcel()">
@@ -173,7 +173,7 @@
       Exportar semana
     </button>
     <select id="exportDaySelect" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:7px 10px;width:auto;cursor:pointer"><option value="">Exportar dia...</option></select>
-    <button class="btn btn-excel" onclick="exportExcelDay()">Dia especÃ­fico</button>
+    <button class="btn btn-excel" onclick="exportExcelDay()">Dia específico</button>
     <button class="btn btn-danger" style="margin-left:auto" onclick="clearDayModal()">Limpar dia</button>
     <button class="btn btn-danger" onclick="clearAll()">Limpar semana</button>
     <button class="btn btn-ghost" onclick="createDevTestLead()">+ Lead teste</button>
@@ -188,7 +188,7 @@
     <div class="day-tabs" id="inicioDayTabs"></div>
     <div class="status-tabs" id="inicioStatusTabs"></div>
     <div style="margin-bottom:10px;flex-shrink:0">
-      <input id="inicioBusca" type="text" placeholder="ðŸ” Buscar por nome, site ou WhatsApp..."
+      <input id="inicioBusca" type="text" placeholder="🔍 Buscar por nome, site ou WhatsApp..."
         oninput="inicioPage=1;renderInicio()"
         style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
         onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"/>
@@ -228,16 +228,16 @@
       <span id="leadBaseTotalBadge" class="history-badge"></span>
     </div>
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px">
-      // inventÃ¡rio completo Â· leads antigos permanecem disponÃ­veis mesmo fora da agenda semanal
+      // inventário completo · leads antigos permanecem disponíveis mesmo fora da agenda semanal
     </div>
     <div class="status-tabs" id="leadBaseFilterTabs"></div>
     <div class="btn-row" style="margin-bottom:10px">
       <button class="btn btn-primary" onclick="prepareSelectedPermanentLeads()">Recuperar selecionados</button>
-      <button class="btn btn-ghost" onclick="selectVisiblePermanentPendingLeads()">Selecionar pendentes visÃ­veis</button>
+      <button class="btn btn-ghost" onclick="selectVisiblePermanentPendingLeads()">Selecionar pendentes visíveis</button>
       <span id="leadBaseSelectedLabel" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">0 selecionados</span>
     </div>
     <div style="margin-bottom:10px;flex-shrink:0">
-      <input id="leadBaseSearch" type="text" placeholder="ðŸ” Buscar em toda a base por nome, site ou WhatsApp..."
+      <input id="leadBaseSearch" type="text" placeholder="🔍 Buscar em toda a base por nome, site ou WhatsApp..."
         oninput="leadBasePage=1;renderLeadBasePanel()"
         style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
         onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"/>
@@ -255,10 +255,10 @@
     </div>
   </div>
 
-  <!-- DOMÃNIOS EXCLUÃDOS â€” abaixo dos leads ativos -->
+  <!-- DOMÍNIOS EXCLUÍDOS — abaixo dos leads ativos -->
   <div class="card" style="margin-top:16px">
-    <div class="card-title">DomÃ­nios excluÃ­dos manualmente <span id="excludedCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
-    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px">Bloqueados manualmente na importaÃ§Ã£o da Apify. NÃ£o representam automaticamente leads jÃ¡ cadastrados.</div>
+    <div class="card-title">Domínios excluídos manualmente <span id="excludedCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px">Bloqueados manualmente na importação da Apify. Não representam automaticamente leads já cadastrados.</div>
     <div id="excludedList" style="max-height:180px;overflow-y:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);"></div>
     <div class="btn-row" style="margin-top:10px">
       <button class="btn btn-danger" onclick="abrirModalLimparExcluidos()">Limpar lista</button>
@@ -266,11 +266,11 @@
   </div>
 </div>
 
-<!-- â”€â”€ IMPORTAR â”€â”€ -->
+<!-- ── IMPORTAR ── -->
 <div class="panel" id="panel-importar">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Importar <span>Leads.</span></div>
-    <div class="page-sub">// Apify Â· nota â‰¥ 4,0 Â· 15+ avaliaÃ§Ãµes Â· com ou sem site â†’ validaÃ§Ã£o WhatsApp Â· sem WhatsApp â†’ Instagram</div>
+    <div class="page-sub">// Apify · nota ≥ 4,0 · 15+ avaliações · com ou sem site → validação WhatsApp · sem WhatsApp → Instagram</div>
   </div>
   <div class="import-grid" style="align-items:start">
     <div style="display:flex;flex-direction:column">
@@ -284,7 +284,7 @@
             </select>
           </div>
           <div id="subRamosWrap" style="display:none;margin-bottom:10px">
-            <label>Sub-categorias incluÃ­das</label>
+            <label>Sub-categorias incluídas</label>
             <div id="subRamosList" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"></div>
           </div>
         </div>
@@ -292,30 +292,30 @@
           <label>Cole o JSON <span class="tag">results[]</span></label>
           <textarea id="importJsonInput" placeholder='[{"title":"Empresa X","website":"https://...","phone":"+55 11 9...","categoryName":"Contabilidade"},...]' style="min-height:260px" oninput="importPreview()"></textarea>
         </div>
-        <div class="filter-summary" id="importSummary">// cole o JSON acima para ver a prÃ©via do filtro</div>
+        <div class="filter-summary" id="importSummary">// cole o JSON acima para ver a prévia do filtro</div>
         <div class="btn-row" style="margin-top:12px">
-          <button class="btn btn-primary" id="importLeadsBtn" style="flex:1" onclick="importarLeads()">â†“ Importar para ValidaÃ§Ã£o</button>
+          <button class="btn btn-primary" id="importLeadsBtn" style="flex:1" onclick="importarLeads()">↓ Importar para Validação</button>
           <button class="btn btn-ghost" onclick="document.getElementById('importJsonInput').value='';importPreview()">Limpar</button>
         </div>
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="stretch-card">
-        <div class="card-title" style="flex-shrink:0">PrÃ©via <span id="previewCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
+        <div class="card-title" style="flex-shrink:0">Prévia <span id="previewCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
         <div id="importPreviewList" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// aguardando JSON...</div>
         <div id="importPreviewPagination"></div>
       </div>
-      <!-- Card: ValidaÃ§Ã£o Manual -->
+      <!-- Card: Validação Manual -->
       <div class="card">
-        <div class="card-title">ValidaÃ§Ã£o Manual</div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:14px">// Insira um lead avulso ou valide um nÃºmero pontualmente</div>
+        <div class="card-title">Validação Manual</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:14px">// Insira um lead avulso ou valide um número pontualmente</div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <div class="field-group">
-            <label>Nome da empresa <span class="tag">OBRIGATÃ“RIO</span></label>
+            <label>Nome da empresa <span class="tag">OBRIGATÓRIO</span></label>
             <input type="text" id="manualLeadNome" placeholder="Ex: Studio Silva"/>
           </div>
           <div class="field-group">
-            <label>NÃºmero WhatsApp</label>
+            <label>Número WhatsApp</label>
             <input type="text" id="manualLeadPhone" placeholder="+55 11 9 9999-9999"/>
           </div>
           <div class="field-group">
@@ -328,39 +328,39 @@
           </div>
         </div>
         <div style="margin-top:12px">
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:6px">Chip para validaÃ§Ã£o:</div>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:6px">Chip para validação:</div>
           <div id="manualValChipTabs" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px"></div>
           <div id="manualValResult" style="display:none;font-family:'DM Mono',monospace;font-size:9px;padding:6px 10px;border-radius:7px;margin-bottom:10px"></div>
         </div>
         <div class="btn-row">
           <button class="btn btn-ghost" style="flex:1" onclick="validarNumeroManual()">
             <div class="spinner" id="manualValSpinner" style="border-top-color:var(--text2)"></div>
-            Validar nÃºmero
+            Validar número
           </button>
-          <button class="btn btn-primary" style="flex:1" onclick="adicionarLeadManual()">âœ“ Adicionar lead</button>
+          <button class="btn btn-primary" style="flex:1" onclick="adicionarLeadManual()">✓ Adicionar lead</button>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- â”€â”€ VALIDAÃ‡ÃƒO â”€â”€ -->
+<!-- ── VALIDAÇÃO ── -->
 <div class="panel" id="panel-validacao">
   <div class="page-header" style="flex-shrink:0">
-    <div class="page-title">ValidaÃ§Ã£o <span>de Leads.</span></div>
-    <div class="page-sub">// triagem rÃ¡pida Â· nÃºmero vÃ¡lido â†’ tag ZAP Â· sem nÃºmero â†’ tag INSTA Â· ambos vÃ£o para AtribuiÃ§Ã£o</div>
+    <div class="page-title">Validação <span>de Leads.</span></div>
+    <div class="page-sub">// triagem rápida · número válido → tag ZAP · sem número → tag INSTA · ambos vão para Atribuição</div>
   </div>
 
   <!-- ABAS DE RESULTADO -->
   <div style="display:flex;gap:5px;margin-bottom:16px;flex-shrink:0;border-bottom:1px solid var(--border);padding-bottom:12px">
     <button id="valResultTabPendentes" class="val-result-tab active" onclick="setValResultTab('pendentes')"
       style="padding:6px 14px;border:1px solid var(--accent-border);border-radius:8px;background:var(--accent-dim);color:var(--accent);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
-      ðŸ“‹ Aguardando ValidaÃ§Ã£o
+      📋 Aguardando Validação
       <span id="valCountSemZap" style="background:rgba(255,92,92,0.15);border:1px solid rgba(255,92,92,0.3);color:var(--error);padding:1px 6px;border-radius:100px;font-size:8px">0</span>
     </button>
     <button id="valResultTabValidados" class="val-result-tab" onclick="setValResultTab('validados')"
       style="padding:6px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
-      âœ… NÃºmero Validado (ZAP)
+      ✅ Número Validado (ZAP)
       <span id="valCountComZap" style="background:rgba(78,203,113,0.1);border:1px solid rgba(78,203,113,0.3);color:var(--ok);padding:1px 6px;border-radius:100px;font-size:8px">0</span>
     </button>
   </div>
@@ -368,60 +368,60 @@
   <!-- PAINEL PRINCIPAL -->
   <div class="val-sub-panel active stretch-container" id="valPanelComSite">
     <div class="stretch-card" style="width:100%">
-      <div class="card-title" style="flex-shrink:0">Oportunidades sem site prÃ³prio â€” validar nÃºmero WhatsApp
-        <div id="valMantidosBadge" title="Empresas que serÃ£o mantidas" style="display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;border-radius:100px;border:1px solid rgba(91,184,245,0.35);background:rgba(91,184,245,0.07);color:#5bb8f5;opacity:0;transform:scale(0.9);transition:opacity 0.22s,transform 0.22s;white-space:nowrap;pointer-events:none">
+      <div class="card-title" style="flex-shrink:0">Oportunidades sem site próprio — validar número WhatsApp
+        <div id="valMantidosBadge" title="Empresas que serão mantidas" style="display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;border-radius:100px;border:1px solid rgba(91,184,245,0.35);background:rgba(91,184,245,0.07);color:#5bb8f5;opacity:0;transform:scale(0.9);transition:opacity 0.22s,transform 0.22s;white-space:nowrap;pointer-events:none">
           <span class="mantidos-dot" style="width:5px;height:5px;border-radius:50%;background:#5bb8f5;flex-shrink:0"></span>
           <span id="valMantidosCount">0</span> mantidos
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;flex-shrink:0">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Chip para validaÃ§Ã£o:</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Chip para validação:</div>
         <div id="valChipTabs" class="chip-tabs"></div>
         <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;margin-left:auto" onclick="validarTodosNumeros()">
           <div class="spinner" id="valSpinner" style="border-top-color:#0a0a0d"></div>
           Validar pendentes
         </button>
         <button class="btn btn-ghost" style="font-size:10px;padding:7px 14px" onclick="validarTodosNumeros({retryAll:true})">
-          Revalidar nÃ£o vÃ¡lidos/falhas
+          Revalidar não válidos/falhas
         </button>
         <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="aprovarTodosParaAtribuicao()">
-          â†’ Enviar todos para AtribuiÃ§Ã£o
+          → Enviar todos para Atribuição
         </button>
       </div>
-      <div id="valComSiteList" class="stretch-list" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// nenhuma empresa aguardando validaÃ§Ã£o</div>
+      <div id="valComSiteList" class="stretch-list" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// nenhuma empresa aguardando validação</div>
       <div id="valPagination"></div>
     </div>
   </div>
 </div>
 
-<!-- â”€â”€ ATRIBUIÃ‡ÃƒO â”€â”€ -->
+<!-- ── ATRIBUIÇÃO ── -->
 <div class="panel" id="panel-atribuicao">
   <div class="page-header" style="flex-shrink:0">
     <div>
-      <div class="page-title">Base de <span>AtribuiÃ§Ã£o.</span></div>
-      <div class="page-sub">// leads validados Â· enviados para Backlog WhatsApp/Instagram</div>
+      <div class="page-title">Base de <span>Atribuição.</span></div>
+      <div class="page-sub">// leads validados · enviados para Backlog WhatsApp/Instagram</div>
     </div>
   </div>
 
   <div style="display:flex;gap:0;flex-shrink:0;margin-bottom:16px;border-bottom:1px solid var(--border)">
     <button id="atribTabZap" onclick="setAtribTab('zap')"
       style="background:none;border:none;border-bottom:2px solid var(--accent);color:var(--accent);font-family:'DM Mono',monospace;font-size:10px;padding:8px 18px;cursor:pointer;font-weight:700;transition:all 0.18s;margin-bottom:-1px">
-      ðŸ’¬ WhatsApp <span id="atribTabZapCount" style="opacity:0.6;font-weight:400"></span>
+      💬 WhatsApp <span id="atribTabZapCount" style="opacity:0.6;font-weight:400"></span>
     </button>
     <button id="atribTabInsta" onclick="setAtribTab('insta')"
       style="background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;padding:8px 18px;cursor:pointer;font-weight:700;transition:all 0.18s;margin-bottom:-1px">
-      ðŸ“¸ Instagram <span id="atribTabInstaCount" style="opacity:0.6;font-weight:400"></span>
+      📸 Instagram <span id="atribTabInstaCount" style="opacity:0.6;font-weight:400"></span>
     </button>
     <button id="atribTabComSite" onclick="setAtribTab('com-site')"
       style="background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;padding:8px 18px;cursor:pointer;font-weight:700;transition:all 0.18s;margin-bottom:-1px">
-      ðŸŒ Com sites <span id="atribTabComSiteCount" style="opacity:0.6;font-weight:400"></span>
+      🌐 Com sites <span id="atribTabComSiteCount" style="opacity:0.6;font-weight:400"></span>
     </button>
   </div>
 
   <!-- ABA WHATSAPP -->
   <div id="atribPanelZap" style="flex:1;display:flex;flex-direction:column;min-height:0">
 
-    <!-- FORMULÃRIO INLINE NOVO LEAD ZAP (fechado por padrÃ£o) -->
+    <!-- FORMULÁRIO INLINE NOVO LEAD ZAP (fechado por padrão) -->
     <div id="zapLeadForm" style="display:none;flex-shrink:0;margin-bottom:12px;background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:12px 14px">
       <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:0.1em;margin-bottom:10px;text-transform:uppercase">// novo lead manual</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -435,24 +435,24 @@
           onkeydown="if(event.key==='Enter')salvarZapLeadManual()"/>
         <button onclick="salvarZapLeadManual()"
           style="background:var(--accent);color:#0a0a0d;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:8px 16px;cursor:pointer;white-space:nowrap;flex-shrink:0">
-          âœ“ Adicionar
+          ✓ Adicionar
         </button>
       </div>
     </div>
-    <!-- Barra de aÃ§Ãµes em lote -->
+    <!-- Barra de ações em lote -->
     <div id="atribAcoesLote" style="display:none;flex-shrink:0;margin-bottom:12px;background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:10px 14px;align-items:center;gap:10px;flex-wrap:wrap">
       <span id="atribLoteLabel" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent)">0 selecionados</span>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Enviar para Backlog:</span>
         <div class="day-tabs" id="atribLoteDayTabs" style="margin-bottom:0"></div>
       </div>
-      <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;margin-left:auto" onclick="atribuirLote()">Enviar para Backlog â†’</button>
+      <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;margin-left:auto" onclick="atribuirLote()">Enviar para Backlog →</button>
       <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="deselecionarTodos()">Cancelar</button>
     </div>
 
     <div class="stretch-card">
       <div class="card-title" style="flex-shrink:0">
-        Aguardando atribuiÃ§Ã£o
+        Aguardando atribuição
         <span id="atribTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
         <button onclick="selecionarTodos()" style="margin-left:8px;background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;cursor:pointer;transition:all 0.18s" onmouseover="this.style.color='var(--accent)';this.style.borderColor='var(--accent)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--border2)'">Selecionar todos</button>
         <button onclick="reclassificarAtribuicaoPorSite()"
@@ -463,13 +463,13 @@
           onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='none'">+ Novo lead</button>
       </div>
       <div style="margin-bottom:12px;flex-shrink:0">
-        <input id="atribBusca" type="text" placeholder="ðŸ” Buscar por nome, site ou WhatsApp..."
+        <input id="atribBusca" type="text" placeholder="🔍 Buscar por nome, site ou WhatsApp..."
           oninput="atribPage=1;renderAtribuicao()"
           style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
           onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"/>
       </div>
       <div id="atribList" class="stretch-list">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuiÃ§Ã£o</div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição</div>
       </div>
       <div id="atribPagination"></div>
     </div>
@@ -477,7 +477,7 @@
 
   <!-- ABA INSTAGRAM -->
   <div id="atribPanelInsta" style="flex:1;display:none;flex-direction:column;min-height:0">
-    <!-- FORMULÃRIO INLINE NOVO LEAD INSTAGRAM (fechado por padrÃ£o) -->
+    <!-- FORMULÁRIO INLINE NOVO LEAD INSTAGRAM (fechado por padrão) -->
     <div id="instaLeadForm" style="display:none;flex-shrink:0;margin-bottom:12px;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.25);border-radius:10px;padding:12px 14px">
       <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--insta);letter-spacing:0.1em;margin-bottom:10px;text-transform:uppercase">// novo lead manual</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -491,27 +491,27 @@
           onkeydown="if(event.key==='Enter')salvarInstaLeadInline()"/>
         <button onclick="salvarInstaLeadInline()"
           style="background:var(--insta);color:#fff;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:8px 16px;cursor:pointer;white-space:nowrap;flex-shrink:0">
-          âœ“ Adicionar
+          ✓ Adicionar
         </button>
       </div>
     </div>
 
     <div class="stretch-card" style="flex:1;display:flex;flex-direction:column;min-height:0">
       <div class="card-title" style="flex-shrink:0">
-        Aguardando atribuiÃ§Ã£o
+        Aguardando atribuição
         <span id="atribInstaFilaTotalBadge" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span>
         <button id="btnToggleInstaForm" onclick="toggleAtribForm('insta')"
           style="background:none;border:1px solid rgba(225,48,108,0.3);color:var(--insta);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 10px;cursor:pointer;transition:all 0.18s;margin-left:auto"
           onmouseover="this.style.background='rgba(225,48,108,0.06)'" onmouseout="this.style.background='none'">+ Novo lead</button>
       </div>
       <div style="margin-bottom:10px;flex-shrink:0">
-        <input id="atribInstaBusca" type="text" placeholder="ðŸ” Buscar por nome ou WhatsApp..."
+        <input id="atribInstaBusca" type="text" placeholder="🔍 Buscar por nome ou WhatsApp..."
           oninput="renderAtribInstaFila()"
           style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
           onfocus="this.style.borderColor='var(--insta)'" onblur="this.style.borderColor='var(--border2)'"/>
       </div>
       <div id="atribInstaList" class="stretch-list" style="flex:1;overflow-y:auto">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuiÃ§Ã£o</div>
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição</div>
       </div>
       <div id="atribInstaPagination"></div>
     </div>
@@ -519,26 +519,26 @@
 </div>
 
 
-<!-- â”€â”€ INSTAGRAM â”€â”€ -->
+<!-- ── INSTAGRAM ── -->
 <div class="panel" id="panel-instagram">
   <!-- HEADER -->
   <div class="page-header" style="flex-shrink:0">
     <div>
       <div class="page-title">Instagram <span>Fila.</span></div>
-      <div class="page-sub">// backlog Â· 60 leads por dia Â· clique para copiar mensagem</div>
+      <div class="page-sub">// backlog · 60 leads por dia · clique para copiar mensagem</div>
     </div>
   </div>
 
   <!-- ABAS: Backlog + dias da semana -->
   <div id="instaTabBar" style="display:flex;gap:0;flex-shrink:0;margin-bottom:16px;border-bottom:1px solid var(--border);flex-wrap:wrap"></div>
 
-  <!-- CONTEÃšDO DA ABA ATIVA -->
+  <!-- CONTEÚDO DA ABA ATIVA -->
   <div id="instaTabContent" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden"></div>
 </div>
 
 <div class="panel" id="panel-fila-zap" style="padding:0;overflow:hidden;flex-direction:row;height:100vh;">
 
-  <!-- â•â• COLUNA ESQUERDA: Selecionar Empresas (50%) â•â• -->
+  <!-- ══ COLUNA ESQUERDA: Selecionar Empresas (50%) ══ -->
   <div class="zapLeft" id="zapLeft">
     <div class="zapLeft-inner">
       <div class="page-header" style="flex-shrink:0;padding:20px 20px 0">
@@ -549,7 +549,7 @@
       <div style="padding:16px 20px;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
         <div class="card-title" style="flex-shrink:0">
           Selecionar empresas
-          <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">â€” adicione Ã  fila do chip desejado</span>
+          <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">— adicione à fila do chip desejado</span>
         </div>
         <div class="day-tabs" id="disparoDayTabs" style="flex-shrink:0"></div>
         <div class="status-tabs" id="disparoStatusTabs" style="flex-shrink:0"></div>
@@ -560,15 +560,15 @@
     </div>
   </div>
 
-  <!-- â•â• DIVISOR VERTICAL â•â• -->
+  <!-- ══ DIVISOR VERTICAL ══ -->
   <div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch;"></div>
 
-  <!-- â•â• COLUNA DIREITA: Accordions de Chip (dinÃ¢mico) â•â• -->
+  <!-- ══ COLUNA DIREITA: Accordions de Chip (dinâmico) ══ -->
   <div class="zapRight" id="zapRight">
     <!-- preenchido dinamicamente por renderChipAccordions() -->
   </div>
 
-  <!-- hidden â€” mantido para compatibilidade com cÃ³digo legado que referencia esses IDs -->
+  <!-- hidden — mantido para compatibilidade com código legado que referencia esses IDs -->
   <div style="display:none">
     <div id="filaZapChipTabs"></div>
     <div id="disparoChipInfo"></div>
@@ -585,11 +585,11 @@
 
 
 
-<!-- â”€â”€ REDIRECIONAMENTOS â”€â”€ -->
+<!-- ── REDIRECIONAMENTOS ── -->
 <div class="panel" id="panel-redirecionamentos">
   <div class="page-header">
     <div class="page-title">Redir<span>ecionamentos.</span></div>
-    <div class="page-sub">// encurtador de links Â· desktop & mobile Â· Figma</div>
+    <div class="page-sub">// encurtador de links · desktop & mobile · Figma</div>
   </div>
   <div class="redirect-grid">
     <div>
@@ -642,10 +642,10 @@
       <div class="card">
         <div class="card-title">Como funciona</div>
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);line-height:1.9">
-          <div style="margin-bottom:10px">â‘  Insira o nome da empresa e os links do Figma para desktop e mobile.</div>
-          <div style="margin-bottom:10px">â‘¡ O sistema gera um link curto via TinyURL no formato <span style="color:var(--accent)">tinyurl.com/nome-vin</span></div>
-          <div style="margin-bottom:10px">â‘¢ Ao acessar, detecta automaticamente se Ã© desktop ou mobile e redireciona para o protÃ³tipo correto.</div>
-          <div>â‘£ Para atualizar o destino sem mudar o link, use o painel ao lado com o alias.</div>
+          <div style="margin-bottom:10px">① Insira o nome da empresa e os links do Figma para desktop e mobile.</div>
+          <div style="margin-bottom:10px">② O sistema gera um link curto via TinyURL no formato <span style="color:var(--accent)">tinyurl.com/nome-vin</span></div>
+          <div style="margin-bottom:10px">③ Ao acessar, detecta automaticamente se é desktop ou mobile e redireciona para o protótipo correto.</div>
+          <div>④ Para atualizar o destino sem mudar o link, use o painel ao lado com o alias.</div>
         </div>
       </div>
     </div>
@@ -657,16 +657,16 @@
 <div class="panel" id="panel-kanban">
   <div class="page-header">
     <div class="page-title">Kanban <span>Comercial.</span></div>
-    <div class="page-sub">// pipeline visual de negociaÃ§Ã£o</div>
+    <div class="page-sub">// pipeline visual de negociação</div>
   </div>
   <div id="kanbanBoard" class="kanban-board"></div>
 </div>
 
-<!-- â”€â”€ FOLLOW-UPS â”€â”€ -->
+<!-- ── FOLLOW-UPS ── -->
 <div class="panel" id="panel-followups">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Central de <span>Follow-ups.</span></div>
-    <div class="page-sub">// hoje Â· atrasados Â· prÃ³ximos 7 dias</div>
+    <div class="page-sub">// hoje · atrasados · próximos 7 dias</div>
   </div>
 
   <div class="followup-dashboard" id="followupDashboard"></div>
@@ -674,7 +674,7 @@
   <div class="followup-tabs">
     <button class="followup-tab active" id="fuTabHoje" onclick="setFollowupFilter('hoje')">Hoje</button>
     <button class="followup-tab" id="fuTabAtrasados" onclick="setFollowupFilter('atrasados')">Atrasados</button>
-    <button class="followup-tab" id="fuTabProximos" onclick="setFollowupFilter('proximos')">PrÃ³ximos 7 dias</button>
+    <button class="followup-tab" id="fuTabProximos" onclick="setFollowupFilter('proximos')">Próximos 7 dias</button>
     <button class="followup-tab" id="fuTabTodos" onclick="setFollowupFilter('todos')">Todos</button>
   </div>
 
@@ -684,41 +684,41 @@
   </div>
 </div>
 
-<!-- â”€â”€ ACOMPANHAMENTO â”€â”€ -->
+<!-- ── ACOMPANHAMENTO ── -->
 <div class="panel" id="panel-acompanhamento">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Acompanha<span>mento.</span></div>
-    <div class="page-sub">// base de resultados mensais Â· leads enviados Â· edite o status a qualquer momento</div>
+    <div class="page-sub">// base de resultados mensais · leads enviados · edite o status a qualquer momento</div>
   </div>
 
-  <!-- BANNER DE MIGRAÃ‡ÃƒO (aparece sÃ³ se houver leads elegÃ­veis na semana) -->
+  <!-- BANNER DE MIGRAÇÃO (aparece só se houver leads elegíveis na semana) -->
   <div id="acompMigracaoBanner" style="display:none;background:rgba(184,240,89,0.06);border:1px solid var(--accent-border);border-radius:10px;padding:12px 16px;margin-bottom:16px;flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <div style="flex:1;min-width:0">
-      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:0.1em;margin-bottom:3px">LEADS ELEGÃVEIS NA SEMANA ATUAL</div>
-      <div id="acompMigracaoDesc" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">â€”</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);letter-spacing:0.1em;margin-bottom:3px">LEADS ELEGÍVEIS NA SEMANA ATUAL</div>
+      <div id="acompMigracaoDesc" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)">—</div>
     </div>
     <button class="btn btn-primary" style="font-size:10px;padding:7px 14px;white-space:nowrap" onclick="migrarLeadsAtuais()">
-      â†“ Importar para Acompanhamento
+      ↓ Importar para Acompanhamento
     </button>
   </div>
 
-  <!-- ABAS LISTA / MÃ‰TRICAS -->
+  <!-- ABAS LISTA / MÉTRICAS -->
   <div style="display:flex;gap:5px;margin-bottom:20px;flex-shrink:0;border-bottom:1px solid var(--border);padding-bottom:12px">
     <button id="acompTabLista" onclick="setAcompTab('lista')"
       style="padding:7px 16px;border:1px solid var(--accent-border);border-radius:8px;background:var(--accent-dim);color:var(--accent);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s">
-      ðŸ“‹ Lista de leads
+      📋 Lista de leads
     </button>
     <button id="acompTabMetricas" onclick="setAcompTab('metricas')"
       style="padding:7px 16px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s">
-      ðŸ“Š MÃ©tricas
+      📊 Métricas
     </button>
   </div>
 
   <!-- PAINEL LISTA -->
   <div id="acompPainelLista" style="display:flex;flex-direction:column;flex:1;min-height:0">
-    <!-- seletor de mÃªs -->
+    <!-- seletor de mês -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-shrink:0;flex-wrap:wrap">
-      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">MÃªs:</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Mês:</div>
       <div id="acompMesesTabs" style="display:flex;gap:5px;flex-wrap:wrap"></div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
         <div id="acompFiltroStatus" style="display:flex;gap:5px;flex-wrap:wrap"></div>
@@ -729,7 +729,7 @@
       <div id="acompFollowTabs" style="display:flex;gap:5px;flex-wrap:wrap"></div>
     </div>
     <div style="margin-bottom:10px;flex-shrink:0">
-      <input id="acompBusca" type="text" placeholder="ðŸ” Buscar por nome, site ou WhatsApp..."
+      <input id="acompBusca" type="text" placeholder="🔍 Buscar por nome, site ou WhatsApp..."
         oninput="acompPage=1;renderAcompLista()"
         style="background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:10px 13px;width:100%;outline:none;transition:border-color 0.2s"
         onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"/>
@@ -751,7 +751,7 @@
             </tr>
           </thead>
           <tbody id="acompTbody">
-            <tr><td colspan="7" class="table-empty">Nenhum resultado neste mÃªs ainda</td></tr>
+            <tr><td colspan="7" class="table-empty">Nenhum resultado neste mês ainda</td></tr>
           </tbody>
         </table>
         <div id="acompPagination"></div>
@@ -759,20 +759,20 @@
     </div>
   </div>
 
-  <!-- PAINEL MÃ‰TRICAS -->
+  <!-- PAINEL MÉTRICAS -->
   <div id="acompPainelMetricas" style="display:none;flex-direction:column;gap:16px">
-    <!-- seletor de mÃªs (mÃ©tricas) -->
+    <!-- seletor de mês (métricas) -->
     <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap">
-      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">MÃªs:</div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Mês:</div>
       <div id="acompMesesTabsMetricas" style="display:flex;gap:5px;flex-wrap:wrap"></div>
     </div>
 
     <!-- stat chips -->
     <div id="acompStatsRow" class="stats-row"></div>
 
-    <!-- comparativo por mÃªs -->
+    <!-- comparativo por mês -->
     <div class="card" id="acompComparativoCard">
-      <div class="card-title">Comparativo por mÃªs</div>
+      <div class="card-title">Comparativo por mês</div>
       <div id="acompComparativoTabela"></div>
     </div>
   </div>
@@ -782,7 +782,7 @@
 <div class="panel" id="panel-conta">
   <div class="page-header">
     <div class="page-title">Minha <span>conta.</span></div>
-    <div class="page-sub">// sessÃ£o Google Â· isolamento dos dados Â· sincronizaÃ§Ã£o Supabase</div>
+    <div class="page-sub">// sessão Google · isolamento dos dados · sincronização Supabase</div>
   </div>
 
   <div class="account-card-grid">
@@ -790,15 +790,15 @@
       <div class="account-card-avatar" id="minhaContaAvatar">?</div>
       <div>
         <div class="account-card-name" id="minhaContaNome">Conta</div>
-        <div class="account-card-email" id="minhaContaEmail">Carregando sessÃ£o...</div>
+        <div class="account-card-email" id="minhaContaEmail">Carregando sessão...</div>
       </div>
     </div>
 
     <div class="stretch-card">
-      <div class="card-title">SessÃ£o e seguranÃ§a</div>
+      <div class="card-title">Sessão e segurança</div>
       <div class="account-card-list">
-        <div><span>Status da sessÃ£o</span><strong class="account-card-status warn" id="minhaContaSessao">Carregando</strong></div>
-        <div><span>Isolamento dos dados</span><strong id="minhaContaIsolamento">Aguardando sessÃ£o</strong></div>
+        <div><span>Status da sessão</span><strong class="account-card-status warn" id="minhaContaSessao">Carregando</strong></div>
+        <div><span>Isolamento dos dados</span><strong id="minhaContaIsolamento">Aguardando sessão</strong></div>
         <div><span>Provedor de login</span><strong id="minhaContaProvider">--</strong></div>
         <div><span>Conta criada em</span><strong id="minhaContaCriadaEm">--</strong></div>
         <div><span>ID da conta</span><strong id="minhaContaId">--</strong></div>
@@ -809,7 +809,7 @@
   <div class="stretch-card account-card-actions-card">
     <div>
       <div class="card-title">Dados persistentes</div>
-      <div class="account-card-help">Leads, chips, conversas e filas permanecem vinculados exclusivamente Ã  conta autenticada.</div>
+      <div class="account-card-help">Leads, chips, conversas e filas permanecem vinculados exclusivamente à conta autenticada.</div>
     </div>
     <div class="account-card-actions">
       <button class="btn btn-primary" onclick="syncOperationalDataToSupabase()">Sincronizar agora</button>
@@ -819,11 +819,11 @@
   </div>
 </div>
 
-<!-- â”€â”€ CONFIGURAÃ‡Ã•ES â”€â”€ -->
+<!-- ── CONFIGURAÇÕES ── -->
 <div class="panel" id="panel-configuracoes">
   <div class="page-header">
-    <div class="page-title">Configur<span>aÃ§Ãµes.</span></div>
-    <div class="page-sub">// chips WhatsApp Â· Evolution API Â· ramos de prospecÃ§Ã£o</div>
+    <div class="page-title">Configur<span>ações.</span></div>
+    <div class="page-sub">// chips WhatsApp · Evolution API · ramos de prospecção</div>
   </div>
 
   <!-- CHIPS -->
@@ -836,7 +836,7 @@
   <div class="persistence-card">
     <div class="persistence-title">Webhook das conversas</div>
     <div class="persistence-text">
-      Use esta URL na instÃ¢ncia Evolution com o evento MESSAGES_UPSERT e webhook por eventos desativado.
+      Use esta URL na instância Evolution com o evento MESSAGES_UPSERT e webhook por eventos desativado.
     </div>
     <div id="webhookUrlEvolution" class="responses-url"></div>
     <div class="persistence-actions">
@@ -848,31 +848,31 @@
   </div>
 
   <div class="persistence-card">
-    <div class="persistence-title">PersistÃªncia Supabase</div>
+    <div class="persistence-title">Persistência Supabase</div>
     <div class="persistence-text">
-      Sincroniza dados operacionais criados no CRM: campanhas, templates, fila, chips, logs, respostas e configuraÃ§Ãµes.
-      O O Supabase Ã© a fonte oficial dos dados operacionais.
+      Sincroniza dados operacionais criados no CRM: campanhas, templates, fila, chips, logs, respostas e configurações.
+      O O Supabase é a fonte oficial dos dados operacionais.
     </div>
     <div class="persistence-actions">
       <button class="btn btn-primary" onclick="syncOperationalDataToSupabase()">Salvar no Supabase</button>
       <button class="btn btn-ghost" onclick="loadOperationalDataFromSupabase()">Recarregar do Supabase</button>
-      <button class="btn btn-ghost" onclick="showPersistenceSchema()">Ver tabelas necessÃ¡rias</button>
+      <button class="btn btn-ghost" onclick="showPersistenceSchema()">Ver tabelas necessárias</button>
     </div>
-    <div id="persistenceStatus" class="persistence-status">// aguardando aÃ§Ã£o</div>
+    <div id="persistenceStatus" class="persistence-status">// aguardando ação</div>
   </div>
 
-  <!-- CONFIGURAÃ‡ÃƒO DE DISPARO -->
+  <!-- CONFIGURAÇÃO DE DISPARO -->
   <div class="card" style="margin-top:16px">
-    <div class="card-title">ConfiguraÃ§Ã£o de disparo</div>
+    <div class="card-title">Configuração de disparo</div>
     <div style="margin-bottom:16px">
-      <label>HorÃ¡rio de inÃ­cio automÃ¡tico</label>
+      <label>Horário de início automático</label>
       <div class="horario-row">
         <input type="time" id="horarioInicio" value="12:00" style="width:auto" oninput="saveEvoConfig()"/>
         <div class="horario-status" id="horarioStatus">aguardando</div>
       </div>
     </div>
 
-    <!-- ParÃ¢metros fixos â€” visÃ­vel e claro -->
+    <!-- Parâmetros fixos — visível e claro -->
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
 
       <!-- bloco 1: delay -->
@@ -886,18 +886,18 @@
       <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">MENSAGENS POR LOTE</div>
         <div id="statLoteVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">30 msg</div>
-        <div id="statLoteSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip Â· 6 lotes por dia</div>
+        <div id="statLoteSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip · 6 lotes por dia</div>
       </div>
 
       <!-- bloco 3: por dia -->
       <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">LIMITE DIÃRIO POR CHIP <span class="tag">ANTI-BAN</span></div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">LIMITE DIÁRIO POR CHIP <span class="tag">ANTI-BAN</span></div>
         <div id="statDiaVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">180 msg</div>
-        <div id="statDiaSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">6 lotes Ã— 30 Â· espera 1h</div>
+        <div id="statDiaSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">6 lotes × 30 · espera 1h</div>
       </div>
 
     </div>
-    <!-- campos ocultos mantidos para compatibilidade com o cÃ³digo de disparo -->
+    <!-- campos ocultos mantidos para compatibilidade com o código de disparo -->
     <input type="hidden" id="delayMin"      value="120"/>
     <input type="hidden" id="delayMax"      value="120"/>
     <input type="hidden" id="loteTamanho"   value="30"/>
@@ -907,7 +907,7 @@
 
   <!-- RAMOS -->
   <div class="card" style="margin-top:16px">
-    <div class="card-title">Ramos de prospecÃ§Ã£o</div>
+    <div class="card-title">Ramos de prospecção</div>
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px">Gerencie os ramos e suas sub-categorias para filtrar o JSON da Apify.</div>
     <div id="ramosConfigList" style="margin-bottom:14px"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -926,19 +926,19 @@
 
   <!-- INSTAGRAM TEMPLATES -->
   <div class="card" style="margin-top:16px">
-    <div class="card-title" style="color:var(--insta)">Templates Instagram <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">Â· sorteio automÃ¡tico ao copiar</span></div>
-    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px">Use {EMPRESA} para o nome. Ao clicar em copiar no lead, um template Ã© sorteado e o nome preenchido automaticamente.</div>
+    <div class="card-title" style="color:var(--insta)">Templates Instagram <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· sorteio automático ao copiar</span></div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px">Use {EMPRESA} para o nome. Ao clicar em copiar no lead, um template é sorteado e o nome preenchido automaticamente.</div>
     <div id="instaTemplatesList"></div>
     <button class="btn btn-ghost" style="margin-top:12px;border-color:rgba(225,48,108,0.3);color:var(--insta)" onclick="adicionarInstaTemplate()">+ Novo template Instagram</button>
   </div>
 </div>
 
 
-<!-- â”€â”€ AUDITORIA V35 â”€â”€ -->
+<!-- ── AUDITORIA V35 ── -->
 <div class="panel" id="panel-audit">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Auditoria <span>de Disparos.</span></div>
-    <div class="page-sub">// envios Â· erros Â· chips Â· templates Â· campanhas</div>
+    <div class="page-sub">// envios · erros · chips · templates · campanhas</div>
   </div>
 
   <div class="audit-v35-cards" id="auditCardsV35"></div>
@@ -963,11 +963,11 @@
 </div>
 
 
-<!-- â”€â”€ CONVERSAS â”€â”€ -->
+<!-- ── CONVERSAS ── -->
 <div class="panel" id="panel-conversations">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Central de <span>Conversas.</span></div>
-    <div class="page-sub">// leads respondidos Â· histÃ³rico Â· resposta pelo chip</div>
+    <div class="page-sub">// leads respondidos · histórico · resposta pelo chip</div>
   </div>
 
   <div class="conversations-v38-layout">
@@ -986,10 +986,10 @@
 <div class="panel" id="panel-inbox">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Caixa de <span>Entrada.</span></div>
-    <div class="page-sub">// respostas recebidas Â· aguardando retorno Â· WhatsApp e Instagram</div>
+    <div class="page-sub">// respostas recebidas · aguardando retorno · WhatsApp e Instagram</div>
   </div>
   <div class="inbox-grid">
-    <div class="inbox-card"><div class="inbox-label">NÃ£o lidas</div><div class="inbox-value" id="inboxUnreadCount">0</div></div>
+    <div class="inbox-card"><div class="inbox-label">Não lidas</div><div class="inbox-value" id="inboxUnreadCount">0</div></div>
     <div class="inbox-card"><div class="inbox-label">WhatsApp</div><div class="inbox-value" id="inboxWhatsappCount">0</div></div>
     <div class="inbox-card"><div class="inbox-label">Instagram</div><div class="inbox-value" id="inboxInstagramCount">0</div></div>
   </div>
@@ -1008,7 +1008,7 @@
 <div class="modal-overlay" id="clearModal">
   <div class="modal">
     <div class="modal-title">Limpar <span style="color:var(--error)">semana?</span></div>
-    <div class="modal-sub">// leads <strong style="color:var(--text)">NÃ£o enviados</strong> voltarÃ£o para a Base de AtribuiÃ§Ã£o. Leads com status (Enviada, Respondida etc.) serÃ£o preservados no histÃ³rico.</div>
+    <div class="modal-sub">// leads <strong style="color:var(--text)">Não enviados</strong> voltarão para a Base de Atribuição. Leads com status (Enviada, Respondida etc.) serão preservados no histórico.</div>
     <div class="modal-btns">
       <button class="modal-btn-ok" style="background:var(--error);color:#fff" onclick="confirmClear()">Limpar mesmo assim</button>
       <button class="modal-btn-cancel" onclick="document.getElementById('clearModal').classList.remove('open')">Cancelar</button>
@@ -1019,7 +1019,7 @@
 <div class="modal-overlay" id="clearDayModalOverlay">
   <div class="modal">
     <div class="modal-title">Limpar <span style="color:var(--error)">dia?</span></div>
-    <div class="modal-sub">// leads <strong style="color:var(--text)">NÃ£o enviados</strong> do dia selecionado voltarÃ£o para a Base de AtribuiÃ§Ã£o. Leads com status jÃ¡ definido serÃ£o mantidos.</div>
+    <div class="modal-sub">// leads <strong style="color:var(--text)">Não enviados</strong> do dia selecionado voltarão para a Base de Atribuição. Leads com status já definido serão mantidos.</div>
     <div class="field-group" style="margin-bottom:16px">
       <label>Selecione o dia</label>
       <select id="clearDaySelect" style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:8px 12px;width:100%;cursor:pointer"></select>
@@ -1034,10 +1034,10 @@
 <div class="modal-overlay" id="chipModal">
   <div class="modal">
     <div class="modal-title">Adicionar <span style="color:var(--accent)">chip</span></div>
-    <div class="modal-sub">// configure as credenciais da instÃ¢ncia Evolution API para este chip.</div>
+    <div class="modal-sub">// configure as credenciais da instância Evolution API para este chip.</div>
     <div class="field-group" style="margin-bottom:12px">
       <label>Nome do chip</label>
-      <input type="text" id="chipNome" placeholder="Ex: Chip 1 â€” Samsung"/>
+      <input type="text" id="chipNome" placeholder="Ex: Chip 1 — Samsung"/>
     </div>
     <div class="field-group" style="margin-bottom:12px">
       <label>URL da Evolution API</label>
@@ -1060,13 +1060,13 @@
 
 <div class="modal-overlay" id="qrModal">
   <div class="modal">
-    <div class="modal-title">QR Code â€” <span id="qrChipNome" style="color:var(--accent)"></span></div>
+    <div class="modal-title">QR Code — <span id="qrChipNome" style="color:var(--accent)"></span></div>
     <div class="modal-sub">// escaneie com o WhatsApp para conectar este chip.</div>
     <div class="qr-wrap" id="qrWrap">
       <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">Gerando QR Code...</div>
     </div>
     <div class="modal-btns">
-      <button class="modal-btn-ok" onclick="atualizarQR()">â†» Atualizar QR</button>
+      <button class="modal-btn-ok" onclick="atualizarQR()">↻ Atualizar QR</button>
       <button class="modal-btn-cancel" onclick="document.getElementById('qrModal').classList.remove('open')">Fechar</button>
     </div>
   </div>
@@ -1080,7 +1080,7 @@
     <div class="modal-title">Novo lead <span style="color:var(--insta)">Instagram</span></div>
     <div class="modal-sub">// cadastre manualmente uma empresa para a fila Instagram</div>
     <div class="field-group" style="margin-bottom:12px">
-      <label>Nome da empresa <span class="tag">OBRIGATÃ“RIO</span></label>
+      <label>Nome da empresa <span class="tag">OBRIGATÓRIO</span></label>
       <input type="text" id="ilNome" placeholder="Ex: Studio Silva"/>
     </div>
     <div class="field-group" style="margin-bottom:12px">
@@ -1106,7 +1106,7 @@
 <div class="modal-overlay" id="limparExcluidosModal">
   <div class="modal">
     <div class="modal-title">Limpar <span style="color:var(--error)">sites vistos?</span></div>
-    <div class="modal-sub">// todos os domÃ­nios da lista serÃ£o removidos e voltarÃ£o a aparecer nas importaÃ§Ãµes.</div>
+    <div class="modal-sub">// todos os domínios da lista serão removidos e voltarão a aparecer nas importações.</div>
     <div class="modal-btns">
       <button class="modal-btn-ok" style="background:var(--error);color:#fff" onclick="confirmarLimparExcluidos()">Limpar mesmo assim</button>
       <button class="modal-btn-cancel" onclick="document.getElementById('limparExcluidosModal').classList.remove('open')">Cancelar</button>
@@ -1114,10 +1114,10 @@
   </div>
 </div>
 
-<!-- MODAL CONFIRMAÃ‡ÃƒO GENÃ‰RICA -->
+<!-- MODAL CONFIRMAÇÃO GENÉRICA -->
 <div class="modal-overlay" id="confirmModal">
   <div class="modal" style="max-width:380px">
-    <div class="modal-title">Confirmar <span style="color:var(--error)">remoÃ§Ã£o</span></div>
+    <div class="modal-title">Confirmar <span style="color:var(--error)">remoção</span></div>
     <div class="modal-sub" id="confirmModalMsg" style="margin-bottom:20px"></div>
     <div class="modal-btns">
       <button class="modal-btn-ok" id="confirmModalOk" style="background:var(--error);color:#fff">Remover</button>
@@ -1129,7 +1129,7 @@
 <!-- MODAL MENSAGEM -->
 <div class="modal-overlay" id="msgModal" onclick="if(event.target===this)fecharMsgModal()">
   <div class="modal" style="max-width:520px">
-    <div class="modal-title" style="margin-bottom:4px">Mensagem â€” <span style="color:var(--accent)" id="msgPanelEmpresaTitle"></span></div>
+    <div class="modal-title" style="margin-bottom:4px">Mensagem — <span style="color:var(--accent)" id="msgPanelEmpresaTitle"></span></div>
     <div class="msg-panel">
       <div class="msg-panel-header">
         <span class="msg-panel-label">// TEMPLATE ATIVO</span>
@@ -1138,8 +1138,8 @@
       <div class="msg-body" id="msgBody" style="max-height:260px;overflow-y:auto">Clique em "Msg" em uma empresa para ver a mensagem.</div>
       <div class="msg-panel-footer">
         <button class="msg-copy-btn" id="msgCopyBtn" onclick="copyMsg()" disabled>Copiar</button>
-        <button class="msg-shuffle-btn" onclick="shuffleMsg()">â†» Sortear</button>
-        <div class="msg-hint">// {EMPRESA} substituÃ­do pelo nome real</div>
+        <button class="msg-shuffle-btn" onclick="shuffleMsg()">↻ Sortear</button>
+        <div class="msg-hint">// {EMPRESA} substituído pelo nome real</div>
       </div>
     </div>
     <div class="modal-btns" style="margin-top:14px">
@@ -1153,7 +1153,7 @@
   <div class="modal" style="max-width:420px">
     <div class="modal-title">Excluir <span style="color:var(--error)">lead?</span></div>
     <div class="modal-sub" style="margin-bottom:16px">
-      // <strong id="excluirLeadNome" style="color:var(--text)"></strong> serÃ¡ removido <strong style="color:var(--error)">permanentemente</strong> de toda a plataforma â€” semana, atribuiÃ§Ã£o, validaÃ§Ã£o e fila de disparo. O site serÃ¡ bloqueado nas importaÃ§Ãµes futuras.
+      // <strong id="excluirLeadNome" style="color:var(--text)"></strong> será removido <strong style="color:var(--error)">permanentemente</strong> de toda a plataforma — semana, atribuição, validação e fila de disparo. O site será bloqueado nas importações futuras.
     </div>
     <div id="excluirLeadReposicaoInfo" style="display:none;background:rgba(184,240,89,0.06);border:1px solid var(--accent-border);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-family:'DM Mono',monospace;font-size:9px;color:var(--accent)"></div>
     <div class="modal-btns">
@@ -1173,7 +1173,7 @@
         <h2 id="leadDrawerName">Lead</h2>
         <p id="leadDrawerMeta">dados da empresa</p>
       </div>
-      <button class="lead-drawer-close" onclick="closeLeadDrawer()" aria-label="Fechar ficha">Ã—</button>
+      <button class="lead-drawer-close" onclick="closeLeadDrawer()" aria-label="Fechar ficha">×</button>
     </div>
 
     <div class="lead-drawer-body">
@@ -1190,7 +1190,7 @@
       <section class="lead-drawer-section">
         <div class="lead-drawer-section-title">Follow-up</div>
         <div class="lead-followup-box">
-          <label for="leadFollowUpDate">PrÃ³ximo contato</label>
+          <label for="leadFollowUpDate">Próximo contato</label>
           <div class="lead-followup-row">
             <input type="date" id="leadFollowUpDate" class="lead-followup-input">
             <button class="btn btn-primary" onclick="saveLeadFollowUp()">Salvar</button>
@@ -1202,13 +1202,13 @@
 
       <section class="lead-drawer-section">
         <div class="lead-drawer-section-title">Notas</div>
-        <textarea id="leadNoteInput" class="lead-note-input" placeholder="Escreva uma observaÃ§Ã£o sobre este lead..."></textarea>
+        <textarea id="leadNoteInput" class="lead-note-input" placeholder="Escreva uma observação sobre este lead..."></textarea>
         <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="addLeadNote()">+ Adicionar nota</button>
         <div class="lead-notes-list" id="leadNotesList"></div>
       </section>
 
       <section class="lead-drawer-section">
-        <div class="lead-drawer-section-title">HistÃ³rico</div>
+        <div class="lead-drawer-section-title">Histórico</div>
         <div class="lead-history-list" id="leadHistoryList"></div>
       </section>
     </div>
@@ -1261,7 +1261,7 @@
   <script src="js/modules/rebuild/schema-bridge-preinit.js"></script>
   <script src="js/modules/rebuild/reconcile-real-frontend.js"></script>
   <script src="js/modules/rebuild/persistent-import-hotfix.js?v=617"></script>
-  <script src="js/modules/rebuild/rebuild-stage-controller.js?v=619"></script>
+  <script src="js/modules/rebuild/rebuild-stage-controller.js?v=620"></script>
   <script src="js/modules/rebuild/schema-bridge-postinit.js"></script>
   <script src="js/app.js"></script>
   <script src="js/modules/whatsapp-manual-send.js"></script>
@@ -1273,104 +1273,104 @@
 <!-- SIDEBAR FINAL -->
 <aside class="sidebar collapsed sidebar-final-v414" id="sidebar" data-menu-final="v41.4">
   <div class="sidebar-final-head">
-    <button class="sidebar-hamburger" onclick="toggleSidebar()" aria-label="Alternar menu">â˜°</button>
+    <button class="sidebar-hamburger" onclick="toggleSidebar()" aria-label="Alternar menu">☰</button>
     <div>
-      <div class="sidebar-final-title">OlÃ¡, Samuel ðŸ‘‹</div>
-      <div class="sidebar-final-sub">CRM de ProspecÃ§Ã£o</div>
+      <div class="sidebar-final-title">Olá, Samuel 👋</div>
+      <div class="sidebar-final-sub">CRM de Prospecção</div>
     </div>
   </div>
 
   <nav class="sidebar-final-nav">
     <button class="nav-item" onclick="openGlobalSearch()" data-label="Busca">
-      <div class="nav-icon">ðŸ”Ž</div><span class="nav-label">Busca</span><span class="nav-badge">âŒ˜K</span>
+      <div class="nav-icon">🔎</div><span class="nav-label">Busca</span><span class="nav-badge">⌘K</span>
     </button>
 
-    <button class="nav-item active" onclick="switchPanel('inicio')" data-label="InÃ­cio">
-      <div class="nav-icon">ðŸ“Š</div><span class="nav-label">InÃ­cio</span><span class="nav-badge" id="badge-inicio">0</span>
+    <button class="nav-item active" onclick="switchPanel('inicio')" data-label="Início">
+      <div class="nav-icon">📊</div><span class="nav-label">Início</span><span class="nav-badge" id="badge-inicio">0</span>
     </button>
 
     <button class="nav-item" onclick="switchPanel('inbox')" data-label="Caixa de Entrada">
-      <div class="nav-icon">ðŸ“¥</div><span class="nav-label">Caixa de Entrada</span><span class="nav-badge" id="badge-inbox">0</span>
+      <div class="nav-icon">📥</div><span class="nav-label">Caixa de Entrada</span><span class="nav-badge" id="badge-inbox">0</span>
     </button>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Leads">
-        <div class="nav-icon">ðŸ‘¥</div>
+        <div class="nav-icon">👥</div>
         <span class="nav-label">Leads</span>
-        <span class="menu-arrow-final">â€º</span>
+        <span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('importar')" data-label="Importar">
-        <div class="nav-icon">ðŸ“¥</div><span class="nav-label">Importar</span><span class="nav-badge" id="badge-importar">0</span>
+        <div class="nav-icon">📥</div><span class="nav-label">Importar</span><span class="nav-badge" id="badge-importar">0</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('validacao')" data-label="ValidaÃ§Ã£o">
-        <div class="nav-icon">âœ…</div><span class="nav-label">ValidaÃ§Ã£o</span><span class="nav-badge" id="badge-validacao">0</span>
+      <button class="nav-item sub" onclick="switchPanel('validacao')" data-label="Validação">
+        <div class="nav-icon">✅</div><span class="nav-label">Validação</span><span class="nav-badge" id="badge-validacao">0</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('atribuicao')" data-label="AtribuiÃ§Ã£o">
-        <div class="nav-icon">ðŸ—‚ï¸</div><span class="nav-label">AtribuiÃ§Ã£o</span><span class="nav-badge" id="badge-atribuicao">0</span>
+      <button class="nav-item sub" onclick="switchPanel('atribuicao')" data-label="Atribuição">
+        <div class="nav-icon">🗂️</div><span class="nav-label">Atribuição</span><span class="nav-badge" id="badge-atribuicao">0</span>
       </button>
     </details>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Envios">
-        <div class="nav-icon">ðŸ“¨</div>
+        <div class="nav-icon">📨</div>
         <span class="nav-label">Envios</span>
-        <span class="menu-arrow-final">â€º</span>
+        <span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('fila-zap')" data-label="WhatsApp">
-        <div class="nav-icon">ðŸ’¬</div><span class="nav-label">WhatsApp</span><span class="nav-badge" id="badge-fila-zap">0</span>
+        <div class="nav-icon">💬</div><span class="nav-label">WhatsApp</span><span class="nav-badge" id="badge-fila-zap">0</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
-        <div class="nav-icon">ðŸ“¸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
+        <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
       </button>
     </details>
 
     <button class="nav-item" onclick="switchPanel('conversations')" data-label="Conversas">
-      <div class="nav-icon">ðŸ’¬</div><span class="nav-label">Conversas</span>
+      <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
     </button>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Gerenciamento">
-        <div class="nav-icon">ðŸ“‹</div>
+        <div class="nav-icon">📋</div>
         <span class="nav-label">Gerenciamento</span>
-        <span class="menu-arrow-final">â€º</span>
+        <span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('followups')" data-label="Follow-ups">
-        <div class="nav-icon">â°</div><span class="nav-label">Follow-ups</span><span class="nav-badge" id="badge-followups">0</span>
+        <div class="nav-icon">⏰</div><span class="nav-label">Follow-ups</span><span class="nav-badge" id="badge-followups">0</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('kanban')" data-label="Kanban">
-        <div class="nav-icon">ðŸ“‹</div><span class="nav-label">Kanban</span>
+        <div class="nav-icon">📋</div><span class="nav-label">Kanban</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('acompanhamento')" data-label="Acompanhamentos">
-        <div class="nav-icon">ðŸ“ˆ</div><span class="nav-label">Acompanhamentos</span><span class="nav-badge" id="badge-acompanhamento">0</span>
+        <div class="nav-icon">📈</div><span class="nav-label">Acompanhamentos</span><span class="nav-badge" id="badge-acompanhamento">0</span>
       </button>
     </details>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Ferramentas">
-        <div class="nav-icon">ðŸ› ï¸</div>
+        <div class="nav-icon">🛠️</div>
         <span class="nav-label">Ferramentas</span>
-        <span class="menu-arrow-final">â€º</span>
+        <span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('redirecionamentos')" data-label="Redirecionamentos">
-        <div class="nav-icon">ðŸ”—</div><span class="nav-label">Redirecionamentos</span>
+        <div class="nav-icon">🔗</div><span class="nav-label">Redirecionamentos</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('audit')" data-label="Auditoria">
-        <div class="nav-icon">ðŸ“Š</div><span class="nav-label">Auditoria</span><span class="nav-badge" id="badge-audit">LOG</span>
+        <div class="nav-icon">📊</div><span class="nav-label">Auditoria</span><span class="nav-badge" id="badge-audit">LOG</span>
       </button>
     </details>
 
     <button class="nav-item" onclick="switchPanel('conta')" data-label="Minha conta">
-      <div class="nav-icon">ðŸ‘¤</div><span class="nav-label">Minha conta</span>
+      <div class="nav-icon">👤</div><span class="nav-label">Minha conta</span>
     </button>
 
-    <button class="nav-item" onclick="switchPanel('configuracoes')" data-label="ConfiguraÃ§Ãµes">
-      <div class="nav-icon">âš™ï¸</div><span class="nav-label">ConfiguraÃ§Ãµes</span>
+    <button class="nav-item" onclick="switchPanel('configuracoes')" data-label="Configurações">
+      <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
     </button>
   </nav>
 
   <div class="sidebar-final-footer">
     <button class="nav-item logout" onclick="logoutSupabase()" data-label="Sair">
-      <div class="nav-icon">ðŸšª</div><span class="nav-label">Sair</span>
+      <div class="nav-icon">🚪</div><span class="nav-label">Sair</span>
     </button>
   </div>
 </aside>
@@ -1430,14 +1430,14 @@
 
 <script>
 (function(){
-  const icons = { Leads:'ðŸ‘¥', Envios:'ðŸ“¨', Gerenciamento:'ðŸ“‹', Ferramentas:'ðŸ› ï¸' };
+  const icons = { Leads:'👥', Envios:'📨', Gerenciamento:'📋', Ferramentas:'🛠️' };
   function normalizeMenuSummaries(){
     document.querySelectorAll('.menu-group-final > summary').forEach(summary => {
-      const label = (summary.textContent || '').replace('â€º','').trim();
+      const label = (summary.textContent || '').replace('›','').trim();
       if (!icons[label] || summary.classList.contains('menu-summary-final')) return;
       summary.className = 'nav-item menu-summary-final';
       summary.dataset.label = label;
-      summary.innerHTML = `<div class="nav-icon">${icons[label]}</div><span class="nav-label">${label}</span><span class="menu-arrow-final">â€º</span>`;
+      summary.innerHTML = `<div class="nav-icon">${icons[label]}</div><span class="nav-label">${label}</span><span class="menu-arrow-final">›</span>`;
     });
   }
   document.addEventListener('DOMContentLoaded', () => {
