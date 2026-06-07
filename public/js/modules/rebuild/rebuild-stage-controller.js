@@ -95,7 +95,7 @@
       ? oldSwitchPanel.apply(this, arguments)
       : undefined;
 
-    if (panel === 'validacao') {
+    if (panel === 'validacao' || panel === 'validation' || panel === 'panel-validacao') {
       setTimeout(renderValidationStageFromSupabase, 80);
     }
 
@@ -117,4 +117,37 @@
     const activeValidation = document.getElementById('panel-validacao')?.classList.contains('active');
     if (activeValidation) renderValidationStageFromSupabase();
   });
+})();
+
+/* PATCH — impedir render antigo de apagar Validação */
+(function () {
+  const oldRenderValidacao = window.renderValidacao;
+
+  window.renderValidacao = async function patchedRenderValidacao() {
+    if (typeof window.renderValidationStageFromSupabase === 'function') {
+      return await window.renderValidationStageFromSupabase();
+    }
+
+    if (typeof oldRenderValidacao === 'function') {
+      return oldRenderValidacao.apply(this, arguments);
+    }
+  };
+
+  const oldUpdateBadges = window.updateBadges;
+
+  window.updateBadges = function patchedUpdateBadges() {
+    const result = typeof oldUpdateBadges === 'function'
+      ? oldUpdateBadges.apply(this, arguments)
+      : undefined;
+
+    if (document.getElementById('panel-validacao')?.classList.contains('active')) {
+      setTimeout(() => {
+        if (typeof window.renderValidationStageFromSupabase === 'function') {
+          window.renderValidationStageFromSupabase();
+        }
+      }, 100);
+    }
+
+    return result;
+  };
 })();
