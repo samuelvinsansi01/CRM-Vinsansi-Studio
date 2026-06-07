@@ -4,14 +4,9 @@
   const SUPABASE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
 
   async function getHeaders() {
-    if (typeof getSupabaseAuthHeadersV423 === 'function') {
-      const h = await getSupabaseAuthHeadersV423();
-      if (h?.apikey) return h;
-    }
-
     return {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`
+      apikey: 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
+      Authorization: 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
     };
   }
 
