@@ -30,7 +30,193 @@ function instaAlocarAuto(id) {
   renderInstagram(); updateBadges();
 }
 
-function renderInstagram() {
+const INSTA_BACKLOG_SUPABASE_HOTFIX_V629 = (() => {
+  let loading = false;
+  let loadedOnce = false;
+
+  function uniq(list = []) {
+    return [...new Set(list.map((item) => String(item || '').trim()).filter(Boolean))];
+  }
+
+  function leadName(lead = {}) {
+    return lead.company_name || lead.nome || lead.name || lead.empresa || 'Empresa sem nome';
+  }
+
+  async function readJsonSafe(response) {
+    try { return await response.json(); }
+    catch (_) { return null; }
+  }
+
+  async function getAuthHeaders(content = false) {
+    let headers = null;
+    try {
+      if (typeof getSupabaseAuthHeadersV423 === 'function') headers = await getSupabaseAuthHeadersV423();
+    } catch (_) {}
+
+    if (!headers || !headers.apikey) {
+      headers = {
+        apikey: typeof SUPABASE_PUBLISHABLE_KEY !== 'undefined' ? SUPABASE_PUBLISHABLE_KEY : '',
+        Authorization: `Bearer ${typeof SUPABASE_PUBLISHABLE_KEY !== 'undefined' ? SUPABASE_PUBLISHABLE_KEY : ''}`
+      };
+    }
+
+    return content ? { ...headers, 'Content-Type': 'application/json' } : headers;
+  }
+
+  async function getCurrentUserId() {
+    try {
+      if (typeof getCurrentSupabaseUserIdV412 === 'function') {
+        const id = await getCurrentSupabaseUserIdV412();
+        if (id) return id;
+      }
+    } catch (_) {}
+
+    try {
+      if (window.currentUser?.id) return window.currentUser.id;
+    } catch (_) {}
+
+    try {
+      if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id;
+    } catch (_) {}
+
+    try {
+      if (window.sbClient?.auth?.getUser) {
+        const { data } = await window.sbClient.auth.getUser();
+        if (data?.user?.id) return data.user.id;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  async function fetchBacklogRows(userId) {
+    const params = new URLSearchParams({
+      select: 'id,lead_id,channel,bucket,status,position,created_at,updated_at',
+      user_id: `eq.${userId}`,
+      channel: 'eq.instagram',
+      status: 'eq.backlog',
+      order: 'position.asc'
+    });
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/backlog_items?${params.toString()}`, {
+      headers: await getAuthHeaders()
+    });
+    const data = await readJsonSafe(response);
+    if (!response.ok) throw data || new Error(`Falha ao carregar Backlog Instagram (${response.status}).`);
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function fetchLeadsByIds(userId, ids = []) {
+    const out = new Map();
+    const unique = uniq(ids);
+    if (!unique.length) return out;
+
+    async function fetchFrom(table) {
+      const params = new URLSearchParams({
+        select: '*',
+        id: `in.(${unique.join(',')})`
+      });
+      if (userId) params.set('user_id', `eq.${userId}`);
+
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params.toString()}`, {
+        headers: await getAuthHeaders()
+      });
+      const data = await readJsonSafe(response);
+      if (!response.ok) throw data || new Error(`Falha ao carregar leads Instagram (${response.status}).`);
+      return Array.isArray(data) ? data : [];
+    }
+
+    let rows = [];
+    try { rows = await fetchFrom('v_lead_ficha_rebuild'); }
+    catch (_) { rows = await fetchFrom('leads'); }
+
+    rows.forEach((lead) => {
+      if (lead?.id) out.set(String(lead.id), lead);
+    });
+    return out;
+  }
+
+  function toInstaLead(row = {}, lead = {}) {
+    const instagram = lead.instagram_url || lead.instagram || lead.instagramUrl || '';
+    return {
+      ...lead,
+      id: String(row.lead_id || lead.id || ''),
+      nome: leadName(lead),
+      company_name: leadName(lead),
+      empresa: leadName(lead),
+      whatsapp: lead.phone || lead.whatsapp || lead.telefone || '',
+      telefone: lead.phone || lead.whatsapp || lead.telefone || '',
+      instagram,
+      instagramUrl: instagram,
+      googleUrl: lead.google_maps_url || lead.googleUrl || '',
+      categoria: lead.category || lead.categoria || '',
+      category: lead.category || lead.categoria || '',
+      totalScore: lead.rating || lead.totalScore || '',
+      reviewsCount: lead.reviews_count || lead.reviewsCount || 0,
+      canal: 'insta',
+      channel: 'instagram',
+      bucket: row.bucket || 'insta',
+      status: 'backlog_instagram',
+      backlogItemId: row.id || '',
+      backlogPosition: row.position || 0,
+      entradaBacklogEm: (row.created_at || row.updated_at || '').slice(0, 10) || (typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0, 10)),
+      baseSource: 'Supabase backlog_items Instagram 6.29'
+    };
+  }
+
+  function mergeIntoLocal(dbLeads = []) {
+    if (typeof getInstaFila !== 'function' || typeof saveInstaFila !== 'function') return false;
+
+    const current = Array.isArray(getInstaFila()) ? getInstaFila() : [];
+    const dbIds = new Set(dbLeads.map((lead) => String(lead.id)));
+    const manualOrScheduled = current.filter((lead) => !dbIds.has(String(lead.id)));
+    const next = [...manualOrScheduled, ...dbLeads];
+
+    const oldSig = JSON.stringify(current.map((lead) => [lead.id, lead.status, lead.backlogItemId, lead.instagram || lead.instagramUrl]));
+    const newSig = JSON.stringify(next.map((lead) => [lead.id, lead.status, lead.backlogItemId, lead.instagram || lead.instagramUrl]));
+    if (oldSig === newSig) return false;
+
+    saveInstaFila(next);
+    return true;
+  }
+
+  async function sync({ rerender = true } = {}) {
+    if (loading) return false;
+    loading = true;
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) return false;
+
+      const backlogRows = await fetchBacklogRows(userId);
+      const leadsById = await fetchLeadsByIds(userId, backlogRows.map((row) => row.lead_id));
+      const dbLeads = backlogRows
+        .filter((row) => leadsById.has(String(row.lead_id)))
+        .map((row) => toInstaLead(row, leadsById.get(String(row.lead_id))))
+        .filter((lead) => lead.id);
+
+      const changed = mergeIntoLocal(dbLeads);
+      loadedOnce = true;
+      if (changed && rerender && typeof renderInstagram === 'function') renderInstagram({ skipSupabaseSync: true });
+      return changed;
+    } catch (error) {
+      console.warn('[insta-backlog-6.29] falha ao sincronizar Backlog Instagram:', error);
+      return false;
+    } finally {
+      loading = false;
+    }
+  }
+
+  return {
+    sync,
+    isLoaded: () => loadedOnce,
+    isLoading: () => loading
+  };
+})();
+
+function renderInstagram(options = {}) {
+  if (!options.skipSupabaseSync) {
+    INSTA_BACKLOG_SUPABASE_HOTFIX_V629.sync({ rerender: true });
+  }
   renderInstaTabBar();
   renderInstaTabContent();
   updateBadges();
