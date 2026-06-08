@@ -181,12 +181,20 @@ function renderPickedTemplateV434(template = {}, nome = '') {
 
 function ensureMessageTemplateDefaultsV434(force = false) {
   const key = 'marcenaria__com-site';
-  const migrated = !!window.__VS_TEMPLATE_SCHEMA_MIGRATED_V434;
-  if (migrated && !force) return;
   const all = getRamoTemplates();
+  const current = Array.isArray(all[key]) ? all[key].map(normalizeMessageTemplateV434) : [];
+
+  // 6.33 — NÃO sobrescrever templates editados pelo usuário.
+  // Antes, esta função era chamada no boot e sempre gravava os padrões de
+  // marcenaria/com-site por cima do que estava digitado em Configurações.
+  // Agora ela só preenche quando não existe template salvo, ou quando force=true.
+  if (!force && current.length) {
+    all[key] = current;
+    return;
+  }
+
   all[key] = cloneTemplateListV434(MARCENARIA_TEMPLATES_V434);
   saveRamoTemplates(all);
-  window.__VS_TEMPLATE_SCHEMA_MIGRATED_V434 = true;
 }
 
 function getRamoTemplatesDefault(ramoId, tipo) {
@@ -207,9 +215,17 @@ function getRamoTemplates() {
   try { return (typeof v48StateGetObject === 'function') ? v48StateGetObject(TEMPLATES_RAMO_KEY) : {}; } catch { return {}; }
 }
 function saveRamoTemplates(obj) {
-  if (typeof v48StateSet === 'function') v48StateSet(TEMPLATES_RAMO_KEY, obj, 'branch-template-update');
-  uiSyncLog('optimistic-update', { entity:'template', action:'save-branch-cache', count:Object.keys(obj || {}).length });
-  scheduleOperationalSync({ delay:400, reason:'branch-template-update' });
+  const next = obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+  if (typeof v48StateSet === 'function') {
+    v48StateSet(TEMPLATES_RAMO_KEY, next, 'branch-template-update');
+  } else if (typeof saveOperationalKey === 'function') {
+    saveOperationalKey(TEMPLATES_RAMO_KEY, next, 'branch-template-update');
+  } else {
+    window.__VS_OPERATIONAL_STATE = window.__VS_OPERATIONAL_STATE || {};
+    window.__VS_OPERATIONAL_STATE.branchTemplates = next;
+  }
+  if (typeof uiSyncLog === 'function') uiSyncLog('optimistic-update', { entity:'template', action:'save-branch-cache', count:Object.keys(next || {}).length });
+  if (typeof scheduleOperationalSync === 'function') scheduleOperationalSync({ delay:400, reason:'branch-template-update' });
 }
 
 function getTemplatesForRamoTipo(ramoId, tipo) {
