@@ -12,6 +12,7 @@
     kanban: { table: 'crm_profiles + leads', stage: 'crm', label: 'Kanban CRM' },
     followups: { table: 'followups + leads', label: 'Follow-ups' },
     acompanhamento: { table: 'lead_events + dispatch_message_logs + whatsapp_messages', label: 'Acompanhamentos' },
+    protecao: { table: 'contact_suppression_entries + dispatch_ledger', label: 'Protecao Operacional' },
     conta: { table: 'auth.users + settings', label: 'Conta' },
     configuracoes: { table: 'settings + whatsapp_instances + message_templates', label: 'Configurações' },
     audit: { table: 'audit_logs + operational_health_logs + lead_events', label: 'Auditoria' },

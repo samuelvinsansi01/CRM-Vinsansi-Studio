@@ -56,9 +56,10 @@ const PANEL_ALIASES_V436 = {
   evolution: 'configuracoes',
   whatsappQueue: 'fila-zap',
   import: 'importar',
-  redirects: 'redirecionamentos'
+  redirects: 'redirecionamentos',
+  protection: 'protecao'
 };
-const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','atribuicao','instagram','fila-zap','kanban','followups','acompanhamento','redirecionamentos','configuracoes','conta'];
+const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','atribuicao','instagram','fila-zap','kanban','followups','acompanhamento','redirecionamentos','protecao','configuracoes','conta'];
 function switchPanel(name, options = {}) {
   name = PANEL_ALIASES_V436[name] || name;
   if (!PANELS.includes(name)) name = 'inicio';
@@ -69,6 +70,7 @@ function switchPanel(name, options = {}) {
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
     const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','WhatsApp':'fila-zap','Instagram':'instagram','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Configurações':'configuracoes','Minha conta':'conta'};
+    panelMap.Protecao = 'protecao';
     el.classList.toggle('active', panelMap[label] === name);
   });
   if (name==='inicio')         renderInicio();
@@ -82,6 +84,7 @@ function switchPanel(name, options = {}) {
   if (name==='kanban')         renderKanban();
   if (name==='followups')      renderFollowups();
   if (name==='acompanhamento') renderAcompanhamento();
+  if (name==='protecao' && typeof renderProtecao === 'function') renderProtecao();
   if (name==='conta')          renderMinhaConta();
   if (name==='configuracoes')  {
     renderConfiguracoes();
@@ -140,6 +143,14 @@ function updateBadges() {
     const mk = currentMonthKey();
     const acomp = getAcompData();
     acompEl.textContent = (acomp[mk]||[]).length;
+  }
+
+  const protecaoEl = document.getElementById('badge-protecao');
+  if (protecaoEl) {
+    const protectionEntries = Array.isArray(window.contactSuppressionEntriesV629)
+      ? window.contactSuppressionEntriesV629
+      : [];
+    protecaoEl.textContent = protectionEntries.filter(entry => !entry.archived_at).length;
   }
 }
 

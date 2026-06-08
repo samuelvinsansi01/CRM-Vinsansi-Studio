@@ -2987,3 +2987,182 @@ body.auth-locked .app{
 
 /* Fase 6.6 — ajuste solicitado */
 .sidebar-final-title{font-size:12px !important;}
+
+/* Fase 6.29 - Protecao operacional */
+.protection-stats{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  margin-bottom:14px;
+}
+.protection-stat{
+  min-height:82px;
+  border:1px solid var(--border2);
+  background:var(--surface2);
+  border-radius:8px;
+  padding:14px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+.protection-stat span{
+  color:var(--muted);
+  font-family:'DM Mono',monospace;
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+.protection-stat strong{
+  color:var(--text);
+  font-family:'DM Mono',monospace;
+  font-size:26px;
+  line-height:1;
+}
+.protection-stat.sent{border-color:rgba(174,255,61,.28);background:rgba(174,255,61,.055)}
+.protection-stat.sent strong{color:var(--accent)}
+.protection-stat.blocked{border-color:rgba(255,92,92,.28);background:rgba(255,92,92,.05)}
+.protection-stat.blocked strong{color:var(--error)}
+.protection-layout{
+  display:grid;
+  grid-template-columns:minmax(320px,420px) minmax(0,1fr);
+  gap:14px;
+  min-height:0;
+}
+.protection-form-panel,
+.protection-list-panel{
+  border:1px solid var(--border2);
+  background:var(--surface);
+  border-radius:8px;
+  padding:14px;
+  min-width:0;
+}
+.protection-tabs{
+  display:flex;
+  gap:6px;
+  margin-bottom:14px;
+}
+.protection-tabs button{
+  border:1px solid var(--border2);
+  background:var(--bg);
+  color:var(--muted);
+  border-radius:7px;
+  padding:8px 12px;
+  font-family:'DM Mono',monospace;
+  font-size:10px;
+  cursor:pointer;
+}
+.protection-tabs button.active{
+  border-color:var(--accent-border);
+  background:var(--accent-dim);
+  color:var(--accent);
+}
+.protection-form-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+.protection-notes-field textarea{min-height:92px}
+.protection-actions{margin-top:14px}
+.protection-list{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+  max-height:calc(100vh - 310px);
+  min-height:260px;
+  overflow:auto;
+  padding-right:4px;
+}
+.protection-item{
+  display:flex;
+  gap:12px;
+  align-items:flex-start;
+  justify-content:space-between;
+  border:1px solid var(--border2);
+  background:var(--bg);
+  border-radius:8px;
+  padding:12px;
+}
+.protection-item.sent{border-color:rgba(174,255,61,.18)}
+.protection-item.blocked{border-color:rgba(255,92,92,.22)}
+.protection-item-main{
+  min-width:0;
+  display:grid;
+  gap:7px;
+}
+.protection-item-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.protection-item-title span{
+  color:var(--text);
+  font-weight:800;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.protection-item-title small{
+  flex:0 0 auto;
+  color:var(--accent);
+  border:1px solid var(--accent-border);
+  background:var(--accent-dim);
+  border-radius:999px;
+  padding:2px 7px;
+  font-family:'DM Mono',monospace;
+  font-size:8px;
+}
+.protection-item.blocked .protection-item-title small{
+  color:var(--error);
+  border-color:rgba(255,92,92,.28);
+  background:rgba(255,92,92,.06);
+}
+.protection-item-meta,
+.protection-notes{
+  color:var(--muted);
+  font-family:'DM Mono',monospace;
+  font-size:9px;
+  line-height:1.45;
+  word-break:break-word;
+}
+.protection-chip-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+.protection-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.035);
+  color:var(--text2);
+  border-radius:999px;
+  padding:3px 8px;
+  font-family:'DM Mono',monospace;
+  font-size:8px;
+  max-width:100%;
+}
+.protection-chip b{
+  color:var(--muted);
+  font-weight:500;
+}
+.protection-remove-btn{
+  flex:0 0 auto;
+  font-size:9px;
+  padding:6px 10px;
+}
+.protection-empty{
+  border:1px dashed var(--border2);
+  color:var(--muted);
+  border-radius:8px;
+  padding:22px;
+  text-align:center;
+  font-family:'DM Mono',monospace;
+  font-size:10px;
+}
+@media(max-width:900px){
+  .protection-stats,
+  .protection-layout{grid-template-columns:1fr}
+  .protection-list{max-height:none}
+}

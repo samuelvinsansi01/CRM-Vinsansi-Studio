@@ -117,6 +117,9 @@
       <button class="nav-item sub" onclick="switchPanel('redirecionamentos')" data-label="Redirecionamentos">
         <div class="nav-icon">🔗</div><span class="nav-label">Redirecionamentos</span>
       </button>
+      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Protecao">
+        <div class="nav-icon">P</div><span class="nav-label">Protecao</span><span class="nav-badge" id="badge-protecao">0</span>
+      </button>
       <button class="nav-item sub" onclick="switchPanel('audit')" data-label="Auditoria">
         <div class="nav-icon">📊</div><span class="nav-label">Auditoria</span><span class="nav-badge" id="badge-audit">LOG</span>
       </button>
@@ -934,6 +937,93 @@
 </div>
 
 
+<!-- PROTECAO OPERACIONAL -->
+<div class="panel" id="panel-protecao">
+  <div class="page-header" style="flex-shrink:0">
+    <div>
+      <div class="page-title">Protecao <span>Operacional.</span></div>
+      <div class="page-sub">// Ja Enviados e Bloqueados protegem importacao, backlog, fila e disparo</div>
+    </div>
+  </div>
+
+  <div class="protection-stats">
+    <div class="protection-stat">
+      <span>Totais</span>
+      <strong id="protectionTotalCount">0</strong>
+    </div>
+    <div class="protection-stat sent">
+      <span>Ja Enviados</span>
+      <strong id="protectionSentCount">0</strong>
+    </div>
+    <div class="protection-stat blocked">
+      <span>Bloqueados</span>
+      <strong id="protectionBlockedCount">0</strong>
+    </div>
+  </div>
+
+  <div class="protection-layout">
+    <div class="protection-form-panel">
+      <div class="protection-tabs">
+        <button class="active" data-protection-type="already_sent" onclick="setProtectionTypeV629('already_sent')">Ja Enviados</button>
+        <button data-protection-type="blocked" onclick="setProtectionTypeV629('blocked')">Bloqueados</button>
+      </div>
+
+      <div class="protection-form-grid">
+        <div class="field-group">
+          <label>Empresa</label>
+          <input id="protectionCompanyName" type="text" placeholder="Nome da empresa">
+        </div>
+        <div class="field-group">
+          <label>Contato</label>
+          <input id="protectionContactName" type="text" placeholder="Nome do contato">
+        </div>
+        <div class="field-group">
+          <label>Telefone / WhatsApp</label>
+          <input id="protectionPhone" type="text" placeholder="+55 11 99999-9999">
+        </div>
+        <div class="field-group">
+          <label>Instagram</label>
+          <input id="protectionInstagram" type="text" placeholder="@empresa ou link">
+        </div>
+        <div class="field-group">
+          <label>Site</label>
+          <input id="protectionWebsite" type="text" placeholder="https://site.com.br">
+        </div>
+        <div class="field-group">
+          <label>Place ID</label>
+          <input id="protectionPlaceId" type="text" placeholder="Google place_id">
+        </div>
+        <div class="field-group">
+          <label>Motivo</label>
+          <input id="protectionReason" type="text" placeholder="Campanha anterior, solicitou remocao...">
+        </div>
+        <div class="field-group">
+          <label>Origem</label>
+          <input id="protectionSource" type="text" value="manual" placeholder="manual">
+        </div>
+        <div class="field-group protection-notes-field">
+          <label>Observacao</label>
+          <textarea id="protectionNotes" placeholder="Detalhe interno"></textarea>
+        </div>
+      </div>
+
+      <div class="btn-row protection-actions">
+        <button class="btn btn-primary" onclick="saveContactSuppressionEntryV629()">Salvar protecao</button>
+        <button class="btn btn-ghost" onclick="clearContactSuppressionFormV629()">Limpar</button>
+        <button class="btn btn-ghost" onclick="loadContactSuppressionEntriesV629()">Atualizar</button>
+      </div>
+    </div>
+
+    <div class="protection-list-panel">
+      <div class="card-title">Registros</div>
+      <div id="protectionListV629" class="protection-list">
+        <div class="protection-empty">Carregando...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <!-- ── AUDITORIA V35 ── -->
 <div class="panel" id="panel-audit">
   <div class="page-header" style="flex-shrink:0">
@@ -1262,6 +1352,7 @@
   <script src="js/modules/rebuild/reconcile-real-frontend.js"></script>
   <script src="js/modules/rebuild/persistent-import-hotfix.js"></script>
   <script src="js/modules/rebuild/rebuild-stage-controller.js"></script>
+  <script src="js/modules/rebuild/contact-suppression.js"></script>
   <script src="js/modules/rebuild/schema-bridge-postinit.js"></script>
   <script src="js/app.js"></script>
   <script src="js/modules/whatsapp-manual-send.js"></script>
@@ -1353,6 +1444,9 @@
       </summary>
       <button class="nav-item sub" onclick="switchPanel('redirecionamentos')" data-label="Redirecionamentos">
         <div class="nav-icon">🔗</div><span class="nav-label">Redirecionamentos</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Protecao">
+        <div class="nav-icon">P</div><span class="nav-label">Protecao</span><span class="nav-badge" id="badge-protecao">0</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('audit')" data-label="Auditoria">
         <div class="nav-icon">📊</div><span class="nav-label">Auditoria</span><span class="nav-badge" id="badge-audit">LOG</span>

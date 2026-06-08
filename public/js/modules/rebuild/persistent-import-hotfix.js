@@ -217,8 +217,10 @@
     const rejectedLowReviews = numberValue(summary.rejectedLowReviews || summary.rejected_low_reviews);
     const duplicates = numberValue(summary.duplicates || summary.rejected_duplicate);
     const blacklist = numberValue(summary.blacklist || summary.blacklisted);
+    const alreadySent = numberValue(summary.alreadySent || summary.already_sent);
+    const blockedContacts = numberValue(summary.blockedContacts || summary.blocked_contacts);
     const errors = numberValue(summary.errors);
-    const rejected = rejectedLowRating + rejectedLowReviews + duplicates + blacklist + errors;
+    const rejected = rejectedLowRating + rejectedLowReviews + duplicates + blacklist + alreadySent + blockedContacts + errors;
     const total = numberValue(summary.total) || approved + rejected;
 
     target.innerHTML = `
@@ -244,6 +246,8 @@
           ${metric('Abaixo das avaliacoes', rejectedLowReviews, 'err')}
           ${metric('Duplicados', duplicates, 'warn')}
           ${metric('Blacklist', blacklist, 'warn')}
+          ${metric('Ja enviados', alreadySent, 'warn')}
+          ${metric('Bloqueados', blockedContacts, 'err')}
           ${metric('Erros', errors, 'err')}
         </div>
       </div>
@@ -254,6 +258,8 @@
     const minRating = window.APIFY_QUALIFICATION_RULES?.minRating ?? 4;
     const minReviews = window.APIFY_QUALIFICATION_RULES?.minReviews ?? 15;
     const approved = analyses.filter((item) => item.route === 'whatsapp-validation' || item.route === 'instagram-backlog');
+    const isProtected = (item) => !!item.protectedContact;
+    const isDuplicate = (item) => !isProtected(item) && (item.alreadyImported || item.payloadDuplicate);
 
     return {
       total: analyses.length,
@@ -263,14 +269,18 @@
       withoutSite: approved.filter((item) => item.route === 'whatsapp-validation' && item.website?.type === 'none').length,
       instagram: approved.filter((item) => item.route === 'instagram-backlog').length,
       wixSites: approved.filter((item) => item.website?.type === 'wixsite').length,
-      rejectedLowRating: analyses.filter((item) => item.ramoMatch && Number(item.qualification?.rating || 0) < minRating).length,
+      alreadySent: analyses.filter((item) => item.protectedContact?.listType === 'already_sent').length,
+      blockedContacts: analyses.filter((item) => item.protectedContact?.listType === 'blocked').length,
+      rejectedLowRating: analyses.filter((item) => !isProtected(item) && !isDuplicate(item) && item.ramoMatch && Number(item.qualification?.rating || 0) < minRating).length,
       rejectedLowReviews: analyses.filter((item) => (
+        !isProtected(item) &&
+        !isDuplicate(item) &&
         item.ramoMatch &&
         Number(item.qualification?.rating || 0) >= minRating &&
         Number(item.qualification?.reviews || 0) < minReviews
       )).length,
-      duplicates: analyses.filter((item) => item.alreadyImported || item.payloadDuplicate).length,
-      blacklist: analyses.filter((item) => ['blocked-link', 'excluded'].includes(item.website?.type)).length,
+      duplicates: analyses.filter(isDuplicate).length,
+      blacklist: analyses.filter((item) => !isProtected(item) && !isDuplicate(item) && ['blocked-link', 'excluded'].includes(item.website?.type)).length,
       errors: 0
     };
   }
@@ -348,6 +358,8 @@
     const lowReviews = result.rejected_low_reviews || 0;
     const duplicates = result.rejected_duplicate || 0;
     const blacklisted = result.blacklisted || 0;
+    const alreadySent = result.already_sent || 0;
+    const blockedContacts = result.blocked_contacts || 0;
     const errors = result.errors || 0;
 
     renderSeparatedImportSummary({
@@ -359,11 +371,13 @@
       rejected_low_reviews: lowReviews,
       rejected_duplicate: duplicates,
       blacklisted,
+      already_sent: alreadySent,
+      blocked_contacts: blockedContacts,
       errors
     });
 
     if (typeof notify === 'function') {
-      notify(`Importacao analisada: ${total} total - ${created} aprovado(s) - ${ignored} ignorado(s) - nota ${lowRating} - avaliacoes ${lowReviews} - duplicados ${duplicates} - blacklist ${blacklisted} - erros ${errors}`);
+      notify(`Importacao analisada: ${total} total - ${created} aprovado(s) - ${ignored} ignorado(s) - nota ${lowRating} - avaliacoes ${lowReviews} - duplicados ${duplicates} - blacklist ${blacklisted} - ja enviados ${alreadySent} - bloqueados ${blockedContacts} - erros ${errors}`);
     }
 
     if (typeof loadSupabaseLeadsToLocalState === 'function') await loadSupabaseLeadsToLocalState();

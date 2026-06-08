@@ -27,6 +27,7 @@ function extractSite(item) {
     item.webSite,
     item.websiteUrl,
     item.website_url,
+    item.website_host,
     item.companyWebsite,
     item.urlWebsite
   ];
@@ -40,10 +41,10 @@ function extractSite(item) {
 
   return '';
 }
-function extractPhone(item) { return String(item.phone || item.whatsapp || item.phoneNumber || item.telefone || '').trim(); }
-function extractName(item)  { return capitalizeName(String(item.title || item.name || item.nome || '').trim()); }
+function extractPhone(item) { return String(item.phone_normalized || item.normalized_phone || item.phone || item.whatsapp || item.phoneNumber || item.telefone || '').trim(); }
+function extractName(item)  { return capitalizeName(String(item.title || item.name || item.nome || item.company_name || item.companyName || item.empresa || '').trim()); }
 function extractInstagram(item) {
-  const ig = String(item.instagram || item.instagramUrl || item.instagram_url || '').trim();
+  const ig = String(item.instagram_username || item.instagram || item.instagramUrl || item.instagram_url || '').trim();
   if (ig) return ig;
   const site = extractSite(item);
   if (isInstagramWebsiteV430(site)) return site;
@@ -61,7 +62,7 @@ function extractCategory(item) {
   return String(item.categoryName || item.category || item.categoria || item.type || '').trim();
 }
 function extractGoogleUrl(item) {
-  return String(item.url || item.googleUrl || item.google_url || item.google_maps_url || item.maps_url || item.link || '').trim();
+  return String(item.place_id || item.placeId || item.googlePlaceId || item.url || item.googleUrl || item.google_url || item.google_maps_url || item.maps_url || item.link || '').trim();
 }
 function hasValidSiteRaw(item) {
   const site = extractSite(item);
@@ -191,6 +192,78 @@ function findLeadIdentityDuplicateV430(index, item = {}) {
   return null;
 }
 
+function normalizeCompanyIdentityV629(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getContactSuppressionEntriesForImportV629() {
+  const fromGetter = typeof window.getContactSuppressionEntriesV629 === 'function'
+    ? window.getContactSuppressionEntriesV629()
+    : null;
+  const fromWindow = Array.isArray(window.contactSuppressionEntriesV629)
+    ? window.contactSuppressionEntriesV629
+    : [];
+  return (Array.isArray(fromGetter) ? fromGetter : fromWindow)
+    .filter((entry) => entry && !entry.archived_at);
+}
+
+function normalizeSuppressionEntryForImportV629(entry = {}) {
+  return {
+    ...entry,
+    phone_normalized: normalizePhone(entry.phone_normalized || entry.normalized_phone || entry.phone || entry.whatsapp),
+    instagram_username: normalizeIdentityUrlV430(extractInstagram(entry)).replace('@', ''),
+    website_host: normalizeWebsiteHostnameV430(extractSite(entry)),
+    place_id: normalizeIdentityUrlV430(extractGoogleUrl(entry)),
+    company_name_normalized: normalizeCompanyIdentityV629(entry.company_name_normalized || entry.company_name || entry.companyName || entry.nome || entry.name || entry.title)
+  };
+}
+
+function findContactSuppressionMatchV629(item = {}) {
+  const phone = normalizePhone(extractPhone(item));
+  const site = normalizeWebsiteHostnameV430(extractSite(item));
+  const maps = normalizeIdentityUrlV430(extractGoogleUrl(item));
+  const instagram = normalizeIdentityUrlV430(extractInstagram(item)).replace('@', '');
+  const company = normalizeCompanyIdentityV629(extractName(item));
+
+  const entries = getContactSuppressionEntriesForImportV629()
+    .map(normalizeSuppressionEntryForImportV629);
+
+  const matches = entries.map((entry) => {
+    if (phone && entry.phone_normalized === phone) return { entry, field:'phone', strength:10 };
+    if (maps && entry.place_id === maps) return { entry, field:'place_id', strength:9 };
+    if (instagram && entry.instagram_username === instagram) return { entry, field:'instagram', strength:8 };
+    if (site && entry.website_host === site) return { entry, field:'website', strength:7 };
+    if (company && entry.company_name_normalized === company) return { entry, field:'company_name', strength:1 };
+    return null;
+  }).filter(Boolean);
+
+  if (!matches.length) return null;
+
+  matches.sort((a, b) => {
+    if ((a.entry.list_type === 'blocked') !== (b.entry.list_type === 'blocked')) {
+      return a.entry.list_type === 'blocked' ? -1 : 1;
+    }
+    return b.strength - a.strength;
+  });
+
+  const match = matches[0];
+  return {
+    id: match.entry.id,
+    listType: match.entry.list_type || 'already_sent',
+    field: match.field,
+    value: match.entry[match.field] || '',
+    companyName: match.entry.company_name || '',
+    reason: match.entry.reason || ''
+  };
+}
+
 function getDatabaseLeadCacheV430() {
   const map = new Map();
   const add = (lead) => {
@@ -208,6 +281,7 @@ function getDatabaseLeadCacheV430() {
   try { (typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : []).forEach(add); } catch (_) {}
   try { (typeof getInstaFila === 'function' ? getInstaFila() : []).forEach(add); } catch (_) {}
   try { Object.values(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}).flat().forEach(add); } catch (_) {}
+  try { getContactSuppressionEntriesForImportV629().forEach(add); } catch (_) {}
 
   return Array.from(map.values());
 }
@@ -222,7 +296,8 @@ function logApifyAnalysisV430(analysis, phase = 'preview') {
     reviews: analysis.qualification.reviews,
     websiteType: analysis.website.type,
     alreadyImported: analysis.alreadyImported,
-    payloadDuplicate: analysis.payloadDuplicate
+    payloadDuplicate: analysis.payloadDuplicate,
+    protectedContact: analysis.protectedContact
   };
   qualificationLogV430('qualification', payload);
   if (phase === 'preview') qualificationLogV430('qualification-preview', payload);
@@ -236,6 +311,7 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
   const name = extractName(item);
   const qualification = getApifyQualificationV430(item);
   const website = classifyWebsiteOpportunityV430(item);
+  const protectedContact = findContactSuppressionMatchV629(item);
   const databaseDuplicate = findLeadIdentityDuplicateV430(databaseIndex, item);
   const payloadDuplicateMatch = findLeadIdentityDuplicateV430(payloadIndex, item);
   const analysis = {
@@ -249,6 +325,7 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     website,
     hasPhone: hasValidPhone(item),
     ramoMatch: isRamoMatch(item),
+    protectedContact,
     alreadyImported: !!databaseDuplicate,
     payloadDuplicate: !databaseDuplicate && !!payloadDuplicateMatch,
     duplicate: databaseDuplicate || payloadDuplicateMatch || null,
@@ -259,6 +336,11 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
   if (!analysis.name) {
     analysis.route = 'skip';
     analysis.reason = 'sem nome';
+  } else if (analysis.protectedContact) {
+    analysis.route = 'skip';
+    analysis.reason = analysis.protectedContact.listType === 'blocked'
+      ? 'contato bloqueado operacional'
+      : 'contato ja enviado anteriormente';
   } else if (analysis.alreadyImported) {
     analysis.route = 'skip';
     analysis.reason = 'lead ja existente no banco do usuario';
