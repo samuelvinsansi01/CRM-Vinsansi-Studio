@@ -50,8 +50,17 @@ async function supabaseFetch(path, options = {}) {
   return data;
 }
 async function listMaps(userId) {
-  const data = await supabaseFetch(`whatsapp_contact_map?select=*&user_id=eq.${encodeURIComponent(userId)}&order=updated_at.desc&limit=1000`);
-  return Array.isArray(data) ? data : [];
+  try {
+    const data = await supabaseFetch(`whatsapp_contact_map?select=*&user_id=eq.${encodeURIComponent(userId)}&order=updated_at.desc&limit=1000`);
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    const message = String(error?.message || error || '');
+    if (message.includes('whatsapp_contact_map') || message.includes('PGRST') || message.includes('42P01')) {
+      console.warn('[contact-map] tabela ausente/incompleta; rode sql/00642_whatsapp_contact_map_repair.sql', message);
+      return [];
+    }
+    throw error;
+  }
 }
 async function findExistingMap({ userId, lid, phoneReal }) {
   const filters = [`user_id=eq.${encodeURIComponent(userId)}`];
