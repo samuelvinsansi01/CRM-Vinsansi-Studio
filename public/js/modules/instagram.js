@@ -68,7 +68,7 @@ function renderFilaInsta() {
           ?`<button class="btn btn-insta" style="font-size:10px;padding:7px 14px" onclick="marcarInstaEnviado('${item.id}')">✓ Marcar enviado</button>`
           :`<span class="q-badge ok">✓ enviado</span>`
         }
-        <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px;margin-right:4px" onclick="instaFilaVoltarAtribuicao('${item.id}')" title="Devolver para Atribuição">↩ Atribuição</button>
+        <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px;margin-right:4px" onclick="instaFilaVoltarAtribuicao('${item.id}')" title="Devolver para Validação">↩ Validação</button>
         <button class="btn btn-danger" style="font-size:10px;padding:7px 12px" onclick="removerDaFilaInsta('${item.id}')">Remover</button>
       </div>
     </div>`;
@@ -80,20 +80,21 @@ function instaFilaVoltarAtribuicao(id) {
   const fila = getInstaFila();
   const item = fila.find(f => f.id === id);
   if (!item) return;
-  const atrib = getAtribuicaoData();
-  if (!atrib.find(a => a.id === id)) {
-    atrib.push({
+  const validacao = getValData();
+  if (!validacao.find(a => a.id === id)) {
+    validacao.push({
       id: item.id, nome: item.nome, whatsapp: item.whatsapp || '',
       instagram: item.instagram || '', googleUrl: item.googleUrl || '',
       canal: 'insta', site: '',
+      numStatus: 'invalido',
       status: 'Não enviada', criadoEm: item.criadoEm || todayStr(),
       validadoEm: todayStr(), diaDestino: null,
     });
-    saveAtribuicaoData(atrib);
+    saveValData(validacao);
   }
   saveInstaFila(fila.filter(f => f.id !== id));
   renderFilaInsta(); updateBadges();
-  notify(`↩ ${item.nome} → Atribuição`);
+  notify(`↩ ${item.nome} → Validação`);
 }
 function setInstaStatus(s) { instaStatus = s; renderFilaInsta(); }
 

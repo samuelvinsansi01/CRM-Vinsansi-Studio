@@ -230,7 +230,6 @@
     set('badge-inicio', leads.length);
     set('badge-importar', leads.length);
     set('badge-validacao', leads.filter(l => ['imported','validation'].includes(l.current_stage)).length);
-    set('badge-atribuicao', leads.filter(l => l.current_stage === 'assigned').length);
     set('badge-fila-zap', leads.filter(l => l.current_stage === 'queued').length);
     set('badge-instagram', leads.filter(l => l.lead_channel === 'instagram').length);
   }

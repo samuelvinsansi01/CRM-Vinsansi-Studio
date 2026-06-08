@@ -330,7 +330,6 @@ function getAllKnownLeadsForWhatsappMapV417() {
   };
 
   try { (typeof getLeadBaseData === 'function' ? getLeadBaseData() : []).forEach(add); } catch(e) {}
-  try { (typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : []).forEach(add); } catch(e) {}
   try { (typeof getValData === 'function' ? getValData() : []).forEach(add); } catch(e) {}
   try { (typeof getZapBacklog === 'function' ? getZapBacklog() : []).forEach(add); } catch(e) {}
   try { (typeof getInstaFila === 'function' ? getInstaFila() : []).forEach(add); } catch(e) {}
@@ -882,7 +881,6 @@ function findLeadByPhoneV412(phone) {
   if (cachedLead) return cachedLead;
 
   const candidates = [];
-  try { candidates.push(...(typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : [])); } catch(e) {}
   try { candidates.push(...(typeof getValData === 'function' ? getValData() : [])); } catch(e) {}
   try { candidates.push(...(typeof getInstaFila === 'function' ? getInstaFila() : [])); } catch(e) {}
   try { candidates.push(...Object.values(filaDisparo || {}).flat()); } catch(e) {}

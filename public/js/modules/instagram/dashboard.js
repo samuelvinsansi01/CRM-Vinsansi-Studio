@@ -277,13 +277,13 @@ function renderInstaTabContent() {
 
 /* ── ABA BACKLOG ── */
 function renderInstaBacklog(container) {
-  // Apenas leads com link do Instagram já confirmado na Atribuição
+  // Apenas leads com link do Instagram já confirmado na Validação
   const filaAll = getInstaFila().filter(e => !!(e.instagram));
 
   if (!filaAll.length) {
     container.innerHTML = `<div class="stretch-card" style="flex:1">
       <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:48px">
-        // backlog vazio · confirme o link do Instagram na aba Atribuição para os leads aparecerem aqui
+        // backlog vazio · envie leads da aba Instagram em Validação para aparecerem aqui
       </div></div>`;
     return;
   }
@@ -507,4 +507,3 @@ function migrarInstaParaMes(leads) {
   data[mk].instagram = [...data[mk].instagram, ...novos];
   saveAcompData(data);
 }
-

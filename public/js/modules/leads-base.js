@@ -43,7 +43,6 @@ function buildPermanentLeadWorkflowIndex() {
 
   try { add(Object.values(getWeekData()?.days || {}).flat(), 'Agenda semanal', 'inicio'); } catch {}
   try { add(getValData(), 'Validação', 'validacao'); } catch {}
-  try { add(getAtribuicaoData(), 'Atribuição', 'atribuicao'); } catch {}
   try { add(getZapBacklog(), 'Backlog WhatsApp', 'fila-zap'); } catch {}
   try { add(getInstaFila(), 'Instagram', 'instagram'); } catch {}
   try { add(Object.values(typeof getInstaWeek === 'function' ? getInstaWeek() : {}).flat(), 'Agenda Instagram', 'instagram'); } catch {}
@@ -121,7 +120,7 @@ function changeLeadBasePgSize(size) {
 
 function getPermanentLeadAction(location = {}) {
   if (location.panel === 'validacao') return ['Abrir validação', 'validacao'];
-  if (location.panel === 'atribuicao') return ['Abrir atribuição', 'atribuicao'];
+  if (location.panel === 'atribuicao') return ['Abrir validação', 'validacao'];
   if (location.panel === 'fila-zap') return ['Abrir WhatsApp', 'fila-zap'];
   if (location.panel === 'instagram') return ['Abrir Instagram', 'instagram'];
   if (location.panel === 'inicio') return ['Ver agenda', 'inicio'];
@@ -133,11 +132,8 @@ function preparePermanentLeads(ids = []) {
   const base = new Map(getLeadBaseData().filter(lead => lead?.id).map(lead => [lead.id, lead]));
   const currentWeekIds = getCurrentWeekLeadIds();
   const workflow = buildPermanentLeadWorkflowIndex();
-  const attribution = getAtribuicaoData();
   const validation = getValData();
-  const attributionIds = new Set(attribution.map(lead => lead.id));
   const validationIds = new Set(validation.map(lead => lead.id));
-  let toAttribution = 0;
   let toValidation = 0;
   let alreadyRouted = 0;
   let ignored = 0;
@@ -162,20 +158,14 @@ function preparePermanentLeads(ids = []) {
       voltouDaSemana: todayStr()
     };
 
-    if (typeof isLeadWhatsappValidatedForQueue === 'function' && isLeadWhatsappValidatedForQueue(restored)) {
-      if (!attributionIds.has(id)) {
-        attribution.push({ ...restored, canal:'zap' });
-        attributionIds.add(id);
-        toAttribution++;
-      }
-      return;
-    }
+    const whatsappReady = typeof isLeadWhatsappValidatedForQueue === 'function' && isLeadWhatsappValidatedForQueue(restored);
 
     if (!validationIds.has(id)) {
       validation.push({
         ...restored,
-        canal: 'pendente',
-        numStatus: restored.numStatus === 'valido' ? 'valido' : 'pendente',
+        canal: whatsappReady ? 'zap' : 'pendente',
+        numStatus: whatsappReady ? 'valido' : (restored.numStatus === 'valido' ? 'valido' : 'pendente'),
+        whatsappValidationStatus: whatsappReady ? 'valid' : restored.whatsappValidationStatus,
         importadoEm: restored.importadoEm || restored.criadoEm || todayStr()
       });
       validationIds.add(id);
@@ -183,14 +173,12 @@ function preparePermanentLeads(ids = []) {
     }
   });
 
-  if (toAttribution) saveAtribuicaoData(attribution);
   if (toValidation) saveValData(validation);
   leadBaseSelected.clear();
   renderLeadBasePanel();
   updateBadges();
 
   const summary = [];
-  if (toAttribution) summary.push(`${toAttribution} → Atribuição`);
   if (toValidation) summary.push(`${toValidation} → Validação`);
   if (alreadyRouted) summary.push(`${alreadyRouted} já encaminhado${alreadyRouted !== 1 ? 's' : ''}`);
   if (ignored) summary.push(`${ignored} ignorado${ignored !== 1 ? 's' : ''}`);

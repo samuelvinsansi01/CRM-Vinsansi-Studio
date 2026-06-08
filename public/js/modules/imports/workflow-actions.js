@@ -39,8 +39,8 @@ function goImportPage(p)   { importPage=p;  importPreview(); }
 function changeImportPgSize(n){ IMPORT_PG=n; importPage=1; importPreview(); }
 function goValPage(p)      { valPage=p;     renderValidacao(); }
 function changeValPgSize(n){ VAL_PG=n; valPage=1; renderValidacao(); }
-function goAtribPage(p)    { atribPage=p;   renderAtribuicao(); }
-function changeAtribPgSize(n){ ATRIB_PG=n; atribPage=1; renderAtribuicao(); }
+function goAtribPage(p)    { valPage=p;     renderValidacao(); }
+function changeAtribPgSize(n){ VAL_PG=n; valPage=1; renderValidacao(); }
 function goDisparoPage(p)  { disparoPage=p; renderDisparoEmpresas(); }
 function changeDisparoPgSize(n){ DISPARO_PG=n; disparoPage=1; renderDisparoEmpresas(); }
 
@@ -157,13 +157,6 @@ function updateWhatsappInLocalCollectionsV43(id, phone) {
   } catch (err) { console.warn('[inicio][whatsapp] base local:', err); }
 
   try {
-    const atrib = typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : [];
-    if (Array.isArray(atrib) && atrib.some(lead => String(lead?.id) === String(id))) {
-      if (typeof saveAtribuicaoData === 'function') saveAtribuicaoData(atrib.map(patchLead));  
-    }
-  } catch (err) { console.warn('[inicio][whatsapp] atribuição:', err); }
-
-  try {
     const val = typeof getValData === 'function' ? getValData() : [];
     if (Array.isArray(val) && val.some(lead => String(lead?.id) === String(id))) {
       if (typeof saveValData === 'function') saveValData(val.map(patchLead));  
@@ -265,15 +258,20 @@ function confirmClear() {
   const paraMes = flat.filter(e => STATUS_MENSAIS.includes(e.status||''));
   if (paraMes.length) migrarParaMes(paraMes);
 
-  // Leads sem status (Não enviada) voltam para a Base de Atribuição
+  // Leads sem status voltam para Validação; Atribuição saiu do fluxo.
   const semStatus = flat.filter(e => !e.status || e.status === 'Não enviada' || e.status === 'Em fila');
   if (semStatus.length) {
-    const atrib = getAtribuicaoData();
-    const atribIds = new Set(atrib.map(a => a.id));
-    const novosNaAtrib = semStatus
-      .filter(e => !atribIds.has(e.id))
-      .map(e => ({ ...e, voltouDaSemana: todayStr(), diaDestino: null }));
-    saveAtribuicaoData([...atrib, ...novosNaAtrib]);
+    const validacao = getValData();
+    const validacaoIds = new Set(validacao.map(a => a.id));
+    const novosNaValidacao = semStatus
+      .filter(e => !validacaoIds.has(e.id))
+      .map(e => ({
+        ...e,
+        canal: e.canal || (e.instagram ? 'insta' : 'pendente'),
+        voltouDaSemana: todayStr(),
+        diaDestino: null
+      }));
+    saveValData([...validacao, ...novosNaValidacao]);
   }
 
   // Zera os dias da semana
@@ -283,7 +281,7 @@ function confirmClear() {
   renderInicio(); updateBadges();
   const msgs = [];
   if (paraMes.length) msgs.push(`${paraMes.length} lead${paraMes.length!==1?'s':''} → Acompanhamento`);
-  if (semStatus.length) msgs.push(`${semStatus.length} → Atribuição`);
+  if (semStatus.length) msgs.push(`${semStatus.length} → Validação`);
   notify('Semana limpa' + (msgs.length ? ' · ' + msgs.join(' · ') : ''));
 }
 
@@ -309,13 +307,20 @@ function confirmClearDay() {
   const paraMes = emps.filter(e => STATUS_MENSAIS.includes(e.status||''));
   if (paraMes.length) migrarParaMes(paraMes);
 
-  // Leads sem status voltam para Atribuição
+  // Leads sem status voltam para Validação; Atribuição saiu do fluxo.
   const semStatus = emps.filter(e => !e.status || e.status === 'Não enviada' || e.status === 'Em fila');
   if (semStatus.length) {
-    const atrib = getAtribuicaoData();
-    const atribIds = new Set(atrib.map(a => a.id));
-    const novos = semStatus.filter(e => !atribIds.has(e.id)).map(e => ({ ...e, voltouDaSemana: todayStr(), diaDestino: null }));
-    saveAtribuicaoData([...atrib, ...novos]);
+    const validacao = getValData();
+    const validacaoIds = new Set(validacao.map(a => a.id));
+    const novos = semStatus
+      .filter(e => !validacaoIds.has(e.id))
+      .map(e => ({
+        ...e,
+        canal: e.canal || (e.instagram ? 'insta' : 'pendente'),
+        voltouDaSemana: todayStr(),
+        diaDestino: null
+      }));
+    saveValData([...validacao, ...novos]);
   }
 
   // Remove todos do dia
@@ -325,6 +330,6 @@ function confirmClearDay() {
   renderInicio(); updateBadges();
   const msgs = [];
   if (paraMes.length) msgs.push(`${paraMes.length} → Acompanhamento`);
-  if (semStatus.length) msgs.push(`${semStatus.length} → Atribuição`);
+  if (semStatus.length) msgs.push(`${semStatus.length} → Validação`);
   notify(`${dayLabel(day)} limpo` + (msgs.length ? ' · ' + msgs.join(' · ') : ''));
 }

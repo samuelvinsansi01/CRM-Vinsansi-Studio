@@ -79,7 +79,6 @@ function updateLeadEverywhereV427(id, patch = {}, options = {}) {
   };
 
   patchStorageArray('validation', typeof getValData === 'function' ? getValData : null, typeof saveValData === 'function' ? saveValData : null);
-  patchStorageArray('assignment', typeof getAtribuicaoData === 'function' ? getAtribuicaoData : null, typeof saveAtribuicaoData === 'function' ? saveAtribuicaoData : null);
   patchStorageArray('instagram', typeof getInstaFila === 'function' ? getInstaFila : null, typeof saveInstaFila === 'function' ? saveInstaFila : null);
 
   if (typeof getAcompData === 'function' && typeof saveAcompData === 'function') {
@@ -701,9 +700,6 @@ function findLeadEverywhere(id) {
   const data = ensureWeekData();
   const weekLead = Object.values(data.days || {}).flat().find(e => e.id === id);
   if (weekLead) return weekLead;
-
-  const atrib = getAtribuicaoData().find(e => e.id === id);
-  if (atrib) return atrib;
 
   const val = getValData().find(e => e.id === id);
   if (val) return val;

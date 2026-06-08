@@ -191,8 +191,7 @@ async function importarLeads() {
 
   const novaValFila = [...getValData()];
   const novaInstaFila = [...getInstaFila()];
-  const novaAtribuicao = [...getAtribuicaoData()];
-  [...novaValFila, ...novaInstaFila, ...novaAtribuicao, ...(typeof getLeadBaseData === 'function' ? getLeadBaseData() : [])].forEach(lead => {
+  [...novaValFila, ...novaInstaFila, ...(typeof getLeadBaseData === 'function' ? getLeadBaseData() : [])].forEach(lead => {
     const phone = normalizeImportedLeadPhoneV432(lead.whatsapp || lead.phone || lead.telefone || '');
     if (phone && !existingPhones.has(phone)) existingPhones.set(phone, lead.id || 'local-cache');
   });

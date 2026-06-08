@@ -4,8 +4,7 @@
   const PANEL_MAP = {
     inicio: { table: 'leads', stage: null, label: 'Início / visão semanal' },
     importar: { table: 'import_batches + lead_imports + leads + lead_locations + lead_snapshots', stage: 'imported', label: 'Importação' },
-    validacao: { table: 'leads + lead_validation_attempts', stage: 'validation', label: 'Validação WhatsApp' },
-    atribuicao: { table: 'leads', stage: 'assigned', label: 'Atribuição por canal' },
+    validacao: { table: 'leads + lead_validation_attempts + backlog_items', stage: 'validation', label: 'Validação + envio ao Backlog' },
     instagram: { table: 'backlog_items + leads', channel: 'instagram', label: 'Backlog/Fila Instagram' },
     'fila-zap': { table: 'queue_items + dispatch_batches + dispatch_items + dispatch_ledger', channel: 'whatsapp', label: 'Fila WhatsApp' },
     redirecionamentos: { table: 'settings', scope: 'redirects', label: 'Redirecionamentos' },
@@ -57,7 +56,6 @@
       setBadge('badge-inicio', counts.inicio || 0);
       setBadge('badge-importar', counts.importar || 0);
       setBadge('badge-validacao', counts.validacao || 0);
-      setBadge('badge-atribuicao', counts.atribuicao || 0);
       setBadge('badge-fila-zap', counts.fila_zap || 0);
       setBadge('badge-instagram', counts.instagram || 0);
       setBadge('badge-inbox', counts.inbox || 0);

@@ -636,7 +636,6 @@
       renderActiveValidationTab();
       if (bucket === 'insta' && typeof renderInstagram === 'function') renderInstagram();
       if (bucket !== 'insta' && typeof renderQueueStageFromSupabase621 === 'function') renderQueueStageFromSupabase621();
-      if (typeof renderAssignmentStageFromSupabase === 'function') renderAssignmentStageFromSupabase();
       if (typeof updateBadges === 'function') updateBadges();
       return true;
     } catch (error) {
@@ -1710,11 +1709,6 @@
         tasks.push(refreshMaybe(safeCall('renderValidationStageFromSupabase')));
       }
 
-      if (isActivePanel('panel-atribuicao')) {
-        tasks.push(refreshMaybe(safeCall('renderAssignmentStageFromSupabase')));
-        tasks.push(refreshMaybe(safeCall('refreshChipsRebuild620')));
-      }
-
       if (isActivePanel('panel-fila-zap')) {
         tasks.push(refreshMaybe(safeCall('renderQueueStageFromSupabase621')));
       } else if (typeof window.refreshDispatchBatchesRebuild622 === 'function') {
@@ -1764,7 +1758,7 @@
 
     const patched = function switchPanelFlow624(panel) {
       const result = previous.apply(this, arguments);
-      if (['validacao', 'validation', 'panel-validacao', 'atribuicao', 'assignment', 'panel-atribuicao', 'fila-zap', 'whatsapp', 'panel-fila-zap'].includes(panel)) {
+      if (['validacao', 'validation', 'panel-validacao', 'fila-zap', 'whatsapp', 'panel-fila-zap'].includes(panel)) {
         scheduleFlowRefresh(220);
       }
       return result;
@@ -1780,7 +1774,6 @@
     [
       'approveLeadWhatsappRebuild',
       'rejectLeadValidationRebuild',
-      'sendLeadToAssignmentRebuild619',
       'assignLeadToChipRebuild620',
       'queueLeadTodayRebuild621',
       'backToBacklogRebuild621',
@@ -1800,7 +1793,7 @@
       'importarLeads',
       'renderValidationStageFromSupabase',
       'approveLeadWhatsappRebuild',
-      'sendLeadToAssignmentRebuild619',
+      'sendValidationLeadToBacklogRebuild629',
       'assignLeadToChipRebuild620',
       'renderQueueStageFromSupabase621',
       'queueLeadTodayRebuild621',
@@ -1813,7 +1806,6 @@
       'importJsonInput',
       'importSummary',
       'valComSiteList',
-      'atribList',
       'disparoEmpresasList',
       'zapRight',
       'chipNome',
@@ -1860,7 +1852,7 @@
     setTimeout(installActionPatches, 400);
     setTimeout(installActionPatches, 1200);
     setTimeout(() => {
-      if (isActivePanel('panel-validacao') || isActivePanel('panel-atribuicao') || isActivePanel('panel-fila-zap')) {
+      if (isActivePanel('panel-validacao') || isActivePanel('panel-fila-zap')) {
         scheduleFlowRefresh(0);
       }
     }, 500);
@@ -2159,7 +2151,7 @@
       assignedChipId: row.chip_id || '',
       chipName: row.chip_name || '',
       chipInstance: row.chip_instance || '',
-      current_stage: inToday ? 'dispatch' : 'assignment',
+      current_stage: inToday ? 'dispatch' : 'backlog',
       current_status: inToday ? status : 'backlog_whatsapp',
       status,
       statusRaw: status,
@@ -2944,7 +2936,6 @@
       leads: 'users',
       importar: 'inbox',
       validacao: 'check',
-      atribuicao: 'folder',
       envios: 'send',
       whatsapp: 'message',
       instagram: 'camera',
@@ -4549,6 +4540,137 @@
     setTimeout(refresh625, 500);
     setTimeout(refresh625, 1500);
     setTimeout(refresh625, 3000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+
+/* CRM Rebuild Fase 6.29 - Atribuicao removida do fluxo operacional */
+(function () {
+  const REMOVED_PANELS = new Set(['atribuicao', 'assignment', 'panel-atribuicao']);
+
+  function normalizeRemovedPanel(panel) {
+    return REMOVED_PANELS.has(String(panel || '')) ? 'validacao' : panel;
+  }
+
+  function validationTabFromLegacy(tab) {
+    if (tab === 'insta' || tab === 'instagram') return 'insta';
+    if (tab === 'com-site' || tab === 'site' || tab === 'sites') return 'com-site';
+    return 'validados';
+  }
+
+  function openValidation(tab) {
+    try {
+      if (tab && typeof window.setValResultTab === 'function') {
+        window.setValResultTab(validationTabFromLegacy(tab));
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof window.switchPanel === 'function') {
+        return window.switchPanel('validacao');
+      }
+    } catch (_) {}
+
+    document.querySelectorAll('.panel').forEach((panel) => {
+      panel.classList.toggle('active', panel.id === 'panel-validacao');
+    });
+    if (typeof window.renderValidacao === 'function') return window.renderValidacao();
+    return null;
+  }
+
+  function notifyRemovedFlow() {
+    if (typeof notify === 'function') {
+      notify('Atribuicao foi incorporada a Validacao. Envie ao Backlog pela propria Validacao.', 'warn');
+    }
+  }
+
+  async function sendLegacyLeadToBacklog(leadId) {
+    if (leadId && typeof window.sendValidationLeadToBacklogRebuild629 === 'function') {
+      return window.sendValidationLeadToBacklogRebuild629(leadId);
+    }
+    notifyRemovedFlow();
+    return openValidation();
+  }
+
+  async function sendSelectedFromValidation() {
+    if (typeof window.enviarSelecionadosValidacaoAoBacklog === 'function') {
+      return window.enviarSelecionadosValidacaoAoBacklog();
+    }
+    notifyRemovedFlow();
+    return openValidation();
+  }
+
+  async function sendVisibleFromValidation() {
+    if (typeof window.enviarTodosValidacaoAoBacklog === 'function') {
+      return window.enviarTodosValidacaoAoBacklog();
+    }
+    notifyRemovedFlow();
+    return openValidation();
+  }
+
+  function selectVisibleValidation() {
+    if (typeof window.selecionarTodosValidacaoBacklog === 'function') {
+      return window.selecionarTodosValidacaoBacklog();
+    }
+    return openValidation();
+  }
+
+  function clearValidationSelection() {
+    if (typeof window.limparSelecaoValidacaoBacklog === 'function') {
+      return window.limparSelecaoValidacaoBacklog();
+    }
+    return openValidation();
+  }
+
+  function installAssignmentRemoval() {
+    const previousSwitchPanel = window.switchPanel;
+    if (typeof previousSwitchPanel === 'function' && !previousSwitchPanel.__assignmentRemoved629) {
+      const patchedSwitchPanel = function switchPanelWithoutAssignment(panel, options) {
+        return previousSwitchPanel.call(this, normalizeRemovedPanel(panel), options);
+      };
+      patchedSwitchPanel.__assignmentRemoved629 = true;
+      patchedSwitchPanel.__previous = previousSwitchPanel;
+      window.switchPanel = patchedSwitchPanel;
+    }
+
+    window.renderAssignmentStageFromSupabase = function renderAssignmentRemoved629() {
+      return openValidation();
+    };
+    window.renderAtribuicao = function renderAtribuicaoRemoved629() {
+      return openValidation();
+    };
+    window.renderAtribInstaFila = function renderAtribInstaRemoved629() {
+      return openValidation('insta');
+    };
+    window.updateAtribTabCounts = function updateAtribTabCountsRemoved629() {};
+    window.setAtribTab = function setAtribTabRemoved629(tab) {
+      return openValidation(validationTabFromLegacy(tab));
+    };
+
+    window.sendLeadToAssignmentRebuild619 = sendLegacyLeadToBacklog;
+    window.aprovarTodosParaAtribuicao = sendVisibleFromValidation;
+    window.atribuirLote = sendSelectedFromValidation;
+    window.selecionarTodos = selectVisibleValidation;
+    window.deselecionarTodos = clearValidationSelection;
+
+    window.CRMRebuild629AssignmentRemoved = {
+      active: true,
+      panel: 'validacao',
+      backlogEntryPoints: ['sendValidationLeadToBacklogRebuild629', 'enviarSelecionadosValidacaoAoBacklog', 'enviarTodosValidacaoAoBacklog']
+    };
+  }
+
+  function boot() {
+    installAssignmentRemoval();
+    setTimeout(installAssignmentRemoval, 120);
+    setTimeout(installAssignmentRemoval, 600);
+    setTimeout(installAssignmentRemoval, 1600);
+    setTimeout(installAssignmentRemoval, 3200);
   }
 
   if (document.readyState === 'loading') {

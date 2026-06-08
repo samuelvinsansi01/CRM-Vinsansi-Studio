@@ -187,7 +187,6 @@ async function syncAllLocalLeadsToSupabase() {
   const weekLeads = Object.values(data.days || {}).flat();
 
   const extras = [];
-  try { extras.push(...getAtribuicaoData()); } catch {}
   try {
     const val = getValData();
     extras.push(...(typeof filterPersistentLeadsV433 === 'function' ? filterPersistentLeadsV433(val, 'Validação') : val));

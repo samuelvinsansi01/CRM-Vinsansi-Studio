@@ -195,6 +195,12 @@ function limparPaginaValidador() {
 }
 
 function aprovarParaFila(id) {
+  if (typeof window.sendValidationLeadToBacklogRebuild629 === 'function') {
+    return window.sendValidationLeadToBacklogRebuild629(id);
+  }
+  notify('// fluxo antigo de Atribuicao removido. Recarregue a pagina.', 'warn');
+  return;
+
   const val = getValData();
   const v = val.find(x => x.id === id);
   if (!v || v.numStatus !== 'valido') { notify('// valide o número primeiro','warn'); return; }
@@ -237,6 +243,12 @@ function aprovarParaFila(id) {
 }
 
 function aprovarParaInsta(id) {
+  if (typeof window.sendValidationLeadToBacklogRebuild629 === 'function') {
+    return window.sendValidationLeadToBacklogRebuild629(id);
+  }
+  notify('// fluxo antigo de Atribuicao removido. Recarregue a pagina.', 'warn');
+  return;
+
   const val = getValData();
   const v = val.find(x => x.id === id);
   if (!v) return;
@@ -265,6 +277,12 @@ function aprovarParaInsta(id) {
 
 /* Aprova TODOS os leads validados para Atribuição (ZAP ou INSTA conforme numStatus) */
 function aprovarTodosParaAtribuicao() {
+  if (typeof window.enviarTodosValidacaoAoBacklog === 'function') {
+    return window.enviarTodosValidacaoAoBacklog();
+  }
+  notify('// fluxo antigo de Atribuicao removido. Recarregue a pagina.', 'warn');
+  return;
+
   const val = getValData();
   const atrib = getAtribuicaoData();
   const existIds = new Set(atrib.map(a => a.id));
@@ -314,8 +332,6 @@ function aprovarTodosParaAtribuicao() {
   msg += ' → Atribuição';
   notify(msg);
 }
-
-
 
 
 

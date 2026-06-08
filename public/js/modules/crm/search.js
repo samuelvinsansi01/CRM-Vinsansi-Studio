@@ -14,7 +14,6 @@ function getAllSearchableLeads() {
     Object.values(data.days || {}).flat().forEach(lead => add(lead, 'Semana'));
   } catch {}
 
-  try { getAtribuicaoData().forEach(lead => add(lead, 'Atribuição')); } catch {}
   try { getValData().forEach(lead => add(lead, 'Validação')); } catch {}
   try { getInstaFila().forEach(lead => add(lead, 'Instagram')); } catch {}
   try { getZapBacklog().forEach(lead => add(lead, 'Fila WhatsApp')); } catch {}

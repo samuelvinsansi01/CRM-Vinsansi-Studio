@@ -70,7 +70,6 @@ const OPERATIONAL_DATA_KEYS = {
   weeklyHistory: HISTORY_KEY,
   monthlyTracking: ACOMP_KEY,
   validationQueue: VAL_KEY,
-  assignmentQueue: ATRIBUICAO_KEY,
   instagramQueue: INSTA_KEY,
   instagramWeek: INSTA_WEEK_KEY,
   instagramSchedule: INSTA_SCHED_KEY,
@@ -100,7 +99,7 @@ const OPERATIONAL_DATA_KEYS = {
 
 function getOperationalDefaultValue(name = '') {
   const arrays = new Set([
-    'weeklyHistory','validationQueue','assignmentQueue','instagramQueue','instagramWeek','instagramSchedule',
+    'weeklyHistory','validationQueue','instagramQueue','instagramWeek','instagramSchedule',
     'whatsappBacklog','chipsConfig','excludedDomains','branches','templatesConfig','branchTemplates',
     'instagramTemplates','whatsappQueue','queueCampaigns','queueTemplates','whatsappChips','evolutionResponses','whatsappOutbox'
   ]);
@@ -218,7 +217,6 @@ async function saveOperationalSnapshotToDatabaseV51(snapshot) {
 
   const queueRows = [];
   pushQueueRowsV51(queueRows, 'validation', data.validationQueue);
-  pushQueueRowsV51(queueRows, 'assignment', data.assignmentQueue);
   pushQueueRowsV51(queueRows, 'instagram_queue', data.instagramQueue);
   pushQueueRowsV51(queueRows, 'instagram_week', data.instagramWeek);
   pushQueueRowsV51(queueRows, 'instagram_schedule', data.instagramSchedule);
@@ -303,7 +301,7 @@ async function loadOperationalSnapshotFromDatabaseV51() {
   });
 
   const queueMap = {
-    validation:'validationQueue', assignment:'assignmentQueue', instagram_queue:'instagramQueue', instagram_week:'instagramWeek', instagram_schedule:'instagramSchedule',
+    validation:'validationQueue', instagram_queue:'instagramQueue', instagram_week:'instagramWeek', instagram_schedule:'instagramSchedule',
     whatsapp_backlog:'whatsappBacklog', whatsapp_queue:'whatsappQueue', queue_campaigns:'queueCampaigns', queue_templates:'queueTemplates',
     whatsapp_chips_cache:'whatsappChips', chips_config:'chipsConfig', excluded_domains:'excludedDomains', branches:'branches', templates:'templatesConfig',
     branch_templates:'branchTemplates', instagram_templates:'instagramTemplates', evolution_responses:'evolutionResponses', whatsapp_outbox:'whatsappOutbox', weekly_history:'weeklyHistory'

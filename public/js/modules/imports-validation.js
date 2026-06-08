@@ -278,7 +278,6 @@ function getDatabaseLeadCacheV430() {
   try { (Array.isArray(window.leadsRebuild) ? window.leadsRebuild : []).forEach(add); } catch (_) {}
   try { (Array.isArray(window.leadsBaseRebuild) ? window.leadsBaseRebuild : []).forEach(add); } catch (_) {}
   try { (typeof getValData === 'function' ? getValData() : []).forEach(add); } catch (_) {}
-  try { (typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : []).forEach(add); } catch (_) {}
   try { (typeof getInstaFila === 'function' ? getInstaFila() : []).forEach(add); } catch (_) {}
   try { Object.values(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}).flat().forEach(add); } catch (_) {}
   try { getContactSuppressionEntriesForImportV629().forEach(add); } catch (_) {}

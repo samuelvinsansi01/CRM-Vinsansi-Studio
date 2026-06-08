@@ -350,6 +350,12 @@ async function validarTodosNumeros(options = {}) {
 }
 
 function aprovarSemSiteParaZap(id) {
+  if (typeof window.sendValidationLeadToBacklogRebuild629 === 'function') {
+    return window.sendValidationLeadToBacklogRebuild629(id);
+  }
+  notify('// fluxo antigo de Atribuicao removido. Recarregue a pagina.', 'warn');
+  return;
+
   const val = getValData();
   const v = val.find(x => x.id === id);
   if (!v) return;
@@ -437,4 +443,3 @@ function passarProximoDia(id) {
   renderValidacao();
   notify(`→ ${v.nome} movido para ${dayLabel(proxDia)}`);
 }
-

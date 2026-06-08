@@ -422,13 +422,10 @@ function confirmarExcluirLead() {
   });
   saveWeekData(data);
 
-  // b) base de atribuição
-  saveAtribuicaoData(getAtribuicaoData().filter(e => e.id !== id));
-
-  // c) validação
+  // b) validação
   saveValData(getValData().filter(e => e.id !== id));
 
-  // d) filas de disparo dos chips (memória + Supabase)
+  // c) filas de disparo dos chips (memória + Supabase)
   const chips = getChips();
   chips.forEach(c => {
     if (filaDisparo[c.id]) {
@@ -470,4 +467,3 @@ function confirmarExcluirLead() {
   _excluirLeadId  = null;
   _excluirLeadDay = null;
 }
-

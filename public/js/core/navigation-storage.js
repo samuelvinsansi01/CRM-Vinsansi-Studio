@@ -57,9 +57,12 @@ const PANEL_ALIASES_V436 = {
   whatsappQueue: 'fila-zap',
   import: 'importar',
   redirects: 'redirecionamentos',
-  protection: 'protecao'
+  protection: 'protecao',
+  assignment: 'validacao',
+  atribuicao: 'validacao',
+  'panel-atribuicao': 'validacao'
 };
-const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','atribuicao','instagram','fila-zap','kanban','followups','acompanhamento','redirecionamentos','protecao','configuracoes','conta'];
+const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','instagram','fila-zap','kanban','followups','acompanhamento','redirecionamentos','protecao','configuracoes','conta'];
 function switchPanel(name, options = {}) {
   name = PANEL_ALIASES_V436[name] || name;
   if (!PANELS.includes(name)) name = 'inicio';
@@ -69,14 +72,15 @@ function switchPanel(name, options = {}) {
   });
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
-    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','WhatsApp':'fila-zap','Instagram':'instagram','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Configurações':'configuracoes','Minha conta':'conta'};
+    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Atribuição':'validacao','WhatsApp':'fila-zap','Instagram':'instagram','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Configurações':'configuracoes','Minha conta':'conta'};
     panelMap.Protecao = 'protecao';
+    panelMap['Atribuição'] = 'validacao';
+    panelMap['Atribuicao'] = 'validacao';
     el.classList.toggle('active', panelMap[label] === name);
   });
   if (name==='inicio')         renderInicio();
   if (name==='importar')       renderImportarPanel();
   if (name==='validacao')      renderValidacao();
-  if (name==='atribuicao')     { renderAtribuicao(); updateAtribTabCounts(); if (atribActiveTab==='insta') { renderAtribInstaFila(); updateAtribInstaCorteInfo(); } }
   if (name==='instagram')      renderInstagram();
   if (name==='fila-zap')       renderFilaZap();
   if (name==='inbox')          { renderInbox(); fetchEvolutionResponsesV34({ silent:true }); }
@@ -113,12 +117,6 @@ function updateBadges() {
   document.getElementById('badge-importar').textContent = flat.filter(e => e.status === 'Não enviada').length;
   const val = getValData();
   document.getElementById('badge-validacao').textContent = val.length;
-  const atribuicaoEl = document.getElementById('badge-atribuicao');
-  if (atribuicaoEl) {
-    // Atribuição = zap sem dia + insta sem link ainda
-    const instaSemLink = getInstaFila().filter(e => !e.instagram).length;
-    atribuicaoEl.textContent = getAtribuicaoData().length + instaSemLink;
-  }
   const naoEnv = flat.filter(e => (e.status||'Não enviada')==='Não enviada' && e.whatsapp).length;
   document.getElementById('badge-fila-zap').textContent = naoEnv;
   const instaEl = document.getElementById('badge-instagram');
@@ -129,8 +127,9 @@ function updateBadges() {
     const instaBacklog = getInstaFila().filter(e => !!e.instagram).length;
     instaEl.textContent = totalInsta + instaBacklog;
   }
-  // Atualiza contadores das abas da base de atribuição
-  updateAtribTabCounts();
+  if (document.getElementById('panel-atribuicao') && typeof updateAtribTabCounts === 'function') {
+    updateAtribTabCounts();
+  }
   const fuBadge = document.getElementById('badge-followups');
   if (fuBadge) {
     const todayIso = new Date().toISOString().slice(0,10);
@@ -296,7 +295,6 @@ function reconcilePermanentLeadBase({ schedule = true } = {}) {
   try { collect(Object.values(getWeekData()?.days || {}).flat(), 'Agenda semanal'); } catch {}
   try { collect(Object.values(getHistoryData()?.days || {}).flat(), 'Histórico semanal'); } catch {}
   try { collect(getValData(), 'Validação'); } catch {}
-  try { collect(getAtribuicaoData(), 'Atribuição'); } catch {}
   try { collect(getInstaFila(), 'Instagram'); } catch {}
   try { collect(getZapBacklog(), 'Backlog WhatsApp'); } catch {}
   try { collect(Object.values(getAcompData() || {}).flat(), 'Acompanhamento'); } catch {}
@@ -333,16 +331,23 @@ function ensureWeekData() {
         migrarParaMes(paraMes);
       }
 
-      // Leads semanais (Não enviada, Em fila) → devolver para Atribuição automaticamente
-      const parmaAtrib = flat.filter(e => !e.status || e.status === 'Não enviada' || e.status === 'Em fila');
-      if (parmaAtrib.length) {
-        const atrib = getAtribuicaoData();
-        const atribIds = new Set(atrib.map(a => a.id));
-        const novos = parmaAtrib.filter(e => !atribIds.has(e.id)).map(e => ({ ...e, voltouDaSemana: todayStr(), diaDestino: null }));
-        saveAtribuicaoData([...atrib, ...novos]);
+      // Leads semanais (Não enviada, Em fila) voltam para Validação; Atribuição saiu do fluxo.
+      const paraValidacao = flat.filter(e => !e.status || e.status === 'Não enviada' || e.status === 'Em fila');
+      if (paraValidacao.length) {
+        const validacao = getValData();
+        const validacaoIds = new Set(validacao.map(a => a.id));
+        const novos = paraValidacao
+          .filter(e => !validacaoIds.has(e.id))
+          .map(e => ({
+            ...e,
+            canal: e.canal || (e.instagram ? 'insta' : 'pendente'),
+            voltouDaSemana: todayStr(),
+            diaDestino: null
+          }));
+        saveValData([...validacao, ...novos]);
 
         // Limpar esses leads das filas de disparo dos chips
-        const idsRetornados = new Set(parmaAtrib.map(e => e.id));
+        const idsRetornados = new Set(paraValidacao.map(e => e.id));
         const chips = getChips();
         chips.forEach(c => {
           if (filaDisparo[c.id]) {
@@ -439,7 +444,7 @@ function getValData()  { return getStoredArray(VAL_KEY); }
 
 
 // V48.6 — hidratação defensiva do lead antes de salvar em qualquer etapa crítica.
-// Problema corrigido: objetos parciais entre Validação/Atribuição/Backlog perdiam site,
+// Problema corrigido: objetos parciais entre Validação/Backlog perdiam site,
 // website, origem e marcadores de segmento. A fonte oficial continua sendo o snapshot
 // Supabase, mas cada save agora tenta completar o lead usando base permanente e filas.
 function getLeadIdentityKeyV486(lead = {}) {
@@ -463,7 +468,6 @@ function collectLeadHydrationSourcesV486() {
   const push = (items) => (Array.isArray(items) ? items : []).forEach(item => { if (item && typeof item === 'object') all.push(item); });
   try { push(getLeadBaseData()); } catch(e) {}
   try { push(getValData()); } catch(e) {}
-  try { push(getAtribuicaoData()); } catch(e) {}
   try { push(getInstaFila()); } catch(e) {}
   try { push(typeof getZapBacklog === 'function' ? getZapBacklog() : []); } catch(e) {}
   try { push(Object.values(typeof getWeekData === 'function' ? (getWeekData()?.days || {}) : {}).flat()); } catch(e) {}
@@ -543,9 +547,7 @@ function getAtribuicaoData()  { return getStoredArray(ATRIBUICAO_KEY); }
 function saveAtribuicaoData(d){
   d = normalizeLeadArrayForCriticalPersistenceV486(d || []);
   if (typeof dedupeLeadArrayV31 === 'function') d = dedupeLeadArrayV31(d || [], 'saveAtribuicaoData.beforeSave');
-  saveOperationalKey(ATRIBUICAO_KEY, d, 'assignment-save');
-  mergeLeadsIntoPermanentBase(d, { source:'Atribuição' });
-  scheduleOperationalSync({ reason:'assignment-save' });
+  saveOperationalKey(ATRIBUICAO_KEY, d, 'assignment-legacy-save');
 }
 
 
