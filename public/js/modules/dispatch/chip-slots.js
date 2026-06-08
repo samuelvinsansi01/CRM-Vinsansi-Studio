@@ -263,6 +263,55 @@ function assertDispatchItemStillQueuedV439(chipId, item = {}, phase = '') {
   return live;
 }
 
+
+async function updateDispatchCheckpointV635(item = {}, patch = {}) {
+  try {
+    const queueId = String(item.queueItemId || item.todayRowId || item.queue_item_id || '').trim();
+    const leadId = String(item.leadId || item.id || '').trim();
+    const userId = typeof getCurrentSupabaseUserIdV412 === 'function'
+      ? await getCurrentSupabaseUserIdV412()
+      : (typeof getCurrentUserId === 'function' ? await getCurrentUserId() : (window.currentUser?.id || ''));
+    if (!userId || !sbClient) return { ok:false, skipped:true, reason:'no-supabase-client' };
+
+    const payload = { ...patch, updated_at: new Date().toISOString(), last_checkpoint_at: new Date().toISOString() };
+    let query = sbClient.from('queue_items').update(payload).eq('user_id', userId);
+    if (queueId) query = query.eq('id', queueId);
+    else if (leadId) query = query.eq('lead_id', leadId).eq('scheduled_for', todayStr()).eq('channel', 'whatsapp');
+    else return { ok:false, skipped:true, reason:'no-id' };
+
+    const { error } = await query;
+    if (error) {
+      console.warn('[dispatch-checkpoint][queue_items]', error.message || error, payload);
+      return { ok:false, error };
+    }
+    return { ok:true };
+  } catch (error) {
+    console.warn('[dispatch-checkpoint][queue_items]', error?.message || error);
+    return { ok:false, error };
+  }
+}
+
+async function persistOutgoingWhatsappMediaV635({ chip = {}, item = {}, phone = '', loteNum = null, response = null } = {}) {
+  try {
+    if (typeof persistOutgoingWhatsappMessageV412 !== 'function') return { ok:false, skipped:true };
+    const externalId = typeof getEvolutionWhatsappExternalIdV412 === 'function'
+      ? getEvolutionWhatsappExternalIdV412(response, item.id)
+      : '';
+    return await persistOutgoingWhatsappMessageV412({
+      id: externalId || `out_media_${item.id || 'lead'}_${Date.now()}`,
+      leadId: item.leadId || item.id || '',
+      instance: chip.instance,
+      phone,
+      text: `[imagem do lote ${loteNum || ''}]`,
+      occurredAt: new Date().toISOString(),
+      response: { ...(response || {}), message_type:'image', loteNum }
+    }, { queueOnFailure:true });
+  } catch (error) {
+    console.warn('[whatsapp_messages] imagem enviada pendente:', error?.message || error);
+    return { ok:false, pending:true, error };
+  }
+}
+
 function getEvolutionUrlReachabilityErrorV435(chip) {
   const baseUrl = typeof getEvolutionBaseUrl === 'function' ? getEvolutionBaseUrl(chip) : String(chip?.url || '').replace(/\/+$/, '');
   if (!baseUrl) return 'Evolution URL ausente. Configure a URL publica HTTPS no chip.';
@@ -636,10 +685,12 @@ async function dispararLoteChip(slot) {
       log(`<span style="color:var(--warning)">⏸ Pausado após ${i} envio${i!==1?'s':''} — aguardando retomada...</span>`);
       const btnTxtP = document.getElementById(`disparoBtn${slot}`);
       if (btnTxtP) btnTxtP.textContent = `⏸ Pausado (${i}/${lote.length})`;
+      await updateDispatchCheckpointV635(item, { dispatch_status:'paused', paused_at:new Date().toISOString(), current_part:'paused' });
       while (st.pausado) {
         await new Promise(r => setTimeout(r, 500));
       }
       log(`<span style="color:var(--ok)">▶ Retomado</span>`);
+      await updateDispatchCheckpointV635(item, { dispatch_status:'sending', current_part:'resumed' });
       if (btnTxtP) btnTxtP.textContent = `Lote ${st.loteAtual}/${st.lotesTotal}...`;
     }
 
@@ -651,6 +702,13 @@ async function dispararLoteChip(slot) {
     item = resumedState.item;
 
     item.status = 'enviando';
+    await updateDispatchCheckpointV635(item, {
+      dispatch_status:'sending',
+      dispatch_started_at: item.dispatchStartedAt || new Date().toISOString(),
+      current_part:'start',
+      error_message:null
+    });
+    item.dispatchStartedAt = item.dispatchStartedAt || new Date().toISOString();
     saveChipDispatchRuntimeV432(chip.id, {
       state:'sending',
       slot,
@@ -679,6 +737,13 @@ async function dispararLoteChip(slot) {
           hasImage:!!getLoteImagem(chip.id, item.mediaLoteNum || st.loteAtual)
         });
         item.textSent = true;
+        item.text1SentAt = new Date().toISOString();
+        await updateDispatchCheckpointV635(item, {
+          dispatch_status:'sending',
+          current_part:'part-2',
+          text1_sent_at:item.text1SentAt,
+          template_part1:item.mensagem || ''
+        });
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-text-sent' });
         log(`  ① apresentação enviada`);
 
@@ -720,6 +785,13 @@ async function dispararLoteChip(slot) {
           hasImage:!!getLoteImagem(chip.id, item.mediaLoteNum || st.loteAtual)
         });
         item.text2Sent = true;
+        item.text2SentAt = new Date().toISOString();
+        await updateDispatchCheckpointV635(item, {
+          dispatch_status:'sending',
+          current_part:'media',
+          text2_sent_at:item.text2SentAt,
+          template_part2:item.mensagem2 || ''
+        });
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-text2-sent' });
         log(`  complemento enviado`);
 
@@ -777,6 +849,13 @@ async function dispararLoteChip(slot) {
           throw new Error(imageError);
         }
         item.mediaSent = true;
+        item.mediaSentAt = new Date().toISOString();
+        await persistOutgoingWhatsappMediaV635({ chip, item, phone:numero, loteNum, response:data3 });
+        await updateDispatchCheckpointV635(item, {
+          dispatch_status:'sending',
+          current_part:'complete',
+          media_sent_at:item.mediaSentAt
+        });
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-media-sent' });
         whatsappSendLogV436('image-success', { ...getWhatsappPartLogPayloadV436({ chip, item, phone:numero, baseUrl, part:'image', hasImage:true }), status:res3.status });
         if (typeof releaseWhatsappSendLockV31 === 'function') releaseWhatsappSendLockV31(imageLock.key);
@@ -785,6 +864,14 @@ async function dispararLoteChip(slot) {
       }
 
       item.status = 'enviado';
+      item.completedAt = new Date().toISOString();
+      await updateDispatchCheckpointV635(item, {
+        dispatch_status:'completed',
+        status:'sent',
+        current_part:'complete',
+        completed_at:item.completedAt,
+        error_message:null
+      });
       if (typeof markLeadAsDispatchedEverV47 === 'function') markLeadAsDispatchedEverV47(item, { source:'dispatch-success', chipId:chip.id || chip.instance || '', instance:chip.instance || '' });
       atualizarStatusFilaSlot(slot, item.id, 'enviado');
       try {
@@ -812,6 +899,12 @@ async function dispararLoteChip(slot) {
       try { console.warn('[whatsapp-send]', { action:'error', slot, itemId:item.id, error:e?.message || e }); } catch(logError) {}
       whatsappSendLogV436('lead-error', { ...getWhatsappPartLogPayloadV436({ chip, item, phone:normalizeDispatchPhoneV432(item.whatsapp), baseUrl, part:'lead', hasImage:false }), error:e?.message || e });
       item.status = 'erro';
+      await updateDispatchCheckpointV635(item, {
+        dispatch_status:'error',
+        status:'error',
+        current_part:'error',
+        error_message:e?.message || String(e || 'Erro no envio')
+      });
       saveFilaDisparo({ delay:0, reason:'dispatch-chip-item-error' });
       atualizarStatusFilaSlot(slot, item.id, 'erro');
       log(`<span style="color:var(--error)">✗ Erro — ${e.message}</span>`);

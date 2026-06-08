@@ -2025,7 +2025,7 @@
 
   async function fetchTodayQueueItems(userId) {
     const params = new URLSearchParams({
-      select: 'id,lead_id,source_backlog_item_id,channel,bucket,status,position,chip_id,chip_name,chip_instance,scheduled_for,batch_id,batch_index,batch_position,template_type,template_index,template_part1,template_part2,created_at,updated_at',
+      select: 'id,lead_id,source_backlog_item_id,channel,bucket,status,position,chip_id,chip_name,chip_instance,scheduled_for,batch_id,batch_index,batch_position,template_type,template_index,template_part1,template_part2,dispatch_status,current_part,text1_sent_at,text2_sent_at,media_sent_at,dispatch_started_at,completed_at,paused_at,error_message,last_checkpoint_at,created_at,updated_at',
       user_id: `eq.${userId}`,
       channel: `eq.${QUEUE_CHANNEL}`,
       scheduled_for: `eq.${localDateISO()}`,
@@ -2154,6 +2154,18 @@
       batchId: row.batch_id || '',
       batchIndex: row.batch_index || null,
       batchPosition: row.batch_position || null,
+      dispatchStatus: row.dispatch_status || '',
+      currentPart: row.current_part || '',
+      textSent: !!row.text1_sent_at,
+      text2Sent: !!row.text2_sent_at,
+      mediaSent: !!row.media_sent_at,
+      text1SentAt: row.text1_sent_at || '',
+      text2SentAt: row.text2_sent_at || '',
+      mediaSentAt: row.media_sent_at || '',
+      dispatchStartedAt: row.dispatch_started_at || '',
+      completedAt: row.completed_at || '',
+      pausedAt: row.paused_at || '',
+      error: row.error_message || '',
       updated_at: row.updated_at,
       baseSource: 'Supabase fila 6.27'
     };
