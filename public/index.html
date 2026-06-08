@@ -351,7 +351,7 @@
 <div class="panel" id="panel-validacao">
   <div class="page-header" style="flex-shrink:0">
     <div class="page-title">Validação <span>de Leads.</span></div>
-    <div class="page-sub">// triagem rápida · número válido → tag ZAP · sem número → tag INSTA · ambos vão para Atribuição</div>
+    <div class="page-sub">// triagem rápida · número válido → WhatsApp/Com sites · sem WhatsApp → Instagram · prontos vão direto ao Backlog</div>
   </div>
 
   <!-- ABAS DE RESULTADO -->
@@ -363,15 +363,25 @@
     </button>
     <button id="valResultTabValidados" class="val-result-tab" onclick="setValResultTab('validados')"
       style="padding:6px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
-      ✅ Número Validado (ZAP)
+      ✅ WhatsApp
       <span id="valCountComZap" style="background:rgba(78,203,113,0.1);border:1px solid rgba(78,203,113,0.3);color:var(--ok);padding:1px 6px;border-radius:100px;font-size:8px">0</span>
+    </button>
+    <button id="valResultTabInsta" class="val-result-tab" onclick="setValResultTab('insta')"
+      style="padding:6px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
+      📸 Instagram
+      <span id="valCountInsta" style="background:rgba(225,48,108,0.1);border:1px solid rgba(225,48,108,0.3);color:var(--insta);padding:1px 6px;border-radius:100px;font-size:8px">0</span>
+    </button>
+    <button id="valResultTabComSite" class="val-result-tab" onclick="setValResultTab('com-site')"
+      style="padding:6px 14px;border:1px solid var(--border2);border-radius:8px;background:var(--bg);color:var(--muted);font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:6px">
+      🌐 Com sites
+      <span id="valCountComSite" style="background:rgba(91,184,245,0.1);border:1px solid rgba(91,184,245,0.3);color:#5bb8f5;padding:1px 6px;border-radius:100px;font-size:8px">0</span>
     </button>
   </div>
 
   <!-- PAINEL PRINCIPAL -->
   <div class="val-sub-panel active stretch-container" id="valPanelComSite">
     <div class="stretch-card" style="width:100%">
-      <div class="card-title" style="flex-shrink:0">Oportunidades sem site próprio — validar número WhatsApp
+      <div class="card-title" style="flex-shrink:0">Validação e envio ao Backlog
         <div id="valMantidosBadge" title="Empresas que serão mantidas" style="display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono',monospace;font-size:8px;padding:3px 9px;border-radius:100px;border:1px solid rgba(91,184,245,0.35);background:rgba(91,184,245,0.07);color:#5bb8f5;opacity:0;transform:scale(0.9);transition:opacity 0.22s,transform 0.22s;white-space:nowrap;pointer-events:none">
           <span class="mantidos-dot" style="width:5px;height:5px;border-radius:50%;background:#5bb8f5;flex-shrink:0"></span>
           <span id="valMantidosCount">0</span> mantidos
@@ -387,8 +397,14 @@
         <button class="btn btn-ghost" style="font-size:10px;padding:7px 14px" onclick="validarTodosNumeros({retryAll:true})">
           Revalidar não válidos/falhas
         </button>
-        <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="aprovarTodosParaAtribuicao()">
-          → Enviar todos para Atribuição
+        <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="selecionarTodosValidacaoBacklog()">
+          Selecionar visíveis
+        </button>
+        <button class="btn btn-primary" style="font-size:10px;padding:7px 12px" onclick="enviarSelecionadosValidacaoAoBacklog()">
+          → Enviar selecionados ao Backlog
+        </button>
+        <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="enviarTodosValidacaoAoBacklog()">
+          → Enviar visíveis ao Backlog
         </button>
       </div>
       <div id="valComSiteList" class="stretch-list" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// nenhuma empresa aguardando validação</div>

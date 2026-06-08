@@ -7,6 +7,7 @@
   const state = {
     activeTab: 'pendentes',
     page: 1,
+    selected: new Set(),
     rows: [],
     loading: false
   };
@@ -131,6 +132,31 @@
     return data;
   }
 
+  async function rpcValidationBacklogAction(leadId, bucket) {
+    const userId = await getCurrentUserIdRebuild();
+    if (!userId) throw new Error('Usuario autenticado nao encontrado.');
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/rpc_assignment_lead_action`, {
+      method: 'POST',
+      headers: await getHeaders(true),
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_lead_id: leadId,
+        p_action: 'send_to_backlog',
+        p_bucket: bucket
+      })
+    });
+    const data = await readJson(response);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('RPC rpc_assignment_lead_action nao encontrado. Execute o SQL 6.27 no Supabase e recarregue a pagina.');
+      }
+      throw new Error(data?.message || data?.details || `Falha ao enviar ao backlog (${response.status}).`);
+    }
+    return data;
+  }
+
   function normalizeLeadForRuntime(row = {}) {
     const companyName = row.company_name || row.nome || 'Empresa sem nome';
     const website = row.website || row.site || '';
@@ -233,16 +259,60 @@
     }
   }
 
+  function digits(value) {
+    return String(value || '').replace(/\D+/g, '');
+  }
+
+  function hasUsefulPhone(row = {}) {
+    return digits(row.phone || row.normalized_phone || row.whatsapp || row.telefone).length >= 10;
+  }
+
+  function hasValidatedWhatsapp(row = {}) {
+    return row.current_status === 'whatsapp_validated'
+      || row.whatsapp_status === 'valid'
+      || row.whatsappValidationStatus === 'valid'
+      || row.numStatus === 'valido';
+  }
+
+  function hasOwnSite(row = {}) {
+    return !!(row.has_own_site || row.hasOwnSite) && !!text(row.website || row.site, '');
+  }
+
+  function bucketForValidation(row = {}) {
+    if (!hasValidatedWhatsapp(row)) return 'insta';
+    if (hasOwnSite(row)) return 'com-site';
+    return 'zap';
+  }
+
+  function isBacklogReadyTab(tab = state.activeTab) {
+    return ['validados', 'insta', 'com-site'].includes(tab);
+  }
+
   function getPendingRows() {
     return state.rows.filter((row) => row.current_status === 'pending_validation');
   }
 
   function getValidatedRows() {
-    return state.rows.filter((row) => row.current_status === 'whatsapp_validated');
+    return state.rows.filter((row) => hasValidatedWhatsapp(row) && bucketForValidation(row) === 'zap');
+  }
+
+  function getInstagramRows() {
+    return state.rows.filter((row) => {
+      if (row.current_status === 'pending_validation_instagram') return true;
+      if (row.lead_channel === 'instagram' && !hasValidatedWhatsapp(row)) return true;
+      return row.current_stage === 'validation' && !hasValidatedWhatsapp(row) && !hasUsefulPhone(row);
+    });
+  }
+
+  function getComSiteRows() {
+    return state.rows.filter((row) => hasValidatedWhatsapp(row) && bucketForValidation(row) === 'com-site');
   }
 
   function getActiveRows() {
-    return state.activeTab === 'validados' ? getValidatedRows() : getPendingRows();
+    if (state.activeTab === 'validados') return getValidatedRows();
+    if (state.activeTab === 'insta') return getInstagramRows();
+    if (state.activeTab === 'com-site') return getComSiteRows();
+    return getPendingRows();
   }
 
   function setBadgeText(id, value) {
@@ -251,25 +321,42 @@
   }
 
   function paintTab(tab, active) {
-    const element = document.getElementById(tab === 'validados' ? 'valResultTabValidados' : 'valResultTabPendentes');
+    const ids = {
+      pendentes: 'valResultTabPendentes',
+      validados: 'valResultTabValidados',
+      insta: 'valResultTabInsta',
+      'com-site': 'valResultTabComSite'
+    };
+    const element = document.getElementById(ids[tab] || ids.pendentes);
     if (!element) return;
 
+    const activeColor = tab === 'insta' ? 'var(--insta)' : tab === 'com-site' ? '#5bb8f5' : 'var(--accent)';
+    const activeBorder = tab === 'insta' ? 'rgba(225,48,108,0.3)' : tab === 'com-site' ? 'rgba(91,184,245,0.35)' : 'var(--accent-border)';
+    const activeBg = tab === 'insta' ? 'rgba(225,48,108,0.06)' : tab === 'com-site' ? 'rgba(91,184,245,0.07)' : 'var(--accent-dim)';
+
     element.classList.toggle('active', active);
-    element.style.borderColor = active ? 'var(--accent-border)' : 'var(--border2)';
-    element.style.background = active ? 'var(--accent-dim)' : 'var(--bg)';
-    element.style.color = active ? 'var(--accent)' : 'var(--muted)';
+    element.style.borderColor = active ? activeBorder : 'var(--border2)';
+    element.style.background = active ? activeBg : 'var(--bg)';
+    element.style.color = active ? activeColor : 'var(--muted)';
   }
 
   function renderCounters() {
     const pending = getPendingRows().length;
     const validated = getValidatedRows().length;
+    const instagram = getInstagramRows().length;
+    const comSite = getComSiteRows().length;
+    const total = pending + validated + instagram + comSite;
 
     setBadgeText('valCountSemZap', pending);
     setBadgeText('valCountComZap', validated);
-    setBadgeText('badge-validacao', pending);
+    setBadgeText('valCountInsta', instagram);
+    setBadgeText('valCountComSite', comSite);
+    setBadgeText('badge-validacao', total);
 
     paintTab('pendentes', state.activeTab === 'pendentes');
     paintTab('validados', state.activeTab === 'validados');
+    paintTab('insta', state.activeTab === 'insta');
+    paintTab('com-site', state.activeTab === 'com-site');
   }
 
   function renderPagination(total) {
@@ -300,13 +387,28 @@
 
   function renderValidationLeadCard(row) {
     const lead = normalizeLeadForRuntime(row);
-    const validated = row.current_status === 'whatsapp_validated';
+    const validated = hasValidatedWhatsapp(row);
+    const readyForBacklog = isBacklogReadyTab();
+    const bucket = bucketForValidation(row);
     const siteLabel = row.website ? (row.has_own_site ? 'Site proprio' : text(row.website_type, 'Com site')) : 'Sem site';
     const siteClass = row.website ? (row.has_own_site ? 'info' : 'warn') : 'ok';
     const location = getStageLocation(row) || 'Local nao informado';
-    const statusBadge = validated
-      ? '<span class="q-badge ok">Numero validado</span>'
-      : '<span class="q-badge warn">Aguardando validacao</span>';
+    const bucketLabel = bucket === 'insta' ? 'Instagram' : bucket === 'com-site' ? 'Com site' : 'WhatsApp';
+    const backlogLabel = bucket === 'insta' ? 'Enviar ao Backlog Instagram' : 'Enviar ao Backlog Zap';
+    const selected = state.selected.has(String(row.id));
+    const selector = readyForBacklog
+      ? `<button type="button" aria-label="Selecionar lead" onclick="toggleValidacaoBacklogSel('${esc(row.id)}')"
+          style="width:18px;height:18px;border-radius:4px;border:2px solid ${selected ? 'var(--accent)' : 'var(--border2)'};
+          background:${selected ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;
+          transition:all 0.15s;flex-shrink:0;padding:0;margin-right:4px">
+          ${selected ? `<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="#0a0a0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}
+        </button>`
+      : '';
+    const statusBadge = readyForBacklog
+      ? `<span class="q-badge ${bucket === 'insta' ? 'insta' : bucket === 'com-site' ? 'info' : 'ok'}">${esc(bucketLabel)}</span>`
+      : validated
+        ? '<span class="q-badge ok">Numero validado</span>'
+        : '<span class="q-badge warn">Aguardando validacao</span>';
     const approveButton = !validated
       ? `<button class="add-btn" type="button" data-validation-action-id="${esc(row.id)}" onclick="approveLeadWhatsappRebuild('${esc(row.id)}')">Aprovar</button>`
       : '';
@@ -316,6 +418,7 @@
 
     return `
       <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:flex-start">
+        ${selector ? `<div style="flex-shrink:0">${selector}</div>` : ''}
         <div class="empresa-info">
           <div class="empresa-nome">${esc(lead.company_name)}</div>
           <div class="empresa-meta">
@@ -333,10 +436,11 @@
         </div>
         <div class="empresa-actions">
           ${statusBadge}
-          ${validateButton}
           <button class="add-btn" type="button" onclick="openValidationLeadDrawerRebuild('${esc(row.id)}')">Ficha</button>
-          ${approveButton}
-          <button class="add-btn" type="button" style="border-color:rgba(255,92,92,0.32);color:var(--error)" data-validation-action-id="${esc(row.id)}" onclick="rejectLeadValidationRebuild('${esc(row.id)}')">Reprovar</button>
+          ${readyForBacklog
+            ? `<button class="add-btn added" type="button" data-validation-action-id="${esc(row.id)}" onclick="sendValidationLeadToBacklogRebuild629('${esc(row.id)}')">${esc(backlogLabel)}</button>`
+            : `${validateButton}${approveButton}<button class="add-btn" type="button" style="border-color:rgba(255,92,92,0.32);color:var(--error)" data-validation-action-id="${esc(row.id)}" onclick="rejectLeadValidationRebuild('${esc(row.id)}')">Reprovar</button>`
+          }
         </div>
       </div>
     `;
@@ -349,9 +453,13 @@
     renderCounters();
 
     const rows = getActiveRows();
-    const emptyText = state.activeTab === 'validados'
-      ? '// nenhum numero validado ainda'
-      : '// nenhum lead aguardando validacao';
+    const emptyTexts = {
+      validados: '// nenhum WhatsApp pronto para backlog',
+      insta: '// nenhum lead pronto para Backlog Instagram',
+      'com-site': '// nenhum lead com site pronto para backlog',
+      pendentes: '// nenhum lead aguardando validacao'
+    };
+    const emptyText = emptyTexts[state.activeTab] || emptyTexts.pendentes;
 
     if (!rows.length) {
       list.innerHTML = `<div class="table-empty">${emptyText}</div>`;
@@ -364,6 +472,11 @@
     state.page = Math.max(1, Math.min(state.page, pages));
     const start = (state.page - 1) * PAGE_SIZE;
     const pageRows = rows.slice(start, start + PAGE_SIZE);
+
+    const visibleIds = new Set(rows.map((row) => String(row.id)));
+    [...state.selected].forEach((id) => {
+      if (!visibleIds.has(id)) state.selected.delete(id);
+    });
 
     list.innerHTML = '<div class="ext-list">' + pageRows.map(renderValidationLeadCard).join('') + '</div>';
     renderPagination(total);
@@ -395,8 +508,9 @@
   }
 
   function setValidationResultTab(tab) {
-    state.activeTab = tab === 'validados' ? 'validados' : 'pendentes';
+    state.activeTab = ['validados', 'insta', 'com-site', 'pendentes'].includes(tab) ? tab : 'pendentes';
     state.page = 1;
+    state.selected.clear();
     renderActiveValidationTab();
   }
 
@@ -454,6 +568,122 @@
     }
   }
 
+  function mirrorInstagramBacklogFromValidation(row = {}) {
+    if (typeof getInstaFila !== 'function' || typeof saveInstaFila !== 'function') return;
+    const lead = normalizeLeadForRuntime(row);
+    const existing = getInstaFila();
+    const nextLead = {
+      ...lead,
+      nome: lead.nome || lead.company_name || '',
+      instagram: lead.instagram || lead.instagram_url || '',
+      instagramUrl: lead.instagram || lead.instagram_url || '',
+      canal: 'insta',
+      status: 'backlog_instagram',
+      entradaBacklogEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0, 10)
+    };
+    saveInstaFila([...existing.filter((item) => String(item.id) !== String(row.id)), nextLead]);
+  }
+
+  function getVisibleBacklogReadyRows() {
+    return isBacklogReadyTab() ? getActiveRows() : [];
+  }
+
+  function toggleValidationBacklogSelection(leadId) {
+    const key = String(leadId || '');
+    if (!key) return;
+    if (state.selected.has(key)) state.selected.delete(key);
+    else state.selected.add(key);
+    renderActiveValidationTab();
+  }
+
+  function selectVisibleValidationBacklogRows() {
+    const rows = getVisibleBacklogReadyRows();
+    if (!rows.length) {
+      if (typeof notify === 'function') notify('// esta aba nao possui leads prontos para backlog', 'warn');
+      return;
+    }
+    rows.forEach((row) => state.selected.add(String(row.id)));
+    renderActiveValidationTab();
+    if (typeof notify === 'function') notify(`${rows.length} lead${rows.length !== 1 ? 's' : ''} selecionado${rows.length !== 1 ? 's' : ''}.`);
+  }
+
+  function clearValidationBacklogSelection() {
+    state.selected.clear();
+    renderActiveValidationTab();
+  }
+
+  async function sendValidationLeadToBacklog(leadId, options = {}) {
+    const row = state.rows.find((item) => String(item.id) === String(leadId));
+    if (!row) {
+      if (!options.silent && typeof notify === 'function') notify('// lead nao encontrado na Validacao', 'warn');
+      return false;
+    }
+
+    const bucket = bucketForValidation(row);
+    setActionButtonsDisabled(leadId, true);
+
+    try {
+      await rpcValidationBacklogAction(leadId, bucket);
+      if (bucket === 'insta') mirrorInstagramBacklogFromValidation(row);
+
+      state.rows = state.rows.filter((item) => String(item.id) !== String(leadId));
+      state.selected.delete(String(leadId));
+
+      if (!options.silent && typeof notify === 'function') {
+        notify(bucket === 'insta' ? 'Lead enviado ao Backlog Instagram.' : 'Lead enviado ao Backlog Zap.');
+      }
+
+      renderActiveValidationTab();
+      if (bucket === 'insta' && typeof renderInstagram === 'function') renderInstagram();
+      if (bucket !== 'insta' && typeof renderQueueStageFromSupabase621 === 'function') renderQueueStageFromSupabase621();
+      if (typeof renderAssignmentStageFromSupabase === 'function') renderAssignmentStageFromSupabase();
+      if (typeof updateBadges === 'function') updateBadges();
+      return true;
+    } catch (error) {
+      console.error('[rebuild629] erro ao enviar validacao ao backlog:', error);
+      if (!options.silent && typeof notify === 'function') notify(error?.message || 'Falha ao enviar lead ao backlog.', 'err');
+      return false;
+    } finally {
+      setActionButtonsDisabled(leadId, false);
+    }
+  }
+
+  async function sendSelectedValidationToBacklog() {
+    if (!state.selected.size) {
+      if (typeof notify === 'function') notify('// selecione ao menos 1 lead pronto', 'warn');
+      return;
+    }
+
+    const ids = [...state.selected];
+    let moved = 0;
+    for (const id of ids) {
+      if (await sendValidationLeadToBacklog(id, { silent: true })) moved++;
+    }
+
+    state.selected.clear();
+    renderActiveValidationTab();
+    await renderValidationStageFromSupabase();
+    if (typeof notify === 'function') notify(`${moved} lead${moved !== 1 ? 's' : ''} enviado${moved !== 1 ? 's' : ''} ao backlog.`);
+  }
+
+  async function sendVisibleValidationToBacklog() {
+    const rows = getVisibleBacklogReadyRows();
+    if (!rows.length) {
+      if (typeof notify === 'function') notify('// esta aba nao possui leads prontos para backlog', 'warn');
+      return;
+    }
+
+    let moved = 0;
+    for (const row of rows) {
+      if (await sendValidationLeadToBacklog(row.id, { silent: true })) moved++;
+    }
+
+    state.selected.clear();
+    renderActiveValidationTab();
+    await renderValidationStageFromSupabase();
+    if (typeof notify === 'function') notify(`${moved} lead${moved !== 1 ? 's' : ''} enviado${moved !== 1 ? 's' : ''} ao backlog.`);
+  }
+
   function openValidationLeadDrawerRebuild(leadId) {
     patchFindLeadEverywhere();
 
@@ -474,7 +704,7 @@
 
     const oldSetValResultTab = window.setValResultTab;
     window.setValResultTab = function setValResultTabRebuild618(tab) {
-      if (tab === 'validados' || tab === 'pendentes') {
+      if (['validados', 'pendentes', 'insta', 'com-site'].includes(tab)) {
         setValidationResultTab(tab);
         return;
       }
@@ -525,8 +755,12 @@
 
     const waitTab = document.getElementById('valResultTabPendentes');
     const validTab = document.getElementById('valResultTabValidados');
+    const instaTab = document.getElementById('valResultTabInsta');
+    const siteTab = document.getElementById('valResultTabComSite');
     if (waitTab) waitTab.onclick = () => setValidationResultTab('pendentes');
     if (validTab) validTab.onclick = () => setValidationResultTab('validados');
+    if (instaTab) instaTab.onclick = () => setValidationResultTab('insta');
+    if (siteTab) siteTab.onclick = () => setValidationResultTab('com-site');
 
     renderCounters();
 
@@ -539,6 +773,12 @@
   window.openValidationLeadDrawerRebuild = openValidationLeadDrawerRebuild;
   window.approveLeadWhatsappRebuild = approveLeadWhatsappRebuild;
   window.rejectLeadValidationRebuild = rejectLeadValidationRebuild;
+  window.sendValidationLeadToBacklogRebuild629 = sendValidationLeadToBacklog;
+  window.toggleValidacaoBacklogSel = toggleValidationBacklogSelection;
+  window.selecionarTodosValidacaoBacklog = selectVisibleValidationBacklogRows;
+  window.limparSelecaoValidacaoBacklog = clearValidationBacklogSelection;
+  window.enviarSelecionadosValidacaoAoBacklog = sendSelectedValidationToBacklog;
+  window.enviarTodosValidacaoAoBacklog = sendVisibleValidationToBacklog;
   window.showValidationWaiting = () => setValidationResultTab('pendentes');
   window.showValidationValidated = () => setValidationResultTab('validados');
   window.goValidationPageRebuild618 = (page) => {
