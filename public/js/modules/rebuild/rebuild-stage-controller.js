@@ -2574,7 +2574,7 @@
     const inputId = `queue-batch-img-${String(chipKey).replace(/[^a-zA-Z0-9_-]/g, '_')}-${batchIndex}`;
     scheduleBatchImageLoad(chip, batchIndex, slot);
     return `
-      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin:8px 0 10px">
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center">
         <label for="${esc(inputId)}" class="fila-img-area${preview ? ' has-img' : ''}" style="min-height:74px;cursor:pointer;border:1px dashed var(--border);border-radius:10px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative">
           <img data-lote-img-key="${esc(key)}" src="${esc(preview || '')}" alt="preview" style="${preview ? '' : 'display:none;'}max-height:74px;max-width:100%;object-fit:cover" />
           <span class="fila-img-label" style="${preview ? 'display:none;' : ''};font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">📎 inserir imagem do lote ${esc(batchIndex)}</span>
@@ -2588,6 +2588,203 @@
       </div>
     `;
   }
+
+  function queueRamosRebuild632() {
+    try {
+      const ramos = typeof getRamos === 'function' ? getRamos() : (typeof RAMOS_DEFAULT !== 'undefined' ? RAMOS_DEFAULT : []);
+      return Array.isArray(ramos) ? ramos.filter((ramo) => ramo && (ramo.id || ramo.nome)) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function batchChipKey(chip = {}) {
+    return String(chip.id || chip.dbId || chip.name || chip.instance || 'chip');
+  }
+
+  function getBatchRamoIdRebuild632(chip, batchIndex) {
+    const chipKey = batchChipKey(chip);
+    try {
+      if (typeof getLoteRamo === 'function') return getLoteRamo(chipKey, batchIndex) || '';
+    } catch (_) {}
+    try {
+      const cfg = typeof v48StateGetObject === 'function' ? v48StateGetObject('vs_lote_cfg_v1') : {};
+      return cfg?.[`chip-${chipKey}-lote-${batchIndex}`]?.ramoId || '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function saveBatchRamoIdRebuild632(chip, batchIndex, ramoId) {
+    const chipKey = batchChipKey(chip);
+    try {
+      if (typeof setLoteRamo === 'function') {
+        setLoteRamo(chipKey, batchIndex, ramoId || null);
+        return;
+      }
+    } catch (_) {}
+    try {
+      const key = 'vs_lote_cfg_v1';
+      const cfg = typeof v48StateGetObject === 'function' ? v48StateGetObject(key) : {};
+      const obj = cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? cfg : {};
+      const itemKey = `chip-${chipKey}-lote-${batchIndex}`;
+      obj[itemKey] = { ...(obj[itemKey] || {}), ramoId: ramoId || null };
+      if (typeof v48StateSet === 'function') v48StateSet(key, obj, 'queue-batch-ramo-update');
+    } catch (_) {}
+  }
+
+  function batchRamoSelectBox(chip, batchIndex) {
+    const ramos = queueRamosRebuild632();
+    const selected = getBatchRamoIdRebuild632(chip, batchIndex);
+    const chipKey = batchChipKey(chip);
+    const options = [`<option value="">Selecionar ramo</option>`]
+      .concat(ramos.map((ramo) => `<option value="${esc(ramo.id)}" ${String(ramo.id) === String(selected) ? 'selected' : ''}>${esc(ramo.nome || ramo.name || ramo.id)}</option>`))
+      .join('');
+    return `
+      <div style="display:grid;gap:5px">
+        <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:.08em">RAMO DAS MENSAGENS</label>
+        <select class="input" style="height:34px;font-family:'DM Mono',monospace;font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:0 10px" onchange="onQueueBatchRamoChangeRebuild632('${esc(chipKey)}', ${Number(batchIndex)}, this.value)">
+          ${options}
+        </select>
+      </div>
+    `;
+  }
+
+  function pickBatchTemplateForRowRebuild632(row = {}, ramoId = '') {
+    const templateType = row.templateType || row.siteSegment || (row.site ? 'com-site' : 'sem-site');
+    let picked = { text: '', text2: '', idx: null };
+    try {
+      if (typeof pickTemplate === 'function') picked = pickTemplate(row.nome || row.company_name || 'Lead', ramoId || row.ramoId || null, templateType) || picked;
+    } catch (error) {
+      console.warn('[rebuild632] falha ao sortear template do lote:', error);
+    }
+    return {
+      template_type: templateType,
+      template_index: Number.isFinite(Number(picked.idx)) ? Number(picked.idx) : null,
+      template_part1: picked.text || '',
+      template_part2: picked.text2 || '',
+      ramoId: ramoId || row.ramoId || null
+    };
+  }
+
+  async function persistQueueTemplateRebuild632(row = {}, payload = {}) {
+    const queueId = row.todayRowId || row.queueItemId || row.id;
+    if (!queueId || String(queueId).startsWith('test_')) return;
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/queue_items?id=eq.${encodeURIComponent(queueId)}`, {
+      method: 'PATCH',
+      headers: await getHeaders(true),
+      body: JSON.stringify({
+        template_type: payload.template_type,
+        template_index: payload.template_index,
+        template_part1: payload.template_part1,
+        template_part2: payload.template_part2,
+        updated_at: new Date().toISOString()
+      })
+    });
+    const data = await readJson(response);
+    if (!response.ok) throw data || new Error(`Falha ao salvar template do lote (${response.status}).`);
+  }
+
+  window.onQueueBatchRamoChangeRebuild632 = async function onQueueBatchRamoChangeRebuild632(chipKey, batchIndex, ramoId) {
+    const chip = state.chips.find((item) => String(batchChipKey(item)) === String(chipKey)) || { id: chipKey };
+    saveBatchRamoIdRebuild632(chip, batchIndex, ramoId || '');
+    const rows = state.rows.filter((row) => row.inTodayQueue && chipMatchesRow(chip, row) && Number(batchIndexForRow(row) || 1) === Number(batchIndex));
+    if (!rows.length) {
+      if (typeof notify === 'function') notify('Ramo salvo para o lote. Gere ou atualize os lotes para aplicar aos leads.', 'warn');
+      renderRightPanel();
+      return;
+    }
+    let updated = 0;
+    for (const row of rows) {
+      if (['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw)) continue;
+      const payload = pickBatchTemplateForRowRebuild632(row, ramoId);
+      row.ramoId = ramoId || null;
+      row.templateType = payload.template_type;
+      row.siteSegment = payload.template_type;
+      row.templateIdx = payload.template_index;
+      row.mensagem = payload.template_part1;
+      row.mensagem2 = payload.template_part2;
+      try {
+        await persistQueueTemplateRebuild632(row, payload);
+        updated++;
+      } catch (error) {
+        console.warn('[rebuild632] falha ao persistir template do lead:', row.id, error);
+      }
+    }
+    publishQueueLeads(state.rows);
+    renderRightPanel();
+    if (typeof notify === 'function') notify(updated ? `Ramo aplicado em ${updated} lead(s) do lote.` : 'Ramo salvo, mas nenhum lead editavel foi atualizado.', updated ? '' : 'warn');
+  };
+
+  function testLeadBoxRebuild632(chip, slot) {
+    const chipKey = batchChipKey(chip);
+    return `
+      <details style="border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.015);padding:9px;margin-bottom:10px">
+        <summary style="cursor:pointer;font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);font-weight:800;letter-spacing:.08em">+ LEAD TESTE</summary>
+        <div style="display:grid;gap:7px;margin-top:8px">
+          <input class="input" id="queueTestName${Number(slot)}" placeholder="Nome do teste" value="Lead teste" style="height:32px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:0 9px" />
+          <input class="input" id="queueTestPhone${Number(slot)}" placeholder="WhatsApp para teste. Ex: 5511999999999" style="height:32px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:0 9px" />
+          <textarea class="input" id="queueTestMessage${Number(slot)}" placeholder="Mensagem opcional. Se vazio, usa o template do ramo selecionado." style="min-height:54px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 9px"></textarea>
+          <button class="add-btn added" type="button" onclick="addQueueTestLeadRebuild632('${esc(chipKey)}', ${Number(slot)})">Adicionar teste visual</button>
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.45">Esse lead não entra no banco e não conta nos 30. Use para conferir mensagem antes de disparar para leads reais.</div>
+        </div>
+      </details>
+    `;
+  }
+
+  window.addQueueTestLeadRebuild632 = function addQueueTestLeadRebuild632(chipKey, slot) {
+    const chip = state.chips.find((item) => String(batchChipKey(item)) === String(chipKey));
+    if (!chip) {
+      if (typeof notify === 'function') notify('Chip do teste nao encontrado.', 'err');
+      return;
+    }
+    const name = String(document.getElementById(`queueTestName${Number(slot)}`)?.value || 'Lead teste').trim() || 'Lead teste';
+    let phone = String(document.getElementById(`queueTestPhone${Number(slot)}`)?.value || '').replace(/\D+/g, '');
+    if (phone && !phone.startsWith('55') && (phone.length === 10 || phone.length === 11)) phone = `55${phone}`;
+    if (!phone || phone.length < 12) {
+      if (typeof notify === 'function') notify('Informe um WhatsApp valido para o teste.', 'warn');
+      return;
+    }
+    const ramoId = getBatchRamoIdRebuild632(chip, 1) || (queueRamosRebuild632()[0]?.id || null);
+    const custom = String(document.getElementById(`queueTestMessage${Number(slot)}`)?.value || '').trim();
+    const temp = {
+      id: `test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      nome: name,
+      empresa: name,
+      company_name: name,
+      whatsapp: phone,
+      phone,
+      telefone: phone,
+      normalized_phone: phone,
+      site: '',
+      website: '',
+      hasOwnSite: false,
+      chipId: chip.id,
+      chipName: chip.name,
+      chipInstance: chip.instance,
+      statusRaw: 'queued_dispatch',
+      status: 'queued_dispatch',
+      inTodayQueue: true,
+      testDispatchLead: true,
+      temporaryLead: true,
+      queueItemId: `test_${Date.now()}`,
+      todayRowId: '',
+      batchId: `teste-${batchChipKey(chip)}`,
+      batchIndex: 1,
+      batchPosition: 0,
+      templateType: 'sem-site',
+      siteSegment: 'sem-site',
+      ramoId
+    };
+    const picked = pickBatchTemplateForRowRebuild632(temp, ramoId);
+    temp.templateIdx = picked.template_index;
+    temp.mensagem = custom || picked.template_part1 || 'Mensagem de teste.';
+    temp.mensagem2 = picked.template_part2 || '';
+    state.rows = state.rows.filter((row) => !(row.testDispatchLead && chipMatchesRow(chip, row))).concat(temp);
+    publishQueueLeads(state.rows);
+    renderRightPanel();
+    if (typeof notify === 'function') notify('Lead teste adicionado visualmente. Ele nao conta no lote real.');
+  };
 
   function leadMessageAccordion(row = {}) {
     const itemKey = queueItemKey(row);
@@ -2644,11 +2841,15 @@
     const batchIndex = group.batchIndex || 1;
     const status = batchStatusLabel(group.status);
     const imageBox = group.batchId ? batchImageBox(chip, batchIndex, slot) : '';
-    const batchAction = group.batchId
-      ? (group.status === 'batch_sending'
-        ? `<button class="add-btn added" type="button" data-batch622-id="${esc(group.batchId)}" onclick="completeDispatchBatchRebuild622('${esc(group.batchId)}')">Concluir lote</button>`
-        : `<button class="add-btn added" type="button" data-batch622-id="${esc(group.batchId)}" onclick="startDispatchBatchRebuild622('${esc(group.batchId)}')">Disparar lote</button>`)
-      : '<span class="q-badge warn">Clique em Gerar lotes</span>';
+    const ramoBox = group.batchId ? batchRamoSelectBox(chip, batchIndex) : '';
+    const isTestBatch = String(group.batchId || '').startsWith('teste-');
+    const batchAction = isTestBatch
+      ? '<span class="q-badge warn">Teste visual</span>'
+      : group.batchId
+        ? (group.status === 'batch_sending'
+          ? `<button class="add-btn added" type="button" data-batch622-id="${esc(group.batchId)}" onclick="completeDispatchBatchRebuild622('${esc(group.batchId)}')">Concluir lote</button>`
+          : `<button class="add-btn added" type="button" data-batch622-id="${esc(group.batchId)}" onclick="startDispatchBatchRebuild622('${esc(group.batchId)}')">Disparar lote</button>`)
+        : '<span class="q-badge warn">Clique em Gerar lotes</span>';
 
     return `
       <div class="queue-batch-block" style="border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:10px;margin-bottom:10px">
@@ -2659,7 +2860,10 @@
           </div>
           ${batchAction}
         </div>
-        ${imageBox}
+        <div style="display:grid;grid-template-columns:minmax(190px,.75fr) 1fr;gap:10px;align-items:end;margin:8px 0 10px">
+          ${ramoBox}
+          ${imageBox}
+        </div>
         <div>${group.rows.map(leadMessageAccordion).join('')}</div>
       </div>
     `;
@@ -2705,9 +2909,10 @@
 
       if (emptyEl) emptyEl.style.display = 'none';
       itemsEl.style.display = 'block';
+      const testBox = testLeadBoxRebuild632(chip, slot);
       itemsEl.innerHTML = groups.length
-        ? groups.map((group) => batchBlock(chip, slot, group)).join('')
-        : '<div class="fila-empty">Sem lotes neste chip.</div>';
+        ? testBox + groups.map((group) => batchBlock(chip, slot, group)).join('')
+        : testBox + '<div class="fila-empty">Sem lotes neste chip.</div>';
     });
   }
 
