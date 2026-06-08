@@ -176,7 +176,15 @@ const INSTA_BACKLOG_SUPABASE_HOTFIX_V629 = (() => {
     const newSig = JSON.stringify(next.map((lead) => [lead.id, lead.status, lead.backlogItemId, lead.instagram || lead.instagramUrl]));
     if (oldSig === newSig) return false;
 
-    saveInstaFila(next);
+    // Importante: não usar saveInstaFila aqui.
+    // saveInstaFila dispara mergeLeadsIntoPermanentBase/sync de leads e, em alguns bancos 6.28,
+    // tenta ler/gravar colunas legadas como status, pipeline_status e crm_data.
+    // Esta sincronização do Backlog Instagram deve apenas atualizar o espelho visual/local.
+    if (typeof saveOperationalKey === 'function' && typeof INSTA_KEY !== 'undefined') {
+      saveOperationalKey(INSTA_KEY, next, 'instagram-backlog-supabase-sync-6.29.1');
+    } else {
+      try { localStorage.setItem('vs_insta_fila_v2', JSON.stringify(next)); } catch (_) {}
+    }
     return true;
   }
 
