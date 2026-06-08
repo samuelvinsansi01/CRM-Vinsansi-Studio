@@ -1029,9 +1029,15 @@
   async function generateBatches() {
     try {
       const result = await rpcBatchAction('generate_batches');
-      if (typeof notify === 'function') notify(`${result?.batches_created || 0} lote(s) gerado(s).`);
       if (typeof window.renderQueueStageFromSupabase621 === 'function') await window.renderQueueStageFromSupabase621();
       await refreshBatches();
+      const created = Number(result?.batches_created || 0);
+      const readyCount = Array.isArray(window.rebuildQueueLeads621)
+        ? window.rebuildQueueLeads621.filter((row) => row?.inTodayQueue && (row.batchId || row.batch_id)).length
+        : 0;
+      if (typeof notify === 'function') {
+        notify(created > 0 ? `${created} lote(s) gerado(s).` : (readyCount > 0 ? `Nenhum lote novo gerado. ${readyCount} lead(s) ja estavam em lotes prontos.` : 'Nenhum lead elegivel para gerar lote.'));
+      }
     } catch (error) {
       console.error('[rebuild622] erro ao gerar lotes:', error);
       if (typeof notify === 'function') notify(error?.message || 'Falha ao gerar lotes. Verifique o SQL 6.27.', 'err');
@@ -2497,15 +2503,172 @@
     }).join('');
   }
 
+  function queueItemKey(row = {}) {
+    return String(row.todayRowId || row.queueItemId || row.queue_item_id || row.id || '');
+  }
+
+  function batchKeyForRow(row = {}) {
+    return row.batchId || row.batch_id || '';
+  }
+
+  function batchIndexForRow(row = {}) {
+    const raw = row.batchIndex || row.batch_index || row.batchPosition || row.batch_position || null;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    return 0;
+  }
+
+  function groupRowsByBatch(rows = []) {
+    const ready = rows.filter((row) => row.inTodayQueue);
+    const groups = new Map();
+    ready.forEach((row, index) => {
+      const batchId = batchKeyForRow(row);
+      const batchIndex = batchIndexForRow(row);
+      const key = batchId || `sem-lote-${Math.floor(index / 30) + 1}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          batchId,
+          batchIndex: batchIndex || (groups.size + 1),
+          status: batchId ? (row.statusRaw || 'batch_ready') : 'queued_dispatch',
+          rows: []
+        });
+      }
+      const group = groups.get(key);
+      group.rows.push(row);
+      if (row.statusRaw === 'batch_sending') group.status = 'batch_sending';
+      if (['sent', 'completed', 'batch_completed'].includes(row.statusRaw) && group.status !== 'batch_sending') group.status = 'completed';
+    });
+    return [...groups.values()].sort((a, b) => (a.batchIndex || 0) - (b.batchIndex || 0));
+  }
+
+  function batchStatusLabel(status) {
+    if (status === 'batch_sending') return 'Em disparo';
+    if (status === 'completed' || status === 'sent' || status === 'batch_completed') return 'Concluido';
+    if (status === 'queued_dispatch') return 'Aguardando gerar lote';
+    return 'Pronto';
+  }
+
+  function getBatchImagePreview(chip, batchIndex) {
+    const chipKey = chip.id || chip.dbId || chip.name || 'chip';
+    try {
+      if (typeof getLoteImagem === 'function') return getLoteImagem(chipKey, batchIndex);
+    } catch (_) {}
+    return null;
+  }
+
+  function scheduleBatchImageLoad(chip, batchIndex, slot) {
+    const chipKey = chip.id || chip.dbId || chip.name || 'chip';
+    if (!chipKey || !batchIndex) return;
+    try {
+      if (typeof carregarImagensLote === 'function') {
+        setTimeout(() => carregarImagensLote(chipKey, batchIndex, slot, true), 40);
+      }
+    } catch (_) {}
+  }
+
+  function batchImageBox(chip, batchIndex, slot) {
+    const chipKey = chip.id || chip.dbId || chip.name || 'chip';
+    const key = `chip-${chipKey}-lote-${batchIndex}`;
+    const preview = getBatchImagePreview(chip, batchIndex);
+    const inputId = `queue-batch-img-${String(chipKey).replace(/[^a-zA-Z0-9_-]/g, '_')}-${batchIndex}`;
+    scheduleBatchImageLoad(chip, batchIndex, slot);
+    return `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin:8px 0 10px">
+        <label for="${esc(inputId)}" class="fila-img-area${preview ? ' has-img' : ''}" style="min-height:74px;cursor:pointer;border:1px dashed var(--border);border-radius:10px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative">
+          <img data-lote-img-key="${esc(key)}" src="${esc(preview || '')}" alt="preview" style="${preview ? '' : 'display:none;'}max-height:74px;max-width:100%;object-fit:cover" />
+          <span class="fila-img-label" style="${preview ? 'display:none;' : ''};font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">📎 inserir imagem do lote ${esc(batchIndex)}</span>
+          <span class="fila-img-ok" style="${preview ? '' : 'display:none;'};position:absolute;right:8px;bottom:6px;font-family:'DM Mono',monospace;font-size:8px;color:var(--accent);background:rgba(0,0,0,0.55);padding:3px 6px;border-radius:999px">imagem salva</span>
+        </label>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <input id="${esc(inputId)}" type="file" accept="image/*" style="display:none" onchange="onLoteImgChange('${esc(chipKey)}', ${Number(batchIndex)}, this, true, ${Number(slot)})" />
+          <button class="add-btn" type="button" onclick="document.getElementById('${esc(inputId)}')?.click()">Imagem</button>
+          <button class="add-btn" type="button" onclick="onLoteImgRemove('${esc(chipKey)}', ${Number(batchIndex)}, true, ${Number(slot)})">Remover</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function leadMessageAccordion(row = {}) {
+    const itemKey = queueItemKey(row);
+    const detailId = `queue-msg-${itemKey}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const msg1 = row.mensagem || '';
+    const msg2 = row.mensagem2 || '';
+    const templateName = Number.isFinite(Number(row.templateIdx)) ? `Template ${Number(row.templateIdx) + 1}` : 'Template sorteado';
+    const hasMessage = !!(msg1 || msg2);
+    const phone = row.whatsapp || row.phone || 'Sem WhatsApp';
+    const locked = ['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw);
+    const actions = locked
+      ? `<span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>`
+      : `<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`;
+
+    return `
+      <div class="empresa-card queue-lead-accordion" data-lead-id="${esc(row.id)}" style="margin-bottom:7px;display:block;padding:0;overflow:hidden">
+        <button type="button" onclick="toggleBatchLeadDetailsRebuild631('${esc(detailId)}')" style="width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:11px 13px;cursor:pointer;display:flex;gap:10px;align-items:flex-start">
+          <div style="flex:1;min-width:0">
+            <div class="empresa-nome" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.nome)}</div>
+            <div class="empresa-meta" style="margin-top:5px">
+              <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
+              <span class="q-badge info">${esc(templateTypeLabel(row))}</span>
+              <span class="q-badge ${hasMessage ? 'ok' : 'warn'}">${hasMessage ? 'Mensagem sorteada' : 'Sem mensagem'}</span>
+              <span class="empresa-phone">${esc(phone)}</span>
+              ${row.site ? `<span class="empresa-site">${esc(row.site)}</span>` : ''}
+            </div>
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding-top:3px">▼</div>
+        </button>
+        <div id="${esc(detailId)}" style="display:none;border-top:1px solid var(--border);padding:10px 13px;background:rgba(255,255,255,0.015)">
+          <div style="display:flex;gap:7px;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);font-weight:700">${esc(templateName)}</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
+              ${actions}
+            </div>
+          </div>
+          <div style="display:grid;gap:8px">
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">MENSAGEM 1</div>
+              <pre style="white-space:pre-wrap;margin:0;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface);font-family:'DM Mono',monospace;font-size:9px;line-height:1.45;color:var(--text)">${esc(msg1 || '// mensagem ainda não sorteada')}</pre>
+            </div>
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">MENSAGEM 2</div>
+              <pre style="white-space:pre-wrap;margin:0;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface);font-family:'DM Mono',monospace;font-size:9px;line-height:1.45;color:var(--text)">${esc(msg2 || '// sem segunda parte')}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function batchBlock(chip, slot, group) {
+    const batchIndex = group.batchIndex || 1;
+    const status = batchStatusLabel(group.status);
+    const imageBox = group.batchId ? batchImageBox(chip, batchIndex, slot) : '';
+    const batchAction = group.batchId
+      ? (group.status === 'batch_sending'
+        ? `<button class="add-btn added" type="button" data-batch622-id="${esc(group.batchId)}" onclick="completeDispatchBatchRebuild622('${esc(group.batchId)}')">Concluir lote</button>`
+        : `<button class="add-btn added" type="button" data-batch622-id="${esc(group.batchId)}" onclick="startDispatchBatchRebuild622('${esc(group.batchId)}')">Disparar lote</button>`)
+      : '<span class="q-badge warn">Clique em Gerar lotes</span>';
+
+    return `
+      <div class="queue-batch-block" style="border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:10px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.08em">LOTE ${esc(batchIndex)}</div>
+            <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:2px">${esc(group.rows.length)} lead${group.rows.length !== 1 ? 's' : ''} · ${esc(status)}${group.batchId ? ` · ${esc(group.batchId)}` : ''}</div>
+          </div>
+          ${batchAction}
+        </div>
+        ${imageBox}
+        <div>${group.rows.map(leadMessageAccordion).join('')}</div>
+      </div>
+    `;
+  }
+
   function renderRightPanel() {
     const right = document.getElementById('zapRight');
     if (!right) return;
 
-    // Hotfix visual 6.29.3:
-    // Mantem a regra atual do banco (backlog_items/queue_items/lotes), mas volta a
-    // exibir a lateral direita no modelo antigo: accordions por chip, botao de
-    // disparo, limpar fila, pausa e lista do chip. O backlog/sem chip fica somente
-    // na lista da esquerda, como antes.
     if (!state.chips.length) {
       right.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum chip ativo encontrado</div>`;
       return;
@@ -2519,6 +2682,7 @@
 
     state.chips.forEach((chip, slot) => {
       const rows = state.rows.filter((row) => row.inTodayQueue && chipMatchesRow(chip, row));
+      const groups = groupRowsByBatch(rows);
       const countEl = document.getElementById(`filaCount${slot}`);
       if (countEl) countEl.textContent = `(${rows.length} empresa${rows.length !== 1 ? 's' : ''})`;
 
@@ -2541,38 +2705,17 @@
 
       if (emptyEl) emptyEl.style.display = 'none';
       itemsEl.style.display = 'block';
-      itemsEl.innerHTML = rows.map((row) => {
-        const phone = row.whatsapp || row.phone || 'Sem WhatsApp';
-        const status = statusLabelForRow(row);
-        const messageBadge = row.mensagem || row.mensagem2
-          ? '<span class="q-badge ok">Mensagem sorteada</span>'
-          : '<span class="q-badge warn">Sem mensagem</span>';
-        const locked = ['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw);
-        const actions = locked
-          ? `<span class="q-badge ${statusClassForRow(row)}">${esc(status)}</span>`
-          : `<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`;
-
-        return `
-          <div class="empresa-card" data-lead-id="${esc(row.id)}" style="margin-bottom:6px;align-items:flex-start">
-            <div class="empresa-info">
-              <div class="empresa-nome">${esc(row.nome)}</div>
-              <div class="empresa-meta">
-                <span class="q-badge ${statusClassForRow(row)}">${esc(status)}</span>
-                <span class="q-badge info">${esc(templateTypeLabel(row))}</span>
-                ${messageBadge}
-                <span class="empresa-phone">${esc(phone)}</span>
-                ${row.site ? `<span class="empresa-site">${esc(row.site)}</span>` : ''}
-              </div>
-            </div>
-            <div class="empresa-actions">
-              <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
-              ${actions}
-            </div>
-          </div>
-        `;
-      }).join('');
+      itemsEl.innerHTML = groups.length
+        ? groups.map((group) => batchBlock(chip, slot, group)).join('')
+        : '<div class="fila-empty">Sem lotes neste chip.</div>';
     });
   }
+
+  window.toggleBatchLeadDetailsRebuild631 = function toggleBatchLeadDetailsRebuild631(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = el.style.display === 'none' || !el.style.display ? 'block' : 'none';
+  };
 
   function renderQueueView() {
     renderTabs();
