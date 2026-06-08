@@ -152,6 +152,48 @@ Dá uma olhada e me fala se faz sentido.`
 
 RAMO_TEMPLATES_DEFAULT.marcenaria['com-site'] = MARCENARIA_TEMPLATES_V434;
 
+
+
+/* ════════════════════════════
+   HOTFIX 6.34 — persistência real dos templates
+   O snapshot operacional legado foi desativado no rebuild, então v48StateSet
+   guarda em memória, mas não sobrevive ao F5. Templates são configuração
+   crítica: salvamos também em localStorage por usuário como camada persistente.
+════════════════════════════ */
+const TEMPLATE_PERSIST_PREFIX_V634 = 'crm_v634_template_persist';
+function templatePersistUserKeyV634(storageKey) {
+  const uid = (typeof currentUser !== 'undefined' && currentUser?.id) ? currentUser.id : 'anon';
+  return `${TEMPLATE_PERSIST_PREFIX_V634}:${uid}:${storageKey}`;
+}
+function readTemplatePersistV634(storageKey, fallback) {
+  try {
+    const raw = localStorage.getItem(templatePersistUserKeyV634(storageKey));
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return parsed === undefined || parsed === null ? fallback : parsed;
+  } catch (error) {
+    console.warn('[templates-v634] falha ao ler persistencia local:', error);
+    return fallback;
+  }
+}
+function writeTemplatePersistV634(storageKey, value) {
+  try {
+    localStorage.setItem(templatePersistUserKeyV634(storageKey), JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.warn('[templates-v634] falha ao salvar persistencia local:', error);
+    return false;
+  }
+}
+function mirrorTemplateMemoryV634(storageKey, value) {
+  try {
+    if (typeof setOperationalStateByStorageKey === 'function') setOperationalStateByStorageKey(storageKey, value);
+    else if (typeof v48StateSet === 'function') v48StateSet(storageKey, value, 'template-persist-mirror');
+  } catch (error) {
+    console.warn('[templates-v634] falha ao espelhar memoria:', error);
+  }
+}
+
 function normalizeMessageTemplateV434(template = {}) {
   if (typeof template === 'string') return { part1: template, part2: '' };
   if (template && typeof template === 'object') {
@@ -212,10 +254,22 @@ function getRamoTemplatesDefault(ramoId, tipo) {
 }
 
 function getRamoTemplates() {
-  try { return (typeof v48StateGetObject === 'function') ? v48StateGetObject(TEMPLATES_RAMO_KEY) : {}; } catch { return {}; }
+  try {
+    const memory = (typeof v48StateGetObject === 'function') ? v48StateGetObject(TEMPLATES_RAMO_KEY) : {};
+    if (memory && typeof memory === 'object' && !Array.isArray(memory) && Object.keys(memory).length) return memory;
+    const persisted = readTemplatePersistV634(TEMPLATES_RAMO_KEY, {});
+    if (persisted && typeof persisted === 'object' && !Array.isArray(persisted) && Object.keys(persisted).length) {
+      mirrorTemplateMemoryV634(TEMPLATES_RAMO_KEY, persisted);
+      return persisted;
+    }
+    return {};
+  } catch {
+    return readTemplatePersistV634(TEMPLATES_RAMO_KEY, {}) || {};
+  }
 }
 function saveRamoTemplates(obj) {
   const next = obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
+  writeTemplatePersistV634(TEMPLATES_RAMO_KEY, next);
   if (typeof v48StateSet === 'function') {
     v48StateSet(TEMPLATES_RAMO_KEY, next, 'branch-template-update');
   } else if (typeof saveOperationalKey === 'function') {
@@ -394,11 +448,25 @@ function capitalizeName(raw) {
 }
 
 function getTemplates() {
-  try { const saved = (typeof v48StateGetArray === 'function') ? v48StateGetArray(TEMPLATES_KEY) : []; return cloneTemplateListV434(saved.length ? saved : TEMPLATES_DEFAULT); } catch { return cloneTemplateListV434(TEMPLATES_DEFAULT); }
+  try {
+    const memory = (typeof v48StateGetArray === 'function') ? v48StateGetArray(TEMPLATES_KEY) : [];
+    if (Array.isArray(memory) && memory.length) return cloneTemplateListV434(memory);
+    const persisted = readTemplatePersistV634(TEMPLATES_KEY, []);
+    if (Array.isArray(persisted) && persisted.length) {
+      mirrorTemplateMemoryV634(TEMPLATES_KEY, cloneTemplateListV434(persisted));
+      return cloneTemplateListV434(persisted);
+    }
+    return cloneTemplateListV434(TEMPLATES_DEFAULT);
+  } catch {
+    const persisted = readTemplatePersistV634(TEMPLATES_KEY, []);
+    return cloneTemplateListV434(Array.isArray(persisted) && persisted.length ? persisted : TEMPLATES_DEFAULT);
+  }
 }
 function saveTemplates(t) {
-  if (typeof v48StateSet === 'function') v48StateSet(TEMPLATES_KEY, t, 'default-template-update');
-  uiSyncLog('optimistic-update', { entity:'template', action:'save-default-cache', count:Array.isArray(t) ? t.length : 0 });
+  const next = cloneTemplateListV434(Array.isArray(t) ? t : []);
+  writeTemplatePersistV634(TEMPLATES_KEY, next);
+  if (typeof v48StateSet === 'function') v48StateSet(TEMPLATES_KEY, next, 'default-template-update');
+  uiSyncLog('optimistic-update', { entity:'template', action:'save-default-cache', count:Array.isArray(next) ? next.length : 0 });
   scheduleOperationalSync({ delay:400, reason:'default-template-update' });
 }
 
