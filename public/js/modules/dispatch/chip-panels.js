@@ -17,9 +17,6 @@ function renderChipAccordions() {
   while (chipSlotState.length < chips.length) {
     chipSlotState.push({ filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false });
   }
-  chips.forEach((chip, slot) => {
-    if (typeof hydrateChipSlotStateFromRuntimeV439 === 'function') hydrateChipSlotStateFromRuntimeV439(slot, chip);
-  });
 
   if (!chips.length) {
     zapRight.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum chip configurado</div>`;
@@ -34,9 +31,7 @@ function renderChipAccordions() {
       aguardandoLote: st ? st.aguardandoLote : false,
       loteAtual: st ? st.loteAtual : 0,
       lotesTotal: st ? st.lotesTotal : 0,
-      loteEsperaFim: st ? st.loteEsperaFim : null,
       pausado: st ? st.pausado : false,
-      runtimeWarning: st ? st.runtimeWarning : '',
       accordionAberto: document.getElementById(`chipAccordion${slot}`)?.classList.contains('open') || false,
     };
   });
@@ -62,15 +57,6 @@ function renderChipAccordions() {
           <div style="margin-bottom:12px">
             <label>Chip</label>
             <div id="chip${slot+1}Info" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);padding:8px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2)">${escHtml(chip.nome)} · ${escHtml(chip.instance)}</div>
-          </div>
-          <div style="margin-bottom:12px;padding:10px;border:1px dashed var(--border2);border-radius:10px;background:rgba(255,255,255,0.02)">
-            <div style="font-family:'DM Mono',monospace;font-size:8px;letter-spacing:0.12em;color:${c.cor};text-transform:uppercase;margin-bottom:8px">Teste rápido de envio</div>
-            <div style="display:grid;grid-template-columns:minmax(120px,1fr) minmax(140px,1fr) auto;gap:8px;align-items:center">
-              <input id="tempDispatchName${slot}" placeholder="Nome do teste" value="Lead teste" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:8px 10px;outline:none">
-              <input id="tempDispatchPhone${slot}" placeholder="WhatsApp com DDD" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:8px 10px;outline:none">
-              <button class="btn btn-ghost" style="font-size:10px;white-space:nowrap;border-color:${c.cor};color:${c.cor}" onclick="addTemporaryDispatchLead(${slot})">+ teste</button>
-            </div>
-            <textarea id="tempDispatchMessage${slot}" placeholder="Mensagem opcional para o teste; vazio usa o template do lote" style="margin-top:8px;width:100%;min-height:42px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:8px 10px;resize:vertical;outline:none"></textarea>
           </div>
           <div style="display:flex;gap:8px;margin-bottom:0">
             <button class="btn btn-danger" style="font-size:11px" onclick="limparFilaChip(${slot})">Limpar fila</button>
@@ -131,20 +117,11 @@ function renderChipAccordions() {
       if (btnTxt) btnTxt.textContent = `⏱ Aguardando próximo lote...`;
       const panel = document.getElementById(`loteEsperaPanel${slot}`);
       if (panel) panel.style.display = 'block';
-      const remaining = Number(est.loteEsperaFim || 0) - Date.now();
-      if (remaining > 0 && typeof iniciarCountdownLoteChip === 'function') iniciarCountdownLoteChip(slot, remaining);
-    } else if (est.runtimeWarning === 'sending-uncertain') {
-      if (btnEl) {
-        btnEl.disabled = true;
-        btnEl.title = 'Envio interrompido em estado incerto. Confira a fila antes de reenviar.';
-      }
-      if (btnTxt) btnTxt.textContent = '⚠ Envio incerto';
     }
   });
 }
 
 function renderFilaZap() {
-  if (typeof repairWhatsappDayQueueLinksV48 === 'function' && disparoDay && disparoDay !== 'backlog') repairWhatsappDayQueueLinksV48(disparoDay, { save:true, source:'render-fila-zap' });
   const devolvidos = devolverZapNaoValidadoParaValidacao();
   if (devolvidos) notify(`↩ ${devolvidos} lead(s) sem WhatsApp validado voltaram para Validação`, 'warn');
   const recovered = recoverSingleChipQueueAssignmentsV431();
@@ -153,7 +130,6 @@ function renderFilaZap() {
   const chips = getChips();
   const weekDays = currentWeekDays();
   const today = todayStr();
-  // V47: preenchimento diário é manual pelo botão no Backlog.
 
   // Só reconstrói os accordions se nenhum disparo estiver em andamento
   // (evita resetar botão/spinner ao trocar de aba durante o envio)

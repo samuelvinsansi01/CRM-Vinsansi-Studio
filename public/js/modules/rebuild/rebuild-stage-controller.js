@@ -982,35 +982,14 @@
   }
 
   function renderBatchPanel() {
-    const right = document.getElementById('zapRight');
-    if (!right) return;
-
+    // Hotfix visual 6.29.3:
+    // A versao nova estava inserindo um painel grande de lotes no topo da lateral
+    // direita, mudando completamente o visual antigo da Fila WhatsApp. Mantemos as
+    // funcoes/regras de lote ativas, mas os controles ficam na barra de acoes da
+    // esquerda via enhanceQueueControls().
     const oldPanel = document.getElementById('dispatchBatchesPanel622');
     if (oldPanel) oldPanel.remove();
-
-    const batches = state.batches.map(normalizeBatch);
-    const ready = batches.filter((batch) => batch.status === 'ready').length;
-    const sending = batches.filter((batch) => batch.status === 'sending').length;
-    const completed = batches.filter((batch) => batch.status === 'completed').length;
-
-    const panel = document.createElement('div');
-    panel.id = 'dispatchBatchesPanel622';
-    panel.style.cssText = 'border-bottom:1px solid var(--border);padding:12px 14px;background:rgba(255,255,255,0.015);flex-shrink:0';
-    panel.innerHTML = `
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <div style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--accent);text-transform:uppercase;font-weight:700">Lotes de disparo</div>
-        <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-left:auto">${ready} pronto(s) / ${sending} em disparo / ${completed} concluido(s)</span>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-        <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="generateDispatchBatchesRebuild622()">Gerar lotes</button>
-        <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="refreshDispatchBatchesRebuild622()">Atualizar lotes</button>
-      </div>
-      <div>
-        ${batches.length ? batches.map(batchCard).join('') : '<div class="fila-empty">// nenhum lote gerado ainda.</div>'}
-      </div>
-    `;
-
-    right.prepend(panel);
+    enhanceQueueControls();
   }
 
   function enhanceQueueControls() {
@@ -2522,97 +2501,77 @@
     const right = document.getElementById('zapRight');
     if (!right) return;
 
-    const unassignedRows = state.rows.filter((row) => !row.chipId);
-    const chipGroups = state.chips.map((chip, index) => ({
-      key: String(chip.id || chip.dbId || index),
-      title: `CHIP ${index + 1}`,
-      subtitle: chip.name,
-      rows: state.rows.filter((row) => chipMatchesRow(chip, row))
-    }));
-    const groups = [
-      {
-        key: 'sem-chip',
-        title: 'SEM CHIP',
-        subtitle: 'Aguardando preencher o dia',
-        rows: unassignedRows
-      },
-      ...chipGroups
-    ].filter((group) => group.rows.length || group.key !== 'sem-chip' || !state.chips.length);
-
-    if (!groups.length) {
-      right.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum lead na fila/backlog</div>`;
+    // Hotfix visual 6.29.3:
+    // Mantem a regra atual do banco (backlog_items/queue_items/lotes), mas volta a
+    // exibir a lateral direita no modelo antigo: accordions por chip, botao de
+    // disparo, limpar fila, pausa e lista do chip. O backlog/sem chip fica somente
+    // na lista da esquerda, como antes.
+    if (!state.chips.length) {
+      right.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum chip ativo encontrado</div>`;
       return;
     }
 
-    if (!state.openChipKeys.size) groups.forEach((group) => state.openChipKeys.add(group.key));
+    if (typeof window.renderChipAccordions === 'function') {
+      window.renderChipAccordions();
+    } else if (typeof renderChipAccordions === 'function') {
+      renderChipAccordions();
+    }
 
-    function messageBlock(row) {
-      const first = row.mensagem || '';
-      const second = row.mensagem2 || '';
-      if (!first && !second) {
-        return `<div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.6;margin-top:7px">// mensagem ainda nao sorteada. Ela sera definida ao entrar na fila do dia.</div>`;
+    state.chips.forEach((chip, slot) => {
+      const rows = state.rows.filter((row) => row.inTodayQueue && chipMatchesRow(chip, row));
+      const countEl = document.getElementById(`filaCount${slot}`);
+      if (countEl) countEl.textContent = `(${rows.length} empresa${rows.length !== 1 ? 's' : ''})`;
+
+      const infoEl = document.getElementById(`chip${slot + 1}Info`);
+      if (infoEl) infoEl.textContent = `${chip.name || chip.nome || 'Chip'} · ${chip.instance || ''}`;
+
+      const labelEl = document.getElementById(`chip${slot + 1}Label`);
+      if (labelEl) labelEl.textContent = `· ${chip.name || chip.nome || 'Chip'}`;
+
+      const emptyEl = document.getElementById(`filaVazia${slot}`);
+      const itemsEl = document.getElementById(`filaItens${slot}`);
+      if (!itemsEl) return;
+
+      if (!rows.length) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        itemsEl.style.display = 'none';
+        itemsEl.innerHTML = '';
+        return;
       }
-      return `
-        <details style="margin-top:8px">
-          <summary style="cursor:pointer;font-family:'DM Mono',monospace;font-size:8px;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em">Mensagem sorteada</summary>
-          <div style="margin-top:7px;display:grid;gap:7px">
-            ${first ? `<div style="white-space:pre-wrap;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:8px;padding:8px 9px;font-family:'DM Mono',monospace;font-size:8px;line-height:1.55;color:var(--text2)">${esc(first)}</div>` : ''}
-            ${second ? `<div style="white-space:pre-wrap;background:rgba(255,255,255,0.025);border:1px solid var(--border);border-radius:8px;padding:8px 9px;font-family:'DM Mono',monospace;font-size:8px;line-height:1.55;color:var(--text2)">${esc(second)}</div>` : ''}
-          </div>
-        </details>
-      `;
-    }
 
-    function queueMiniCard(row) {
-      const chip = row.chipName || row.chipId || 'Sem chip';
-      return `
-        <div style="border:1px solid var(--border);border-radius:8px;padding:9px 10px;background:var(--surface2)">
-          <div style="display:flex;gap:8px;align-items:center">
-            <div style="font-size:10px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${esc(row.nome)}</div>
-            <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
-          </div>
-          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px">
-            <span class="q-badge info">${esc(templateTypeLabel(row))}</span>
-            <span class="q-badge ${row.chipId ? 'ok' : 'warn'}">${esc(chip)}</span>
-            ${row.batchId ? `<span class="q-badge info">Lote ${esc(row.batchIndex || '')}</span>` : ''}
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:6px;display:flex;gap:7px;flex-wrap:wrap">
-            <span>${esc(row.whatsapp || 'Sem WhatsApp')}</span>
-            ${row.site ? `<span>${esc(row.site)}</span>` : ''}
-          </div>
-          ${messageBlock(row)}
-          <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;flex-wrap:wrap">
-            <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
-            ${!row.inTodayQueue ? `<button class="add-btn added" type="button" data-queue621-lead="${esc(row.id)}" onclick="queueLeadTodayRebuild621('${esc(row.id)}')">Entrar na fila</button>` : ''}
-          </div>
-        </div>
-      `;
-    }
+      if (emptyEl) emptyEl.style.display = 'none';
+      itemsEl.style.display = 'block';
+      itemsEl.innerHTML = rows.map((row) => {
+        const phone = row.whatsapp || row.phone || 'Sem WhatsApp';
+        const status = statusLabelForRow(row);
+        const messageBadge = row.mensagem || row.mensagem2
+          ? '<span class="q-badge ok">Mensagem sorteada</span>'
+          : '<span class="q-badge warn">Sem mensagem</span>';
+        const locked = ['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw);
+        const actions = locked
+          ? `<span class="q-badge ${statusClassForRow(row)}">${esc(status)}</span>`
+          : `<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`;
 
-    right.innerHTML = groups.map((group, index) => {
-      const open = state.openChipKeys.has(group.key);
-      const today = group.rows.filter((row) => row.inTodayQueue).length;
-      const backlog = group.rows.length - today;
-
-      return `
-        <div class="chip-accordion${open ? ' open' : ''}" data-slot="${index}">
-          <div class="chip-accordion-header" style="border-color:rgba(184,240,89,0.25);cursor:pointer" onclick="toggleQueueChipAccordion621('${esc(group.key)}')">
-            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-              <span style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--accent)">${esc(group.title)}</span>
-              <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(group.subtitle || '')}</span>
-              <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-left:auto;white-space:nowrap">${today} fila - ${backlog} backlog</span>
-            </div>
-          </div>
-          <div class="chip-accordion-body" style="display:${open ? 'block' : 'none'}">
-            <div class="chip-fila-scroll">
-              <div class="fila-items" style="display:flex;padding:10px 12px;gap:6px;flex-direction:column">
-                ${group.rows.length ? group.rows.map(queueMiniCard).join('') : '<div class="fila-empty">Sem leads neste chip.</div>'}
+        return `
+          <div class="empresa-card" data-lead-id="${esc(row.id)}" style="margin-bottom:6px;align-items:flex-start">
+            <div class="empresa-info">
+              <div class="empresa-nome">${esc(row.nome)}</div>
+              <div class="empresa-meta">
+                <span class="q-badge ${statusClassForRow(row)}">${esc(status)}</span>
+                <span class="q-badge info">${esc(templateTypeLabel(row))}</span>
+                ${messageBadge}
+                <span class="empresa-phone">${esc(phone)}</span>
+                ${row.site ? `<span class="empresa-site">${esc(row.site)}</span>` : ''}
               </div>
             </div>
+            <div class="empresa-actions">
+              <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
+              ${actions}
+            </div>
           </div>
-        </div>
-      `;
-    }).join('');
+        `;
+      }).join('');
+    });
   }
 
   function renderQueueView() {
