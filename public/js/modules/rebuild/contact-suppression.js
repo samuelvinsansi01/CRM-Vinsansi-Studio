@@ -154,17 +154,19 @@
 
     loading = true;
     try {
+      // 6.40: busca tolerante. Algumas bases antigas ainda nao tinham todas as
+      // colunas da Protecao; select('*') evita quebrar a tela quando uma coluna
+      // opcional ainda nao existe ou quando registros antigos tem active null.
       const { data, error } = await client
         .from('lead_blocks')
-        .select('id,user_id,lead_id,block_type,company_name,contact_name,phone,normalized_phone,instagram_url,instagram_username,website,website_host,place_id,reason,note,source,created_at,updated_at,removed_at,active')
+        .select('*')
         .eq('user_id', user.id)
-        .eq('active', true)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
       loaded = true;
-      publishEntries(data || []);
+      publishEntries((data || []).filter((entry) => entry?.active !== false && !entry?.removed_at));
       renderContactSuppressionPanelV629();
       return entries;
     } catch (error) {
