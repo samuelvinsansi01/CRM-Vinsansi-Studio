@@ -312,6 +312,64 @@ async function persistOutgoingWhatsappMediaV635({ chip = {}, item = {}, phone = 
   }
 }
 
+
+async function protectLeadAfterDispatchV639(item = {}, chip = {}, phone = '', meta = {}) {
+  try {
+    const client = (typeof sbClient !== 'undefined' && sbClient?.rpc)
+      ? sbClient
+      : (window.supabaseClient?.rpc ? window.supabaseClient : (window.crmSupabase?.rpc ? window.crmSupabase : null));
+    const userId = typeof getCurrentSupabaseUserIdV412 === 'function'
+      ? await getCurrentSupabaseUserIdV412()
+      : (typeof getCurrentUserId === 'function' ? await getCurrentUserId() : (window.currentUser?.id || ''));
+    if (!client?.rpc || !userId) return { ok:false, skipped:true, reason:'no-client-or-user' };
+
+    const normalizedPhone = normalizeDispatchPhoneV432(phone || item.normalized_phone || item.whatsapp || item.phone || item.telefone || '');
+    const companyName = item.company_name || item.nome || item.empresa || item.name || '';
+    const payload = {
+      block_type:'already_sent',
+      list_type:'already_sent',
+      lead_id:item.leadId || item.lead_id || item.id || null,
+      company_name:companyName,
+      contact_name:companyName,
+      phone:item.phone || item.whatsapp || item.telefone || normalizedPhone,
+      normalized_phone:normalizedPhone,
+      instagram_url:item.instagram_url || item.instagram || '',
+      instagram_username:item.instagram_username || '',
+      website:item.website || item.site || '',
+      reason:'disparo_realizado',
+      note:`Inserido automaticamente após disparo concluído${chip?.instance ? ` pela instância ${chip.instance}` : ''}.`,
+      source:'dispatch_auto',
+      chip_id:chip?.id || '',
+      instance:chip?.instance || '',
+      sent_at:new Date().toISOString(),
+      ...meta
+    };
+
+    const { data, error } = await client.rpc('rpc_lead_block_upsert', {
+      p_user_id:userId,
+      p_entry:payload
+    });
+    if (error) throw error;
+
+    try {
+      if (Array.isArray(window.contactSuppressionEntriesV629)) {
+        window.contactSuppressionEntriesV629.unshift({
+          ...payload,
+          id:data?.id || `auto_${payload.lead_id || normalizedPhone}_${Date.now()}`,
+          active:true,
+          created_at:new Date().toISOString(),
+          block_type:'already_sent',
+          list_type:'already_sent'
+        });
+      }
+    } catch (_) {}
+    return { ok:true, data };
+  } catch (error) {
+    console.warn('[dispatch-protection] falha ao proteger lead enviado:', error?.message || error, { item, phone });
+    return { ok:false, error };
+  }
+}
+
 function getEvolutionUrlReachabilityErrorV435(chip) {
   const baseUrl = typeof getEvolutionBaseUrl === 'function' ? getEvolutionBaseUrl(chip) : String(chip?.url || '').replace(/\/+$/, '');
   if (!baseUrl) return 'Evolution URL ausente. Configure a URL publica HTTPS no chip.';
@@ -873,6 +931,9 @@ async function dispararLoteChip(slot) {
         error_message:null
       });
       if (typeof markLeadAsDispatchedEverV47 === 'function') markLeadAsDispatchedEverV47(item, { source:'dispatch-success', chipId:chip.id || chip.instance || '', instance:chip.instance || '' });
+      const protectionResultV639 = await protectLeadAfterDispatchV639(item, chip, numero, { status:'sent', source_reason:'dispatch-success' });
+      if (protectionResultV639?.ok) log(`  ↳ protegido em Já Enviados`);
+      else log(`  ↳ <span style="color:var(--warning)">proteção pendente: confira aba Proteção</span>`);
       atualizarStatusFilaSlot(slot, item.id, 'enviado');
       try {
         atualizarStatusEmpresa(item.id, 'Enviada', { phone:numero, sentAt:new Date().toISOString() });
@@ -889,6 +950,7 @@ async function dispararLoteChip(slot) {
       if (isDispatchItemFullyDeliveredV438(item)) {
         item.status = 'enviado';
         if (typeof markLeadAsDispatchedEverV47 === 'function') markLeadAsDispatchedEverV47(item, { source:'dispatch-repair' });
+        await protectLeadAfterDispatchV639(item, chip, normalizeDispatchPhoneV432(item.whatsapp || item.phone || ''), { status:'sent', source_reason:'dispatch-repair' });
         saveFilaDisparo({ delay:0, reason:'dispatch-chip-delivered-after-error-repair' });
         atualizarStatusFilaSlot(slot, item.id, 'enviado');
         atualizarStatusEmpresa(item.id, 'Enviada', { phone:item.whatsapp || item.phone || '', sentAt:new Date().toISOString() });

@@ -107,13 +107,23 @@
   }
 
   function normalizeEntry(entry = {}) {
+    const listType = entry.list_type || entry.block_type || entry.type || 'already_sent';
+    const archivedAt = entry.archived_at || entry.removed_at || (entry.active === false ? entry.updated_at || entry.created_at : null);
     return {
       ...entry,
+      list_type: listType === 'blocked' ? 'blocked' : 'already_sent',
+      block_type: listType === 'blocked' ? 'blocked' : 'already_sent',
       phone_normalized: onlyDigits(entry.phone_normalized || entry.normalized_phone || entry.phone || entry.whatsapp),
+      normalized_phone: onlyDigits(entry.normalized_phone || entry.phone_normalized || entry.phone || entry.whatsapp),
+      instagram: entry.instagram || entry.instagram_url || entry.instagramUrl || '',
+      instagram_url: entry.instagram_url || entry.instagram || entry.instagramUrl || '',
       instagram_username: normalizeInstagram(entry.instagram_username || entry.instagram || entry.instagram_url || entry.instagramUrl),
       website_host: normalizeHost(entry.website_host || entry.website || entry.site || entry.website_url || entry.websiteUrl),
       place_id: String(entry.place_id || entry.placeId || entry.googlePlaceId || '').trim().toLowerCase(),
-      company_name_normalized: normalizeCompany(entry.company_name || entry.companyName || entry.nome || entry.name || entry.title)
+      company_name_normalized: normalizeCompany(entry.company_name || entry.companyName || entry.nome || entry.name || entry.title),
+      notes: entry.notes || entry.note || '',
+      note: entry.note || entry.notes || '',
+      archived_at: archivedAt
     };
   }
 
@@ -145,11 +155,11 @@
     loading = true;
     try {
       const { data, error } = await client
-        .from('contact_suppression_entries')
-        .select('id,user_id,lead_id,list_type,company_name,company_name_normalized,contact_name,phone,phone_normalized,instagram,instagram_username,website,website_host,place_id,reason,notes,source,occurred_at,created_at,updated_at,archived_at')
+        .from('lead_blocks')
+        .select('id,user_id,lead_id,block_type,company_name,contact_name,phone,normalized_phone,instagram_url,instagram_username,website,website_host,place_id,reason,note,source,created_at,updated_at,removed_at,active')
         .eq('user_id', user.id)
-        .is('archived_at', null)
-        .order('updated_at', { ascending: false });
+        .eq('active', true)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -160,7 +170,7 @@
     } catch (error) {
       publishEntries([]);
       renderContactSuppressionPanelV629(error?.message || 'Falha ao carregar protecao.');
-      if (!silent && typeof notify === 'function') notify('Execute a SQL 00629 para ativar Protecao.', 'warn');
+      if (!silent && typeof notify === 'function') notify('Execute a SQL 00637 para ativar Protecao por contato.', 'warn');
       return entries;
     } finally {
       loading = false;
@@ -208,9 +218,15 @@
     }
 
     try {
-      const { error } = await client.rpc('rpc_contact_suppression_upsert', {
+      const { error } = await client.rpc('rpc_lead_block_upsert', {
         p_user_id: user.id,
-        p_entry: entry
+        p_entry: {
+          ...entry,
+          block_type: entry.list_type,
+          normalized_phone: entry.phone_normalized,
+          instagram_url: entry.instagram,
+          note: entry.notes
+        }
       });
       if (error) throw error;
 
@@ -229,9 +245,9 @@
     if (!client?.rpc || !user?.id || !id) return;
 
     try {
-      const { error } = await client.rpc('rpc_contact_suppression_archive', {
+      const { error } = await client.rpc('rpc_lead_block_archive', {
         p_user_id: user.id,
-        p_entry_id: id
+        p_block_id: id
       });
       if (error) throw error;
       await loadContactSuppressionEntriesV629({ silent: true });

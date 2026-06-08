@@ -470,59 +470,322 @@ async function importarLeads() {
     }
   };
 
-  if (typeof window.adicionarLeadManual !== 'function') {
-    window.adicionarLeadManual = async function adicionarLeadManual() {
-      const nome = (document.getElementById('manualLeadNome')?.value || '').trim();
-      const phone = normalizeManualPhone(document.getElementById('manualLeadPhone')?.value || '');
-      const googleUrl = (document.getElementById('manualLeadGoogleUrl')?.value || '').trim();
-      const instagram = (document.getElementById('manualLeadInsta')?.value || '').trim();
-
-      if (!nome) {
-        notifyManual('// informe o nome da empresa', 'warn');
-        return;
-      }
-
-      const lead = {
-        id: typeof genId === 'function' ? genId() : `manual-${Date.now()}`,
-        nome,
-        company_name: nome,
-        whatsapp: phone,
-        phone,
-        instagram,
-        googleUrl,
-        google_maps_url: googleUrl,
-        ramoId: window.activeRamoId || null,
-        numStatus: phone ? 'pendente' : 'nao-aplicavel',
-        tipo: phone ? 'sem-site' : 'instagram',
-        templateType: phone ? 'sem-site' : '',
-        canal: phone ? 'pendente' : 'insta',
-        stage: phone ? 'validation' : 'instagram_backlog',
-        importadoEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0, 10),
-        sourceRaw: { source: 'manual-import-hotfix-6.36' },
-        rawPayload: { source: 'manual-import-hotfix-6.36' }
-      };
-
-      try {
-        if (phone) {
-          const list = typeof getValData === 'function' ? [...getValData(), lead] : [lead];
-          if (typeof saveValData === 'function') saveValData(list);
-        } else {
-          const list = typeof getInstaFila === 'function' ? [...getInstaFila(), lead] : [lead];
-          if (typeof saveInstaFila === 'function') saveInstaFila(list);
-        }
-        if (typeof markOperationalDataDirtyV430 === 'function') markOperationalDataDirtyV430('manual-lead');
-        if (typeof scheduleOperationalSync === 'function') scheduleOperationalSync({ delay: 0, reason: 'manual-lead' });
-        if (typeof updateBadges === 'function') updateBadges();
-        if (typeof importPreview === 'function') importPreview();
-        notifyManual(phone ? '✓ Lead manual adicionado à Validação' : '✓ Lead manual adicionado ao Instagram', '');
-      } catch (error) {
-        console.warn('[hotfix636] adicionar lead manual falhou:', error);
-        notifyManual(error?.message || 'Falha ao adicionar lead manual.', 'err');
-      }
+  async function getManualAuthHeadersV637() {
+    if (typeof getSupabaseAuthHeadersV423 === 'function') {
+      const headers = await getSupabaseAuthHeadersV423();
+      if (headers?.apikey) return headers;
+    }
+    return {
+      apikey: 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
+      Authorization: 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
     };
   }
+
+  async function getManualCurrentUserIdV637() {
+    try { if (window.currentUser?.id) return window.currentUser.id; } catch (_) {}
+    try { if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id; } catch (_) {}
+    try {
+      if (typeof getCurrentSupabaseUserIdV412 === 'function') {
+        const id = await getCurrentSupabaseUserIdV412();
+        if (id) return id;
+      }
+    } catch (_) {}
+    try {
+      const client = window.supabaseClient || window.crmSupabase || window.sb || null;
+      if (client?.auth?.getUser) {
+        const { data } = await client.auth.getUser();
+        if (data?.user?.id) return data.user.id;
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  function normalizeManualInstagramUsernameV637(value = '') {
+    let raw = String(value || '').trim().toLowerCase().replace('@', '');
+    if (!raw) return '';
+    raw = raw.replace(/^https?:\/\//, '').replace(/^www\./, '');
+    if (raw.includes('instagram.com/')) raw = raw.split('instagram.com/')[1] || '';
+    return raw.split('?')[0].split('#')[0].split('/')[0] || '';
+  }
+
+  async function rpcManualImportLeadV637({ nome, phone, googleUrl, instagram }) {
+    const userId = await getManualCurrentUserIdV637();
+    if (!userId) throw new Error('Usuário autenticado não encontrado. Faça login novamente.');
+
+    const normalizedPhone = normalizeManualPhone(phone);
+    const route = normalizedPhone ? 'whatsapp-validation' : 'instagram-backlog';
+    const row = {
+      lead: {
+        company_name: nome,
+        phone: normalizedPhone || null,
+        normalized_phone: normalizedPhone || null,
+        instagram_url: instagram || null,
+        instagram_username: normalizeManualInstagramUsernameV637(instagram),
+        rating: 5,
+        reviews_count: 15,
+        website: null,
+        website_type: 'none',
+        has_own_site: false,
+        whatsapp_status: normalizedPhone ? 'pending' : 'unknown'
+      },
+      location: {
+        google_maps_url: googleUrl || null,
+        raw_location: { source: 'manual-import-hotfix-6.37' }
+      },
+      route,
+      reason: 'manual-import',
+      analysis: { route, reason: 'manual-import' },
+      original: { source: 'manual-import-hotfix-6.37', nome, phone: normalizedPhone, googleUrl, instagram }
+    };
+
+    const headers = await getManualAuthHeadersV637();
+    const response = await fetch('https://txyknazfufashgzlxkqh.supabase.co/rest/v1/rpc/rpc_import_leads_batch', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        p_user_id: userId,
+        p_rows: [row],
+        p_source: 'manual_form',
+        p_source_file_name: 'lead_manual'
+      })
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!response.ok) throw data || new Error(`Erro Supabase ${response.status}`);
+    return data || {};
+  }
+
+  window.adicionarLeadManual = async function adicionarLeadManual() {
+    const nome = (document.getElementById('manualLeadNome')?.value || '').trim();
+    const phone = normalizeManualPhone(document.getElementById('manualLeadPhone')?.value || '');
+    const googleUrl = (document.getElementById('manualLeadGoogleUrl')?.value || '').trim();
+    const instagram = (document.getElementById('manualLeadInsta')?.value || '').trim();
+
+    if (!nome) {
+      notifyManual('// informe o nome da empresa', 'warn');
+      return;
+    }
+    if (!phone && !instagram) {
+      notifyManual('// informe telefone ou Instagram para importar', 'warn');
+      return;
+    }
+
+    try {
+      const result = await rpcManualImportLeadV637({ nome, phone, googleUrl, instagram });
+      const created = Number(result.created || 0);
+      const alreadySent = Number(result.already_sent || 0);
+      const blockedContacts = Number(result.blocked_contacts || 0);
+      const duplicates = Number(result.rejected_duplicate || 0);
+      const errors = Number(result.errors || 0);
+
+      if (created > 0) {
+        notifyManual(phone ? '✓ Lead manual inserido em Aguardando Validação' : '✓ Lead manual inserido para Instagram', '');
+        ['manualLeadNome','manualLeadPhone','manualLeadGoogleUrl','manualLeadInsta'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+      } else if (blockedContacts > 0) {
+        notifyManual('Bloqueado: este contato está na Proteção como Bloqueado. Não foi importado.', 'err');
+      } else if (alreadySent > 0) {
+        notifyManual('Já enviado: este contato está na Proteção. Não foi importado.', 'warn');
+      } else if (duplicates > 0) {
+        notifyManual('Duplicado: este lead já existe na base. Não foi importado.', 'warn');
+      } else if (errors > 0) {
+        notifyManual('Erro ao inserir lead manual. Verifique o console/Supabase.', 'err');
+      } else {
+        notifyManual('Lead manual não foi importado. Nenhuma alteração feita.', 'warn');
+      }
+
+      if (typeof loadSupabaseLeadsToLocalState === 'function') await loadSupabaseLeadsToLocalState();
+      if (typeof renderValidationStageFromSupabase === 'function') await renderValidationStageFromSupabase();
+      if (typeof updateBadges === 'function') updateBadges();
+      if (typeof importPreview === 'function') importPreview();
+      return result;
+    } catch (error) {
+      console.warn('[hotfix637] adicionar lead manual falhou:', error);
+      notifyManual(error?.message || 'Falha ao adicionar lead manual.', 'err');
+    }
+  };
 
   setTimeout(() => {
     if (document.getElementById('manualValChipTabs')) window.renderManualValChips();
   }, 300);
+})();
+
+/* ═══════════════════════════
+   HOTFIX 6.38 — Importação manual real, proteção obrigatória e sem falso sucesso
+   - Usa rpc_manual_lead_import_v638
+   - Se não criou no banco, não mostra sucesso
+   - Recarrega validação após criar
+═══════════════════════════ */
+(function installManualImportRealHotfix638(){
+  if (window.__manualImportRealHotfix638) return;
+  window.__manualImportRealHotfix638 = true;
+
+  const SUPABASE_URL_V638 = 'https://txyknazfufashgzlxkqh.supabase.co';
+
+  function notifyV638(message, type = '') {
+    if (typeof notify === 'function') return notify(message, type);
+    if (typeof notifyUser === 'function') return notifyUser(message, type);
+    console[type === 'err' ? 'error' : 'log'](message);
+  }
+
+  function digitsV638(value = '') {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  function normalizePhoneV638(value = '') {
+    const raw = digitsV638(value);
+    if (!raw) return '';
+    if (raw.startsWith('55')) return raw;
+    if (raw.length === 10 || raw.length === 11) return `55${raw}`;
+    return raw;
+  }
+
+  async function getUserIdV638() {
+    try { if (window.currentUser?.id) return window.currentUser.id; } catch (_) {}
+    try { if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id; } catch (_) {}
+    try {
+      if (typeof getCurrentSupabaseUserIdV412 === 'function') {
+        const id = await getCurrentSupabaseUserIdV412();
+        if (id) return id;
+      }
+    } catch (_) {}
+    try {
+      const client = window.supabaseClient || window.crmSupabase || window.sb || null;
+      if (client?.auth?.getUser) {
+        const { data } = await client.auth.getUser();
+        if (data?.user?.id) return data.user.id;
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  async function getHeadersV638() {
+    try {
+      if (typeof getSupabaseAuthHeadersV423 === 'function') {
+        const headers = await getSupabaseAuthHeadersV423();
+        if (headers?.apikey && headers?.Authorization) return headers;
+      }
+    } catch (_) {}
+    return {
+      apikey: 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E',
+      Authorization: 'Bearer sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E'
+    };
+  }
+
+  function unwrapRpcResultV638(result) {
+    if (Array.isArray(result)) return result[0] || {};
+    if (result?.rpc_manual_lead_import_v638) return result.rpc_manual_lead_import_v638;
+    return result || {};
+  }
+
+  async function callManualImportRpcV638(entry) {
+    const userId = await getUserIdV638();
+    if (!userId) throw new Error('Usuário autenticado não encontrado. Faça login novamente.');
+    const headers = await getHeadersV638();
+    const response = await fetch(`${SUPABASE_URL_V638}/rest/v1/rpc/rpc_manual_lead_import_v638`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_user_id: userId, p_entry: entry })
+    });
+    const text = await response.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (_) { data = { raw: text }; }
+    if (!response.ok) {
+      const msg = data?.message || data?.error || `Erro Supabase ${response.status}`;
+      if (response.status === 404 || String(msg).includes('rpc_manual_lead_import_v638')) {
+        throw new Error('Execute o SQL 00638_manual_import_real_hotfix.sql no Supabase e recarregue a página.');
+      }
+      throw new Error(msg);
+    }
+    return unwrapRpcResultV638(data);
+  }
+
+  async function refreshAfterManualImportV638() {
+    try { if (typeof loadSupabaseLeadsToLocalState === 'function') await loadSupabaseLeadsToLocalState(); } catch (error) { console.warn('[hotfix638] loadSupabaseLeadsToLocalState:', error); }
+    try { if (typeof renderValidationStageFromSupabase === 'function') await renderValidationStageFromSupabase(); } catch (error) { console.warn('[hotfix638] renderValidationStageFromSupabase:', error); }
+    try { if (typeof renderValidador === 'function') renderValidador(); } catch (_) {}
+    try { if (typeof updateBadges === 'function') updateBadges(); } catch (_) {}
+    try { if (typeof importPreview === 'function') importPreview(); } catch (_) {}
+  }
+
+  window.adicionarLeadManual = async function adicionarLeadManualV638() {
+    const button = document.querySelector('[onclick*="adicionarLeadManual"]');
+    const originalLabel = button ? button.textContent : '';
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Inserindo...';
+    }
+
+    const nome = String(document.getElementById('manualLeadNome')?.value || '').trim();
+    const phoneRaw = String(document.getElementById('manualLeadPhone')?.value || '').trim();
+    const phone = normalizePhoneV638(phoneRaw);
+    const googleUrl = String(document.getElementById('manualLeadGoogleUrl')?.value || '').trim();
+    const instagram = String(document.getElementById('manualLeadInsta')?.value || '').trim();
+
+    try {
+      if (!nome) {
+        notifyV638('// informe o nome da empresa', 'warn');
+        return { ok: false, action: 'invalid' };
+      }
+      if (!phone && !instagram) {
+        notifyV638('// informe telefone ou Instagram', 'warn');
+        return { ok: false, action: 'invalid' };
+      }
+
+      const result = await callManualImportRpcV638({
+        company_name: nome,
+        phone,
+        normalized_phone: phone,
+        google_maps_url: googleUrl,
+        instagram_url: instagram,
+        source: 'manual-form-v638'
+      });
+
+      const action = result.action || '';
+      const created = Number(result.created || 0);
+
+      if (action === 'created' && created > 0 && result.lead_id) {
+        notifyV638('✓ Lead manual inserido em Aguardando Validação', '');
+        ['manualLeadNome','manualLeadPhone','manualLeadGoogleUrl','manualLeadInsta'].forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+        });
+        await refreshAfterManualImportV638();
+        return result;
+      }
+
+      if (action === 'already_sent') {
+        notifyV638('Já enviado: este contato está na Proteção. Não foi importado.', 'warn');
+        await refreshAfterManualImportV638();
+        return result;
+      }
+
+      if (action === 'blocked') {
+        notifyV638('Bloqueado: este contato está na Proteção. Não foi importado.', 'err');
+        await refreshAfterManualImportV638();
+        return result;
+      }
+
+      if (action === 'duplicate') {
+        notifyV638('Duplicado: este lead já existe na base. Não foi importado.', 'warn');
+        await refreshAfterManualImportV638();
+        return result;
+      }
+
+      notifyV638(result.reason || 'Lead manual não foi importado. Nenhuma alteração feita.', 'warn');
+      await refreshAfterManualImportV638();
+      return result;
+    } catch (error) {
+      console.warn('[hotfix638] adicionar lead manual:', error);
+      notifyV638(error?.message || 'Falha ao inserir lead manual.', 'err');
+      return { ok: false, error: error?.message || String(error) };
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalLabel || 'Inserir lead manual';
+      }
+    }
+  };
 })();
