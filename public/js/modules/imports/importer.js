@@ -265,3 +265,264 @@ async function importarLeads() {
     }
   }
 }
+
+/* ═══════════════════════════
+   HOTFIX 6.36 — Validação manual na Importação
+   Corrige funções globais ausentes: renderManualValChips e validarNumeroManual.
+═══════════════════════════ */
+(function installManualValidationImportHotfix(){
+  if (window.__manualValidationImportHotfix636) return;
+  window.__manualValidationImportHotfix636 = true;
+
+  function escManual(value = '') {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function digitsManual(value = '') {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  function normalizeManualPhone(value = '') {
+    const raw = digitsManual(value);
+    if (!raw) return '';
+    if (raw.startsWith('55')) return raw;
+    if (raw.length === 10 || raw.length === 11) return `55${raw}`;
+    return raw;
+  }
+
+  function notifyManual(message, type = '') {
+    if (typeof notify === 'function') return notify(message, type);
+    if (typeof notifyUser === 'function') return notifyUser(message, type);
+    console[type === 'err' ? 'error' : 'log'](message);
+  }
+
+  function normalizeManualChip(chip = {}) {
+    return {
+      ...chip,
+      id: chip.id || chip.chip_id || chip.instance || chip.name || chip.label || '',
+      name: chip.name || chip.nome || chip.label || chip.instance || 'Chip',
+      url: String(chip.url || chip.base_url || chip.baseUrl || chip.api_url || chip.apiUrl || '').replace(/\/+$/, ''),
+      instance: chip.instance || chip.instance_name || chip.instanceName || chip.nome || chip.name || '',
+      key: chip.key || chip.apikey || chip.apiKey || chip.api_key || chip.token || ''
+    };
+  }
+
+  async function getManualChips() {
+    try {
+      if (typeof window.CRMHydrateChipsCache === 'function') {
+        const hydrated = await window.CRMHydrateChipsCache();
+        if (Array.isArray(hydrated) && hydrated.length) return hydrated.map(normalizeManualChip);
+      }
+    } catch (error) {
+      console.warn('[hotfix636] hydrate chips falhou:', error);
+    }
+
+    const local = [];
+    try { if (typeof window.getChips === 'function') local.push(...(window.getChips() || [])); } catch (_) {}
+    try { if (Array.isArray(window.__crmChipsCache)) local.push(...window.__crmChipsCache); } catch (_) {}
+
+    const seen = new Set();
+    return local.map(normalizeManualChip).filter((chip) => {
+      const key = String(chip.id || chip.instance || chip.name || '').trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  window.renderManualValChips = function renderManualValChips() {
+    const target = document.getElementById('manualValChipTabs');
+    if (!target) return;
+
+    target.innerHTML = '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">Carregando chips...</span>';
+
+    getManualChips().then((chips) => {
+      window.__manualValChips = chips;
+
+      if (!chips.length) {
+        target.innerHTML = '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">Nenhum chip configurado em Configurações > Chips</span>';
+        return;
+      }
+
+      if (!window.__manualValChipId || !chips.some((chip) => String(chip.id) === String(window.__manualValChipId))) {
+        window.__manualValChipId = chips[0].id;
+      }
+
+      target.innerHTML = chips.map((chip, index) => {
+        const active = String(chip.id) === String(window.__manualValChipId);
+        const status = chip.connectionState || chip.status || 'salvo';
+        return `
+          <div class="chip-tab${active ? ' active' : ''}"
+               title="${escManual(chip.instance)} · ${escManual(status)}"
+               onclick="window.__manualValChipId='${escManual(chip.id)}'; if (typeof window.setValChip === 'function') window.setValChip('${escManual(chip.id)}'); window.renderManualValChips();">
+            ${escManual(chip.name || `Chip ${index + 1}`)}
+          </div>
+        `;
+      }).join('');
+    }).catch((error) => {
+      console.warn('[hotfix636] render manual chips falhou:', error);
+      target.innerHTML = '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--danger,#ef4444)">Falha ao carregar chips</span>';
+    });
+  };
+
+  function parseManualValidationResult(data = {}) {
+    const item = Array.isArray(data)
+      ? data[0]
+      : (data?.data?.[0] || data?.result?.[0] || data?.numbers?.[0] || data);
+
+    const explicitFalse = item && (
+      item.exists === false ||
+      item.isWhatsapp === false ||
+      item.numberExists === false ||
+      item.exists === 'false' ||
+      item.isWhatsapp === 'false' ||
+      item.numberExists === 'false'
+    );
+
+    const exists = !!(
+      item?.exists === true ||
+      item?.isWhatsapp === true ||
+      item?.numberExists === true ||
+      item?.exists === 'true' ||
+      item?.isWhatsapp === 'true' ||
+      item?.numberExists === 'true' ||
+      item?.jid ||
+      item?.waId ||
+      item?.wa_id
+    );
+
+    return { item: item || {}, exists, definitive: exists || explicitFalse };
+  }
+
+  function setManualResult(message, type = '') {
+    const box = document.getElementById('manualValResult');
+    if (!box) return;
+    box.style.display = 'block';
+    box.style.border = `1px solid ${type === 'err' ? 'var(--danger,#ef4444)' : type === 'warn' ? 'var(--warning,#f59e0b)' : 'var(--success,#22c55e)'}`;
+    box.style.background = 'var(--surface2)';
+    box.style.color = type === 'err' ? 'var(--danger,#ef4444)' : type === 'warn' ? 'var(--warning,#f59e0b)' : 'var(--success,#22c55e)';
+    box.textContent = message;
+  }
+
+  window.validarNumeroManual = async function validarNumeroManual() {
+    const phoneInput = document.getElementById('manualLeadPhone');
+    const spinner = document.getElementById('manualValSpinner');
+    const phone = normalizeManualPhone(phoneInput?.value || '');
+
+    if (!phone || phone.length < 12) {
+      setManualResult('Número ausente ou inválido.', 'warn');
+      notifyManual('// número manual inválido', 'warn');
+      return { ok: false, invalidPhone: true };
+    }
+
+    const chips = await getManualChips();
+    window.__manualValChips = chips;
+    const chip = chips.find((item) => String(item.id) === String(window.__manualValChipId)) || chips[0];
+
+    if (!chip) {
+      setManualResult('Cadastre ou selecione um chip antes de validar.', 'warn');
+      notifyManual('// cadastre ou selecione um chip antes de validar', 'warn');
+      return { ok: false, noChip: true };
+    }
+
+    if (!chip.url || !chip.instance || !chip.key) {
+      setManualResult('Chip incompleto: URL, instância ou API key ausente.', 'err');
+      notifyManual('// chip incompleto para validação', 'err');
+      return { ok: false, chipIncomplete: true };
+    }
+
+    if (spinner) spinner.style.display = 'inline-block';
+    try {
+      const response = await fetch('/api/prospeccao/validar-numero', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numbers: [phone], chipUrl: chip.url, instance: chip.instance, apikey: chip.key })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.error) throw new Error(data?.error || data?.message || `Falha ${response.status}`);
+
+      const parsed = parseManualValidationResult(data);
+      if (!parsed.definitive) {
+        setManualResult('A Evolution respondeu sem resultado definitivo. Não aprove ainda.', 'warn');
+        return { ok: false, raw: data };
+      }
+
+      if (parsed.exists) {
+        setManualResult(`WhatsApp validado: ${phone}`, '');
+        if (phoneInput) phoneInput.value = phone;
+        return { ok: true, exists: true, phone, raw: data };
+      }
+
+      setManualResult(`Número sem WhatsApp: ${phone}`, 'warn');
+      return { ok: true, exists: false, phone, raw: data };
+    } catch (error) {
+      console.warn('[hotfix636] validação manual falhou:', error);
+      setManualResult(error?.message || 'Falha ao validar número.', 'err');
+      notifyManual(error?.message || 'Falha ao validar número.', 'err');
+      return { ok: false, error: true };
+    } finally {
+      if (spinner) spinner.style.display = 'none';
+    }
+  };
+
+  if (typeof window.adicionarLeadManual !== 'function') {
+    window.adicionarLeadManual = async function adicionarLeadManual() {
+      const nome = (document.getElementById('manualLeadNome')?.value || '').trim();
+      const phone = normalizeManualPhone(document.getElementById('manualLeadPhone')?.value || '');
+      const googleUrl = (document.getElementById('manualLeadGoogleUrl')?.value || '').trim();
+      const instagram = (document.getElementById('manualLeadInsta')?.value || '').trim();
+
+      if (!nome) {
+        notifyManual('// informe o nome da empresa', 'warn');
+        return;
+      }
+
+      const lead = {
+        id: typeof genId === 'function' ? genId() : `manual-${Date.now()}`,
+        nome,
+        company_name: nome,
+        whatsapp: phone,
+        phone,
+        instagram,
+        googleUrl,
+        google_maps_url: googleUrl,
+        ramoId: window.activeRamoId || null,
+        numStatus: phone ? 'pendente' : 'nao-aplicavel',
+        tipo: phone ? 'sem-site' : 'instagram',
+        templateType: phone ? 'sem-site' : '',
+        canal: phone ? 'pendente' : 'insta',
+        stage: phone ? 'validation' : 'instagram_backlog',
+        importadoEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0, 10),
+        sourceRaw: { source: 'manual-import-hotfix-6.36' },
+        rawPayload: { source: 'manual-import-hotfix-6.36' }
+      };
+
+      try {
+        if (phone) {
+          const list = typeof getValData === 'function' ? [...getValData(), lead] : [lead];
+          if (typeof saveValData === 'function') saveValData(list);
+        } else {
+          const list = typeof getInstaFila === 'function' ? [...getInstaFila(), lead] : [lead];
+          if (typeof saveInstaFila === 'function') saveInstaFila(list);
+        }
+        if (typeof markOperationalDataDirtyV430 === 'function') markOperationalDataDirtyV430('manual-lead');
+        if (typeof scheduleOperationalSync === 'function') scheduleOperationalSync({ delay: 0, reason: 'manual-lead' });
+        if (typeof updateBadges === 'function') updateBadges();
+        if (typeof importPreview === 'function') importPreview();
+        notifyManual(phone ? '✓ Lead manual adicionado à Validação' : '✓ Lead manual adicionado ao Instagram', '');
+      } catch (error) {
+        console.warn('[hotfix636] adicionar lead manual falhou:', error);
+        notifyManual(error?.message || 'Falha ao adicionar lead manual.', 'err');
+      }
+    };
+  }
+
+  setTimeout(() => {
+    if (document.getElementById('manualValChipTabs')) window.renderManualValChips();
+  }, 300);
+})();
