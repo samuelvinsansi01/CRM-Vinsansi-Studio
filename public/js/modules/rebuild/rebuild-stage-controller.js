@@ -2839,7 +2839,7 @@
           </div>
           <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
+        <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px">
           ${days.map((day) => {
             const active = day.iso === activeIso;
             const total = queueRowsForDispatchDate(day.iso).length;
@@ -2963,14 +2963,21 @@
     return state.chips.reduce((total, chip) => total + (Number(chip.dailyLimit || 120) || 120), 0);
   }
 
+  function operationWeekStart(date = new Date()) {
+    const base = new Date(date);
+    base.setHours(0, 0, 0, 0);
+    base.setDate(base.getDate() - base.getDay());
+    return base;
+  }
+
   function operationWeekDays() {
     const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-    return Array.from({ length: 8 }, (_, index) => {
-      const offset = index - 1;
-      const date = new Date();
-      date.setDate(date.getDate() + offset);
+    const start = operationWeekStart();
+    const todayIso = localDateISO();
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
       const iso = localDateISO(date);
-      const todayIso = localDateISO();
       return {
         iso,
         isToday: iso === todayIso,
@@ -2978,6 +2985,14 @@
         label: `${labels[date.getDay()]} ${date.getDate()}/${String(date.getMonth() + 1).padStart(2, '0')}`
       };
     });
+  }
+
+  function normalizeOperationScope(scope) {
+    if (scope === 'backlog') return 'backlog';
+    const iso = String(scope || '').slice(0, 10);
+    const days = operationWeekDays().map((day) => day.iso);
+    if (days.includes(iso)) return iso;
+    return localDateISO();
   }
 
   function operationStatusCounts(iso) {
@@ -3163,6 +3178,7 @@
     const days = operationWeekDays();
     const todayIso = localDateISO();
     if (!state.operationScope) state.operationScope = 'backlog';
+    state.operationScope = normalizeOperationScope(state.operationScope);
     const selectedScope = state.operationScope;
     const selectedDay = days.find((day) => day.iso === selectedScope);
     const isBacklog = selectedScope === 'backlog';
@@ -3188,7 +3204,7 @@
             <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="setQueueModeRebuild643('dispatch')">Ir para disparos</button>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:8px">
+        <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
           <button type="button" onclick="setQueueOperationScopeRebuild646('backlog')" style="min-width:0;text-align:left;border:1px solid ${isBacklog ? 'var(--accent)' : 'var(--border)'};border-radius:12px;background:${isBacklog ? 'rgba(182,255,75,.08)' : 'var(--surface2)'};padding:10px;cursor:pointer;color:var(--text)">
             <div style="font-size:11px;font-weight:900;color:${isBacklog ? 'var(--accent)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Backlog</div>
             <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:7px">${backlogTotal} leads</div>
@@ -3231,7 +3247,7 @@
   };
 
   window.setQueueOperationScopeRebuild646 = function setQueueOperationScopeRebuild646(scope) {
-    state.operationScope = scope === 'backlog' ? 'backlog' : String(scope || localDateISO()).slice(0, 10);
+    state.operationScope = normalizeOperationScope(scope);
     state.operationStatus = 'not_sent';
     state.operationPage = 1;
     renderOperationView();
