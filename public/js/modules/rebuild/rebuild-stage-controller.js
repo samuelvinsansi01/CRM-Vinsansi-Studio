@@ -2072,7 +2072,7 @@
       status: 'not.in.(removed)',
       order: 'scheduled_for.asc,position.asc'
     });
-    params.append('scheduled_for', `gte.${addDaysISO(0)}`);
+    params.append('scheduled_for', `gte.${addDaysISO(-1)}`);
     params.append('scheduled_for', `lte.${addDaysISO(6)}`);
 
     const response = await fetch(`${SUPABASE_URL}/rest/v1/queue_items?${params.toString()}`, {
@@ -2542,448 +2542,64 @@
       return;
     }
 
-    right.innerHTML = state.chips.map((chip, index) => {
-      const rows = state.rows.filter((row) => String(row.chipId) === String(chip.id) || String(row.chipId) === String(chip.dbId) || row.chipName === chip.name);
-      const today = rows.filter((row) => row.inTodayQueue).length;
-      const backlog = rows.length - today;
-
-      return `
-        <div class="chip-accordion open" data-slot="${index}">
-          <div class="chip-accordion-header" style="border-color:rgba(184,240,89,0.25)">
-            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
-              <span style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--accent)">CHIP ${index + 1}</span>
-              <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;">· ${esc(chip.name)}</span>
-              <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-left:auto;white-space:nowrap">${today} fila · ${backlog} backlog</span>
-            </div>
+    const today = localDateISO();
+    right.innerHTML = `
+      <div style="height:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden;width:100%">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;flex-shrink:0">
+          <div>
+            <div class="card-title" style="margin:0">Kanban dos disparos</div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// somente execução diária · alocação fica na aba Operação</div>
           </div>
-          <div class="chip-accordion-body" style="display:block">
-            <div class="chip-fila-scroll">
-              <div class="fila-items" style="display:flex;padding:10px 12px;gap:6px;flex-direction:column">
-                ${rows.length ? rows.map((row) => `
-                  <div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface2)">
-                    <div style="font-size:10px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.nome)}</div>
-                    <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px">${esc(row.inTodayQueue ? 'Fila de hoje' : 'Backlog')}</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;min-height:0;flex:1;padding-bottom:8px">
+          ${state.chips.map((chip, slot) => {
+            const rows = state.rows.filter((row) => row.inTodayQueue && chipMatchesRow(chip, row));
+            const groups = groupRowsByBatch(rows);
+            const ready = rows.filter((row) => ['queued_dispatch', 'batch_ready'].includes(row.statusRaw)).length;
+            const sending = rows.filter((row) => row.statusRaw === 'batch_sending').length;
+            const sent = rows.filter((row) => ['sent', 'completed', 'batch_completed'].includes(row.statusRaw)).length;
+            const chipLabel = chip.name || chip.nome || `Chip ${slot + 1}`;
+            const chipInstance = chip.instance || chip.numero || chip.phone || '';
+            return `
+              <section style="min-width:430px;width:430px;max-width:430px;height:100%;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden">
+                <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+                    <div style="min-width:0">
+                      <div style="font-size:12px;font-weight:900;color:var(--accent);letter-spacing:.08em">CHIP ${slot + 1}</div>
+                      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px">${esc(chipLabel)} ${chipInstance ? `· ${esc(chipInstance)}` : ''}</div>
+                    </div>
+                    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${rows.length} empresa${rows.length !== 1 ? 's' : ''}</div>
                   </div>
-                `).join('') : '<div class="fila-empty">Sem leads neste chip.</div>'}
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
-
-  function queueItemKey(row = {}) {
-    return String(row.todayRowId || row.queueItemId || row.queue_item_id || row.id || '');
-  }
-
-  function batchKeyForRow(row = {}) {
-    return row.batchId || row.batch_id || '';
-  }
-
-  function batchIndexForRow(row = {}) {
-    const raw = row.batchIndex || row.batch_index || row.batchPosition || row.batch_position || null;
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    return 0;
-  }
-
-  function groupRowsByBatch(rows = []) {
-    const ready = rows.filter((row) => row.inTodayQueue);
-    const groups = new Map();
-    ready.forEach((row, index) => {
-      const batchId = batchKeyForRow(row);
-      const batchIndex = batchIndexForRow(row);
-      const key = batchId || `sem-lote-${Math.floor(index / 30) + 1}`;
-      if (!groups.has(key)) {
-        groups.set(key, {
-          key,
-          batchId,
-          batchIndex: batchIndex || (groups.size + 1),
-          status: batchId ? (row.statusRaw || 'batch_ready') : 'queued_dispatch',
-          rows: []
-        });
-      }
-      const group = groups.get(key);
-      group.rows.push(row);
-      if (row.statusRaw === 'batch_sending') group.status = 'batch_sending';
-      if (['sent', 'completed', 'batch_completed'].includes(row.statusRaw) && group.status !== 'batch_sending') group.status = 'completed';
-    });
-    return [...groups.values()].sort((a, b) => (a.batchIndex || 0) - (b.batchIndex || 0));
-  }
-
-  function batchStatusLabel(status) {
-    if (status === 'batch_sending') return 'Em disparo';
-    if (status === 'completed' || status === 'sent' || status === 'batch_completed') return 'Concluido';
-    if (status === 'queued_dispatch') return 'Aguardando gerar lote';
-    return 'Pronto';
-  }
-
-  function getBatchImagePreview(chip, batchIndex) {
-    const chipKey = chip.id || chip.dbId || chip.name || 'chip';
-    try {
-      if (typeof getLoteImagem === 'function') return getLoteImagem(chipKey, batchIndex);
-    } catch (_) {}
-    return null;
-  }
-
-  function scheduleBatchImageLoad(chip, batchIndex, slot) {
-    const chipKey = chip.id || chip.dbId || chip.name || 'chip';
-    if (!chipKey || !batchIndex) return;
-    try {
-      if (typeof carregarImagensLote === 'function') {
-        setTimeout(() => carregarImagensLote(chipKey, batchIndex, slot, true), 40);
-      }
-    } catch (_) {}
-  }
-
-  function batchImageBox(chip, batchIndex, slot) {
-    const chipKey = chip.id || chip.dbId || chip.name || 'chip';
-    const key = `chip-${chipKey}-lote-${batchIndex}`;
-    const preview = getBatchImagePreview(chip, batchIndex);
-    const inputId = `queue-batch-img-${String(chipKey).replace(/[^a-zA-Z0-9_-]/g, '_')}-${batchIndex}`;
-    scheduleBatchImageLoad(chip, batchIndex, slot);
-    return `
-      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center">
-        <label for="${esc(inputId)}" class="fila-img-area${preview ? ' has-img' : ''}" style="min-height:74px;cursor:pointer;border:1px dashed var(--border);border-radius:10px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative">
-          <img data-lote-img-key="${esc(key)}" src="${esc(preview || '')}" alt="preview" style="${preview ? '' : 'display:none;'}max-height:74px;max-width:100%;object-fit:cover" />
-          <span class="fila-img-label" style="${preview ? 'display:none;' : ''};font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">📎 inserir imagem do lote ${esc(batchIndex)}</span>
-          <span class="fila-img-ok" style="${preview ? '' : 'display:none;'};position:absolute;right:8px;bottom:6px;font-family:'DM Mono',monospace;font-size:8px;color:var(--accent);background:rgba(0,0,0,0.55);padding:3px 6px;border-radius:999px">imagem salva</span>
-        </label>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <input id="${esc(inputId)}" type="file" accept="image/*" style="display:none" onchange="onLoteImgChange('${esc(chipKey)}', ${Number(batchIndex)}, this, true, ${Number(slot)})" />
-          <button class="add-btn" type="button" onclick="document.getElementById('${esc(inputId)}')?.click()">Imagem</button>
-          <button class="add-btn" type="button" onclick="onLoteImgRemove('${esc(chipKey)}', ${Number(batchIndex)}, true, ${Number(slot)})">Remover</button>
+                  <div style="margin-top:10px">
+                    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:6px">CHIP</div>
+                    <div style="border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);padding:9px 10px;font-size:11px;color:var(--text)">${esc(chipInstance || chipLabel)} · ${esc(chipLabel)}</div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:110px 1fr;gap:8px;margin-top:10px">
+                    <button class="btn btn-ghost" type="button" style="font-size:10px;padding:9px 10px" onclick="clearChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')">Limpar fila</button>
+                    <button class="btn btn-primary" type="button" style="font-size:11px;padding:9px 10px" onclick="dispatchChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')">🌐 Disparar</button>
+                  </div>
+                  <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">
+                    <span class="q-badge ok">${ready} prontos</span>
+                    <span class="q-badge info">${sending} disparo</span>
+                    <span class="q-badge ok">${sent} enviados</span>
+                  </div>
+                </div>
+                <div style="padding:12px;overflow:auto;min-height:0;flex:1">
+                  <div style="font-size:10px;font-weight:900;color:var(--accent);letter-spacing:.08em;margin-bottom:10px">FILA CHIP ${slot + 1}</div>
+                  ${testLeadBoxRebuild632(chip, slot)}
+                  ${groups.length
+                    ? groups.map((group) => batchBlock(chip, slot, group)).join('')
+                    : '<div class="fila-empty" style="min-height:140px">// sem lotes neste chip</div>'}
+                </div>
+              </section>
+            `;
+          }).join('')}
         </div>
       </div>
     `;
-  }
-
-  function queueRamosRebuild632() {
-    try {
-      const ramos = typeof getRamos === 'function' ? getRamos() : (typeof RAMOS_DEFAULT !== 'undefined' ? RAMOS_DEFAULT : []);
-      return Array.isArray(ramos) ? ramos.filter((ramo) => ramo && (ramo.id || ramo.nome)) : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function batchChipKey(chip = {}) {
-    return String(chip.id || chip.dbId || chip.name || chip.instance || 'chip');
-  }
-
-  function getBatchRamoIdRebuild632(chip, batchIndex) {
-    const chipKey = batchChipKey(chip);
-    try {
-      if (typeof getLoteRamo === 'function') return getLoteRamo(chipKey, batchIndex) || '';
-    } catch (_) {}
-    try {
-      const cfg = typeof v48StateGetObject === 'function' ? v48StateGetObject('vs_lote_cfg_v1') : {};
-      return cfg?.[`chip-${chipKey}-lote-${batchIndex}`]?.ramoId || '';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  function saveBatchRamoIdRebuild632(chip, batchIndex, ramoId) {
-    const chipKey = batchChipKey(chip);
-    try {
-      if (typeof setLoteRamo === 'function') {
-        setLoteRamo(chipKey, batchIndex, ramoId || null);
-        return;
-      }
-    } catch (_) {}
-    try {
-      const key = 'vs_lote_cfg_v1';
-      const cfg = typeof v48StateGetObject === 'function' ? v48StateGetObject(key) : {};
-      const obj = cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? cfg : {};
-      const itemKey = `chip-${chipKey}-lote-${batchIndex}`;
-      obj[itemKey] = { ...(obj[itemKey] || {}), ramoId: ramoId || null };
-      if (typeof v48StateSet === 'function') v48StateSet(key, obj, 'queue-batch-ramo-update');
-    } catch (_) {}
-  }
-
-  function batchRamoSelectBox(chip, batchIndex) {
-    const ramos = queueRamosRebuild632();
-    const selected = getBatchRamoIdRebuild632(chip, batchIndex);
-    const chipKey = batchChipKey(chip);
-    const options = [`<option value="">Selecionar ramo</option>`]
-      .concat(ramos.map((ramo) => `<option value="${esc(ramo.id)}" ${String(ramo.id) === String(selected) ? 'selected' : ''}>${esc(ramo.nome || ramo.name || ramo.id)}</option>`))
-      .join('');
-    return `
-      <div style="display:grid;gap:5px">
-        <label style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:.08em">RAMO DAS MENSAGENS</label>
-        <select class="input" style="height:34px;font-family:'DM Mono',monospace;font-size:10px;background:var(--surface);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:0 10px" onchange="onQueueBatchRamoChangeRebuild632('${esc(chipKey)}', ${Number(batchIndex)}, this.value)">
-          ${options}
-        </select>
-      </div>
-    `;
-  }
-
-  function pickBatchTemplateForRowRebuild632(row = {}, ramoId = '') {
-    const templateType = row.templateType || row.siteSegment || (row.site ? 'com-site' : 'sem-site');
-    let picked = { text: '', text2: '', idx: null };
-    try {
-      if (typeof pickTemplate === 'function') picked = pickTemplate(row.nome || row.company_name || 'Lead', ramoId || row.ramoId || null, templateType) || picked;
-    } catch (error) {
-      console.warn('[rebuild632] falha ao sortear template do lote:', error);
-    }
-    return {
-      template_type: templateType,
-      template_index: Number.isFinite(Number(picked.idx)) ? Number(picked.idx) : null,
-      template_part1: picked.text || '',
-      template_part2: picked.text2 || '',
-      ramoId: ramoId || row.ramoId || null
-    };
-  }
-
-  async function persistQueueTemplateRebuild632(row = {}, payload = {}) {
-    const queueId = row.todayRowId || row.queueItemId || row.id;
-    if (!queueId || String(queueId).startsWith('test_')) return;
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/queue_items?id=eq.${encodeURIComponent(queueId)}`, {
-      method: 'PATCH',
-      headers: await getHeaders(true),
-      body: JSON.stringify({
-        template_type: payload.template_type,
-        template_index: payload.template_index,
-        template_part1: payload.template_part1,
-        template_part2: payload.template_part2,
-        updated_at: new Date().toISOString()
-      })
-    });
-    const data = await readJson(response);
-    if (!response.ok) throw data || new Error(`Falha ao salvar template do lote (${response.status}).`);
-  }
-
-  window.onQueueBatchRamoChangeRebuild632 = async function onQueueBatchRamoChangeRebuild632(chipKey, batchIndex, ramoId) {
-    const chip = state.chips.find((item) => String(batchChipKey(item)) === String(chipKey)) || { id: chipKey };
-    saveBatchRamoIdRebuild632(chip, batchIndex, ramoId || '');
-    const rows = state.rows.filter((row) => row.inTodayQueue && chipMatchesRow(chip, row) && Number(batchIndexForRow(row) || 1) === Number(batchIndex));
-    if (!rows.length) {
-      if (typeof notify === 'function') notify('Ramo salvo para o lote. Gere ou atualize os lotes para aplicar aos leads.', 'warn');
-      renderRightPanel();
-      return;
-    }
-    let updated = 0;
-    for (const row of rows) {
-      if (['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw)) continue;
-      const payload = pickBatchTemplateForRowRebuild632(row, ramoId);
-      row.ramoId = ramoId || null;
-      row.templateType = payload.template_type;
-      row.siteSegment = payload.template_type;
-      row.templateIdx = payload.template_index;
-      row.mensagem = payload.template_part1;
-      row.mensagem2 = payload.template_part2;
-      try {
-        await persistQueueTemplateRebuild632(row, payload);
-        updated++;
-      } catch (error) {
-        console.warn('[rebuild632] falha ao persistir template do lead:', row.id, error);
-      }
-    }
-    publishQueueLeads(state.rows);
-    renderRightPanel();
-    if (typeof notify === 'function') notify(updated ? `Ramo aplicado em ${updated} lead(s) do lote.` : 'Ramo salvo, mas nenhum lead editavel foi atualizado.', updated ? '' : 'warn');
-  };
-
-  function testLeadBoxRebuild632(chip, slot) {
-    const chipKey = batchChipKey(chip);
-    return `
-      <details style="border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,0.015);padding:9px;margin-bottom:10px">
-        <summary style="cursor:pointer;font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);font-weight:800;letter-spacing:.08em">+ LEAD TESTE</summary>
-        <div style="display:grid;gap:7px;margin-top:8px">
-          <input class="input" id="queueTestName${Number(slot)}" placeholder="Nome do teste" value="Lead teste" style="height:32px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:0 9px" />
-          <input class="input" id="queueTestPhone${Number(slot)}" placeholder="WhatsApp para teste. Ex: 5511999999999" style="height:32px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:0 9px" />
-          <textarea class="input" id="queueTestMessage${Number(slot)}" placeholder="Mensagem opcional. Se vazio, usa o template do ramo selecionado." style="min-height:54px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 9px"></textarea>
-          <button class="add-btn added" type="button" onclick="addQueueTestLeadRebuild632('${esc(chipKey)}', ${Number(slot)})">Adicionar teste visual</button>
-          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.45">Esse lead não entra no banco e não conta nos 30. Use para conferir mensagem antes de disparar para leads reais.</div>
-        </div>
-      </details>
-    `;
-  }
-
-  window.addQueueTestLeadRebuild632 = function addQueueTestLeadRebuild632(chipKey, slot) {
-    const chip = state.chips.find((item) => String(batchChipKey(item)) === String(chipKey));
-    if (!chip) {
-      if (typeof notify === 'function') notify('Chip do teste nao encontrado.', 'err');
-      return;
-    }
-    const name = String(document.getElementById(`queueTestName${Number(slot)}`)?.value || 'Lead teste').trim() || 'Lead teste';
-    let phone = String(document.getElementById(`queueTestPhone${Number(slot)}`)?.value || '').replace(/\D+/g, '');
-    if (phone && !phone.startsWith('55') && (phone.length === 10 || phone.length === 11)) phone = `55${phone}`;
-    if (!phone || phone.length < 12) {
-      if (typeof notify === 'function') notify('Informe um WhatsApp valido para o teste.', 'warn');
-      return;
-    }
-    const ramoId = getBatchRamoIdRebuild632(chip, 1) || (queueRamosRebuild632()[0]?.id || null);
-    const custom = String(document.getElementById(`queueTestMessage${Number(slot)}`)?.value || '').trim();
-    const temp = {
-      id: `test_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      nome: name,
-      empresa: name,
-      company_name: name,
-      whatsapp: phone,
-      phone,
-      telefone: phone,
-      normalized_phone: phone,
-      site: '',
-      website: '',
-      hasOwnSite: false,
-      chipId: chip.id,
-      chipName: chip.name,
-      chipInstance: chip.instance,
-      statusRaw: 'queued_dispatch',
-      status: 'queued_dispatch',
-      inTodayQueue: true,
-      testDispatchLead: true,
-      temporaryLead: true,
-      queueItemId: `test_${Date.now()}`,
-      todayRowId: '',
-      batchId: `teste-${batchChipKey(chip)}`,
-      batchIndex: 1,
-      batchPosition: 0,
-      templateType: 'sem-site',
-      siteSegment: 'sem-site',
-      ramoId
-    };
-    const picked = pickBatchTemplateForRowRebuild632(temp, ramoId);
-    temp.templateIdx = picked.template_index;
-    temp.mensagem = custom || picked.template_part1 || 'Mensagem de teste.';
-    temp.mensagem2 = picked.template_part2 || '';
-    state.rows = state.rows.filter((row) => !(row.testDispatchLead && chipMatchesRow(chip, row))).concat(temp);
-    publishQueueLeads(state.rows);
-    renderRightPanel();
-    if (typeof notify === 'function') notify('Lead teste adicionado visualmente. Ele nao conta no lote real.');
-  };
-
-  function leadMessageAccordion(row = {}) {
-    const itemKey = queueItemKey(row);
-    const detailId = `queue-msg-${itemKey}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const msg1 = row.mensagem || '';
-    const msg2 = row.mensagem2 || '';
-    const templateName = Number.isFinite(Number(row.templateIdx)) ? `Template ${Number(row.templateIdx) + 1}` : 'Template sorteado';
-    const hasMessage = !!(msg1 || msg2);
-    const phone = row.whatsapp || row.phone || 'Sem WhatsApp';
-    const locked = ['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw);
-    const actions = locked
-      ? `<span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>`
-      : `<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`;
-
-    return `
-      <div class="empresa-card queue-lead-accordion" data-lead-id="${esc(row.id)}" style="margin-bottom:7px;display:block;padding:0;overflow:hidden">
-        <button type="button" onclick="toggleBatchLeadDetailsRebuild631('${esc(detailId)}')" style="width:100%;border:0;background:transparent;color:inherit;text-align:left;padding:11px 13px;cursor:pointer;display:flex;gap:10px;align-items:flex-start">
-          <div style="flex:1;min-width:0">
-            <div class="empresa-nome" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.nome)}</div>
-            <div class="empresa-meta" style="margin-top:5px">
-              <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
-              <span class="q-badge info">${esc(templateTypeLabel(row))}</span>
-              <span class="q-badge ${hasMessage ? 'ok' : 'warn'}">${hasMessage ? 'Mensagem sorteada' : 'Sem mensagem'}</span>
-              <span class="empresa-phone">${esc(phone)}</span>
-              ${row.site ? `<span class="empresa-site">${esc(row.site)}</span>` : ''}
-            </div>
-          </div>
-          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding-top:3px">▼</div>
-        </button>
-        <div id="${esc(detailId)}" style="display:none;border-top:1px solid var(--border);padding:10px 13px;background:rgba(255,255,255,0.015)">
-          <div style="display:flex;gap:7px;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);font-weight:700">${esc(templateName)}</span>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-              <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
-              ${actions}
-            </div>
-          </div>
-          <div style="display:grid;gap:8px">
-            <div>
-              <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">MENSAGEM 1</div>
-              <pre style="white-space:pre-wrap;margin:0;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface);font-family:'DM Mono',monospace;font-size:9px;line-height:1.45;color:var(--text)">${esc(msg1 || '// mensagem ainda não sorteada')}</pre>
-            </div>
-            <div>
-              <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px">MENSAGEM 2</div>
-              <pre style="white-space:pre-wrap;margin:0;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--surface);font-family:'DM Mono',monospace;font-size:9px;line-height:1.45;color:var(--text)">${esc(msg2 || '// sem segunda parte')}</pre>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  function batchBlock(chip, slot, group) {
-    const batchIndex = group.batchIndex || 1;
-    const status = batchStatusLabel(group.status);
-    const imageBox = group.batchId ? batchImageBox(chip, batchIndex, slot) : '';
-    const ramoBox = group.batchId ? batchRamoSelectBox(chip, batchIndex) : '';
-    const isTestBatch = String(group.batchId || '').startsWith('teste-');
-    const batchAction = isTestBatch
-      ? '<span class="q-badge warn">Teste visual</span>'
-      : group.batchId
-        ? (group.status === 'batch_sending'
-          ? `<button class="add-btn added" type="button" data-batch622-id="${esc(group.batchId)}" onclick="completeDispatchBatchRebuild622('${esc(group.batchId)}')">Concluir lote</button>`
-          : `<button class="add-btn added" type="button" data-batch622-id="${esc(group.batchId)}" onclick="startDispatchBatchRebuild622('${esc(group.batchId)}')">Disparar lote</button>`)
-        : '<span class="q-badge warn">Clique em Gerar lotes</span>';
-
-    return `
-      <div class="queue-batch-block" style="border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:10px;margin-bottom:10px">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.08em">LOTE ${esc(batchIndex)}</div>
-            <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:2px">${esc(group.rows.length)} lead${group.rows.length !== 1 ? 's' : ''} · ${esc(status)}${group.batchId ? ` · ${esc(group.batchId)}` : ''}</div>
-          </div>
-          ${batchAction}
-        </div>
-        <div style="display:grid;grid-template-columns:minmax(190px,.75fr) 1fr;gap:10px;align-items:end;margin:8px 0 10px">
-          ${ramoBox}
-          ${imageBox}
-        </div>
-        <div>${group.rows.map(leadMessageAccordion).join('')}</div>
-      </div>
-    `;
-  }
-
-  function renderRightPanel() {
-    const right = document.getElementById('zapRight');
-    if (!right) return;
-
-    if (!state.chips.length) {
-      right.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum chip ativo encontrado</div>`;
-      return;
-    }
-
-    if (typeof window.renderChipAccordions === 'function') {
-      window.renderChipAccordions();
-    } else if (typeof renderChipAccordions === 'function') {
-      renderChipAccordions();
-    }
-
-    state.chips.forEach((chip, slot) => {
-      const rows = state.rows.filter((row) => row.inTodayQueue && chipMatchesRow(chip, row));
-      const groups = groupRowsByBatch(rows);
-      const countEl = document.getElementById(`filaCount${slot}`);
-      if (countEl) countEl.textContent = `(${rows.length} empresa${rows.length !== 1 ? 's' : ''})`;
-
-      const infoEl = document.getElementById(`chip${slot + 1}Info`);
-      if (infoEl) infoEl.textContent = `${chip.name || chip.nome || 'Chip'} · ${chip.instance || ''}`;
-
-      const labelEl = document.getElementById(`chip${slot + 1}Label`);
-      if (labelEl) labelEl.textContent = `· ${chip.name || chip.nome || 'Chip'}`;
-
-      const emptyEl = document.getElementById(`filaVazia${slot}`);
-      const itemsEl = document.getElementById(`filaItens${slot}`);
-      if (!itemsEl) return;
-
-      if (!rows.length) {
-        if (emptyEl) emptyEl.style.display = 'block';
-        itemsEl.style.display = 'none';
-        itemsEl.innerHTML = '';
-        return;
-      }
-
-      if (emptyEl) emptyEl.style.display = 'none';
-      itemsEl.style.display = 'block';
-      const testBox = testLeadBoxRebuild632(chip, slot);
-      itemsEl.innerHTML = groups.length
-        ? testBox + groups.map((group) => batchBlock(chip, slot, group)).join('')
-        : testBox + '<div class="fila-empty">Sem lotes neste chip.</div>';
-    });
   }
 
   window.toggleBatchLeadDetailsRebuild631 = function toggleBatchLeadDetailsRebuild631(id) {
@@ -3014,78 +2630,132 @@
     return state.chips.reduce((total, chip) => total + (Number(chip.dailyLimit || 120) || 120), 0);
   }
 
+  function operationWeekDays() {
+    const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    return Array.from({ length: 8 }, (_, index) => {
+      const offset = index - 1;
+      const date = new Date();
+      date.setDate(date.getDate() + offset);
+      const iso = localDateISO(date);
+      const todayIso = localDateISO();
+      return {
+        iso,
+        isToday: iso === todayIso,
+        isPast: iso < todayIso,
+        label: `${labels[date.getDay()]} ${date.getDate()}/${String(date.getMonth() + 1).padStart(2, '0')}`
+      };
+    });
+  }
+
+  function operationStatusCounts(iso) {
+    const todayIso = localDateISO();
+    const rows = rowsForWeekDate(iso);
+    const sentRows = rows.filter((row) => ['sent', 'completed', 'batch_completed'].includes(row.statusRaw) || row.completedAt || row.mediaSentAt);
+    const sendingRows = rows.filter((row) => row.statusRaw === 'batch_sending' || row.dispatchStartedAt);
+    const queuedRows = rows.filter((row) => ['batch_ready'].includes(row.statusRaw));
+    const notSentRows = rows.filter((row) => ['queued_dispatch'].includes(row.statusRaw));
+    const respondedRows = rows.filter((row) => row.respondedAt || row.response_at || row.hasResponse || row.replied_at);
+    const refusedRows = rows.filter((row) => ['refused', 'recused', 'declined'].includes(String(row.current_status || row.statusRaw || '').toLowerCase()));
+    const closedRows = rows.filter((row) => ['closed', 'won', 'fechado'].includes(String(row.current_status || row.statusRaw || '').toLowerCase()));
+    const isPast = iso < todayIso;
+    const sent = sentRows.length;
+    const responded = respondedRows.length;
+    return {
+      isPast,
+      notSent: isPast ? null : notSentRows.length,
+      queued: isPast ? null : queuedRows.length,
+      sending: sendingRows.length,
+      sent,
+      responded,
+      notResponded: Math.max(0, sent - responded),
+      refused: refusedRows.length,
+      closed: closedRows.length,
+      total: rows.length
+    };
+  }
+
   function renderOperationView() {
     const content = document.getElementById('queueOperationContent');
     if (!content) return;
-    const backlogCount = state.rows.filter((row) => !row.inTodayQueue).length;
-    const totalCapacity = chipCapacity();
-    const days = queueWeekDays();
-    const todayRows = rowsForWeekDate(localDateISO());
-    const queued = todayRows.filter((row) => ['queued_dispatch', 'batch_ready'].includes(row.statusRaw)).length;
-    const sending = todayRows.filter((row) => row.statusRaw === 'batch_sending').length;
-    const sent = todayRows.filter((row) => ['sent', 'completed', 'batch_completed'].includes(row.statusRaw)).length;
-    const errors = todayRows.filter((row) => row.statusRaw === 'error').length;
+    const days = operationWeekDays();
+    const todayIso = localDateISO();
+    if (!state.selectedOperationDate || !days.some((day) => day.iso === state.selectedOperationDate)) {
+      state.selectedOperationDate = todayIso;
+    }
+    const selectedDay = days.find((day) => day.iso === state.selectedOperationDate) || days[1] || days[0];
+    const selectedCounts = operationStatusCounts(selectedDay.iso);
+
+    const statusRows = [
+      ...(selectedCounts.isPast ? [] : [
+        ['Não enviada', selectedCounts.notSent || 0, 'warn'],
+        ['Em fila', selectedCounts.queued || 0, 'info']
+      ]),
+      ['Enviada', selectedCounts.sent || 0, 'ok'],
+      ['Respondida', selectedCounts.responded || 0, 'ok'],
+      ['Não respondida', selectedCounts.notResponded || 0, 'warn'],
+      ['Recusada', selectedCounts.refused || 0, 'err'],
+      ['Fechada', selectedCounts.closed || 0, 'ok']
+    ];
 
     content.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;flex-shrink:0">
-        <div class="card" style="margin:0;padding:13px"><div class="card-title">Backlog</div><div style="font-size:24px;font-weight:800;color:var(--text)">${backlogCount}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">leads disponíveis</div></div>
-        <div class="card" style="margin:0;padding:13px"><div class="card-title">Hoje</div><div style="font-size:24px;font-weight:800;color:var(--accent)">${todayRows.length}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">alocados / ${totalCapacity || 0}</div></div>
-        <div class="card" style="margin:0;padding:13px"><div class="card-title">Chips</div><div style="font-size:24px;font-weight:800;color:var(--text)">${state.chips.length}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">ativos na fila</div></div>
-        <div class="card" style="margin:0;padding:13px"><div class="card-title">Status hoje</div><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="q-badge ok">${queued} fila</span><span class="q-badge info">${sending} disparo</span><span class="q-badge ok">${sent} enviados</span>${errors ? `<span class="q-badge err">${errors} erro</span>` : ''}</div></div>
-      </div>
-      <div class="card" style="margin:0;padding:14px;flex-shrink:0">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
-          <div class="card-title" style="margin:0">Próximos 7 dias</div>
+      <div class="card" style="margin:0;padding:16px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <div>
+            <div class="card-title" style="margin:0">Agenda semanal</div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// planejamento diário · virada do dia devolve não enviadas e fila ao backlog</div>
+          </div>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
             <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
             <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="setQueueModeRebuild643('dispatch')">Ir para disparos</button>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;overflow:auto;padding-bottom:2px">
+        <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">
           ${days.map((day) => {
-            const rows = rowsForWeekDate(day.iso);
-            const pct = totalCapacity ? Math.min(100, Math.round((rows.length / totalCapacity) * 100)) : 0;
-            const chipsWithRows = state.chips.filter((chip) => rows.some((row) => chipMatchesRow(chip, row))).length;
+            const counts = operationStatusCounts(day.iso);
+            const active = day.iso === selectedDay.iso;
             return `
-              <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:11px;min-width:120px">
+              <button type="button" onclick="setQueueOperationDateRebuild645('${esc(day.iso)}')" style="min-width:132px;text-align:left;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};border-radius:13px;background:${active ? 'rgba(182,255,75,.08)' : 'var(--surface2)'};padding:11px;cursor:pointer;color:var(--text)">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                  <div style="font-size:12px;font-weight:800;color:${day.iso === localDateISO() ? 'var(--accent)' : 'var(--text)'}">${esc(day.label)}</div>
-                  <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${esc(day.caption)}</div>
+                  <span style="font-size:12px;font-weight:900;color:${day.isToday ? 'var(--accent)' : 'var(--text)'}">${esc(day.label)}${day.isToday ? ' ●' : ''}</span>
                 </div>
-                <div style="font-size:22px;font-weight:800;color:var(--text);margin-top:7px">${rows.length}</div>
-                <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">de ${totalCapacity || 0} capacidade</div>
-                <div style="height:5px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:9px"><div style="width:${pct}%;height:100%;background:var(--accent)"></div></div>
-                <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:7px">${chipsWithRows}/${state.chips.length || 0} chips com leads</div>
-              </div>
+                <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:8px">${counts.total} itens no dia</div>
+              </button>
             `;
           }).join('')}
         </div>
       </div>
-      <div class="card" style="margin:0;padding:14px;min-height:0;flex:1;overflow:auto">
-        <div class="card-title">Alocação por chip hoje</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
-          ${state.chips.map((chip, index) => {
-            const rows = todayRows.filter((row) => chipMatchesRow(chip, row));
-            const ready = rows.filter((row) => row.statusRaw === 'batch_ready').length;
-            const sendingChip = rows.filter((row) => row.statusRaw === 'batch_sending').length;
-            const sentChip = rows.filter((row) => ['sent','completed','batch_completed'].includes(row.statusRaw)).length;
-            return `
-              <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:12px">
-                <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
-                  <div>
-                    <div style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.08em">CHIP ${index + 1}</div>
-                    <div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">${esc(chip.name || chip.nome || 'Chip')}</div>
-                  </div>
-                  <span class="q-badge ${rows.length ? 'ok' : 'warn'}">${rows.length}/${Number(chip.dailyLimit || 120) || 120}</span>
-                </div>
-                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px"><span class="q-badge ok">${ready} prontos</span><span class="q-badge info">${sendingChip} disparo</span><span class="q-badge ok">${sentChip} enviados</span></div>
-              </div>
-            `;
-          }).join('') || '<div class="fila-empty">// nenhum chip ativo</div>'}
+
+      <div class="card" style="margin:0;padding:16px;flex:1;min-height:0;overflow:auto">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <div class="card-title" style="margin:0">${esc(selectedDay.label)}${selectedDay.isToday ? ' · hoje' : ''}</div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">${selectedCounts.isPast ? '// histórico do dia' : '// operação do dia selecionado'}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">
+          ${statusRows.map(([label, value, tone]) => `
+            <div style="border:1px solid var(--border);border-radius:14px;background:var(--surface2);padding:14px">
+              <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">${esc(label)}</div>
+              <div style="font-size:28px;font-weight:900;color:${tone === 'ok' ? 'var(--accent)' : tone === 'err' ? 'var(--error)' : 'var(--text)'};margin-top:8px">${value}</div>
+            </div>
+          `).join('')}
         </div>
       </div>
     `;
   }
+
+  window.setQueueOperationDateRebuild645 = function setQueueOperationDateRebuild645(iso) {
+    state.selectedOperationDate = String(iso || localDateISO()).slice(0, 10);
+    renderOperationView();
+  };
+
+  window.clearChipQueueRebuild643 = function clearChipQueueRebuild643() {
+    if (typeof notify === 'function') notify('Limpar fila por chip ainda não foi executado aqui. Use voltar backlog por lead/lote enquanto finalizamos essa ação.', 'warn');
+  };
+
+  window.dispatchChipQueueRebuild643 = function dispatchChipQueueRebuild643() {
+    if (typeof notify === 'function') notify('Disparo por chip usa os lotes abaixo. Abra o lote e use Disparar lote.', 'warn');
+  };
 
   function renderQueueView() {
     renderQueueModeTabs();
