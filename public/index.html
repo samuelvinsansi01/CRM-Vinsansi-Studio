@@ -1530,6 +1530,104 @@
 })();
 </script>
 
+
+<script>
+(function(){
+  const PANEL_ALIASES_FINAL = {
+    responses:'inbox', inbox:'inbox', caixa:'inbox',
+    import:'importar', imports:'importar', importar:'importar',
+    validation:'validacao', validacao:'validacao', assignment:'validacao', atribuicao:'validacao',
+    archived:'arquivados', arquivados:'arquivados',
+    base:'base-permanente', permanentBase:'base-permanente', 'base-permanente':'base-permanente',
+    whatsappQueue:'fila-zap', whatsapp:'fila-zap', 'fila-zap':'fila-zap',
+    instagram:'instagram', templates:'templates', template:'templates', templatesConfig:'templates',
+    conversations:'conversations', conversas:'conversations',
+    kanban:'kanban', followups:'followups', acompanhamento:'acompanhamento',
+    protection:'protecao', protecao:'protecao', 'proteção':'protecao',
+    domains:'dominios', dominios:'dominios', redirects:'redirecionamentos', redirecionamentos:'redirecionamentos',
+    audit:'audit', auditoria:'audit', auditorias:'audit',
+    configuracoes:'configuracoes', settings:'configuracoes', conta:'conta', account:'conta', inicio:'inicio', home:'inicio'
+  };
+  const PANELS_FINAL = ['inicio','inbox','importar','validacao','arquivados','base-permanente','fila-zap','instagram','templates','conversations','kanban','followups','acompanhamento','protecao','dominios','configuracoes','redirecionamentos','audit','conta'];
+  const LABEL_TO_PANEL_FINAL = {
+    'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Arquivados':'arquivados','Base Permanente':'base-permanente',
+    'WhatsApp':'fila-zap','Fila WhatsApp':'fila-zap','Instagram':'instagram','Templates':'templates','Conversas':'conversations',
+    'Kanban':'kanban','Follow Up':'followups','Follow-ups':'followups','Acompanhamento':'acompanhamento','Proteção':'protecao','Protecao':'protecao',
+    'Domínios Bloqueados':'dominios','Dominios Bloqueados':'dominios','Configurações':'configuracoes','Configuracoes':'configuracoes',
+    'Redirecionamentos':'redirecionamentos','Auditorias':'audit','Auditoria':'audit','Minha conta':'conta','Minha Conta':'conta'
+  };
+  function safeCall(fnName, ...args){
+    try {
+      const fn = window[fnName];
+      if (typeof fn === 'function') return fn.apply(window, args);
+    } catch (error) { console.error(`[router-final] erro em ${fnName}`, error); }
+    return undefined;
+  }
+  function renderPanelFinal(name){
+    if (name === 'inicio') safeCall('renderInicio');
+    if (name === 'inbox') { safeCall('renderInbox'); safeCall('fetchEvolutionResponsesV34', { silent:true }); }
+    if (name === 'importar') safeCall('renderImportarPanel');
+    if (name === 'validacao') { safeCall('renderValidacao'); setTimeout(() => safeCall('renderValidationStageFromSupabase'), 80); }
+    if (name === 'arquivados') safeCall('renderArquivados');
+    if (name === 'base-permanente') safeCall('renderLeadBasePanel');
+    if (name === 'fila-zap') safeCall('renderFilaZap');
+    if (name === 'instagram') safeCall('renderInstagram');
+    if (name === 'templates') { safeCall('renderTemplatesPanelV656') || (safeCall('renderTemplatesConfig'), safeCall('renderInstaTemplatesConfig')); }
+    if (name === 'conversations') { safeCall('renderConversations'); safeCall('fetchEvolutionResponsesV34', { silent:true }); }
+    if (name === 'kanban') safeCall('renderKanban');
+    if (name === 'followups') safeCall('renderFollowups');
+    if (name === 'acompanhamento') safeCall('renderAcompanhamento');
+    if (name === 'protecao') { safeCall('renderProtecao'); safeCall('loadContactSuppressionEntriesV629'); }
+    if (name === 'dominios') safeCall('renderExcluidos');
+    if (name === 'configuracoes') { safeCall('renderConfiguracoes'); safeCall('renderWebhookUrlV34'); }
+    if (name === 'redirecionamentos') safeCall('renderRedirecionamentos');
+    if (name === 'audit') safeCall('renderAuditV35');
+    if (name === 'conta') safeCall('renderMinhaConta');
+    safeCall('updateBadges');
+  }
+  function setActivePanelFinal(name){
+    document.querySelectorAll('.panel').forEach(panel => panel.classList.toggle('active', panel.id === `panel-${name}`));
+    document.querySelectorAll('.nav-item').forEach(item => {
+      const label = item.getAttribute('data-label') || '';
+      item.classList.toggle('active', LABEL_TO_PANEL_FINAL[label] === name);
+    });
+    const activeNav = [...document.querySelectorAll('.nav-item.active')][0];
+    if (activeNav) {
+      const group = activeNav.closest('details.menu-group-final');
+      if (group) {
+        document.querySelectorAll('details.menu-group-final').forEach(d => { if (d !== group) d.open = false; });
+        group.open = true;
+      }
+    }
+  }
+  function switchPanelFinal(name, options = {}){
+    const normalized = PANEL_ALIASES_FINAL[String(name || '').trim()] || String(name || 'inicio').trim() || 'inicio';
+    const panel = PANELS_FINAL.includes(normalized) ? normalized : 'inicio';
+    setActivePanelFinal(panel);
+    renderPanelFinal(panel);
+    if (options.persist !== false) {
+      try { sessionStorage.setItem('vs_active_panel_v434', panel); } catch(e) {}
+    }
+    return panel;
+  }
+  switchPanelFinal.__routerFinal658 = true;
+  window.switchPanel = switchPanelFinal;
+  window.restoreLastActivePanelV434 = function restoreLastActivePanelFinal(){
+    let panel = 'inicio';
+    try {
+      const saved = sessionStorage.getItem('vs_active_panel_v434') || '';
+      panel = PANEL_ALIASES_FINAL[saved] || saved || 'inicio';
+    } catch(e) {}
+    return switchPanelFinal(panel, { persist:false });
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      try { window.restoreLastActivePanelV434(); } catch(e) { switchPanelFinal('inicio', { persist:false }); }
+    }, 120);
+  });
+})();
+</script>
+
 </body>
 </html>
 

@@ -116,6 +116,9 @@ export default async function handler(req, res) {
   // derrubar a navegação do CRM. Se auth/env/tabela falhar, devolve lista vazia.
   if (req.method === 'GET') {
     try {
+      if (!SUPABASE_SECRET_KEY && !SUPABASE_SERVICE_ROLE_KEY) {
+        return res.status(200).json({ success:true, maps:[], warning:'service key ausente' });
+      }
       let userId = getUserId(req, body);
       try { userId = await verifyRequestUser(req, userId); } catch (authError) {
         console.warn('[contact-map:get] auth indisponível; usando user_id informado como fallback seguro de leitura vazia se necessário', authError?.message || authError);
