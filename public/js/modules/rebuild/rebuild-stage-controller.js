@@ -2647,15 +2647,14 @@
           ${batchConfigBlock(chip, slot, group)}
           ${group.rows.map((row, index) => `
             <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:10px;margin-bottom:8px">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer" onclick="toggleBatchLeadDetailsRebuild631('lead-${esc(batchDomId)}-${index}')">
-                <div style="min-width:0">
-                  <div style="font-size:12px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.nome || row.company_name || 'Lead')}</div>
-                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px">
-                    <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${esc(row.whatsapp || row.phone || '')}</span>
-                    <span class="q-badge ${templateTypeLabel(row) === 'Com site' ? 'info' : 'warn'}">${esc(templateTypeLabel(row))}</span>
-                  </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;min-width:0" onclick="toggleBatchLeadDetailsRebuild631('lead-${esc(batchDomId)}-${index}')">
+                <div style="min-width:0;flex:1 1 auto;overflow:hidden">
+                  <div style="font-size:12px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(row.nome || row.company_name || 'Lead')}</div>
                 </div>
-                <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
+                <div style="flex:0 0 auto;display:flex;align-items:center;gap:6px;white-space:nowrap">
+                  <span class="q-badge ${templateTypeLabel(row) === 'Com site' ? 'info' : 'warn'}">${esc(templateTypeLabel(row))}</span>
+                  <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
+                </div>
               </div>
               <div id="lead-${esc(batchDomId)}-${index}" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
                 <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:6px">Mensagem 1</div>
