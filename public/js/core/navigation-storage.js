@@ -101,6 +101,13 @@ function switchPanel(name, options = {}) {
   if (name==='acompanhamento') renderAcompanhamento();
   if (name==='protecao' && typeof renderProtecao === 'function') renderProtecao();
   if (name==='dominios' && typeof renderExcluidos === 'function') renderExcluidos();
+  if (name==='redirecionamentos') {
+    // Painel estático com formulários; mantém hook caso exista render futuro.
+    if (typeof renderRedirecionamentos === 'function') renderRedirecionamentos();
+  }
+  if (name==='audit') {
+    if (typeof renderAuditV35 === 'function') renderAuditV35();
+  }
   if (name==='conta')          renderMinhaConta();
   if (name==='configuracoes')  {
     renderConfiguracoes();

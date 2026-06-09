@@ -109,10 +109,31 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-supabase-user-id');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ success:false, error:'Method not allowed' });
+
+  const body = parseRequestBody(req);
+
+  // A listagem de mapas é auxiliar para Conversas/Caixa de Entrada. Ela nunca deve
+  // derrubar a navegação do CRM. Se auth/env/tabela falhar, devolve lista vazia.
+  if (req.method === 'GET') {
+    try {
+      let userId = getUserId(req, body);
+      try { userId = await verifyRequestUser(req, userId); } catch (authError) {
+        console.warn('[contact-map:get] auth indisponível; usando user_id informado como fallback seguro de leitura vazia se necessário', authError?.message || authError);
+      }
+      if (!userId) return res.status(200).json({ success:true, maps:[], warning:'user_id ausente' });
+      const maps = await listMaps(userId).catch(error => {
+        console.warn('[contact-map:get] falha ao listar mapas; retornando vazio', error?.message || error);
+        return [];
+      });
+      return res.status(200).json({ success:true, maps });
+    } catch (error) {
+      console.warn('[contact-map:get] fallback vazio', error?.message || error);
+      return res.status(200).json({ success:true, maps:[], warning:error?.message || 'contact-map indisponível' });
+    }
+  }
+
   try {
-    const body = parseRequestBody(req);
     const userId = await verifyRequestUser(req, getUserId(req, body));
-    if (req.method === 'GET') return res.status(200).json({ success:true, maps: await listMaps(userId) });
     const lid = normalizePhone(body.lid || body.phone_lid || body.remote_jid || '');
     const leadId = String(body.lead_id || body.leadId || '').trim();
     const phoneReal = normalizePhone(body.phone_real || body.phoneReal || body.phone || '');
@@ -126,7 +147,7 @@ export default async function handler(req, res) {
     const updatedMessages = await updateExistingMessages({ userId, lid, leadId: lead.id });
     return res.status(200).json({ success:true, map, updatedMessages });
   } catch (error) {
-    console.error('[contact-map]', error);
+    console.error('[contact-map:post]', error);
     return res.status(500).json({ success:false, error:error?.message || 'erro interno' });
   }
 }
