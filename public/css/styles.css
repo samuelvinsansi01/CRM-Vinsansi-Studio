@@ -3166,3 +3166,34 @@ body.auth-locked .app{
   .protection-layout{grid-template-columns:1fr}
   .protection-list{max-height:none}
 }
+
+/* Hotfix 6.46 — Fila WhatsApp full-width com conteúdo abaixo do título */
+#panel-fila-zap.active{
+  flex-direction:column !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  height:100vh !important;
+}
+#panel-fila-zap .page-header{
+  width:100% !important;
+  box-sizing:border-box !important;
+  margin-bottom:0 !important;
+}
+#queueOperationView,
+#queueDispatchView{
+  width:100% !important;
+  box-sizing:border-box !important;
+}
+#queueOperationContent{
+  width:100% !important;
+}
+#queueDispatchView .zapRight{
+  width:100% !important;
+  height:100% !important;
+  background:transparent !important;
+}
+@media (max-width: 1100px){
+  #queueOperationContent [style*="repeat(8"]{
+    grid-template-columns:repeat(4,minmax(0,1fr)) !important;
+  }
+}

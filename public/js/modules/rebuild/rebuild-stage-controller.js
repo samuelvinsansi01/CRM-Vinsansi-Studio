@@ -2533,6 +2533,86 @@
     list.innerHTML = rows.map(rowCard).join('');
   }
 
+  function groupRowsByBatch(rows = []) {
+    const groups = new Map();
+    rows.forEach((row, index) => {
+      const batchId = row.batchId || row.batch_id || row.dispatchBatchId || row.dispatch_batch_id || 'sem-lote';
+      if (!groups.has(batchId)) {
+        groups.set(batchId, {
+          id: String(batchId),
+          batchId: String(batchId),
+          batchIndex: row.batchIndex || row.batch_index || (groups.size + 1),
+          statusRaw: row.statusRaw || row.status || 'queued_dispatch',
+          rows: []
+        });
+      }
+      const group = groups.get(batchId);
+      group.rows.push(row);
+      if (row.statusRaw === 'batch_sending') group.statusRaw = 'batch_sending';
+      if (['sent', 'completed', 'batch_completed'].includes(row.statusRaw) && group.statusRaw !== 'batch_sending') group.statusRaw = row.statusRaw;
+    });
+    return [...groups.values()].sort((a, b) => Number(a.batchIndex || 0) - Number(b.batchIndex || 0));
+  }
+
+  function batchStatusLabel(raw = '') {
+    if (raw === 'batch_sending') return 'Em disparo';
+    if (['sent', 'completed', 'batch_completed'].includes(raw)) return 'Concluído';
+    return 'Pronto';
+  }
+
+  function batchBlock(chip, slot, group) {
+    const batchDomId = `batch-${slot}-${String(group.batchId).replace(/[^a-zA-Z0-9_-]/g, '')}`;
+    const label = group.batchId === 'sem-lote' ? 'Sem lote' : `Lote ${group.batchIndex || 1}`;
+    return `
+      <div style="border:1px solid var(--border);border-radius:13px;background:var(--bg);margin-bottom:10px;overflow:hidden">
+        <button type="button" onclick="toggleBatchLeadDetailsRebuild631('${esc(batchDomId)}')" style="width:100%;border:0;background:var(--surface2);color:var(--text);padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;text-align:left">
+          <span style="font-size:11px;font-weight:900;color:var(--accent);letter-spacing:.08em">${esc(label)}</span>
+          <span style="display:flex;align-items:center;gap:7px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">
+            <span>${group.rows.length} lead${group.rows.length !== 1 ? 's' : ''}</span>
+            <span class="q-badge ${statusClassForRow({ statusRaw: group.statusRaw })}">${esc(batchStatusLabel(group.statusRaw))}</span>
+            <span>▾</span>
+          </span>
+        </button>
+        <div id="${esc(batchDomId)}" style="display:block;padding:10px;max-height:420px;overflow:auto">
+          ${group.rows.map((row, index) => `
+            <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:10px;margin-bottom:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer" onclick="toggleBatchLeadDetailsRebuild631('lead-${esc(batchDomId)}-${index}')">
+                <div style="min-width:0">
+                  <div style="font-size:12px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.nome || row.company_name || 'Lead')}</div>
+                  <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.whatsapp || row.phone || '')} ${row.site ? ' · ' + esc(row.site) : ''}</div>
+                </div>
+                <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
+              </div>
+              <div id="lead-${esc(batchDomId)}-${index}" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+                <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:6px">Mensagem 1</div>
+                <div style="font-size:10px;line-height:1.5;color:var(--text);background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:9px;padding:9px;white-space:pre-wrap">${esc(row.mensagem || row.template_part1 || 'Mensagem ainda não sorteada')}</div>
+                <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin:10px 0 6px">Mensagem 2</div>
+                <div style="font-size:10px;line-height:1.5;color:var(--text);background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:9px;padding:9px;white-space:pre-wrap">${esc(row.mensagem2 || row.template_part2 || 'Mensagem ainda não sorteada')}</div>
+                <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:10px;flex-wrap:wrap">
+                  <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
+                  ${!['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw) ? `<button class="add-btn" type="button" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>` : ''}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function testLeadBoxRebuild632(chip, slot) {
+    const id = chip.id || chip.instance || slot;
+    return `
+      <div style="border:1px dashed var(--border2);border-radius:12px;background:rgba(255,255,255,.02);padding:10px;margin-bottom:10px">
+        <div style="font-size:10px;font-weight:900;color:var(--muted);letter-spacing:.08em;margin-bottom:7px">LEAD TESTE</div>
+        <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+          <input id="testLeadPhone-${esc(id)}" placeholder="Número para teste" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px;font-family:'DM Mono',monospace;font-size:9px" />
+          <button class="add-btn added" type="button" onclick="typeof sendTestLeadFromChipRebuild632==='function'?sendTestLeadFromChipRebuild632('${esc(id)}'):notify('Envio teste ainda não configurado', 'warn')">Testar</button>
+        </div>
+      </div>
+    `;
+  }
+
   function renderRightPanel() {
     const right = document.getElementById('zapRight');
     if (!right) return;
@@ -2674,79 +2754,218 @@
     };
   }
 
+  function operationStatusDefinitions(isPast = false, isBacklog = false) {
+    if (isBacklog) return [
+      ['not_sent', 'Não enviada'],
+      ['queued', 'Em fila'],
+      ['sent', 'Enviada'],
+      ['responded', 'Respondida'],
+      ['not_responded', 'Não respondida'],
+      ['refused', 'Recusada'],
+      ['closed', 'Fechada']
+    ];
+    return [
+      ...(isPast ? [] : [
+        ['not_sent', 'Não enviada'],
+        ['queued', 'Em fila']
+      ]),
+      ['sent', 'Enviada'],
+      ['responded', 'Respondida'],
+      ['not_responded', 'Não respondida'],
+      ['refused', 'Recusada'],
+      ['closed', 'Fechada']
+    ];
+  }
+
+  function operationScopeRows(scope) {
+    const todayIso = localDateISO();
+    if (!scope || scope === 'backlog') return state.rows.filter((row) => !row.inTodayQueue);
+    const iso = String(scope).slice(0, 10);
+    const map = new Map();
+    const source = iso === todayIso
+      ? [...rowsForWeekDate(iso), ...state.rows.filter((row) => row.inTodayQueue)]
+      : rowsForWeekDate(iso);
+    source.forEach((row) => {
+      const key = String(row.id || row.leadId || row.lead_id || row.queueItemId || Math.random());
+      if (!map.has(key)) map.set(key, row);
+    });
+    return [...map.values()];
+  }
+
+  function rowMatchesOperationStatus(row = {}, status = 'not_sent', scope = 'backlog') {
+    const raw = String(row.statusRaw || row.current_status || '').toLowerCase();
+    const sent = ['sent', 'completed', 'batch_completed'].includes(raw) || row.completedAt || row.mediaSentAt || row.sent_at;
+    const sending = raw === 'batch_sending' || row.dispatchStartedAt;
+    const queued = row.inTodayQueue || ['queued_dispatch', 'batch_ready'].includes(raw) || row.inScheduledQueue;
+    const responded = !!(row.respondedAt || row.response_at || row.hasResponse || row.replied_at);
+    const refused = ['refused', 'recused', 'declined', 'recusada'].some((key) => raw.includes(key));
+    const closed = ['closed', 'won', 'fechado', 'fechada'].some((key) => raw.includes(key));
+    if (status === 'queued') return queued && !sent && !sending;
+    if (status === 'sent') return !!sent;
+    if (status === 'responded') return !!responded;
+    if (status === 'not_responded') return !!sent && !responded;
+    if (status === 'refused') return !!refused;
+    if (status === 'closed') return !!closed;
+    return !queued && !sent && !sending;
+  }
+
+  function countOperationStatus(scope, status) {
+    return operationScopeRows(scope).filter((row) => rowMatchesOperationStatus(row, status, scope)).length;
+  }
+
+  function operationRowsForActiveFilter() {
+    const scope = state.operationScope || 'backlog';
+    const status = state.operationStatus || 'not_sent';
+    const term = String(state.operationSearch || '').toLowerCase().trim();
+    return operationScopeRows(scope).filter((row) => {
+      if (!rowMatchesOperationStatus(row, status, scope)) return false;
+      if (!term) return true;
+      return [row.nome, row.company_name, row.site, row.website, row.instagram, row.whatsapp, row.phone, row.normalized_phone]
+        .some((value) => String(value || '').toLowerCase().includes(term));
+    });
+  }
+
+  function operationLeadActions(row = {}) {
+    const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
+    const locked = ['sent', 'completed', 'batch_completed', 'batch_sending'].includes(String(row.statusRaw || '').toLowerCase());
+    const base = `<button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>`;
+    if (locked) return `${base}<span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>`;
+    if (row.inTodayQueue || row.inScheduledQueue) {
+      return `${base}<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`;
+    }
+    if (!activeChips.length) return `${base}<span class="q-badge warn">Sem chip ativo</span>`;
+    return `${base}${activeChips.map((chip, index) => `
+      <button class="add-btn added" type="button" data-queue621-lead="${esc(row.id)}" onclick="queueLeadToChipRebuild646('${esc(row.id)}','${esc(chip.id)}')">Chip ${index + 1}</button>
+    `).join('')}`;
+  }
+
+  function operationLeadRow(row = {}) {
+    const status = statusLabelForRow(row);
+    const statusClass = statusClassForRow(row);
+    return `
+      <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:center">
+        <div class="empresa-info" style="min-width:0">
+          <div class="empresa-nome">${esc(row.nome || row.company_name || 'Lead')}</div>
+          <div class="empresa-meta">
+            <span class="q-badge ${statusClass}">${esc(status)}</span>
+            <span>${esc(row.instagram || row.instagram_username || 'Sem Instagram')}</span>
+            <span>${esc(row.site || row.website || 'Sem site')}</span>
+            <span>${esc(row.whatsapp || row.phone || row.normalized_phone || 'Sem WhatsApp')}</span>
+            ${row.mensagem || row.mensagem2 ? '<span class="q-badge ok">Mensagem sorteada</span>' : ''}
+          </div>
+        </div>
+        <div class="empresa-actions" style="justify-content:flex-end">
+          ${operationLeadActions(row)}
+        </div>
+      </div>
+    `;
+  }
+
   function renderOperationView() {
     const content = document.getElementById('queueOperationContent');
     if (!content) return;
     const days = operationWeekDays();
     const todayIso = localDateISO();
-    if (!state.selectedOperationDate || !days.some((day) => day.iso === state.selectedOperationDate)) {
-      state.selectedOperationDate = todayIso;
-    }
-    const selectedDay = days.find((day) => day.iso === state.selectedOperationDate) || days[1] || days[0];
-    const selectedCounts = operationStatusCounts(selectedDay.iso);
-
-    const statusRows = [
-      ...(selectedCounts.isPast ? [] : [
-        ['Não enviada', selectedCounts.notSent || 0, 'warn'],
-        ['Em fila', selectedCounts.queued || 0, 'info']
-      ]),
-      ['Enviada', selectedCounts.sent || 0, 'ok'],
-      ['Respondida', selectedCounts.responded || 0, 'ok'],
-      ['Não respondida', selectedCounts.notResponded || 0, 'warn'],
-      ['Recusada', selectedCounts.refused || 0, 'err'],
-      ['Fechada', selectedCounts.closed || 0, 'ok']
-    ];
+    if (!state.operationScope) state.operationScope = 'backlog';
+    const selectedScope = state.operationScope;
+    const selectedDay = days.find((day) => day.iso === selectedScope);
+    const isBacklog = selectedScope === 'backlog';
+    const isPast = !!selectedDay && selectedDay.iso < todayIso;
+    const statuses = operationStatusDefinitions(isPast, isBacklog);
+    if (!statuses.some(([key]) => key === state.operationStatus)) state.operationStatus = statuses[0]?.[0] || 'not_sent';
+    const rows = operationRowsForActiveFilter();
+    const scopeLabel = isBacklog ? 'Backlog' : (selectedDay?.label || selectedScope);
 
     content.innerHTML = `
       <div class="card" style="margin:0;padding:16px;flex-shrink:0">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
           <div>
             <div class="card-title" style="margin:0">Agenda semanal</div>
-            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// planejamento diário · virada do dia devolve não enviadas e fila ao backlog</div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// operação diária · ao virar o dia, não enviadas e em fila retornam ao backlog</div>
           </div>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
             <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
             <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="setQueueModeRebuild643('dispatch')">Ir para disparos</button>
           </div>
         </div>
-        <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px">
+        <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
           ${days.map((day) => {
-            const counts = operationStatusCounts(day.iso);
-            const active = day.iso === selectedDay.iso;
+            const active = day.iso === selectedScope;
+            const total = operationScopeRows(day.iso).length;
             return `
-              <button type="button" onclick="setQueueOperationDateRebuild645('${esc(day.iso)}')" style="min-width:132px;text-align:left;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};border-radius:13px;background:${active ? 'rgba(182,255,75,.08)' : 'var(--surface2)'};padding:11px;cursor:pointer;color:var(--text)">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                  <span style="font-size:12px;font-weight:900;color:${day.isToday ? 'var(--accent)' : 'var(--text)'}">${esc(day.label)}${day.isToday ? ' ●' : ''}</span>
-                </div>
-                <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:8px">${counts.total} itens no dia</div>
+              <button type="button" onclick="setQueueOperationScopeRebuild646('${esc(day.iso)}')" style="min-width:0;text-align:left;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};border-radius:12px;background:${active ? 'rgba(182,255,75,.08)' : 'var(--surface2)'};padding:10px;cursor:pointer;color:var(--text)">
+                <div style="font-size:11px;font-weight:900;color:${day.isToday ? 'var(--accent)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(day.label)}${day.isToday ? ' ●' : ''}</div>
+                <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:7px">${total} itens</div>
               </button>
             `;
           }).join('')}
         </div>
       </div>
 
-      <div class="card" style="margin:0;padding:16px;flex:1;min-height:0;overflow:auto">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-          <div>
-            <div class="card-title" style="margin:0">${esc(selectedDay.label)}${selectedDay.isToday ? ' · hoje' : ''}</div>
-            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">${selectedCounts.isPast ? '// histórico do dia' : '// operação do dia selecionado'}</div>
-          </div>
+      <div class="card" style="margin:0;padding:16px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
+        <div class="card-title" style="margin:0 0 14px">Leads ativos</div>
+        <div class="day-tabs" style="margin-bottom:10px;gap:7px;flex-wrap:wrap">
+          <div class="day-tab${isBacklog ? ' active' : ''}" onclick="setQueueOperationScopeRebuild646('backlog')">Backlog <span class="day-count">${operationScopeRows('backlog').length}</span></div>
+          ${days.map((day) => `<div class="day-tab${day.iso === selectedScope ? ' active' : ''}" onclick="setQueueOperationScopeRebuild646('${esc(day.iso)}')">${esc(day.label)}${day.isToday ? ' ●' : ''}</div>`).join('')}
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px">
-          ${statusRows.map(([label, value, tone]) => `
-            <div style="border:1px solid var(--border);border-radius:14px;background:var(--surface2);padding:14px">
-              <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">${esc(label)}</div>
-              <div style="font-size:28px;font-weight:900;color:${tone === 'ok' ? 'var(--accent)' : tone === 'err' ? 'var(--error)' : 'var(--text)'};margin-top:8px">${value}</div>
+        <div class="day-tabs" style="margin-bottom:12px;gap:7px;flex-wrap:wrap">
+          ${statuses.map(([key, label]) => `
+            <div class="day-tab${state.operationStatus === key ? ' active' : ''}" onclick="setQueueOperationStatusRebuild646('${esc(key)}')">
+              ${esc(label)} <span class="day-count">${countOperationStatus(selectedScope, key)}</span>
             </div>
           `).join('')}
+        </div>
+        <input type="text" value="${esc(state.operationSearch || '')}" oninput="setQueueOperationSearchRebuild646(this.value)" placeholder="🔍 Buscar por nome, site ou WhatsApp..." style="width:100%;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-family:'DM Mono',monospace;font-size:11px;outline:none" />
+        <div style="border:1px solid var(--border);border-radius:14px;overflow:hidden;min-height:0;flex:1;display:flex;flex-direction:column">
+          <div style="display:grid;grid-template-columns:2fr 1fr 1.2fr 1fr 1.2fr;gap:10px;padding:11px 14px;background:var(--surface2);font-family:'DM Mono',monospace;font-size:9px;font-weight:900;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">
+            <div>Empresa</div><div>Instagram</div><div>Site</div><div>WhatsApp</div><div>Ações</div>
+          </div>
+          <div style="overflow:auto;min-height:0;flex:1;padding:10px">
+            ${rows.length ? rows.map(operationLeadRow).join('') : `<div class="fila-empty" style="min-height:160px">// nenhuma empresa em ${esc(scopeLabel)} com este status</div>`}
+          </div>
         </div>
       </div>
     `;
   }
 
   window.setQueueOperationDateRebuild645 = function setQueueOperationDateRebuild645(iso) {
-    state.selectedOperationDate = String(iso || localDateISO()).slice(0, 10);
+    window.setQueueOperationScopeRebuild646(iso);
+  };
+
+  window.setQueueOperationScopeRebuild646 = function setQueueOperationScopeRebuild646(scope) {
+    state.operationScope = scope === 'backlog' ? 'backlog' : String(scope || localDateISO()).slice(0, 10);
+    state.operationStatus = 'not_sent';
     renderOperationView();
+  };
+
+  window.setQueueOperationStatusRebuild646 = function setQueueOperationStatusRebuild646(status) {
+    state.operationStatus = String(status || 'not_sent');
+    renderOperationView();
+  };
+
+  window.setQueueOperationSearchRebuild646 = function setQueueOperationSearchRebuild646(value) {
+    state.operationSearch = String(value || '');
+    renderOperationView();
+  };
+
+  window.queueLeadToChipRebuild646 = async function queueLeadToChipRebuild646(leadId, chipId) {
+    setButtonsDisabled(leadId, true);
+    try {
+      if (!state.rows.length) await fetchQueueState();
+      const row = state.rows.find((item) => String(item.id) === String(leadId));
+      if (!row) throw new Error('Lead nao encontrado no backlog.');
+      const chip = state.chips.find((item) => String(item.id) === String(chipId) || String(item.dbId || '') === String(chipId));
+      if (!chip) throw new Error('Chip selecionado nao encontrado.');
+      await rpcQueueAction(leadId, 'queue_today', queuePayloadFor(row, chip, 'operation_manual_chip'));
+      if (typeof notify === 'function') notify(`Lead enviado para ${chip.name || chip.instance || 'chip'} na fila de disparos.`);
+      state.operationStatus = 'queued';
+      await renderQueueStageFromSupabase();
+    } catch (error) {
+      console.error('[rebuild646] erro ao enviar lead ao chip:', error);
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao enviar lead para o chip.', 'err');
+    } finally {
+      setButtonsDisabled(leadId, false);
+    }
   };
 
   window.clearChipQueueRebuild643 = function clearChipQueueRebuild643() {
