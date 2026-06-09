@@ -58,11 +58,18 @@ const PANEL_ALIASES_V436 = {
   import: 'importar',
   redirects: 'redirecionamentos',
   protection: 'protecao',
+  templatesConfig: 'templates',
+  template: 'templates',
+  templates: 'templates',
+  permanentBase: 'base-permanente',
+  base: 'base-permanente',
+  dominios: 'dominios',
+  domains: 'dominios',
   assignment: 'validacao',
   atribuicao: 'validacao',
   'panel-atribuicao': 'validacao'
 };
-const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','arquivados','instagram','fila-zap','kanban','followups','acompanhamento','redirecionamentos','protecao','configuracoes','conta'];
+const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','arquivados','base-permanente','instagram','fila-zap','templates','kanban','followups','acompanhamento','redirecionamentos','protecao','dominios','configuracoes','conta'];
 function switchPanel(name, options = {}) {
   name = PANEL_ALIASES_V436[name] || name;
   if (!PANELS.includes(name)) name = 'inicio';
@@ -72,8 +79,9 @@ function switchPanel(name, options = {}) {
   });
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
-    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Arquivados':'arquivados','Atribuição':'validacao','WhatsApp':'fila-zap','Instagram':'instagram','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Configurações':'configuracoes','Minha conta':'conta'};
+    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Arquivados':'arquivados','Base Permanente':'base-permanente','Atribuição':'validacao','WhatsApp':'fila-zap','Instagram':'instagram','Templates':'templates','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow Up':'followups','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Auditorias':'audit','Domínios Bloqueados':'dominios','Configurações':'configuracoes','Minha conta':'conta'};
     panelMap.Protecao = 'protecao';
+    panelMap['Proteção'] = 'protecao';
     panelMap['Atribuição'] = 'validacao';
     panelMap['Atribuicao'] = 'validacao';
     el.classList.toggle('active', panelMap[label] === name);
@@ -82,14 +90,17 @@ function switchPanel(name, options = {}) {
   if (name==='importar')       renderImportarPanel();
   if (name==='validacao')      renderValidacao();
   if (name==='arquivados' && typeof renderArquivados === 'function') renderArquivados();
+  if (name==='base-permanente' && typeof renderLeadBasePanel === 'function') renderLeadBasePanel();
   if (name==='instagram')      renderInstagram();
   if (name==='fila-zap')       renderFilaZap();
+  if (name==='templates')      { if (typeof renderTemplatesPanelV656 === 'function') renderTemplatesPanelV656(); else { try{renderTemplatesConfig();}catch(e){} try{renderInstaTemplatesConfig();}catch(e){} } }
   if (name==='inbox')          { renderInbox(); fetchEvolutionResponsesV34({ silent:true }); }
   if (name==='conversations')  { renderConversations(); fetchEvolutionResponsesV34({ silent:true }); }
   if (name==='kanban')         renderKanban();
   if (name==='followups')      renderFollowups();
   if (name==='acompanhamento') renderAcompanhamento();
   if (name==='protecao' && typeof renderProtecao === 'function') renderProtecao();
+  if (name==='dominios' && typeof renderExcluidos === 'function') renderExcluidos();
   if (name==='conta')          renderMinhaConta();
   if (name==='configuracoes')  {
     renderConfiguracoes();
@@ -120,6 +131,14 @@ function updateBadges() {
   document.getElementById('badge-validacao').textContent = val.length;
   const archBadge = document.getElementById('badge-arquivados');
   if (archBadge && Array.isArray(window.__archivedLeadsCacheV644)) archBadge.textContent = String(window.__archivedLeadsCacheV644.length);
+  const baseBadge = document.getElementById('badge-base-permanente');
+  if (baseBadge && typeof getLeadBaseData === 'function') {
+    try { baseBadge.textContent = String((getLeadBaseData() || []).length); } catch(e) {}
+  }
+  const domainsBadge = document.getElementById('badge-dominios');
+  if (domainsBadge && typeof getExcludedDomains === 'function') {
+    try { domainsBadge.textContent = String((getExcludedDomains() || []).length); } catch(e) {}
+  }
   const naoEnv = flat.filter(e => (e.status||'Não enviada')==='Não enviada' && e.whatsapp).length;
   document.getElementById('badge-fila-zap').textContent = naoEnv;
   const instaEl = document.getElementById('badge-instagram');

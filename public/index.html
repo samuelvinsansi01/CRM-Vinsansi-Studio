@@ -58,9 +58,7 @@
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Leads">
-        <div class="nav-icon">👥</div>
-        <span class="nav-label">Leads</span>
-        <span class="menu-arrow-final">›</span>
+        <div class="nav-icon">👥</div><span class="nav-label">Leads</span><span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('importar')" data-label="Importar">
         <div class="nav-icon">📥</div><span class="nav-label">Importar</span><span class="nav-badge" id="badge-importar">0</span>
@@ -71,13 +69,14 @@
       <button class="nav-item sub" onclick="switchPanel('arquivados')" data-label="Arquivados">
         <div class="nav-icon">🗄️</div><span class="nav-label">Arquivados</span><span class="nav-badge" id="badge-arquivados">0</span>
       </button>
+      <button class="nav-item sub" onclick="switchPanel('base-permanente')" data-label="Base Permanente">
+        <div class="nav-icon">🧱</div><span class="nav-label">Base Permanente</span><span class="nav-badge" id="badge-base-permanente">0</span>
+      </button>
     </details>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Envios">
-        <div class="nav-icon">📨</div>
-        <span class="nav-label">Envios</span>
-        <span class="menu-arrow-final">›</span>
+        <div class="nav-icon">📨</div><span class="nav-label">Envios</span><span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('fila-zap')" data-label="WhatsApp">
         <div class="nav-icon">💬</div><span class="nav-label">WhatsApp</span><span class="nav-badge" id="badge-fila-zap">0</span>
@@ -85,54 +84,60 @@
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
         <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
       </button>
+      <button class="nav-item sub" onclick="switchPanel('templates')" data-label="Templates">
+        <div class="nav-icon">✉️</div><span class="nav-label">Templates</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('conversations')" data-label="Conversas">
+        <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
+      </button>
     </details>
 
-    <button class="nav-item" onclick="switchPanel('conversations')" data-label="Conversas">
-      <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
-    </button>
-
     <details class="menu-group-final">
-      <summary class="nav-item menu-summary-final" data-label="Gerenciamento">
-        <div class="nav-icon">📋</div>
-        <span class="nav-label">Gerenciamento</span>
-        <span class="menu-arrow-final">›</span>
+      <summary class="nav-item menu-summary-final" data-label="CRM">
+        <div class="nav-icon">📋</div><span class="nav-label">CRM</span><span class="menu-arrow-final">›</span>
       </summary>
-      <button class="nav-item sub" onclick="switchPanel('followups')" data-label="Follow-ups">
-        <div class="nav-icon">⏰</div><span class="nav-label">Follow-ups</span><span class="nav-badge" id="badge-followups">0</span>
-      </button>
       <button class="nav-item sub" onclick="switchPanel('kanban')" data-label="Kanban">
         <div class="nav-icon">📋</div><span class="nav-label">Kanban</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('acompanhamento')" data-label="Acompanhamentos">
-        <div class="nav-icon">📈</div><span class="nav-label">Acompanhamentos</span><span class="nav-badge" id="badge-acompanhamento">0</span>
+      <button class="nav-item sub" onclick="switchPanel('followups')" data-label="Follow Up">
+        <div class="nav-icon">⏰</div><span class="nav-label">Follow Up</span><span class="nav-badge" id="badge-followups">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('acompanhamento')" data-label="Acompanhamento">
+        <div class="nav-icon">📈</div><span class="nav-label">Acompanhamento</span><span class="nav-badge" id="badge-acompanhamento">0</span>
+      </button>
+    </details>
+
+    <details class="menu-group-final">
+      <summary class="nav-item menu-summary-final" data-label="Controle">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Controle</span><span class="menu-arrow-final">›</span>
+      </summary>
+      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Proteção">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Proteção</span><span class="nav-badge" id="badge-protecao">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('dominios')" data-label="Domínios Bloqueados">
+        <div class="nav-icon">🌐</div><span class="nav-label">Domínios Bloqueados</span><span class="nav-badge" id="badge-dominios">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('configuracoes')" data-label="Configurações">
+        <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
       </button>
     </details>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Ferramentas">
-        <div class="nav-icon">🛠️</div>
-        <span class="nav-label">Ferramentas</span>
-        <span class="menu-arrow-final">›</span>
+        <div class="nav-icon">🛠️</div><span class="nav-label">Ferramentas</span><span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('redirecionamentos')" data-label="Redirecionamentos">
         <div class="nav-icon">🔗</div><span class="nav-label">Redirecionamentos</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Protecao">
-        <div class="nav-icon">P</div><span class="nav-label">Protecao</span><span class="nav-badge" id="badge-protecao">0</span>
-      </button>
-      <button class="nav-item sub" onclick="switchPanel('audit')" data-label="Auditoria">
-        <div class="nav-icon">📊</div><span class="nav-label">Auditoria</span><span class="nav-badge" id="badge-audit">LOG</span>
+      <button class="nav-item sub" onclick="switchPanel('audit')" data-label="Auditorias">
+        <div class="nav-icon">📊</div><span class="nav-label">Auditorias</span><span class="nav-badge" id="badge-audit">LOG</span>
       </button>
     </details>
 
     <button class="nav-item" onclick="switchPanel('conta')" data-label="Minha conta">
       <div class="nav-icon">👤</div><span class="nav-label">Minha conta</span>
     </button>
-
-    <button class="nav-item" onclick="switchPanel('configuracoes')" data-label="Configurações">
-      <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
-    </button>
-  </nav>
+</nav>
 
   <div class="sidebar-final-footer">
     <button class="nav-item logout" onclick="logoutSupabase()" data-label="Sair">
@@ -225,6 +230,14 @@
     </div>
   </div>
 
+
+
+<!-- ── BASE PERMANENTE ── -->
+<div class="panel" id="panel-base-permanente">
+  <div class="page-header" style="flex-shrink:0">
+    <div class="page-title">Base <span>Permanente.</span></div>
+    <div class="page-sub">// inventário completo de leads salvos no banco e no fluxo operacional</div>
+  </div>
   <div class="stretch-card" style="margin-top:16px">
     <div class="card-title" style="flex-shrink:0">
       Base permanente de leads
@@ -258,6 +271,15 @@
     </div>
   </div>
 
+
+</div>
+
+<!-- ── DOMÍNIOS BLOQUEADOS ── -->
+<div class="panel" id="panel-dominios">
+  <div class="page-header" style="flex-shrink:0">
+    <div class="page-title">Domínios <span>Bloqueados.</span></div>
+    <div class="page-sub">// domínios excluídos manualmente das próximas importações</div>
+  </div>
   <!-- DOMÍNIOS EXCLUÍDOS — abaixo dos leads ativos -->
   <div class="card" style="margin-top:16px">
     <div class="card-title">Domínios excluídos manualmente <span id="excludedCount" style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0"></span></div>
@@ -268,7 +290,6 @@
     </div>
   </div>
 </div>
-
 <!-- ── IMPORTAR ── -->
 <div class="panel" id="panel-importar">
   <div class="page-header" style="flex-shrink:0">
@@ -840,6 +861,21 @@
     </div>
   </div>
 
+</div>
+
+
+
+<!-- ── TEMPLATES ── -->
+<div class="panel" id="panel-templates">
+  <div class="page-header" style="flex-shrink:0">
+    <div class="page-title">Templates de <span>Envio.</span></div>
+    <div class="page-sub">// modelos usados nos disparos por canal · WhatsApp e Instagram</div>
+  </div>
+  <div class="template-channel-tabs" style="display:flex;gap:8px;margin-bottom:16px;flex-shrink:0">
+    <button id="tplChannelWhatsappBtn" class="status-tab active" onclick="setTemplatesChannelV656('whatsapp')">WhatsApp</button>
+    <button id="tplChannelInstagramBtn" class="status-tab" onclick="setTemplatesChannelV656('instagram')">Instagram</button>
+  </div>
+  <div id="tplChannelWhatsappPanel" class="template-channel-panel">
   <!-- MSG TEMPLATES -->
   <div class="card" style="margin-top:16px">
     <div class="card-title">Templates de mensagem</div>
@@ -848,6 +884,9 @@
     <button class="btn btn-ghost" style="margin-top:12px" onclick="adicionarTemplate()">+ Novo template</button>
   </div>
 
+
+  </div>
+  <div id="tplChannelInstagramPanel" class="template-channel-panel" style="display:none">
   <!-- INSTAGRAM TEMPLATES -->
   <div class="card" style="margin-top:16px">
     <div class="card-title" style="color:var(--insta)">Templates Instagram <span style="font-size:9px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">· sorteio automático ao copiar</span></div>
@@ -855,8 +894,9 @@
     <div id="instaTemplatesList"></div>
     <button class="btn btn-ghost" style="margin-top:12px;border-color:rgba(225,48,108,0.3);color:var(--insta)" onclick="adicionarInstaTemplate()">+ Novo template Instagram</button>
   </div>
-</div>
 
+  </div>
+</div>
 
 <!-- PROTECAO OPERACIONAL -->
 <div class="panel" id="panel-protecao">
@@ -1306,9 +1346,7 @@
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Leads">
-        <div class="nav-icon">👥</div>
-        <span class="nav-label">Leads</span>
-        <span class="menu-arrow-final">›</span>
+        <div class="nav-icon">👥</div><span class="nav-label">Leads</span><span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('importar')" data-label="Importar">
         <div class="nav-icon">📥</div><span class="nav-label">Importar</span><span class="nav-badge" id="badge-importar">0</span>
@@ -1319,13 +1357,14 @@
       <button class="nav-item sub" onclick="switchPanel('arquivados')" data-label="Arquivados">
         <div class="nav-icon">🗄️</div><span class="nav-label">Arquivados</span><span class="nav-badge" id="badge-arquivados">0</span>
       </button>
+      <button class="nav-item sub" onclick="switchPanel('base-permanente')" data-label="Base Permanente">
+        <div class="nav-icon">🧱</div><span class="nav-label">Base Permanente</span><span class="nav-badge" id="badge-base-permanente">0</span>
+      </button>
     </details>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Envios">
-        <div class="nav-icon">📨</div>
-        <span class="nav-label">Envios</span>
-        <span class="menu-arrow-final">›</span>
+        <div class="nav-icon">📨</div><span class="nav-label">Envios</span><span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('fila-zap')" data-label="WhatsApp">
         <div class="nav-icon">💬</div><span class="nav-label">WhatsApp</span><span class="nav-badge" id="badge-fila-zap">0</span>
@@ -1333,54 +1372,60 @@
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
         <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
       </button>
+      <button class="nav-item sub" onclick="switchPanel('templates')" data-label="Templates">
+        <div class="nav-icon">✉️</div><span class="nav-label">Templates</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('conversations')" data-label="Conversas">
+        <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
+      </button>
     </details>
 
-    <button class="nav-item" onclick="switchPanel('conversations')" data-label="Conversas">
-      <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
-    </button>
-
     <details class="menu-group-final">
-      <summary class="nav-item menu-summary-final" data-label="Gerenciamento">
-        <div class="nav-icon">📋</div>
-        <span class="nav-label">Gerenciamento</span>
-        <span class="menu-arrow-final">›</span>
+      <summary class="nav-item menu-summary-final" data-label="CRM">
+        <div class="nav-icon">📋</div><span class="nav-label">CRM</span><span class="menu-arrow-final">›</span>
       </summary>
-      <button class="nav-item sub" onclick="switchPanel('followups')" data-label="Follow-ups">
-        <div class="nav-icon">⏰</div><span class="nav-label">Follow-ups</span><span class="nav-badge" id="badge-followups">0</span>
-      </button>
       <button class="nav-item sub" onclick="switchPanel('kanban')" data-label="Kanban">
         <div class="nav-icon">📋</div><span class="nav-label">Kanban</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('acompanhamento')" data-label="Acompanhamentos">
-        <div class="nav-icon">📈</div><span class="nav-label">Acompanhamentos</span><span class="nav-badge" id="badge-acompanhamento">0</span>
+      <button class="nav-item sub" onclick="switchPanel('followups')" data-label="Follow Up">
+        <div class="nav-icon">⏰</div><span class="nav-label">Follow Up</span><span class="nav-badge" id="badge-followups">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('acompanhamento')" data-label="Acompanhamento">
+        <div class="nav-icon">📈</div><span class="nav-label">Acompanhamento</span><span class="nav-badge" id="badge-acompanhamento">0</span>
+      </button>
+    </details>
+
+    <details class="menu-group-final">
+      <summary class="nav-item menu-summary-final" data-label="Controle">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Controle</span><span class="menu-arrow-final">›</span>
+      </summary>
+      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Proteção">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Proteção</span><span class="nav-badge" id="badge-protecao">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('dominios')" data-label="Domínios Bloqueados">
+        <div class="nav-icon">🌐</div><span class="nav-label">Domínios Bloqueados</span><span class="nav-badge" id="badge-dominios">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('configuracoes')" data-label="Configurações">
+        <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
       </button>
     </details>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="Ferramentas">
-        <div class="nav-icon">🛠️</div>
-        <span class="nav-label">Ferramentas</span>
-        <span class="menu-arrow-final">›</span>
+        <div class="nav-icon">🛠️</div><span class="nav-label">Ferramentas</span><span class="menu-arrow-final">›</span>
       </summary>
       <button class="nav-item sub" onclick="switchPanel('redirecionamentos')" data-label="Redirecionamentos">
         <div class="nav-icon">🔗</div><span class="nav-label">Redirecionamentos</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Protecao">
-        <div class="nav-icon">P</div><span class="nav-label">Protecao</span><span class="nav-badge" id="badge-protecao">0</span>
-      </button>
-      <button class="nav-item sub" onclick="switchPanel('audit')" data-label="Auditoria">
-        <div class="nav-icon">📊</div><span class="nav-label">Auditoria</span><span class="nav-badge" id="badge-audit">LOG</span>
+      <button class="nav-item sub" onclick="switchPanel('audit')" data-label="Auditorias">
+        <div class="nav-icon">📊</div><span class="nav-label">Auditorias</span><span class="nav-badge" id="badge-audit">LOG</span>
       </button>
     </details>
 
     <button class="nav-item" onclick="switchPanel('conta')" data-label="Minha conta">
       <div class="nav-icon">👤</div><span class="nav-label">Minha conta</span>
     </button>
-
-    <button class="nav-item" onclick="switchPanel('configuracoes')" data-label="Configurações">
-      <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
-    </button>
-  </nav>
+</nav>
 
   <div class="sidebar-final-footer">
     <button class="nav-item logout" onclick="logoutSupabase()" data-label="Sair">
@@ -1444,7 +1489,7 @@
 
 <script>
 (function(){
-  const icons = { Leads:'👥', Envios:'📨', Gerenciamento:'📋', Ferramentas:'🛠️' };
+  const icons = { Leads:'👥', Envios:'📨', CRM:'📋', Controle:'🛡️', Ferramentas:'🛠️' };
   function normalizeMenuSummaries(){
     document.querySelectorAll('.menu-group-final > summary').forEach(summary => {
       const label = (summary.textContent || '').replace('›','').trim();
@@ -1457,6 +1502,31 @@
   document.addEventListener('DOMContentLoaded', () => {
     normalizeMenuSummaries();
   });
+})();
+</script>
+
+<script>
+(function(){
+  window.__templatesChannelV656 = window.__templatesChannelV656 || 'whatsapp';
+  window.setTemplatesChannelV656 = function(channel){
+    window.__templatesChannelV656 = channel === 'instagram' ? 'instagram' : 'whatsapp';
+    const isInsta = window.__templatesChannelV656 === 'instagram';
+    const wp = document.getElementById('tplChannelWhatsappPanel');
+    const ig = document.getElementById('tplChannelInstagramPanel');
+    const wpBtn = document.getElementById('tplChannelWhatsappBtn');
+    const igBtn = document.getElementById('tplChannelInstagramBtn');
+    if (wp) wp.style.display = isInsta ? 'none' : '';
+    if (ig) ig.style.display = isInsta ? '' : 'none';
+    if (wpBtn) wpBtn.classList.toggle('active', !isInsta);
+    if (igBtn) igBtn.classList.toggle('active', isInsta);
+    try { if (!isInsta && typeof renderTemplatesConfig === 'function') renderTemplatesConfig(); } catch(e){}
+    try { if (isInsta && typeof renderInstaTemplatesConfig === 'function') renderInstaTemplatesConfig(); } catch(e){}
+  };
+  window.renderTemplatesPanelV656 = function(){
+    try { if (typeof renderTemplatesConfig === 'function') renderTemplatesConfig(); } catch(e){}
+    try { if (typeof renderInstaTemplatesConfig === 'function') renderInstaTemplatesConfig(); } catch(e){}
+    window.setTemplatesChannelV656(window.__templatesChannelV656 || 'whatsapp');
+  };
 })();
 </script>
 
