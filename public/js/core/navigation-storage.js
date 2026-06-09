@@ -62,7 +62,7 @@ const PANEL_ALIASES_V436 = {
   atribuicao: 'validacao',
   'panel-atribuicao': 'validacao'
 };
-const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','instagram','fila-zap','kanban','followups','acompanhamento','redirecionamentos','protecao','configuracoes','conta'];
+const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','arquivados','instagram','fila-zap','kanban','followups','acompanhamento','redirecionamentos','protecao','configuracoes','conta'];
 function switchPanel(name, options = {}) {
   name = PANEL_ALIASES_V436[name] || name;
   if (!PANELS.includes(name)) name = 'inicio';
@@ -72,7 +72,7 @@ function switchPanel(name, options = {}) {
   });
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
-    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Atribuição':'validacao','WhatsApp':'fila-zap','Instagram':'instagram','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Configurações':'configuracoes','Minha conta':'conta'};
+    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Arquivados':'arquivados','Atribuição':'validacao','WhatsApp':'fila-zap','Instagram':'instagram','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Configurações':'configuracoes','Minha conta':'conta'};
     panelMap.Protecao = 'protecao';
     panelMap['Atribuição'] = 'validacao';
     panelMap['Atribuicao'] = 'validacao';
@@ -81,6 +81,7 @@ function switchPanel(name, options = {}) {
   if (name==='inicio')         renderInicio();
   if (name==='importar')       renderImportarPanel();
   if (name==='validacao')      renderValidacao();
+  if (name==='arquivados' && typeof renderArquivados === 'function') renderArquivados();
   if (name==='instagram')      renderInstagram();
   if (name==='fila-zap')       renderFilaZap();
   if (name==='inbox')          { renderInbox(); fetchEvolutionResponsesV34({ silent:true }); }
@@ -117,6 +118,8 @@ function updateBadges() {
   document.getElementById('badge-importar').textContent = flat.filter(e => e.status === 'Não enviada').length;
   const val = getValData();
   document.getElementById('badge-validacao').textContent = val.length;
+  const archBadge = document.getElementById('badge-arquivados');
+  if (archBadge && Array.isArray(window.__archivedLeadsCacheV644)) archBadge.textContent = String(window.__archivedLeadsCacheV644.length);
   const naoEnv = flat.filter(e => (e.status||'Não enviada')==='Não enviada' && e.whatsapp).length;
   document.getElementById('badge-fila-zap').textContent = naoEnv;
   const instaEl = document.getElementById('badge-instagram');

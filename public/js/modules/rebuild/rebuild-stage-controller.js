@@ -1858,6 +1858,8 @@
 
   const state = {
     activeTab: 'backlog',
+    activeQueueMode: 'operation',
+    weekRows: [],
     openChipKeys: new Set(),
     chips: [],
     rows: [],
@@ -1980,6 +1982,26 @@
     return new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
   }
 
+  function addDaysISO(offset = 0) {
+    const date = new Date();
+    date.setDate(date.getDate() + Number(offset || 0));
+    return localDateISO(date);
+  }
+
+  function queueWeekDays() {
+    const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    return Array.from({ length: 7 }, (_, offset) => {
+      const date = new Date();
+      date.setDate(date.getDate() + offset);
+      const iso = localDateISO(date);
+      return {
+        iso,
+        label: offset === 0 ? 'Hoje' : offset === 1 ? 'Amanhã' : labels[date.getDay()],
+        caption: `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`
+      };
+    });
+  }
+
   function chunks(list, size = 120) {
     const output = [];
     for (let index = 0; index < list.length; index += size) output.push(list.slice(index, index + size));
@@ -2039,6 +2061,26 @@
     const data = await readJson(response);
 
     if (!response.ok) throw data || new Error(`Falha ao carregar fila de hoje (${response.status}).`);
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function fetchWeeklyQueueItems(userId) {
+    const params = new URLSearchParams({
+      select: 'id,lead_id,source_backlog_item_id,channel,bucket,status,position,chip_id,chip_name,chip_instance,scheduled_for,batch_id,batch_index,batch_position,template_type,template_index,template_part1,template_part2,dispatch_status,current_part,text1_sent_at,text2_sent_at,media_sent_at,dispatch_started_at,completed_at,paused_at,error_message,last_checkpoint_at,created_at,updated_at',
+      user_id: `eq.${userId}`,
+      channel: `eq.${QUEUE_CHANNEL}`,
+      status: 'not.in.(removed)',
+      order: 'scheduled_for.asc,position.asc'
+    });
+    params.append('scheduled_for', `gte.${addDaysISO(0)}`);
+    params.append('scheduled_for', `lte.${addDaysISO(6)}`);
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/queue_items?${params.toString()}`, {
+      headers: await getHeaders()
+    });
+    const data = await readJson(response);
+
+    if (!response.ok) throw data || new Error(`Falha ao carregar visão semanal (${response.status}).`);
     return Array.isArray(data) ? data : [];
   }
 
@@ -2238,18 +2280,34 @@
 
       await runQueueRollover();
 
-      const [chips, backlogItems, queueItems] = await Promise.all([
+      const [chips, backlogItems, queueItems, weeklyQueueItems] = await Promise.all([
         fetchWhatsappChips(),
         fetchBacklogItems(userId),
-        fetchTodayQueueItems(userId)
+        fetchTodayQueueItems(userId),
+        fetchWeeklyQueueItems(userId)
       ]);
       const leadIds = [
         ...backlogItems.map((row) => row.lead_id),
-        ...queueItems.map((row) => row.lead_id)
+        ...queueItems.map((row) => row.lead_id),
+        ...weeklyQueueItems.map((row) => row.lead_id)
       ];
       const leadsById = await fetchLeadsByIds(leadIds);
       state.chips = chips;
       state.rows = mergeQueueRows(backlogItems, queueItems, leadsById);
+      state.weekRows = weeklyQueueItems
+        .map((row) => {
+          const leadId = String(row.lead_id || '');
+          if (!leadId || !leadsById.has(leadId)) return null;
+          const normalized = rowLead(row, leadsById.get(leadId), 'today');
+          normalized.id = leadId;
+          normalized.inTodayQueue = row.scheduled_for === localDateISO();
+          normalized.inScheduledQueue = true;
+          normalized.todayRowId = row.id;
+          normalized.queueItemId = row.id;
+          normalized.todayPosition = row.position ?? 0;
+          return normalized;
+        })
+        .filter(Boolean);
       publishQueueLeads(state.rows);
       return state.rows;
     } finally {
@@ -2934,11 +2992,115 @@
     el.style.display = el.style.display === 'none' || !el.style.display ? 'block' : 'none';
   };
 
-  function renderQueueView() {
-    renderTabs();
-    renderLeftList();
-    renderRightPanel();
+  function renderQueueModeTabs() {
+    const tabs = document.getElementById('queueModeTabs');
+    const operation = document.getElementById('queueOperationView');
+    const dispatch = document.getElementById('queueDispatchView');
+    if (tabs) {
+      tabs.innerHTML = `
+        <div class="day-tab${state.activeQueueMode === 'operation' ? ' active' : ''}" onclick="setQueueModeRebuild643('operation')">Operação</div>
+        <div class="day-tab${state.activeQueueMode === 'dispatch' ? ' active' : ''}" onclick="setQueueModeRebuild643('dispatch')">Fila de disparos</div>
+      `;
+    }
+    if (operation) operation.style.display = state.activeQueueMode === 'operation' ? 'flex' : 'none';
+    if (dispatch) dispatch.style.display = state.activeQueueMode === 'dispatch' ? 'flex' : 'none';
   }
+
+  function rowsForWeekDate(iso) {
+    return (state.weekRows || []).filter((row) => String(row.scheduledFor || '').slice(0, 10) === iso);
+  }
+
+  function chipCapacity() {
+    return state.chips.reduce((total, chip) => total + (Number(chip.dailyLimit || 120) || 120), 0);
+  }
+
+  function renderOperationView() {
+    const content = document.getElementById('queueOperationContent');
+    if (!content) return;
+    const backlogCount = state.rows.filter((row) => !row.inTodayQueue).length;
+    const totalCapacity = chipCapacity();
+    const days = queueWeekDays();
+    const todayRows = rowsForWeekDate(localDateISO());
+    const queued = todayRows.filter((row) => ['queued_dispatch', 'batch_ready'].includes(row.statusRaw)).length;
+    const sending = todayRows.filter((row) => row.statusRaw === 'batch_sending').length;
+    const sent = todayRows.filter((row) => ['sent', 'completed', 'batch_completed'].includes(row.statusRaw)).length;
+    const errors = todayRows.filter((row) => row.statusRaw === 'error').length;
+
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;flex-shrink:0">
+        <div class="card" style="margin:0;padding:13px"><div class="card-title">Backlog</div><div style="font-size:24px;font-weight:800;color:var(--text)">${backlogCount}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">leads disponíveis</div></div>
+        <div class="card" style="margin:0;padding:13px"><div class="card-title">Hoje</div><div style="font-size:24px;font-weight:800;color:var(--accent)">${todayRows.length}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">alocados / ${totalCapacity || 0}</div></div>
+        <div class="card" style="margin:0;padding:13px"><div class="card-title">Chips</div><div style="font-size:24px;font-weight:800;color:var(--text)">${state.chips.length}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">ativos na fila</div></div>
+        <div class="card" style="margin:0;padding:13px"><div class="card-title">Status hoje</div><div style="display:flex;gap:5px;flex-wrap:wrap"><span class="q-badge ok">${queued} fila</span><span class="q-badge info">${sending} disparo</span><span class="q-badge ok">${sent} enviados</span>${errors ? `<span class="q-badge err">${errors} erro</span>` : ''}</div></div>
+      </div>
+      <div class="card" style="margin:0;padding:14px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+          <div class="card-title" style="margin:0">Próximos 7 dias</div>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
+            <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="setQueueModeRebuild643('dispatch')">Ir para disparos</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px;overflow:auto;padding-bottom:2px">
+          ${days.map((day) => {
+            const rows = rowsForWeekDate(day.iso);
+            const pct = totalCapacity ? Math.min(100, Math.round((rows.length / totalCapacity) * 100)) : 0;
+            const chipsWithRows = state.chips.filter((chip) => rows.some((row) => chipMatchesRow(chip, row))).length;
+            return `
+              <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:11px;min-width:120px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                  <div style="font-size:12px;font-weight:800;color:${day.iso === localDateISO() ? 'var(--accent)' : 'var(--text)'}">${esc(day.label)}</div>
+                  <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${esc(day.caption)}</div>
+                </div>
+                <div style="font-size:22px;font-weight:800;color:var(--text);margin-top:7px">${rows.length}</div>
+                <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">de ${totalCapacity || 0} capacidade</div>
+                <div style="height:5px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:9px"><div style="width:${pct}%;height:100%;background:var(--accent)"></div></div>
+                <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:7px">${chipsWithRows}/${state.chips.length || 0} chips com leads</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      <div class="card" style="margin:0;padding:14px;min-height:0;flex:1;overflow:auto">
+        <div class="card-title">Alocação por chip hoje</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">
+          ${state.chips.map((chip, index) => {
+            const rows = todayRows.filter((row) => chipMatchesRow(chip, row));
+            const ready = rows.filter((row) => row.statusRaw === 'batch_ready').length;
+            const sendingChip = rows.filter((row) => row.statusRaw === 'batch_sending').length;
+            const sentChip = rows.filter((row) => ['sent','completed','batch_completed'].includes(row.statusRaw)).length;
+            return `
+              <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:12px">
+                <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+                  <div>
+                    <div style="font-size:11px;font-weight:800;color:var(--accent);letter-spacing:.08em">CHIP ${index + 1}</div>
+                    <div style="font-size:12px;font-weight:700;color:var(--text);margin-top:2px">${esc(chip.name || chip.nome || 'Chip')}</div>
+                  </div>
+                  <span class="q-badge ${rows.length ? 'ok' : 'warn'}">${rows.length}/${Number(chip.dailyLimit || 120) || 120}</span>
+                </div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px"><span class="q-badge ok">${ready} prontos</span><span class="q-badge info">${sendingChip} disparo</span><span class="q-badge ok">${sentChip} enviados</span></div>
+              </div>
+            `;
+          }).join('') || '<div class="fila-empty">// nenhum chip ativo</div>'}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderQueueView() {
+    renderQueueModeTabs();
+    renderTabs();
+    renderOperationView();
+    if (state.activeQueueMode === 'dispatch') {
+      renderLeftList();
+      renderRightPanel();
+    }
+  }
+
+  window.setQueueModeRebuild643 = function setQueueModeRebuild643(mode) {
+    state.activeQueueMode = mode === 'dispatch' ? 'dispatch' : 'operation';
+    renderQueueView();
+  };
 
   async function renderQueueStageFromSupabase() {
     const list = document.getElementById('disparoEmpresasList');

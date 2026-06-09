@@ -68,6 +68,9 @@
       <button class="nav-item sub" onclick="switchPanel('validacao')" data-label="Validação">
         <div class="nav-icon">✅</div><span class="nav-label">Validação</span><span class="nav-badge" id="badge-validacao">0</span>
       </button>
+      <button class="nav-item sub" onclick="switchPanel('arquivados')" data-label="Arquivados">
+        <div class="nav-icon">🗄️</div><span class="nav-label">Arquivados</span><span class="nav-badge" id="badge-arquivados">0</span>
+      </button>
     </details>
 
     <details class="menu-group-final">
@@ -410,6 +413,33 @@
   </div>
 </div>
 
+
+<!-- ── ARQUIVADOS ── -->
+<div class="panel" id="panel-arquivados">
+  <div class="page-header" style="flex-shrink:0">
+    <div>
+      <div class="page-title">Leads <span>Arquivados.</span></div>
+      <div class="page-sub">// arquivar não apaga do banco · excluir aqui apenas remove da plataforma</div>
+    </div>
+    <button class="btn btn-ghost" onclick="renderArquivados()">Atualizar</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;margin-bottom:16px">
+    <input id="archivedLeadsSearch" class="global-search-input" style="height:auto;padding:12px 14px;font-size:12px" placeholder="Buscar por empresa, telefone, site ou Instagram..." oninput="setArchivedSearchV644(this.value)" />
+    <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);white-space:nowrap">
+      <span id="archivedLeadsCount">0</span> arquivados
+    </div>
+  </div>
+
+  <div style="border:1px solid rgba(255,189,89,0.28);background:rgba(255,189,89,0.06);border-radius:14px;padding:12px 14px;margin-bottom:14px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);line-height:1.6">
+    Regra: fora desta tela, remover um lead significa <strong style="color:var(--text)">arquivar</strong>. Nesta tela, <strong style="color:var(--text)">Restaurar</strong> volta o lead para a plataforma; <strong style="color:var(--error)">Excluir da plataforma</strong> só preenche <code>removed_at</code> no banco. Nada é apagado fisicamente.
+  </div>
+
+  <div id="archivedLeadsList" class="stretch-list" style="min-height:180px">
+    <div style="padding:18px;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px">// carregando...</div>
+  </div>
+</div>
+
 <!-- ── INSTAGRAM ── -->
 <div class="panel" id="panel-instagram">
   <!-- HEADER -->
@@ -427,36 +457,51 @@
   <div id="instaTabContent" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden"></div>
 </div>
 
-<div class="panel" id="panel-fila-zap" style="padding:0;overflow:hidden;flex-direction:row;height:100vh;">
+<div class="panel" id="panel-fila-zap" style="padding:0;overflow:hidden;flex-direction:column;height:100vh;">
 
-  <!-- ══ COLUNA ESQUERDA: Selecionar Empresas (50%) ══ -->
-  <div class="zapLeft" id="zapLeft">
-    <div class="zapLeft-inner">
-      <div class="page-header" style="flex-shrink:0;padding:20px 20px 0">
+  <div class="page-header" style="flex-shrink:0;padding:20px 20px 10px;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div>
         <div class="page-title">Fila <span>WhatsApp.</span></div>
         <div class="page-sub" id="filaZapSub">// carregando...</div>
       </div>
-
-      <div style="padding:16px 20px;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
-        <div class="card-title" style="flex-shrink:0">
-          Selecionar empresas
-          <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">— adicione à fila do chip desejado</span>
-        </div>
-        <div class="day-tabs" id="disparoDayTabs" style="flex-shrink:0"></div>
-        <div class="status-tabs" id="disparoStatusTabs" style="flex-shrink:0"></div>
-        <div class="stats-row" id="disparoStats" style="flex-shrink:0"></div>
-        <div id="disparoEmpresasList" class="stretch-list zap-empresa-list"></div>
-        <div id="disparoPagination" style="flex-shrink:0"></div>
+      <div class="day-tabs" id="queueModeTabs" style="margin:0;flex-shrink:0">
+        <div class="day-tab active" onclick="setQueueModeRebuild643('operation')">Operação</div>
+        <div class="day-tab" onclick="setQueueModeRebuild643('dispatch')">Fila de disparos</div>
       </div>
     </div>
   </div>
 
-  <!-- ══ DIVISOR VERTICAL ══ -->
-  <div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch;"></div>
+  <div id="queueOperationView" style="display:flex;flex-direction:column;min-height:0;flex:1;overflow:hidden;padding:16px 20px;gap:14px">
+    <div id="queueOperationContent" style="display:flex;flex-direction:column;gap:14px;min-height:0;flex:1;overflow:auto">
+      <div class="fila-empty">// carregando operação...</div>
+    </div>
+  </div>
 
-  <!-- ══ COLUNA DIREITA: Accordions de Chip (dinâmico) ══ -->
-  <div class="zapRight" id="zapRight">
-    <!-- preenchido dinamicamente por renderChipAccordions() -->
+  <div id="queueDispatchView" style="display:none;flex:1;min-height:0;overflow:hidden;">
+    <!-- ══ COLUNA ESQUERDA: Selecionar Empresas ══ -->
+    <div class="zapLeft" id="zapLeft" style="width:38%;min-width:360px;max-width:520px;">
+      <div class="zapLeft-inner">
+        <div style="padding:16px 20px;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+          <div class="card-title" style="flex-shrink:0">
+            Selecionar empresas
+            <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">— backlog e fila do dia</span>
+          </div>
+          <div class="day-tabs" id="disparoDayTabs" style="flex-shrink:0"></div>
+          <div class="status-tabs" id="disparoStatusTabs" style="flex-shrink:0"></div>
+          <div class="stats-row" id="disparoStats" style="flex-shrink:0"></div>
+          <div id="disparoEmpresasList" class="stretch-list zap-empresa-list"></div>
+          <div id="disparoPagination" style="flex-shrink:0"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch;"></div>
+
+    <!-- ══ COLUNA DIREITA: Disparos por chip ══ -->
+    <div class="zapRight" id="zapRight" style="flex:1;min-width:0;">
+      <!-- preenchido dinamicamente por renderChipAccordions() -->
+    </div>
   </div>
 
   <!-- hidden — mantido para compatibilidade com código legado que referencia esses IDs -->
@@ -1243,6 +1288,7 @@
   <script src="js/app.js"></script>
   <script src="js/modules/whatsapp-manual-send.js"></script>
   <script src="js/modules/whatsapp-supabase.js"></script>
+  <script src="js/modules/rebuild/archived-leads.js"></script>
 
 <script>
 (function(){
@@ -1281,6 +1327,9 @@
       </button>
       <button class="nav-item sub" onclick="switchPanel('validacao')" data-label="Validação">
         <div class="nav-icon">✅</div><span class="nav-label">Validação</span><span class="nav-badge" id="badge-validacao">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('arquivados')" data-label="Arquivados">
+        <div class="nav-icon">🗄️</div><span class="nav-label">Arquivados</span><span class="nav-badge" id="badge-arquivados">0</span>
       </button>
     </details>
 
