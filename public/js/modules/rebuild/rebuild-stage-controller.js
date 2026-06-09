@@ -2384,9 +2384,9 @@
   }
 
   function chipMatchesRow(chip, row = {}) {
-    return String(row.chipId || '') === String(chip.id || '')
-      || String(row.chipId || '') === String(chip.dbId || '')
-      || (!!row.chipName && row.chipName === chip.name);
+    const chips = typeof chipKeyCandidates === 'function' ? chipKeyCandidates(chip) : [chip?.id, chip?.dbId, chip?.instance, chip?.name].map((value) => String(value || '').trim()).filter(Boolean);
+    const rows = typeof rowChipCandidates === 'function' ? rowChipCandidates(row) : [row?.chipId, row?.chipName, row?.chipInstance].map((value) => String(value || '').trim()).filter(Boolean);
+    return rows.some((rowKey) => chips.includes(rowKey));
   }
 
   function buildChipUsage(activeChips = []) {
@@ -2421,7 +2421,7 @@
       chip_name: chip.name,
       chip_instance: chip.instance,
       filled_day_at: new Date().toISOString(),
-      scheduled_for: localDateISO(),
+      scheduled_for: (state.operationScope && state.operationScope !== 'backlog' ? String(state.operationScope).slice(0, 10) : localDateISO()),
       ...pickTemplatePayload(row)
     };
   }
@@ -2614,6 +2614,60 @@
     `;
   }
 
+
+  function selectedQueueDateForDispatch() {
+    const scope = String(state.operationScope || '').slice(0, 10);
+    if (scope && /^\d{4}-\d{2}-\d{2}$/.test(scope)) return scope;
+    return localDateISO();
+  }
+
+  function selectedQueueDateLabel(iso) {
+    const days = operationWeekDays();
+    const found = days.find((day) => day.iso === iso);
+    if (found) return found.label;
+    try {
+      const [y, m, d] = String(iso || '').split('-').map(Number);
+      if (!y || !m || !d) return 'Hoje';
+      const date = new Date(y, m - 1, d);
+      const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      return `${labels[date.getDay()]} ${date.getDate()}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+    } catch (_) {
+      return 'Hoje';
+    }
+  }
+
+  function queueRowsForDispatchDate(iso) {
+    const target = String(iso || localDateISO()).slice(0, 10);
+    const map = new Map();
+    const push = (row) => {
+      if (!row) return;
+      const scheduled = String(row.scheduledFor || row.scheduled_for || '').slice(0, 10);
+      if (scheduled !== target) return;
+      const key = String(row.id || row.leadId || row.lead_id || row.queueItemId || row.queue_item_id || '');
+      if (!key) return;
+      map.set(key, { ...row, inTodayQueue: target === localDateISO(), inScheduledQueue: true });
+    };
+    (state.weekRows || []).forEach(push);
+    (state.rows || []).filter((row) => row.inTodayQueue).forEach(push);
+    return [...map.values()].sort((a, b) => {
+      const chipA = String(a.chipName || a.chipId || '').localeCompare(String(b.chipName || b.chipId || ''));
+      if (chipA) return chipA;
+      return Number(a.todayPosition || a.queuePosition || 0) - Number(b.todayPosition || b.queuePosition || 0);
+    });
+  }
+
+  function chipKeyCandidates(chip = {}) {
+    return [chip.id, chip.dbId, chip.instance, chip.name, chip.phone, chip.label]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+  }
+
+  function rowChipCandidates(row = {}) {
+    return [row.chipId, row.assignedChipId, row.chip_id, row.chipName, row.chipInstance, row.chip_name, row.chip_instance]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+  }
+
   function renderRightPanel() {
     const right = document.getElementById('zapRight');
     if (!right) return;
@@ -2623,13 +2677,15 @@
       return;
     }
 
-    const today = localDateISO();
+    const dispatchDate = selectedQueueDateForDispatch();
+    const dispatchLabel = selectedQueueDateLabel(dispatchDate);
+    const dispatchRows = queueRowsForDispatchDate(dispatchDate);
     right.innerHTML = `
       <div style="height:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden;width:100%">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;flex-shrink:0">
           <div>
-            <div class="card-title" style="margin:0">Kanban dos disparos</div>
-            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// somente execução diária · alocação fica na aba Operação</div>
+            <div class="card-title" style="margin:0">Kanban dos disparos · ${esc(dispatchLabel)}</div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// somente execução do dia selecionado · alocação fica na aba Operação</div>
           </div>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
             <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
@@ -2637,7 +2693,7 @@
         </div>
         <div style="display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;min-height:0;flex:1;padding-bottom:8px;width:100%">
           ${state.chips.map((chip, slot) => {
-            const rows = state.rows.filter((row) => row.inTodayQueue && chipMatchesRow(chip, row));
+            const rows = dispatchRows.filter((row) => chipMatchesRow(chip, row));
             const groups = groupRowsByBatch(rows);
             const ready = rows.filter((row) => ['queued_dispatch', 'batch_ready'].includes(row.statusRaw)).length;
             const sending = rows.filter((row) => row.statusRaw === 'batch_sending').length;
