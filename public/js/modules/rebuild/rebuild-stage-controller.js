@@ -2539,22 +2539,32 @@
 
   function groupRowsByBatch(rows = []) {
     const groups = new Map();
+    const LOTE_SIZE = (typeof getLoteSize === 'function' ? Number(getLoteSize()) : 30) || 30;
+
     rows.forEach((row, index) => {
-      const batchId = row.batchId || row.batch_id || row.dispatchBatchId || row.dispatch_batch_id || 'sem-lote';
+      const realBatchId = row.batchId || row.batch_id || row.dispatchBatchId || row.dispatch_batch_id || '';
+      const isTestBatch = String(realBatchId || '').startsWith('teste-');
+      const computedBatchIndex = Number(row.batchIndex || row.batch_index) || (Math.floor(index / LOTE_SIZE) + 1);
+      const batchId = realBatchId || `auto-lote-${computedBatchIndex}`;
+
       if (!groups.has(batchId)) {
         groups.set(batchId, {
           id: String(batchId),
           batchId: String(batchId),
-          batchIndex: row.batchIndex || row.batch_index || (groups.size + 1),
+          batchIndex: computedBatchIndex,
+          isAutoBatch: !realBatchId,
+          isTestBatch,
           statusRaw: row.statusRaw || row.status || 'queued_dispatch',
           rows: []
         });
       }
+
       const group = groups.get(batchId);
       group.rows.push(row);
       if (row.statusRaw === 'batch_sending') group.statusRaw = 'batch_sending';
       if (['sent', 'completed', 'batch_completed'].includes(row.statusRaw) && group.statusRaw !== 'batch_sending') group.statusRaw = row.statusRaw;
     });
+
     return [...groups.values()].sort((a, b) => Number(a.batchIndex || 0) - Number(b.batchIndex || 0));
   }
 
@@ -2632,7 +2642,8 @@
 
   function batchBlock(chip, slot, group) {
     const batchDomId = `batch-${slot}-${String(group.batchId).replace(/[^a-zA-Z0-9_-]/g, '')}`;
-    const label = group.batchId === 'sem-lote' ? 'Sem lote' : (String(group.batchId || '').startsWith('teste-') ? 'Lote teste' : `Lote ${group.batchIndex || 1}`);
+    const loteNumber = String(Number(group.batchIndex || 1) || 1).padStart(2, '0');
+    const label = group.isTestBatch || String(group.batchId || '').startsWith('teste-') ? 'Lote teste' : `Lote ${loteNumber}`;
     return `
       <div style="border:1px solid var(--border);border-radius:13px;background:var(--bg);margin-bottom:10px;overflow:hidden">
         <button type="button" onclick="toggleBatchLeadDetailsRebuild631('${esc(batchDomId)}')" style="width:100%;border:0;background:var(--surface2);color:var(--text);padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;text-align:left">
@@ -2640,7 +2651,7 @@
           <span style="display:flex;align-items:center;gap:7px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">
             <span>${group.rows.length} lead${group.rows.length !== 1 ? 's' : ''}</span>
             <span class="q-badge ${statusClassForRow({ statusRaw: group.statusRaw })}">${esc(batchStatusLabel(group.statusRaw))}</span>
-            <span>▾</span>
+            <span id="arrow-${esc(batchDomId)}" style="display:inline-block;transition:transform .2s ease">▼</span>
           </span>
         </button>
         <div id="${esc(batchDomId)}" style="display:block;padding:10px;max-height:520px;overflow:auto">
@@ -2649,7 +2660,7 @@
             <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:10px;margin-bottom:8px">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;min-width:0" onclick="toggleBatchLeadDetailsRebuild631('lead-${esc(batchDomId)}-${index}')">
                 <div style="min-width:0;flex:1 1 auto;overflow:hidden">
-                  <div style="font-size:12px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(row.nome || row.company_name || 'Lead')}</div>
+                  <div style="font-size:10px;line-height:14px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(row.nome || row.company_name || 'Lead')}</div>
                 </div>
                 <div style="flex:0 0 auto;display:flex;align-items:center;gap:6px;white-space:nowrap">
                   <span class="q-badge ${templateTypeLabel(row) === 'Com site' ? 'info' : 'warn'}">${esc(templateTypeLabel(row))}</span>
@@ -2937,7 +2948,13 @@
   window.toggleBatchLeadDetailsRebuild631 = function toggleBatchLeadDetailsRebuild631(id) {
     const el = document.getElementById(id);
     if (!el) return;
-    el.style.display = el.style.display === 'none' || !el.style.display ? 'block' : 'none';
+    const willOpen = el.style.display === 'none' || !el.style.display;
+    el.style.display = willOpen ? 'block' : 'none';
+    const arrow = document.getElementById(`arrow-${id}`);
+    if (arrow) {
+      arrow.textContent = willOpen ? '▼' : '▶';
+      arrow.style.transform = willOpen ? 'rotate(0deg)' : 'rotate(0deg)';
+    }
   };
 
   function renderQueueModeTabs() {
