@@ -2421,6 +2421,7 @@
       chip_name: chip.name,
       chip_instance: chip.instance,
       filled_day_at: new Date().toISOString(),
+      scheduled_for: localDateISO(),
       ...pickTemplatePayload(row)
     };
   }
@@ -2634,7 +2635,7 @@
             <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
           </div>
         </div>
-        <div style="display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;min-height:0;flex:1;padding-bottom:8px">
+        <div style="display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;min-height:0;flex:1;padding-bottom:8px;width:100%">
           ${state.chips.map((chip, slot) => {
             const rows = state.rows.filter((row) => row.inTodayQueue && chipMatchesRow(chip, row));
             const groups = groupRowsByBatch(rows);
@@ -2644,7 +2645,7 @@
             const chipLabel = chip.name || chip.nome || `Chip ${slot + 1}`;
             const chipInstance = chip.instance || chip.numero || chip.phone || '';
             return `
-              <section style="min-width:430px;width:430px;max-width:430px;height:100%;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden">
+              <section style="min-width:430px;flex:1 0 430px;height:100%;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden">
                 <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0">
                   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
                     <div style="min-width:0">
