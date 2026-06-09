@@ -40,6 +40,15 @@ function getUserId(req, body = {}) {
   const query = req?.query || {};
   return String(query.user_id || query.userId || body.user_id || body.userId || '').trim();
 }
+function safeEmptyContactMap(extra = {}) {
+  return {
+    ok: true,
+    success: true,
+    items: [],
+    maps: [],
+    ...extra
+  };
+}
 async function supabaseFetch(path, options = {}) {
   const url = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/${path}`;
   const res = await fetch(url, { ...options, headers: backendHeaders(options.headers || {}) });
@@ -117,21 +126,22 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
       if (!SUPABASE_SECRET_KEY && !SUPABASE_SERVICE_ROLE_KEY) {
-        return res.status(200).json({ success:true, maps:[], warning:'service key ausente' });
+        console.warn('[contact-map:get] service key ausente; retornando vazio');
+        return res.status(200).json(safeEmptyContactMap({ warning:'service key ausente' }));
       }
       let userId = getUserId(req, body);
       try { userId = await verifyRequestUser(req, userId); } catch (authError) {
         console.warn('[contact-map:get] auth indisponível; usando user_id informado como fallback seguro de leitura vazia se necessário', authError?.message || authError);
       }
-      if (!userId) return res.status(200).json({ success:true, maps:[], warning:'user_id ausente' });
+      if (!userId) return res.status(200).json(safeEmptyContactMap({ warning:'user_id ausente' }));
       const maps = await listMaps(userId).catch(error => {
         console.warn('[contact-map:get] falha ao listar mapas; retornando vazio', error?.message || error);
         return [];
       });
-      return res.status(200).json({ success:true, maps });
+      return res.status(200).json({ ok:true, success:true, items:maps, maps });
     } catch (error) {
       console.warn('[contact-map:get] fallback vazio', error?.message || error);
-      return res.status(200).json({ success:true, maps:[], warning:error?.message || 'contact-map indisponível' });
+      return res.status(200).json(safeEmptyContactMap({ warning:error?.message || 'contact-map indisponivel' }));
     }
   }
 
