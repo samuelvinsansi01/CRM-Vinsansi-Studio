@@ -1863,6 +1863,8 @@
     openChipKeys: new Set(),
     chips: [],
     rows: [],
+    operationSelected: new Set(),
+    operationBusy: false,
     loading: false
   };
 
@@ -3112,14 +3114,15 @@
   function operationLeadActions(row = {}) {
     const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
     const locked = ['sent', 'completed', 'batch_completed', 'batch_sending'].includes(String(row.statusRaw || '').toLowerCase());
+    const disabled = state.operationBusy ? 'disabled' : '';
     const base = `<button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>`;
     if (locked) return `${base}<span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>`;
     if (row.inTodayQueue || row.inScheduledQueue) {
-      return `${base}<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`;
+      return `${base}<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" ${disabled} onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>`;
     }
     if (!activeChips.length) return `${base}<span class="q-badge warn">Sem chip ativo</span>`;
     return `${base}${activeChips.map((chip, index) => `
-      <button class="add-btn added" type="button" data-queue621-lead="${esc(row.id)}" onclick="queueLeadToChipRebuild646('${esc(row.id)}','${esc(chip.id)}')">Chip ${index + 1}</button>
+      <button class="add-btn added" type="button" data-queue621-lead="${esc(row.id)}" ${disabled} onclick="queueLeadToChipRebuild646('${esc(row.id)}','${esc(chip.id)}')">Chip ${index + 1}</button>
     `).join('')}`;
   }
 
@@ -3143,9 +3146,88 @@
     `;
   }
 
+  function operationRowKey(row = {}) {
+    return String(row.id || row.leadId || row.lead_id || row.queueItemId || row.queue_item_id || '');
+  }
+
+  function isOperationRowLocked(row = {}) {
+    return ['sent', 'completed', 'batch_completed', 'batch_sending']
+      .includes(String(row.statusRaw || row.current_status || '').toLowerCase());
+  }
+
+  function isOperationRowQueued(row = {}) {
+    const raw = String(row.statusRaw || row.current_status || '').toLowerCase();
+    return row.inTodayQueue || row.inScheduledQueue || ['queued_dispatch', 'batch_ready'].includes(raw);
+  }
+
+  function syncOperationSelection(rows = []) {
+    const available = new Set(rows.map(operationRowKey).filter(Boolean));
+    [...state.operationSelected].forEach((id) => {
+      if (!available.has(id)) state.operationSelected.delete(id);
+    });
+  }
+
+  function selectedOperationRows(rows = []) {
+    return rows.filter((row) => state.operationSelected.has(operationRowKey(row)));
+  }
+
+  function operationSelectionStats(allRows = []) {
+    const selectableRows = allRows.filter((row) => !isOperationRowLocked(row));
+    const selectedRows = selectedOperationRows(allRows);
+    const actionable = selectedRows.filter((row) => !isOperationRowLocked(row));
+    const queued = actionable.filter(isOperationRowQueued);
+    const toQueue = actionable.filter((row) => !isOperationRowQueued(row));
+    return {
+      selectableCount: selectableRows.length,
+      selectedRows,
+      selectedCount: selectedRows.length,
+      queuedCount: queued.length,
+      toQueueCount: toQueue.length,
+      allSelected: selectableRows.length > 0 && selectableRows.every((row) => state.operationSelected.has(operationRowKey(row))),
+      partiallySelected: selectableRows.some((row) => state.operationSelected.has(operationRowKey(row)))
+    };
+  }
+
+  function syncOperationSelectAllInput(stats) {
+    const input = document.getElementById('queueOperationSelectAll');
+    if (!input) return;
+    input.indeterminate = !!(stats.partiallySelected && !stats.allSelected);
+  }
+
+  function operationSelectionToolbar(allRows = []) {
+    const stats = operationSelectionStats(allRows);
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:9px 10px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:10px;font-weight:900;color:var(--text);cursor:${stats.selectableCount ? 'pointer' : 'not-allowed'}">
+          <input id="queueOperationSelectAll" type="checkbox" ${stats.allSelected ? 'checked' : ''} ${!stats.selectableCount || state.operationBusy ? 'disabled' : ''}
+            onchange="toggleQueueOperationSelectAllRebuild648(this.checked)"
+            style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer" />
+          <span>Selecionar todos</span>
+          <span class="q-badge info">${allRows.length} filtrado${allRows.length !== 1 ? 's' : ''}</span>
+          ${stats.selectedCount ? `<span class="q-badge ok">${stats.selectedCount} selecionado${stats.selectedCount !== 1 ? 's' : ''}</span>` : ''}
+        </label>
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 10px" ${!stats.toQueueCount || state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsRebuild648()">Entrar na fila</button>
+          <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 10px" ${!stats.queuedCount || state.operationBusy ? 'disabled' : ''} onclick="backSelectedOperationToBacklogRebuild648()">Voltar backlog</button>
+          <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 10px" ${!stats.selectedCount || state.operationBusy ? 'disabled' : ''} onclick="clearQueueOperationSelectionRebuild648()">Limpar</button>
+          ${state.operationBusy ? '<span class="q-badge warn">Processando</span>' : ''}
+        </div>
+      </div>
+    `;
+  }
+
   function operationLeadRow(row = {}) {
+    const key = operationRowKey(row);
+    const checked = state.operationSelected.has(key);
+    const locked = isOperationRowLocked(row);
     return `
       <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:center;gap:12px">
+        <label aria-label="Selecionar lead" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:${locked || state.operationBusy ? 'not-allowed' : 'pointer'}">
+          <input type="checkbox" ${checked ? 'checked' : ''} ${locked || state.operationBusy ? 'disabled' : ''}
+            onclick="event.stopPropagation()"
+            onchange="toggleQueueOperationSelectionRebuild648('${esc(key)}')"
+            style="width:15px;height:15px;accent-color:var(--accent);cursor:${locked || state.operationBusy ? 'not-allowed' : 'pointer'}" />
+        </label>
         <div class="empresa-info" style="min-width:0">
           <div class="empresa-nome">${esc(row.nome || row.company_name || 'Lead')}</div>
           <div class="empresa-meta" style="gap:6px;flex-wrap:wrap">
@@ -3202,6 +3284,7 @@
     const statuses = operationStatusDefinitions(isPast, isBacklog);
     if (!statuses.some(([key]) => key === state.operationStatus)) state.operationStatus = statuses[0]?.[0] || 'not_sent';
     const allRows = operationRowsForActiveFilter();
+    syncOperationSelection(allRows);
     const pagination = operationPaginatedRows(allRows);
     const rows = pagination.rows;
     const scopeLabel = isBacklog ? 'Backlog' : (selectedDay?.label || selectedScope);
@@ -3247,6 +3330,7 @@
             </div>
           `).join('')}
         </div>
+        ${operationSelectionToolbar(allRows)}
         <input type="text" value="${esc(state.operationSearch || '')}" oninput="setQueueOperationSearchRebuild646(this.value)" placeholder="🔍 Buscar por nome, site ou WhatsApp..." style="width:100%;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-family:'DM Mono',monospace;font-size:11px;outline:none" />
         <div style="border:1px solid var(--border);border-radius:14px;overflow:hidden;min-height:0;flex:1;display:flex;flex-direction:column">
           <div style="overflow:auto;min-height:0;flex:1;padding:10px">
@@ -3256,6 +3340,7 @@
         ${operationPaginationHtml(pagination)}
       </div>
     `;
+    syncOperationSelectAllInput(operationSelectionStats(allRows));
   }
 
   window.setQueueOperationDateRebuild645 = function setQueueOperationDateRebuild645(iso) {
@@ -3266,24 +3351,135 @@
     state.operationScope = normalizeOperationScope(scope);
     state.operationStatus = 'not_sent';
     state.operationPage = 1;
+    state.operationSelected.clear();
     renderOperationView();
   };
 
   window.setQueueOperationStatusRebuild646 = function setQueueOperationStatusRebuild646(status) {
     state.operationStatus = String(status || 'not_sent');
     state.operationPage = 1;
+    state.operationSelected.clear();
     renderOperationView();
   };
 
   window.setQueueOperationSearchRebuild646 = function setQueueOperationSearchRebuild646(value) {
     state.operationSearch = String(value || '');
     state.operationPage = 1;
+    state.operationSelected.clear();
     renderOperationView();
   };
 
   window.setQueueOperationPageRebuild647 = function setQueueOperationPageRebuild647(page) {
     state.operationPage = Math.max(1, Number(page || 1));
     renderOperationView();
+  };
+
+  window.toggleQueueOperationSelectionRebuild648 = function toggleQueueOperationSelectionRebuild648(leadId) {
+    if (state.operationBusy) return;
+    const key = String(leadId || '');
+    if (!key) return;
+    const row = operationRowsForActiveFilter().find((item) => operationRowKey(item) === key);
+    if (!row || isOperationRowLocked(row)) return;
+    if (state.operationSelected.has(key)) state.operationSelected.delete(key);
+    else state.operationSelected.add(key);
+    renderOperationView();
+  };
+
+  window.toggleQueueOperationSelectAllRebuild648 = function toggleQueueOperationSelectAllRebuild648(checked) {
+    if (state.operationBusy) return;
+    const rows = operationRowsForActiveFilter().filter((row) => !isOperationRowLocked(row));
+    rows.forEach((row) => {
+      const key = operationRowKey(row);
+      if (!key) return;
+      if (checked) state.operationSelected.add(key);
+      else state.operationSelected.delete(key);
+    });
+    renderOperationView();
+  };
+
+  window.clearQueueOperationSelectionRebuild648 = function clearQueueOperationSelectionRebuild648() {
+    if (state.operationBusy) return;
+    state.operationSelected.clear();
+    renderOperationView();
+  };
+
+  function setQueueOperationBulkBusy(value) {
+    state.operationBusy = !!value;
+    renderOperationView();
+  }
+
+  window.queueSelectedOperationLeadsRebuild648 = async function queueSelectedOperationLeadsRebuild648() {
+    if (state.operationBusy) return;
+    const rows = selectedOperationRows(operationRowsForActiveFilter())
+      .filter((row) => !isOperationRowLocked(row) && !isOperationRowQueued(row));
+    if (!rows.length) {
+      if (typeof notify === 'function') notify('// selecione ao menos 1 lead fora da fila', 'warn');
+      return;
+    }
+
+    const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
+    if (!activeChips.length) {
+      if (typeof notify === 'function') notify('// configure pelo menos um chip ativo antes de preencher a fila', 'warn');
+      return;
+    }
+
+    setQueueOperationBulkBusy(true);
+    const usage = buildChipUsage(activeChips);
+    let chipCursor = 0;
+    let moved = 0;
+
+    try {
+      for (const row of rows) {
+        const result = chooseNextAvailableChip(activeChips, usage, chipCursor);
+        const chip = result.chip;
+        chipCursor = result.nextIndex;
+        if (!chip) break;
+        try {
+          await rpcQueueAction(row.id, 'queue_today', queuePayloadFor(row, chip, 'operation_bulk_selected'));
+          moved++;
+        } catch (error) {
+          console.warn('[rebuild648] falha ao colocar lead selecionado na fila:', row.id, error);
+        }
+      }
+      if (typeof notify === 'function') {
+        notify(`${moved} lead${moved !== 1 ? 's' : ''} entrou${moved !== 1 ? 'aram' : ''} na fila.`);
+      }
+    } finally {
+      state.operationSelected.clear();
+      state.operationBusy = false;
+      await renderQueueStageFromSupabase();
+    }
+  };
+
+  window.backSelectedOperationToBacklogRebuild648 = async function backSelectedOperationToBacklogRebuild648() {
+    if (state.operationBusy) return;
+    const rows = selectedOperationRows(operationRowsForActiveFilter())
+      .filter((row) => !isOperationRowLocked(row) && isOperationRowQueued(row));
+    if (!rows.length) {
+      if (typeof notify === 'function') notify('// selecione ao menos 1 lead em fila', 'warn');
+      return;
+    }
+
+    setQueueOperationBulkBusy(true);
+    let moved = 0;
+
+    try {
+      for (const row of rows) {
+        try {
+          await rpcQueueAction(row.id, 'back_to_backlog');
+          moved++;
+        } catch (error) {
+          console.warn('[rebuild648] falha ao voltar lead selecionado ao backlog:', row.id, error);
+        }
+      }
+      if (typeof notify === 'function') {
+        notify(`${moved} lead${moved !== 1 ? 's' : ''} voltou${moved !== 1 ? 'aram' : ''} ao backlog.`);
+      }
+    } finally {
+      state.operationSelected.clear();
+      state.operationBusy = false;
+      await renderQueueStageFromSupabase();
+    }
   };
 
   window.queueLeadToChipRebuild646 = async function queueLeadToChipRebuild646(leadId, chipId) {
