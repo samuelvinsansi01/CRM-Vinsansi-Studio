@@ -2839,23 +2839,66 @@
     `).join('')}`;
   }
 
-  function operationLeadRow(row = {}) {
-    const status = statusLabelForRow(row);
-    const statusClass = statusClassForRow(row);
+  function operationMetaBadge(label, value, kind = 'warn', href = '') {
+    const textValue = String(value || '').trim();
+    if (!textValue) return `<span class="q-badge ${kind}">${esc(label)}</span>`;
+    if (href) return `<a class="q-badge ${kind}" href="${esc(href)}" target="_blank" rel="noopener" title="${esc(textValue)}">${esc(label)}</a>`;
+    return `<span class="q-badge ${kind}" title="${esc(textValue)}">${esc(label)}</span>`;
+  }
+
+  function operationLeadMeta(row = {}) {
+    const instagram = row.instagram || row.instagram_username || row.instagram_url || '';
+    const site = row.site || row.website || '';
+    const phone = row.whatsapp || row.phone || row.normalized_phone || '';
     return `
-      <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:center">
+      <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
+      ${instagram ? operationMetaBadge('Instagram', instagram, 'info', String(instagram).startsWith('http') ? instagram : '') : operationMetaBadge('Sem Instagram', '', 'warn')}
+      ${site ? operationMetaBadge('Site', site, 'info', site) : operationMetaBadge('Sem site', '', 'warn')}
+      ${phone ? operationMetaBadge(phone, '', 'ok') : operationMetaBadge('Sem WhatsApp', '', 'warn')}
+      ${row.mensagem || row.mensagem2 ? '<span class="q-badge ok">Mensagem sorteada</span>' : ''}
+    `;
+  }
+
+  function operationLeadRow(row = {}) {
+    return `
+      <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:center;gap:12px">
         <div class="empresa-info" style="min-width:0">
           <div class="empresa-nome">${esc(row.nome || row.company_name || 'Lead')}</div>
-          <div class="empresa-meta">
-            <span class="q-badge ${statusClass}">${esc(status)}</span>
-            <span>${esc(row.instagram || row.instagram_username || 'Sem Instagram')}</span>
-            <span>${esc(row.site || row.website || 'Sem site')}</span>
-            <span>${esc(row.whatsapp || row.phone || row.normalized_phone || 'Sem WhatsApp')}</span>
-            ${row.mensagem || row.mensagem2 ? '<span class="q-badge ok">Mensagem sorteada</span>' : ''}
+          <div class="empresa-meta" style="gap:6px;flex-wrap:wrap">
+            ${operationLeadMeta(row)}
           </div>
         </div>
-        <div class="empresa-actions" style="justify-content:flex-end">
+        <div class="empresa-actions" style="justify-content:flex-end;gap:6px;flex-wrap:wrap">
           ${operationLeadActions(row)}
+        </div>
+      </div>
+    `;
+  }
+
+  function operationPaginatedRows(rows = []) {
+    const pageSize = Number(state.operationPageSize || 10) || 10;
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    const page = Math.min(Math.max(1, Number(state.operationPage || 1) || 1), totalPages);
+    state.operationPage = page;
+    return {
+      page,
+      pageSize,
+      totalPages,
+      total: rows.length,
+      rows: rows.slice((page - 1) * pageSize, page * pageSize)
+    };
+  }
+
+  function operationPaginationHtml(pagination) {
+    if (!pagination || pagination.totalPages <= 1) return '';
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">
+          Página ${pagination.page} de ${pagination.totalPages} · ${pagination.total} leads
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 10px" ${pagination.page <= 1 ? 'disabled' : ''} onclick="setQueueOperationPageRebuild647(${pagination.page - 1})">Anterior</button>
+          <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 10px" ${pagination.page >= pagination.totalPages ? 'disabled' : ''} onclick="setQueueOperationPageRebuild647(${pagination.page + 1})">Próxima</button>
         </div>
       </div>
     `;
@@ -2873,8 +2916,11 @@
     const isPast = !!selectedDay && selectedDay.iso < todayIso;
     const statuses = operationStatusDefinitions(isPast, isBacklog);
     if (!statuses.some(([key]) => key === state.operationStatus)) state.operationStatus = statuses[0]?.[0] || 'not_sent';
-    const rows = operationRowsForActiveFilter();
+    const allRows = operationRowsForActiveFilter();
+    const pagination = operationPaginatedRows(allRows);
+    const rows = pagination.rows;
     const scopeLabel = isBacklog ? 'Backlog' : (selectedDay?.label || selectedScope);
+    const backlogTotal = operationScopeRows('backlog').length;
 
     content.innerHTML = `
       <div class="card" style="margin:0;padding:16px;flex-shrink:0">
@@ -2885,10 +2931,15 @@
           </div>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
             <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
-            <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="setQueueModeRebuild643('dispatch')">Ir para disparos</button>
+            <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="generateDispatchBatchesRebuild622()">Gerar lotes</button>
+            <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="setQueueModeRebuild643('dispatch')">Ir para disparos</button>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
+        <div style="display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:8px">
+          <button type="button" onclick="setQueueOperationScopeRebuild646('backlog')" style="min-width:0;text-align:left;border:1px solid ${isBacklog ? 'var(--accent)' : 'var(--border)'};border-radius:12px;background:${isBacklog ? 'rgba(182,255,75,.08)' : 'var(--surface2)'};padding:10px;cursor:pointer;color:var(--text)">
+            <div style="font-size:11px;font-weight:900;color:${isBacklog ? 'var(--accent)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Backlog</div>
+            <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:7px">${backlogTotal} leads</div>
+          </button>
           ${days.map((day) => {
             const active = day.iso === selectedScope;
             const total = operationScopeRows(day.iso).length;
@@ -2904,10 +2955,6 @@
 
       <div class="card" style="margin:0;padding:16px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden">
         <div class="card-title" style="margin:0 0 14px">Leads ativos</div>
-        <div class="day-tabs" style="margin-bottom:10px;gap:7px;flex-wrap:wrap">
-          <div class="day-tab${isBacklog ? ' active' : ''}" onclick="setQueueOperationScopeRebuild646('backlog')">Backlog <span class="day-count">${operationScopeRows('backlog').length}</span></div>
-          ${days.map((day) => `<div class="day-tab${day.iso === selectedScope ? ' active' : ''}" onclick="setQueueOperationScopeRebuild646('${esc(day.iso)}')">${esc(day.label)}${day.isToday ? ' ●' : ''}</div>`).join('')}
-        </div>
         <div class="day-tabs" style="margin-bottom:12px;gap:7px;flex-wrap:wrap">
           ${statuses.map(([key, label]) => `
             <div class="day-tab${state.operationStatus === key ? ' active' : ''}" onclick="setQueueOperationStatusRebuild646('${esc(key)}')">
@@ -2917,13 +2964,11 @@
         </div>
         <input type="text" value="${esc(state.operationSearch || '')}" oninput="setQueueOperationSearchRebuild646(this.value)" placeholder="🔍 Buscar por nome, site ou WhatsApp..." style="width:100%;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:12px;font-family:'DM Mono',monospace;font-size:11px;outline:none" />
         <div style="border:1px solid var(--border);border-radius:14px;overflow:hidden;min-height:0;flex:1;display:flex;flex-direction:column">
-          <div style="display:grid;grid-template-columns:2fr 1fr 1.2fr 1fr 1.2fr;gap:10px;padding:11px 14px;background:var(--surface2);font-family:'DM Mono',monospace;font-size:9px;font-weight:900;color:var(--muted);letter-spacing:.08em;text-transform:uppercase">
-            <div>Empresa</div><div>Instagram</div><div>Site</div><div>WhatsApp</div><div>Ações</div>
-          </div>
           <div style="overflow:auto;min-height:0;flex:1;padding:10px">
             ${rows.length ? rows.map(operationLeadRow).join('') : `<div class="fila-empty" style="min-height:160px">// nenhuma empresa em ${esc(scopeLabel)} com este status</div>`}
           </div>
         </div>
+        ${operationPaginationHtml(pagination)}
       </div>
     `;
   }
@@ -2935,16 +2980,24 @@
   window.setQueueOperationScopeRebuild646 = function setQueueOperationScopeRebuild646(scope) {
     state.operationScope = scope === 'backlog' ? 'backlog' : String(scope || localDateISO()).slice(0, 10);
     state.operationStatus = 'not_sent';
+    state.operationPage = 1;
     renderOperationView();
   };
 
   window.setQueueOperationStatusRebuild646 = function setQueueOperationStatusRebuild646(status) {
     state.operationStatus = String(status || 'not_sent');
+    state.operationPage = 1;
     renderOperationView();
   };
 
   window.setQueueOperationSearchRebuild646 = function setQueueOperationSearchRebuild646(value) {
     state.operationSearch = String(value || '');
+    state.operationPage = 1;
+    renderOperationView();
+  };
+
+  window.setQueueOperationPageRebuild647 = function setQueueOperationPageRebuild647(page) {
+    state.operationPage = Math.max(1, Number(page || 1));
     renderOperationView();
   };
 
@@ -2958,7 +3011,6 @@
       if (!chip) throw new Error('Chip selecionado nao encontrado.');
       await rpcQueueAction(leadId, 'queue_today', queuePayloadFor(row, chip, 'operation_manual_chip'));
       if (typeof notify === 'function') notify(`Lead enviado para ${chip.name || chip.instance || 'chip'} na fila de disparos.`);
-      state.operationStatus = 'queued';
       await renderQueueStageFromSupabase();
     } catch (error) {
       console.error('[rebuild646] erro ao enviar lead ao chip:', error);
