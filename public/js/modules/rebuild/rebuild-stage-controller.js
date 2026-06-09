@@ -2348,19 +2348,22 @@
   }
 
   function statusLabelForRow(row = {}) {
-    if (!row.inTodayQueue) return 'Nao enviado';
-    if (row.statusRaw === 'batch_sending') return 'Em disparo';
-    if (row.statusRaw === 'batch_ready' || row.statusRaw === 'queued_dispatch') return 'Em fila';
-    if (row.statusRaw === 'sent' || row.statusRaw === 'completed' || row.statusRaw === 'batch_completed') return 'Enviado';
-    if (row.statusRaw === 'error') return 'Erro';
-    return row.inTodayQueue ? 'Em fila' : 'Nao enviado';
+    const raw = String(row.statusRaw || row.current_status || '').toLowerCase();
+    if (raw === 'batch_sending') return 'Em disparo';
+    if (raw === 'batch_ready' || raw === 'queued_dispatch') return 'Em fila';
+    if (raw === 'sent' || raw === 'completed' || raw === 'batch_completed') return 'Enviado';
+    if (raw === 'error') return 'Erro';
+    if (row.inScheduledQueue || row.inTodayQueue) return 'Em fila';
+    return 'Não enviado';
   }
 
   function statusClassForRow(row = {}) {
-    if (row.statusRaw === 'sent' || row.statusRaw === 'completed' || row.statusRaw === 'batch_completed') return 'ok';
-    if (row.statusRaw === 'batch_sending') return 'info';
-    if (row.statusRaw === 'error') return 'err';
-    return row.inTodayQueue ? 'ok' : 'warn';
+    const raw = String(row.statusRaw || row.current_status || '').toLowerCase();
+    if (raw === 'sent' || raw === 'completed' || raw === 'batch_completed') return 'ok';
+    if (raw === 'batch_sending') return 'info';
+    if (raw === 'error') return 'err';
+    if (raw === 'batch_ready' || raw === 'queued_dispatch' || row.inScheduledQueue || row.inTodayQueue) return 'ok';
+    return 'warn';
   }
 
   function templateTypeLabel(row = {}) {
@@ -2561,6 +2564,41 @@
     return 'Pronto';
   }
 
+  function batchConfigBlock(chip, slot, group) {
+    const batchIndex = Number(group.batchIndex || 1) || 1;
+    const chipId = chip.id || chip.dbId || chip.instance || String(slot);
+    const selectedRamo = (typeof getLoteRamo === 'function') ? getLoteRamo(chipId, batchIndex) : '';
+    const ramos = (typeof getRamos === 'function' ? getRamos() : []) || [];
+    const imageKey = (typeof getLoteImgKey === 'function') ? getLoteImgKey(chipId, batchIndex) : `chip-${chipId}-lote-${batchIndex}`;
+    const imageSrc = (typeof getLoteImagem === 'function') ? getLoteImagem(chipId, batchIndex) : null;
+    try {
+      if (typeof carregarImagensLote === 'function') carregarImagensLote(chipId, batchIndex, slot, true);
+    } catch (_) {}
+    return `
+      <div style="border:1px dashed var(--border2);border-radius:12px;background:rgba(255,255,255,.02);padding:10px;margin-bottom:10px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start">
+          <label style="display:flex;flex-direction:column;gap:6px;min-width:0">
+            <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Ramo do lote</span>
+            <select onchange="typeof onLoteRamoChange==='function'&&onLoteRamoChange('${esc(chipId)}',${batchIndex},this.value,true,${slot})" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px;font-family:'DM Mono',monospace;font-size:9px">
+              <option value="">— selecione o ramo —</option>
+              ${ramos.map((ramo) => `<option value="${esc(ramo.id)}" ${String(selectedRamo || '') === String(ramo.id) ? 'selected' : ''}>${esc(ramo.nome || ramo.name || ramo.id)}</option>`).join('')}
+            </select>
+          </label>
+          <div style="min-width:0">
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:6px">Imagem do lote</div>
+            <div class="fila-img-area ${imageSrc ? 'has-img' : ''}" style="position:relative;border:1px dashed var(--border2);border-radius:9px;min-height:42px;padding:8px;background:var(--bg);display:flex;align-items:center;gap:8px;overflow:hidden">
+              <img data-lote-img-key="${esc(imageKey)}" src="${esc(imageSrc || '')}" style="${imageSrc ? '' : 'display:none;'}width:40px;height:40px;object-fit:cover;border-radius:7px;border:1px solid var(--border)" />
+              <span class="fila-img-label" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);${imageSrc ? 'display:none' : ''}">Sem imagem</span>
+              <span class="fila-img-ok" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--accent);${imageSrc ? '' : 'display:none'}">Imagem salva</span>
+              <input type="file" accept="image/*" onchange="typeof onLoteImgChange==='function'&&onLoteImgChange('${esc(chipId)}',${batchIndex},this,true,${slot})" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+              <button class="fila-remove-btn add-btn" type="button" onclick="event.stopPropagation();typeof onLoteImgRemove==='function'&&onLoteImgRemove('${esc(chipId)}',${batchIndex},true,${slot})" style="margin-left:auto;${imageSrc ? '' : 'display:none'}">Remover</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function batchBlock(chip, slot, group) {
     const batchDomId = `batch-${slot}-${String(group.batchId).replace(/[^a-zA-Z0-9_-]/g, '')}`;
     const label = group.batchId === 'sem-lote' ? 'Sem lote' : `Lote ${group.batchIndex || 1}`;
@@ -2574,7 +2612,8 @@
             <span>▾</span>
           </span>
         </button>
-        <div id="${esc(batchDomId)}" style="display:block;padding:10px;max-height:420px;overflow:auto">
+        <div id="${esc(batchDomId)}" style="display:block;padding:10px;max-height:520px;overflow:auto">
+          ${batchConfigBlock(chip, slot, group)}
           ${group.rows.map((row, index) => `
             <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:10px;margin-bottom:8px">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer" onclick="toggleBatchLeadDetailsRebuild631('lead-${esc(batchDomId)}-${index}')">
@@ -2601,14 +2640,16 @@
     `;
   }
 
-  function testLeadBoxRebuild632(chip, slot) {
+  function testLeadBoxRebuild632(chip, slot, dispatchDate = localDateISO()) {
     const id = chip.id || chip.instance || slot;
+    const disabledAttr = dispatchControlsDisabledAttr(dispatchDate);
+    const disabledTitle = dispatchControlsTitle(dispatchDate);
     return `
       <div style="border:1px dashed var(--border2);border-radius:12px;background:rgba(255,255,255,.02);padding:10px;margin-bottom:10px">
         <div style="font-size:10px;font-weight:900;color:var(--muted);letter-spacing:.08em;margin-bottom:7px">LEAD TESTE</div>
         <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
           <input id="testLeadPhone-${esc(id)}" placeholder="Número para teste" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px;font-family:'DM Mono',monospace;font-size:9px" />
-          <button class="add-btn added" type="button" onclick="typeof sendTestLeadFromChipRebuild632==='function'?sendTestLeadFromChipRebuild632('${esc(id)}'):notify('Envio teste ainda não configurado', 'warn')">Testar</button>
+          <button class="add-btn added" type="button" onclick="typeof sendTestLeadFromChipRebuild632==='function'?sendTestLeadFromChipRebuild632('${esc(id)}'):notify('Envio teste ainda não configurado', 'warn')" ${disabledAttr}${disabledTitle}>Testar</button>
         </div>
       </div>
     `;
@@ -2668,6 +2709,41 @@
       .filter(Boolean);
   }
 
+  function dispatchAgendaHtml(activeIso) {
+    const days = operationWeekDays();
+    return `
+      <div class="card" style="margin:0 0 12px;padding:14px;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+          <div>
+            <div class="card-title" style="margin:0">Agenda semanal</div>
+            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// selecione o dia para visualizar a fila de disparos</div>
+          </div>
+          <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
+          ${days.map((day) => {
+            const active = day.iso === activeIso;
+            const total = queueRowsForDispatchDate(day.iso).length;
+            return `
+              <button type="button" onclick="setQueueOperationScopeRebuild646('${esc(day.iso)}');setQueueModeRebuild643('dispatch')" style="min-width:0;text-align:left;border:1px solid ${active ? 'var(--accent)' : 'var(--border)'};border-radius:12px;background:${active ? 'rgba(182,255,75,.08)' : 'var(--surface2)'};padding:10px;cursor:pointer;color:var(--text)">
+                <div style="font-size:11px;font-weight:900;color:${day.isToday ? 'var(--accent)' : 'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(day.label)}${day.isToday ? ' ●' : ''}</div>
+                <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:7px">${total} itens</div>
+              </button>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function dispatchControlsDisabledAttr(dispatchDate) {
+    return String(dispatchDate || '').slice(0, 10) === localDateISO() ? '' : 'disabled';
+  }
+
+  function dispatchControlsTitle(dispatchDate) {
+    return String(dispatchDate || '').slice(0, 10) === localDateISO() ? '' : ' title="Disparo permitido apenas para o dia de hoje"';
+  }
+
   function renderRightPanel() {
     const right = document.getElementById('zapRight');
     if (!right) return;
@@ -2680,8 +2756,11 @@
     const dispatchDate = selectedQueueDateForDispatch();
     const dispatchLabel = selectedQueueDateLabel(dispatchDate);
     const dispatchRows = queueRowsForDispatchDate(dispatchDate);
+    const disabledAttr = dispatchControlsDisabledAttr(dispatchDate);
+    const disabledTitle = dispatchControlsTitle(dispatchDate);
     right.innerHTML = `
       <div style="height:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden;width:100%">
+        ${dispatchAgendaHtml(dispatchDate)}
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;flex-shrink:0">
           <div>
             <div class="card-title" style="margin:0">Kanban dos disparos · ${esc(dispatchLabel)}</div>
@@ -2715,8 +2794,8 @@
                     <div style="border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);padding:9px 10px;font-size:11px;color:var(--text)">${esc(chipInstance || chipLabel)} · ${esc(chipLabel)}</div>
                   </div>
                   <div style="display:grid;grid-template-columns:110px 1fr;gap:8px;margin-top:10px">
-                    <button class="btn btn-ghost" type="button" style="font-size:10px;padding:9px 10px" onclick="clearChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')">Limpar fila</button>
-                    <button class="btn btn-primary" type="button" style="font-size:11px;padding:9px 10px" onclick="dispatchChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')">🌐 Disparar</button>
+                    <button class="btn btn-ghost" type="button" style="font-size:10px;padding:9px 10px" onclick="clearChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')" ${disabledAttr}${disabledTitle}>Limpar fila</button>
+                    <button class="btn btn-primary" type="button" style="font-size:11px;padding:9px 10px" onclick="dispatchChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')" ${disabledAttr}${disabledTitle}>🌐 Disparar</button>
                   </div>
                   <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">
                     <span class="q-badge ok">${ready} prontos</span>
@@ -2726,7 +2805,7 @@
                 </div>
                 <div style="padding:12px;overflow:auto;min-height:0;flex:1">
                   <div style="font-size:10px;font-weight:900;color:var(--accent);letter-spacing:.08em;margin-bottom:10px">FILA CHIP ${slot + 1}</div>
-                  ${testLeadBoxRebuild632(chip, slot)}
+                  ${testLeadBoxRebuild632(chip, slot, dispatchDate)}
                   ${groups.length
                     ? groups.map((group) => batchBlock(chip, slot, group)).join('')
                     : '<div class="fila-empty" style="min-height:140px">// sem lotes neste chip</div>'}
