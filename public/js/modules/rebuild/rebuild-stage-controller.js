@@ -2564,6 +2564,37 @@
     return 'Pronto';
   }
 
+
+  window.onRebuildKanbanLoteRamoChange = function onRebuildKanbanLoteRamoChange(chipId, batchIndex, ramoId, isSlot, slot, batchId) {
+    try {
+      if (typeof onLoteRamoChange === 'function') onLoteRamoChange(chipId, batchIndex, ramoId, isSlot, slot);
+    } catch (_) {}
+    const targetBatch = String(batchId || '');
+    const rows = readTestDispatchRows();
+    let changed = false;
+    rows.forEach((row) => {
+      if (String(row.batchId || row.batch_id || '') !== targetBatch) return;
+      row.ramoId = ramoId || null;
+      if (ramoId && typeof pickTemplate === 'function') {
+        const picked = pickTemplate(row.nome || row.company_name || 'Lead teste', ramoId, row.templateType || row.siteSegment || 'sem-site');
+        row.mensagem = picked?.text || '';
+        row.mensagem2 = picked?.text2 || '';
+        row.template_part1 = row.mensagem;
+        row.template_part2 = row.mensagem2;
+        row.template_index = Number.isFinite(Number(picked?.idx)) ? Number(picked.idx) : null;
+      } else {
+        row.mensagem = '';
+        row.mensagem2 = '';
+        row.template_part1 = '';
+        row.template_part2 = '';
+        row.template_index = null;
+      }
+      changed = true;
+    });
+    if (changed) saveTestDispatchRows(rows);
+    renderRightPanel();
+  };
+
   function batchConfigBlock(chip, slot, group) {
     const batchIndex = Number(group.batchIndex || 1) || 1;
     const chipId = chip.id || chip.dbId || chip.instance || String(slot);
@@ -2579,7 +2610,7 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start">
           <label style="display:flex;flex-direction:column;gap:6px;min-width:0">
             <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Ramo do lote</span>
-            <select onchange="typeof onLoteRamoChange==='function'&&onLoteRamoChange('${esc(chipId)}',${batchIndex},this.value,true,${slot})" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px;font-family:'DM Mono',monospace;font-size:9px">
+            <select onchange="typeof onRebuildKanbanLoteRamoChange==='function'&&onRebuildKanbanLoteRamoChange('${esc(chipId)}',${batchIndex},this.value,true,${slot},'${esc(group.batchId || group.id || '')}')" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px;font-family:'DM Mono',monospace;font-size:9px">
               <option value="">— selecione o ramo —</option>
               ${ramos.map((ramo) => `<option value="${esc(ramo.id)}" ${String(selectedRamo || '') === String(ramo.id) ? 'selected' : ''}>${esc(ramo.nome || ramo.name || ramo.id)}</option>`).join('')}
             </select>
@@ -2601,7 +2632,7 @@
 
   function batchBlock(chip, slot, group) {
     const batchDomId = `batch-${slot}-${String(group.batchId).replace(/[^a-zA-Z0-9_-]/g, '')}`;
-    const label = group.batchId === 'sem-lote' ? 'Sem lote' : `Lote ${group.batchIndex || 1}`;
+    const label = group.batchId === 'sem-lote' ? 'Sem lote' : (String(group.batchId || '').startsWith('teste-') ? 'Lote teste' : `Lote ${group.batchIndex || 1}`);
     return `
       <div style="border:1px solid var(--border);border-radius:13px;background:var(--bg);margin-bottom:10px;overflow:hidden">
         <button type="button" onclick="toggleBatchLeadDetailsRebuild631('${esc(batchDomId)}')" style="width:100%;border:0;background:var(--surface2);color:var(--text);padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;text-align:left">
@@ -2619,7 +2650,10 @@
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer" onclick="toggleBatchLeadDetailsRebuild631('lead-${esc(batchDomId)}-${index}')">
                 <div style="min-width:0">
                   <div style="font-size:12px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.nome || row.company_name || 'Lead')}</div>
-                  <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(row.whatsapp || row.phone || '')} ${row.site ? ' · ' + esc(row.site) : ''}</div>
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px">
+                    <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${esc(row.whatsapp || row.phone || '')}</span>
+                    <span class="q-badge ${templateTypeLabel(row) === 'Com site' ? 'info' : 'warn'}">${esc(templateTypeLabel(row))}</span>
+                  </div>
                 </div>
                 <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
               </div>
@@ -2677,6 +2711,90 @@
     }
   }
 
+
+  const TEST_DISPATCH_ROWS_KEY = 'rebuild_test_dispatch_rows_v1';
+
+  function readTestDispatchRows() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(TEST_DISPATCH_ROWS_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveTestDispatchRows(rows = []) {
+    try { localStorage.setItem(TEST_DISPATCH_ROWS_KEY, JSON.stringify(Array.isArray(rows) ? rows : [])); } catch (_) {}
+  }
+
+  function testRowChipMatchesKey(row = {}, key = '') {
+    const target = String(key || '').trim();
+    if (!target) return false;
+    return rowChipCandidates(row).includes(target) || String(row.chipSlot || '') === target;
+  }
+
+  window.sendTestLeadFromChipRebuild632 = function sendTestLeadFromChipRebuild632(chipKey) {
+    const key = String(chipKey || '').trim();
+    const chip = state.chips.find((item, index) => chipKeyCandidates(item).includes(key) || String(index) === key);
+    if (!chip) {
+      if (typeof notify === 'function') notify('Chip de teste não encontrado.', 'err');
+      return;
+    }
+    const input = document.getElementById(`testLeadPhone-${key}`) || document.getElementById(`testLeadPhone-${chip.id || chip.instance || ''}`);
+    const rawPhone = input?.value || '';
+    const phone = digits(rawPhone);
+    if (phone.length < 10) {
+      if (typeof notify === 'function') notify('Informe um número válido para o lead teste.', 'warn');
+      return;
+    }
+    const dispatchDate = selectedQueueDateForDispatch();
+    if (dispatchDate !== localDateISO()) {
+      if (typeof notify === 'function') notify('Lead teste só pode ser criado para o dia de hoje.', 'warn');
+      return;
+    }
+    const chipId = chip.id || chip.dbId || chip.instance || key;
+    const chipName = chip.name || chip.nome || chip.instance || `Chip ${key}`;
+    const chipInstance = chip.instance || chip.phone || chip.numero || '';
+    const now = Date.now();
+    const testRow = {
+      id: `teste-${chipId}-${now}`,
+      leadId: `teste-${chipId}-${now}`,
+      isTestLead: true,
+      nome: 'Lead teste',
+      company_name: 'Lead teste',
+      phone,
+      whatsapp: phone,
+      normalized_phone: phone,
+      site: '',
+      website: '',
+      templateType: 'sem-site',
+      siteSegment: 'sem-site',
+      statusRaw: 'queued_dispatch',
+      status: 'queued_dispatch',
+      scheduledFor: dispatchDate,
+      scheduled_for: dispatchDate,
+      chipId,
+      chip_id: chipId,
+      chipName,
+      chip_name: chipName,
+      chipInstance,
+      chip_instance: chipInstance,
+      batchId: `teste-${chipId}-${dispatchDate}`,
+      batch_id: `teste-${chipId}-${dispatchDate}`,
+      batchIndex: 1,
+      batch_index: 1,
+      batchPosition: 1,
+      batch_position: 1,
+      created_at: new Date().toISOString()
+    };
+    const rows = readTestDispatchRows().filter((row) => !(row.isTestLead && String(row.phone || row.whatsapp || '') === phone && testRowChipMatchesKey(row, chipId)));
+    rows.push(testRow);
+    saveTestDispatchRows(rows);
+    if (input) input.value = '';
+    if (typeof notify === 'function') notify('Lead teste adicionado ao lote de teste do chip. Selecione ramo e imagem antes de disparar.');
+    renderRightPanel();
+  };
+
   function queueRowsForDispatchDate(iso) {
     const target = String(iso || localDateISO()).slice(0, 10);
     const map = new Map();
@@ -2690,6 +2808,7 @@
     };
     (state.weekRows || []).forEach(push);
     (state.rows || []).filter((row) => row.inTodayQueue).forEach(push);
+    readTestDispatchRows().forEach(push);
     return [...map.values()].sort((a, b) => {
       const chipA = String(a.chipName || a.chipId || '').localeCompare(String(b.chipName || b.chipId || ''));
       if (chipA) return chipA;
@@ -2789,21 +2908,19 @@
                     </div>
                     <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${rows.length} empresa${rows.length !== 1 ? 's' : ''}</div>
                   </div>
-                  <div style="margin-top:10px">
-                    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:6px">CHIP</div>
-                    <div style="border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);padding:9px 10px;font-size:11px;color:var(--text)">${esc(chipInstance || chipLabel)} · ${esc(chipLabel)}</div>
-                  </div>
-                  <div style="display:grid;grid-template-columns:110px 1fr;gap:8px;margin-top:10px">
+                </div>
+                <div style="padding:12px;overflow:auto;min-height:0;flex:1">
+                  <div style="border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);padding:9px 10px;font-size:11px;color:var(--text);margin-bottom:10px">${esc(chipInstance || chipLabel)} · ${esc(chipLabel)}</div>
+                  <div style="display:grid;grid-template-columns:110px 1fr;gap:8px;margin-bottom:10px">
                     <button class="btn btn-ghost" type="button" style="font-size:10px;padding:9px 10px" onclick="clearChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')" ${disabledAttr}${disabledTitle}>Limpar fila</button>
                     <button class="btn btn-primary" type="button" style="font-size:11px;padding:9px 10px" onclick="dispatchChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')" ${disabledAttr}${disabledTitle}>🌐 Disparar</button>
                   </div>
-                  <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px">
+                  <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">
                     <span class="q-badge ok">${ready} prontos</span>
                     <span class="q-badge info">${sending} disparo</span>
                     <span class="q-badge ok">${sent} enviados</span>
+                    <span class="q-badge err">${rows.filter((row) => row.statusRaw === 'error').length} erro</span>
                   </div>
-                </div>
-                <div style="padding:12px;overflow:auto;min-height:0;flex:1">
                   <div style="font-size:10px;font-weight:900;color:var(--accent);letter-spacing:.08em;margin-bottom:10px">FILA CHIP ${slot + 1}</div>
                   ${testLeadBoxRebuild632(chip, slot, dispatchDate)}
                   ${groups.length
