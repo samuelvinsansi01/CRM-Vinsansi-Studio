@@ -193,6 +193,7 @@ async function loadWhatsappChipsFromSupabaseV22(){
 
     storeWhatsappChipsCacheV426(chips);
     mergeWhatsappChipsIntoOperationalState(chips);
+    if (typeof renderChipsConfig === 'function') renderChipsConfig();
     if (typeof renderConfiguracoes === 'function') renderConfiguracoes();
 
     console.log('[chips][db-load]', { userId, userEmail, count:chips.length });

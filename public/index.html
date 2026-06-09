@@ -84,13 +84,20 @@
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
         <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
       </button>
+      <button class="nav-item sub" onclick="switchPanel('ramos')" data-label="Ramos">
+        <div class="nav-icon">🌿</div><span class="nav-label">Ramos</span>
+      </button>
       <button class="nav-item sub" onclick="switchPanel('templates')" data-label="Templates">
         <div class="nav-icon">✉️</div><span class="nav-label">Templates</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('conversations')" data-label="Conversas">
-        <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
+      <button class="nav-item sub" onclick="switchPanel('chips')" data-label="Chips">
+        <div class="nav-icon">📱</div><span class="nav-label">Chips</span>
       </button>
     </details>
+
+    <button class="nav-item" onclick="switchPanel('conversations')" data-label="Conversas">
+      <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
+    </button>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="CRM">
@@ -104,21 +111,6 @@
       </button>
       <button class="nav-item sub" onclick="switchPanel('acompanhamento')" data-label="Acompanhamento">
         <div class="nav-icon">📈</div><span class="nav-label">Acompanhamento</span><span class="nav-badge" id="badge-acompanhamento">0</span>
-      </button>
-    </details>
-
-    <details class="menu-group-final">
-      <summary class="nav-item menu-summary-final" data-label="Controle">
-        <div class="nav-icon">🛡️</div><span class="nav-label">Controle</span><span class="menu-arrow-final">›</span>
-      </summary>
-      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Proteção">
-        <div class="nav-icon">🛡️</div><span class="nav-label">Proteção</span><span class="nav-badge" id="badge-protecao">0</span>
-      </button>
-      <button class="nav-item sub" onclick="switchPanel('dominios')" data-label="Domínios Bloqueados">
-        <div class="nav-icon">🌐</div><span class="nav-label">Domínios Bloqueados</span><span class="nav-badge" id="badge-dominios">0</span>
-      </button>
-      <button class="nav-item sub" onclick="switchPanel('configuracoes')" data-label="Configurações">
-        <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
       </button>
     </details>
 
@@ -137,6 +129,21 @@
     <button class="nav-item" onclick="switchPanel('conta')" data-label="Minha conta">
       <div class="nav-icon">👤</div><span class="nav-label">Minha conta</span>
     </button>
+
+    <details class="menu-group-final">
+      <summary class="nav-item menu-summary-final" data-label="Controle">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Controle</span><span class="menu-arrow-final">›</span>
+      </summary>
+      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Proteção">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Proteção</span><span class="nav-badge" id="badge-protecao">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('dominios')" data-label="Domínios Bloqueados">
+        <div class="nav-icon">🌐</div><span class="nav-label">Domínios Bloqueados</span><span class="nav-badge" id="badge-dominios">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('configuracoes')" data-label="Configurações">
+        <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
+      </button>
+    </details>
 </nav>
 
   <div class="sidebar-final-footer">
@@ -765,94 +772,28 @@
   </div>
 </div>
 
-<!-- ── CONFIGURAÇÕES ── -->
-<div class="panel" id="panel-configuracoes">
+<!-- ── CHIPS ── -->
+<div class="panel" id="panel-chips">
   <div class="page-header">
-    <div class="page-title">Configur<span>ações.</span></div>
-    <div class="page-sub">// chips WhatsApp · Evolution API · ramos de prospecção</div>
+    <div class="page-title">Chips <span>WhatsApp.</span></div>
+    <div class="page-sub">// instâncias Evolution usadas para validação e disparo</div>
   </div>
 
-  <!-- CHIPS -->
   <div class="card">
     <div class="card-title">Chips WhatsApp</div>
     <div id="chipGrid" class="chip-grid"></div>
     <button class="btn btn-ghost" onclick="abrirModalNovoChip()">+ Adicionar chip</button>
   </div>
+</div>
 
-  <div class="persistence-card">
-    <div class="persistence-title">Webhook das conversas</div>
-    <div class="persistence-text">
-      Use esta URL na instância Evolution com o evento MESSAGES_UPSERT e webhook por eventos desativado.
-    </div>
-    <div id="webhookUrlEvolution" class="responses-url"></div>
-    <div class="persistence-actions">
-      <button class="btn btn-primary" onclick="copyWebhookUrlV34()">Copiar URL do webhook</button>
-    </div>
-    <div class="persistence-text">
-      Se EVOLUTION_WEBHOOK_SECRET estiver configurado na Vercel, acrescente &amp;secret=SEU_SEGREDO ao final da URL cadastrada na Evolution.
-    </div>
+<!-- ── RAMOS ── -->
+<div class="panel" id="panel-ramos">
+  <div class="page-header">
+    <div class="page-title">Ramos de <span>Prospecção.</span></div>
+    <div class="page-sub">// categorias usadas na importação, templates e lotes</div>
   </div>
 
-  <div class="persistence-card">
-    <div class="persistence-title">Persistência Supabase</div>
-    <div class="persistence-text">
-      Sincroniza dados operacionais criados no CRM: campanhas, templates, fila, chips, logs, respostas e configurações.
-      O O Supabase é a fonte oficial dos dados operacionais.
-    </div>
-    <div class="persistence-actions">
-      <button class="btn btn-primary" onclick="syncOperationalDataToSupabase()">Salvar no Supabase</button>
-      <button class="btn btn-ghost" onclick="loadOperationalDataFromSupabase()">Recarregar do Supabase</button>
-      <button class="btn btn-ghost" onclick="showPersistenceSchema()">Ver tabelas necessárias</button>
-    </div>
-    <div id="persistenceStatus" class="persistence-status">// aguardando ação</div>
-  </div>
-
-  <!-- CONFIGURAÇÃO DE DISPARO -->
-  <div class="card" style="margin-top:16px">
-    <div class="card-title">Configuração de disparo</div>
-    <div style="margin-bottom:16px">
-      <label>Horário de início automático</label>
-      <div class="horario-row">
-        <input type="time" id="horarioInicio" value="12:00" style="width:auto" oninput="saveEvoConfig()"/>
-        <div class="horario-status" id="horarioStatus">aguardando</div>
-      </div>
-    </div>
-
-    <!-- Parâmetros fixos — visível e claro -->
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
-
-      <!-- bloco 1: delay -->
-      <div style="background:var(--bg);border:1px solid var(--accent-border);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">INTERVALO ENTRE LEADS</div>
-        <div id="statIntervalVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--accent);line-height:1">2 min</div>
-        <div id="statIntervalSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">120 seg fixo entre cada lead</div>
-      </div>
-
-      <!-- bloco 2: por hora -->
-      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">MENSAGENS POR LOTE</div>
-        <div id="statLoteVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">30 msg</div>
-        <div id="statLoteSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip · 4 lotes por dia</div>
-      </div>
-
-      <!-- bloco 3: por dia -->
-      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">LIMITE DIÁRIO POR CHIP <span class="tag">ANTI-BAN</span></div>
-        <div id="statDiaVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">120 msg</div>
-        <div id="statDiaSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">4 lotes × 30 · espera 1h</div>
-      </div>
-
-    </div>
-    <!-- campos ocultos mantidos para compatibilidade com o código de disparo -->
-    <input type="hidden" id="delayMin"      value="120"/>
-    <input type="hidden" id="delayMax"      value="120"/>
-    <input type="hidden" id="loteTamanho"   value="30"/>
-    <input type="hidden" id="loteEsperaMin" value="60"/>
-    <input type="hidden" id="loteAtivo"     value="1"/>
-  </div>
-
-  <!-- RAMOS -->
-  <div class="card" style="margin-top:16px">
+  <div class="card">
     <div class="card-title">Ramos de prospecção</div>
     <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px">Gerencie os ramos e suas sub-categorias para filtrar o JSON da Apify.</div>
     <div id="ramosConfigList" style="margin-bottom:14px"></div>
@@ -861,7 +802,106 @@
       <button class="btn btn-primary" style="white-space:nowrap" onclick="adicionarRamo()">+ Adicionar ramo</button>
     </div>
   </div>
+</div>
 
+<!-- ── CONFIGURAÇÕES ── -->
+<div class="panel" id="panel-configuracoes">
+  <div class="page-header">
+    <div class="page-title">Configur<span>ações.</span></div>
+    <div class="page-sub">// integrações · persistência · regras gerais de disparo</div>
+  </div>
+
+  <div id="settingsHubCards" class="settings-hub-grid">
+    <button type="button" class="settings-menu-card" onclick="showSettingsSection('webhook')">
+      <span class="settings-menu-icon">🔗</span>
+      <span class="settings-menu-title">Webhook das conversas</span>
+      <span class="settings-menu-text">URL para receber respostas da Evolution API.</span>
+    </button>
+    <button type="button" class="settings-menu-card" onclick="showSettingsSection('persistencia')">
+      <span class="settings-menu-icon">☁️</span>
+      <span class="settings-menu-title">Persistência Supabase</span>
+      <span class="settings-menu-text">Sincronização operacional e diagnóstico das tabelas.</span>
+    </button>
+    <button type="button" class="settings-menu-card" onclick="showSettingsSection('disparo')">
+      <span class="settings-menu-icon">⏱️</span>
+      <span class="settings-menu-title">Configuração de disparo</span>
+      <span class="settings-menu-text">Horário inicial, intervalo, lotes e limite diário.</span>
+    </button>
+  </div>
+
+  <div class="settings-detail" id="settingsDetailWebhook" style="display:none">
+    <button class="btn btn-ghost settings-back-btn" onclick="showSettingsHub()">← Voltar</button>
+    <div class="persistence-card">
+      <div class="persistence-title">Webhook das conversas</div>
+      <div class="persistence-text">
+        Use esta URL na instância Evolution com o evento MESSAGES_UPSERT e webhook por eventos desativado.
+      </div>
+      <div id="webhookUrlEvolution" class="responses-url"></div>
+      <div class="persistence-actions">
+        <button class="btn btn-primary" onclick="copyWebhookUrlV34()">Copiar URL do webhook</button>
+      </div>
+      <div class="persistence-text">
+        Se EVOLUTION_WEBHOOK_SECRET estiver configurado na Vercel, acrescente &amp;secret=SEU_SEGREDO ao final da URL cadastrada na Evolution.
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-detail" id="settingsDetailPersistencia" style="display:none">
+    <button class="btn btn-ghost settings-back-btn" onclick="showSettingsHub()">← Voltar</button>
+    <div class="persistence-card">
+      <div class="persistence-title">Persistência Supabase</div>
+      <div class="persistence-text">
+        Sincroniza dados operacionais criados no CRM: campanhas, templates, fila, chips, logs, respostas e configurações.
+        O Supabase é a fonte oficial dos dados operacionais.
+      </div>
+      <div class="persistence-actions">
+        <button class="btn btn-primary" onclick="syncOperationalDataToSupabase()">Salvar no Supabase</button>
+        <button class="btn btn-ghost" onclick="loadOperationalDataFromSupabase()">Recarregar do Supabase</button>
+        <button class="btn btn-ghost" onclick="showPersistenceSchema()">Ver tabelas necessárias</button>
+      </div>
+      <div id="persistenceStatus" class="persistence-status">// aguardando ação</div>
+    </div>
+  </div>
+
+  <div class="settings-detail" id="settingsDetailDisparo" style="display:none">
+    <button class="btn btn-ghost settings-back-btn" onclick="showSettingsHub()">← Voltar</button>
+    <div class="card">
+      <div class="card-title">Configuração de disparo</div>
+      <div style="margin-bottom:16px">
+        <label>Horário de início automático</label>
+        <div class="horario-row">
+          <input type="time" id="horarioInicio" value="12:00" style="width:auto" oninput="saveEvoConfig()"/>
+          <div class="horario-status" id="horarioStatus">aguardando</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
+        <div style="background:var(--bg);border:1px solid var(--accent-border);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">INTERVALO ENTRE LEADS</div>
+          <div id="statIntervalVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--accent);line-height:1">2 min</div>
+          <div id="statIntervalSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">120 seg fixo entre cada lead</div>
+        </div>
+
+        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">MENSAGENS POR LOTE</div>
+          <div id="statLoteVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">30 msg</div>
+          <div id="statLoteSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip · 4 lotes por dia</div>
+        </div>
+
+        <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
+          <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">LIMITE DIÁRIO POR CHIP <span class="tag">ANTI-BAN</span></div>
+          <div id="statDiaVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">120 msg</div>
+          <div id="statDiaSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">4 lotes × 30 · espera 1h</div>
+        </div>
+      </div>
+
+      <input type="hidden" id="delayMin"      value="120"/>
+      <input type="hidden" id="delayMax"      value="120"/>
+      <input type="hidden" id="loteTamanho"   value="30"/>
+      <input type="hidden" id="loteEsperaMin" value="60"/>
+      <input type="hidden" id="loteAtivo"     value="1"/>
+    </div>
+  </div>
 </div>
 
 
@@ -1373,13 +1413,20 @@
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
         <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
       </button>
+      <button class="nav-item sub" onclick="switchPanel('ramos')" data-label="Ramos">
+        <div class="nav-icon">🌿</div><span class="nav-label">Ramos</span>
+      </button>
       <button class="nav-item sub" onclick="switchPanel('templates')" data-label="Templates">
         <div class="nav-icon">✉️</div><span class="nav-label">Templates</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('conversations')" data-label="Conversas">
-        <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
+      <button class="nav-item sub" onclick="switchPanel('chips')" data-label="Chips">
+        <div class="nav-icon">📱</div><span class="nav-label">Chips</span>
       </button>
     </details>
+
+    <button class="nav-item" onclick="switchPanel('conversations')" data-label="Conversas">
+      <div class="nav-icon">💬</div><span class="nav-label">Conversas</span>
+    </button>
 
     <details class="menu-group-final">
       <summary class="nav-item menu-summary-final" data-label="CRM">
@@ -1393,21 +1440,6 @@
       </button>
       <button class="nav-item sub" onclick="switchPanel('acompanhamento')" data-label="Acompanhamento">
         <div class="nav-icon">📈</div><span class="nav-label">Acompanhamento</span><span class="nav-badge" id="badge-acompanhamento">0</span>
-      </button>
-    </details>
-
-    <details class="menu-group-final">
-      <summary class="nav-item menu-summary-final" data-label="Controle">
-        <div class="nav-icon">🛡️</div><span class="nav-label">Controle</span><span class="menu-arrow-final">›</span>
-      </summary>
-      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Proteção">
-        <div class="nav-icon">🛡️</div><span class="nav-label">Proteção</span><span class="nav-badge" id="badge-protecao">0</span>
-      </button>
-      <button class="nav-item sub" onclick="switchPanel('dominios')" data-label="Domínios Bloqueados">
-        <div class="nav-icon">🌐</div><span class="nav-label">Domínios Bloqueados</span><span class="nav-badge" id="badge-dominios">0</span>
-      </button>
-      <button class="nav-item sub" onclick="switchPanel('configuracoes')" data-label="Configurações">
-        <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
       </button>
     </details>
 
@@ -1426,6 +1458,21 @@
     <button class="nav-item" onclick="switchPanel('conta')" data-label="Minha conta">
       <div class="nav-icon">👤</div><span class="nav-label">Minha conta</span>
     </button>
+
+    <details class="menu-group-final">
+      <summary class="nav-item menu-summary-final" data-label="Controle">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Controle</span><span class="menu-arrow-final">›</span>
+      </summary>
+      <button class="nav-item sub" onclick="switchPanel('protecao')" data-label="Proteção">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Proteção</span><span class="nav-badge" id="badge-protecao">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('dominios')" data-label="Domínios Bloqueados">
+        <div class="nav-icon">🌐</div><span class="nav-label">Domínios Bloqueados</span><span class="nav-badge" id="badge-dominios">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('configuracoes')" data-label="Configurações">
+        <div class="nav-icon">⚙️</div><span class="nav-label">Configurações</span>
+      </button>
+    </details>
 </nav>
 
   <div class="sidebar-final-footer">
@@ -1535,7 +1582,7 @@
 <script>
 (function(){
   const KEY = 'vs_active_panel_v434';
-  const PANELS = ['inicio','inbox','importar','validacao','arquivados','base-permanente','fila-zap','instagram','templates','conversations','kanban','followups','acompanhamento','protecao','dominios','configuracoes','redirecionamentos','audit','conta'];
+  const PANELS = ['inicio','inbox','importar','validacao','arquivados','base-permanente','fila-zap','instagram','ramos','templates','chips','conversations','kanban','followups','acompanhamento','protecao','dominios','configuracoes','redirecionamentos','audit','conta'];
   const ALIAS = {
     inicio:'inicio', home:'inicio', responses:'inbox', inbox:'inbox', caixa:'inbox',
     import:'importar', imports:'importar', importar:'importar',
@@ -1543,7 +1590,7 @@
     archived:'arquivados', arquivados:'arquivados',
     base:'base-permanente', basePermanente:'base-permanente', permanentBase:'base-permanente', 'base-permanente':'base-permanente',
     whatsapp:'fila-zap', whatsappQueue:'fila-zap', filaZap:'fila-zap', 'fila-zap':'fila-zap',
-    instagram:'instagram', templates:'templates', template:'templates', templatesConfig:'templates',
+    instagram:'instagram', ramos:'ramos', branches:'ramos', templates:'templates', template:'templates', templatesConfig:'templates', chips:'chips', whatsappChips:'chips',
     conversas:'conversations', conversations:'conversations',
     crmKanban:'kanban', kanban:'kanban',
     followUp:'followups', followup:'followups', followups:'followups', 'follow-up':'followups',
@@ -1558,7 +1605,7 @@
   const LABELS = {
     inicio:'inicio', 'caixa de entrada':'inbox', importar:'importar', validacao:'validacao',
     arquivados:'arquivados', 'base permanente':'base-permanente', whatsapp:'fila-zap',
-    instagram:'instagram', templates:'templates', conversas:'conversations', kanban:'kanban',
+    instagram:'instagram', ramos:'ramos', templates:'templates', chips:'chips', conversas:'conversations', kanban:'kanban',
     'follow up':'followups', followups:'followups', acompanhamento:'acompanhamento',
     protecao:'protecao', 'dominios bloqueados':'dominios', configuracoes:'configuracoes',
     redirecionamentos:'redirecionamentos', auditoria:'audit', auditorias:'audit', 'minha conta':'conta'
@@ -1622,7 +1669,9 @@
     if (panel === 'base-permanente') safeCall('renderLeadBasePanel');
     if (panel === 'fila-zap') safeCall('renderFilaZap');
     if (panel === 'instagram') safeCall('renderInstagram');
+    if (panel === 'ramos') safeCall('renderRamosPanel');
     if (panel === 'templates') { safeCall('renderTemplatesPanelV656'); safeCall('setTemplatesChannelV656', window.__templatesChannelV656 || 'whatsapp'); }
+    if (panel === 'chips') safeCall('renderChipsPanel');
     if (panel === 'conversations') { safeCall('renderConversations'); safeCall('fetchEvolutionResponsesV34', { silent:true }); }
     if (panel === 'kanban') safeCall('renderKanban');
     if (panel === 'followups') safeCall('renderFollowups');

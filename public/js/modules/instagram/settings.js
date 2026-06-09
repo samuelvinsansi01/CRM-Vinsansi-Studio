@@ -2,10 +2,37 @@
    CONFIGURAÇÕES
 ════════════════════════════ */
 function renderConfiguracoes() {
+  if (window.__settingsActiveSectionV670) showSettingsSection(window.__settingsActiveSectionV670);
+  else showSettingsHub();
+  if (typeof renderWebhookUrlV34 === 'function') renderWebhookUrlV34();
+  if (typeof atualizarStatsDisparo === 'function') atualizarStatsDisparo();
+}
+
+function renderChipsPanel() {
   renderChipsConfig();
+}
+
+function renderRamosPanel() {
   renderRamosConfig();
-  renderTemplatesConfig();
-  renderInstaTemplatesConfig();
+}
+
+function showSettingsHub() {
+  window.__settingsActiveSectionV670 = '';
+  const hub = document.getElementById('settingsHubCards');
+  if (hub) hub.style.display = 'grid';
+  document.querySelectorAll('.settings-detail').forEach(el => { el.style.display = 'none'; });
+}
+
+function showSettingsSection(section) {
+  window.__settingsActiveSectionV670 = section;
+  const normalized = section === 'persistencia' ? 'Persistencia' : section === 'disparo' ? 'Disparo' : 'Webhook';
+  const hub = document.getElementById('settingsHubCards');
+  if (hub) hub.style.display = 'none';
+  document.querySelectorAll('.settings-detail').forEach(el => { el.style.display = 'none'; });
+  const detail = document.getElementById('settingsDetail' + normalized);
+  if (detail) detail.style.display = 'block';
+  if (section === 'webhook' && typeof renderWebhookUrlV34 === 'function') renderWebhookUrlV34();
+  if (section === 'disparo' && typeof atualizarStatsDisparo === 'function') atualizarStatsDisparo();
 }
 
 /* CHIPS */
@@ -27,13 +54,14 @@ function salvarChip() {
   const chips = getChips();
   chips.push({ id: genId(), nome, url, instance, key, status: 'desconectado' });
   saveChips(chips);
-  fecharChipModal(); renderConfiguracoes(); updateBadges();
+  fecharChipModal(); renderChipsConfig(); renderConfiguracoes(); updateBadges();
   notify('✓ Chip salvo');
 }
 
 function renderChipsConfig() {
   const chips = getChips();
   const grid  = document.getElementById('chipGrid');
+  if (!grid) return;
   if (!chips.length) {
     grid.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted)">Nenhum chip configurado. Adicione os chips usados na operação.</div>';
     return;
@@ -97,7 +125,7 @@ function deletarChip(id) {
   saveChips(getChips().filter(c => c.id !== id));
   if (disparoChipId === id) disparoChipId = null;
   if (activeChipId === id) activeChipId = null;
-  renderConfiguracoes(); updateBadges(); notify('✓ Chip removido');
+  renderChipsConfig(); renderConfiguracoes(); updateBadges(); notify('✓ Chip removido');
 }
 
 function iniciarRenomeioChip(id) {
@@ -121,14 +149,16 @@ function confirmarRenomeioCip(id) {
   if (!chip) return;
   chip.nome = novoNome;
   saveChips(chips);
-  renderConfiguracoes(); updateBadges();
+  renderChipsConfig(); renderConfiguracoes(); updateBadges();
   notify('✓ Chip renomeado');
 }
 
 /* RAMOS */
 function renderRamosConfig() {
   const ramos = getRamos();
-  document.getElementById('ramosConfigList').innerHTML = ramos.map(r => `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:8px">
+  const list = document.getElementById('ramosConfigList');
+  if (!list) return;
+  list.innerHTML = ramos.map(r => `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:8px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <span style="font-weight:700;font-size:13px;flex:1">${escHtml(r.nome)}</span>
       <button class="del-btn" onclick="deletarRamo('${r.id}')">✕</button>
@@ -161,6 +191,7 @@ function deletarRamo(id) {
 function renderTemplatesConfig() {
   const ramos = getRamos();
   const el = document.getElementById('templatesList');
+  if (!el) return;
 
   // Seletor de ramo e tipo
   const ramoSel = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
@@ -243,4 +274,3 @@ function adicionarTemplate() {
 function removerTemplate(idx) {
   const tpls = getTemplates(); tpls.splice(idx, 1); saveTemplates(tpls); renderTemplatesConfig();
 }
-

@@ -11,7 +11,9 @@
     'base-permanente',
     'fila-zap',
     'instagram',
+    'ramos',
     'templates',
+    'chips',
     'conversations',
     'kanban',
     'followups',
@@ -60,9 +62,13 @@
     'fila-zap': 'fila-zap',
 
     instagram: 'instagram',
+    ramos: 'ramos',
+    branches: 'ramos',
     templates: 'templates',
     template: 'templates',
     templatesConfig: 'templates',
+    chips: 'chips',
+    whatsappChips: 'chips',
 
     conversas: 'conversations',
     conversations: 'conversations',
@@ -115,7 +121,9 @@
     whatsapp: 'fila-zap',
     'fila whatsapp': 'fila-zap',
     instagram: 'instagram',
+    ramos: 'ramos',
     templates: 'templates',
+    chips: 'chips',
     conversas: 'conversations',
     kanban: 'kanban',
     'follow up': 'followups',
@@ -247,7 +255,9 @@
     if (panelId === 'base-permanente') safeCall('renderLeadBasePanel');
     if (panelId === 'fila-zap') safeCall('renderFilaZap');
     if (panelId === 'instagram') safeCall('renderInstagram');
+    if (panelId === 'ramos') safeCall('renderRamosPanel');
     if (panelId === 'templates') renderTemplatesPanel();
+    if (panelId === 'chips') safeCall('renderChipsPanel');
     if (panelId === 'conversations') {
       safeCall('renderConversations');
       safeCall('fetchEvolutionResponsesV34', { silent: true });

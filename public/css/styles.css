@@ -2944,6 +2944,16 @@ body.auth-locked .app{
 .conversation-actions-menu-v421.open{display:flex;flex-direction:column;gap:2px}
 .conversation-actions-menu-v421 button{width:100%;text-align:left;border:0;background:transparent;color:var(--text2);padding:10px 12px;border-radius:10px;font-size:12px;cursor:pointer}
 .conversation-actions-menu-v421 button:hover{background:rgba(174,255,61,.08);color:var(--accent)}
+
+/* Settings hub */
+.settings-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:stretch}
+.settings-menu-card{appearance:none;width:100%;min-height:150px;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;color:var(--text);cursor:pointer;transition:border-color .18s,background .18s,transform .18s}
+.settings-menu-card:hover{border-color:var(--accent-border);background:rgba(184,240,89,.04);transform:translateY(-1px)}
+.settings-menu-icon{width:34px;height:34px;border:1px solid var(--border2);border-radius:10px;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:17px}
+.settings-menu-title{font-size:15px;font-weight:800;color:var(--text);line-height:1.25}
+.settings-menu-text{font-family:'DM Mono',monospace;font-size:10px;line-height:1.6;color:var(--muted)}
+.settings-detail{display:block}
+.settings-back-btn{margin-bottom:12px}
 .inbox-title-row{display:flex;align-items:center;gap:10px;justify-content:space-between}
 .inbox-count{font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);border:1px solid rgba(174,255,61,.28);background:rgba(174,255,61,.08);padding:4px 7px;border-radius:999px;white-space:nowrap}
 

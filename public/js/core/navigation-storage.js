@@ -52,8 +52,11 @@ function toggleSidebar() {
 const ACTIVE_PANEL_KEY_V434 = 'vs_active_panel_v434';
 const PANEL_ALIASES_V436 = {
   responses: 'inbox',
-  chips: 'configuracoes',
+  chips: 'chips',
   evolution: 'configuracoes',
+  ramos: 'ramos',
+  branches: 'ramos',
+  whatsappChips: 'chips',
   whatsappQueue: 'fila-zap',
   import: 'importar',
   redirects: 'redirecionamentos',
@@ -69,7 +72,7 @@ const PANEL_ALIASES_V436 = {
   atribuicao: 'validacao',
   'panel-atribuicao': 'validacao'
 };
-const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','arquivados','base-permanente','instagram','fila-zap','templates','kanban','followups','acompanhamento','redirecionamentos','protecao','dominios','configuracoes','conta'];
+const PANELS = ['audit','conversations','inicio','inbox','importar','validacao','arquivados','base-permanente','instagram','fila-zap','ramos','templates','chips','kanban','followups','acompanhamento','redirecionamentos','protecao','dominios','configuracoes','conta'];
 function switchPanel(name, options = {}) {
   name = PANEL_ALIASES_V436[name] || name;
   if (!PANELS.includes(name)) name = 'inicio';
@@ -79,7 +82,7 @@ function switchPanel(name, options = {}) {
   });
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
-    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Arquivados':'arquivados','Base Permanente':'base-permanente','Atribuição':'validacao','WhatsApp':'fila-zap','Instagram':'instagram','Templates':'templates','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow Up':'followups','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Auditorias':'audit','Domínios Bloqueados':'dominios','Configurações':'configuracoes','Minha conta':'conta'};
+    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Arquivados':'arquivados','Base Permanente':'base-permanente','Atribuição':'validacao','WhatsApp':'fila-zap','Instagram':'instagram','Ramos':'ramos','Templates':'templates','Chips':'chips','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow Up':'followups','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Auditorias':'audit','Domínios Bloqueados':'dominios','Configurações':'configuracoes','Minha conta':'conta'};
     panelMap.Protecao = 'protecao';
     panelMap['Proteção'] = 'protecao';
     panelMap['Atribuição'] = 'validacao';
@@ -93,7 +96,9 @@ function switchPanel(name, options = {}) {
   if (name==='base-permanente' && typeof renderLeadBasePanel === 'function') renderLeadBasePanel();
   if (name==='instagram')      renderInstagram();
   if (name==='fila-zap')       renderFilaZap();
+  if (name==='ramos' && typeof renderRamosPanel === 'function') renderRamosPanel();
   if (name==='templates')      { if (typeof renderTemplatesPanelV656 === 'function') renderTemplatesPanelV656(); else { try{renderTemplatesConfig();}catch(e){} try{renderInstaTemplatesConfig();}catch(e){} } }
+  if (name==='chips' && typeof renderChipsPanel === 'function') renderChipsPanel();
   if (name==='inbox')          { renderInbox(); fetchEvolutionResponsesV34({ silent:true }); }
   if (name==='conversations')  { renderConversations(); fetchEvolutionResponsesV34({ silent:true }); }
   if (name==='kanban')         renderKanban();
