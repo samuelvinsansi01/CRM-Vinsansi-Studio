@@ -94,7 +94,6 @@
 
     configuracoes: 'configuracoes',
     settings: 'configuracoes',
-    chips: 'configuracoes',
     evolution: 'configuracoes',
 
     redirecionamentos: 'redirecionamentos',
