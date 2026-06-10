@@ -108,20 +108,30 @@
   }
 
   function normalizeEntry(entry = {}) {
+    const lead = entry.leads || entry.lead || {};
     const listType = entry.list_type || entry.block_type || entry.type || 'already_sent';
     const archivedAt = entry.archived_at || entry.removed_at || (entry.active === false ? entry.updated_at || entry.created_at : null);
+    const companyName = entry.company_name || entry.companyName || entry.nome || entry.name || entry.title || lead.company_name || '';
+    const phoneValue = entry.phone_normalized || entry.normalized_phone || entry.phone || entry.whatsapp || lead.normalized_phone || lead.phone || '';
+    const instagramValue = entry.instagram || entry.instagram_url || entry.instagramUrl || lead.instagram_url || '';
+    const websiteValue = entry.website_host || entry.website || entry.site || entry.website_url || entry.websiteUrl || lead.website || '';
     return {
       ...entry,
+      lead,
+      lead_id: entry.lead_id || lead.id || '',
       list_type: listType === 'blocked' ? 'blocked' : 'already_sent',
       block_type: listType === 'blocked' ? 'blocked' : 'already_sent',
-      phone_normalized: onlyDigits(entry.phone_normalized || entry.normalized_phone || entry.phone || entry.whatsapp),
-      normalized_phone: onlyDigits(entry.normalized_phone || entry.phone_normalized || entry.phone || entry.whatsapp),
-      instagram: entry.instagram || entry.instagram_url || entry.instagramUrl || '',
-      instagram_url: entry.instagram_url || entry.instagram || entry.instagramUrl || '',
-      instagram_username: normalizeInstagram(entry.instagram_username || entry.instagram || entry.instagram_url || entry.instagramUrl),
-      website_host: normalizeHost(entry.website_host || entry.website || entry.site || entry.website_url || entry.websiteUrl),
+      company_name: companyName,
+      phone: entry.phone || lead.phone || phoneValue,
+      phone_normalized: onlyDigits(phoneValue),
+      normalized_phone: onlyDigits(phoneValue),
+      instagram: instagramValue,
+      instagram_url: entry.instagram_url || instagramValue,
+      instagram_username: normalizeInstagram(entry.instagram_username || instagramValue),
+      website: entry.website || lead.website || websiteValue,
+      website_host: normalizeHost(websiteValue),
       place_id: String(entry.place_id || entry.placeId || entry.googlePlaceId || '').trim().toLowerCase(),
-      company_name_normalized: normalizeCompany(entry.company_name || entry.companyName || entry.nome || entry.name || entry.title),
+      company_name_normalized: normalizeCompany(companyName),
       notes: entry.notes || entry.note || '',
       note: entry.note || entry.notes || '',
       archived_at: archivedAt
@@ -196,7 +206,7 @@
       // opcional ainda nao existe ou quando registros antigos tem active null.
       const { data, error } = await client
         .from('lead_blocks')
-        .select('*')
+        .select('*, leads:lead_id(id, company_name, phone, normalized_phone, website, instagram_url, category, rating, reviews_count, current_stage, current_status)')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -278,6 +288,34 @@
       console.warn('[protection] save:', error);
       if (typeof notify === 'function') notify(error?.message || 'Falha ao salvar protecao.', 'err');
     }
+  }
+
+
+  function openProtectionLeadFichaV676(leadId) {
+    const id = String(leadId || '').trim();
+    if (!id) {
+      if (typeof notify === 'function') notify('Ficha indisponível: lead não encontrado.', 'warn');
+      return;
+    }
+
+    const openers = [
+      window.openLeadDrawer,
+      window.openLeadFicha,
+      window.openLeadDetails,
+      window.openQueueLeadDrawerRebuild621,
+      window.openArchivedLeadDrawerV644
+    ].filter((fn) => typeof fn === 'function');
+
+    if (openers.length) {
+      try {
+        openers[0](id);
+        return;
+      } catch (error) {
+        console.warn('[protection] ficha opener:', error);
+      }
+    }
+
+    if (typeof notify === 'function') notify('Componente de ficha do lead ainda não está disponível nesta tela.', 'warn');
   }
 
   async function archiveContactSuppressionEntryNow(id) {
@@ -377,7 +415,10 @@
           <div class="protection-chip-row">${identityChips(entry)}</div>
           ${entry.notes ? `<div class="protection-notes">${escHtml(entry.notes)}</div>` : ''}
         </div>
-        <button class="btn btn-ghost protection-remove-btn" onclick="archiveContactSuppressionEntryV629('${escHtml(id)}')" ${!id ? 'disabled' : ''}>Remover</button>
+        <div class="protection-item-actions">
+          <button class="btn btn-ghost" onclick="openProtectionLeadFichaV676('${escHtml(entry.lead_id || entry.lead?.id || '')}')" ${!(entry.lead_id || entry.lead?.id) ? 'disabled' : ''}>Ficha</button>
+          <button class="btn btn-ghost protection-remove-btn" onclick="archiveContactSuppressionEntryV629('${escHtml(id)}')" ${!id ? 'disabled' : ''}>Remover</button>
+        </div>
       </div>
     `;
   }
@@ -429,6 +470,8 @@
     if (!loaded && !loading) loadContactSuppressionEntriesV629({ silent: true });
   }
 
+
+  window.openProtectionLeadFichaV676 = openProtectionLeadFichaV676;
 
   window.toggleProtectionEntrySelectionV674 = function toggleProtectionEntrySelectionV674(id) {
     const key = String(id || '');
