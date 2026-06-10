@@ -221,6 +221,68 @@ body{
 .login-status.error{color:#e14b5d}
 .login-status.success{color:#3bbf75}
 
+
+/* 6.66 login spacing refinement */
+.login-form-wrap{
+  padding:10px 0 4px;
+}
+.eyebrow{
+  margin-bottom:10px;
+}
+.login-title{
+  font-size:clamp(30px,2.85vw,52px);
+  line-height:.95;
+  letter-spacing:-.04em;
+  margin-bottom:18px;
+}
+.login-sub{
+  margin-bottom:24px;
+}
+.login-card{
+  gap:12px;
+}
+.form-row{
+  gap:8px;
+}
+.input{
+  min-height:56px;
+}
+.login-btn,
+.google-btn{
+  min-height:58px;
+  border-radius:16px;
+}
+.login-btn{
+  margin-top:8px;
+}
+.divider{
+  margin:28px 0 20px;
+}
+.google-btn{
+  margin-top:0;
+}
+.login-status{
+  min-height:16px;
+}
+.login-footer{
+  margin-top:32px;
+}
+@media (max-height: 820px){
+  .login-panel{
+    padding-top:26px;
+    padding-bottom:24px;
+  }
+  .login-title{
+    font-size:clamp(28px,2.6vw,46px);
+  }
+  .login-sub{
+    margin-bottom:18px;
+  }
+  .divider{
+    margin:22px 0 16px;
+  }
+}
+
 </style>
 </head>
 <body>
