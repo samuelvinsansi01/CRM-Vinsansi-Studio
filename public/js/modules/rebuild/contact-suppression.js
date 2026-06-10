@@ -363,7 +363,7 @@
     ].filter(Boolean).join(' | ');
 
     return `
-      <div class="protection-item ${type.tone}">
+      <div class="protection-item ${type.tone} has-bulk-checkbox">
         <label class="bulk-row-check protection-row-check" aria-label="Selecionar registro">
           <input class="bulk-checkbox" type="checkbox" ${checked ? 'checked' : ''} ${!id || loading ? 'disabled' : ''}
             onchange="toggleProtectionEntrySelectionV674('${escHtml(id)}')" />

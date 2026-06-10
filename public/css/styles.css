@@ -3443,3 +3443,179 @@ body.auth-locked .app{
   align-items:center;
   justify-content:center;
 }
+
+
+/* 6.75 - Checkbox global para listagens */
+.bulk-list-toolbar{
+  width:100%;
+  min-height:42px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:rgba(18,18,26,.72);
+  margin:0 0 10px;
+}
+
+.bulk-list-left,
+.bulk-list-actions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+
+.bulk-list-actions{
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .18s ease;
+}
+
+.bulk-list-actions.is-visible{
+  opacity:1;
+  pointer-events:auto;
+}
+
+.bulk-select-btn{
+  border:1px solid var(--border);
+  background:rgba(8,9,13,.7);
+  color:var(--text);
+  border-radius:10px;
+  min-height:30px;
+  padding:0 10px;
+  font-family:'DM Mono',monospace;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer;
+}
+
+.bulk-select-btn:hover:not(:disabled){
+  border-color:var(--accent);
+  color:var(--accent);
+}
+
+.bulk-select-btn:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+
+.bulk-row-check{
+  width:18px;
+  height:18px;
+  min-width:18px;
+  flex:0 0 18px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin:0;
+  padding:0;
+  cursor:pointer;
+  align-self:flex-start;
+}
+
+.bulk-checkbox{
+  appearance:none;
+  -webkit-appearance:none;
+  width:16px;
+  height:16px;
+  min-width:16px;
+  border:1px solid #3b4052;
+  border-radius:3px;
+  background:rgba(5,6,10,.82);
+  display:inline-grid;
+  place-content:center;
+  margin:0;
+  cursor:pointer;
+  transition:background .15s ease,border-color .15s ease,box-shadow .15s ease;
+}
+
+.bulk-checkbox::before{
+  content:"";
+  width:8px;
+  height:8px;
+  transform:scale(0);
+  transition:transform .12s ease;
+  background:var(--accent);
+  clip-path:polygon(14% 44%,0 58%,38% 96%,100% 18%,84% 5%,36% 66%);
+}
+
+.bulk-checkbox:checked{
+  border-color:var(--accent);
+  background:rgba(182,255,75,.12);
+  box-shadow:0 0 0 3px rgba(182,255,75,.08);
+}
+
+.bulk-checkbox:checked::before{
+  transform:scale(1);
+}
+
+.bulk-checkbox:indeterminate{
+  border-color:#5ab7ff;
+  background:rgba(90,183,255,.1);
+}
+
+.bulk-checkbox:indeterminate::before{
+  content:"";
+  width:8px;
+  height:2px;
+  transform:scale(1);
+  background:#5ab7ff;
+  clip-path:none;
+}
+
+.bulk-checkbox:disabled{
+  opacity:.35;
+  cursor:not-allowed;
+}
+
+.empresa-card.has-bulk-checkbox,
+.protection-item.has-bulk-checkbox{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+}
+
+.empresa-card.has-bulk-checkbox .bulk-row-check,
+.protection-item.has-bulk-checkbox .bulk-row-check{
+  margin-top:5px;
+}
+
+.empresa-card.has-bulk-checkbox .empresa-info,
+.protection-item.has-bulk-checkbox .protection-item-main{
+  min-width:0;
+  flex:1 1 auto;
+}
+
+.protection-item.has-bulk-checkbox{
+  padding-left:14px;
+}
+
+.protection-item.has-bulk-checkbox .protection-item-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+
+.protection-item.has-bulk-checkbox .protection-item-title span{
+  font-size:14px;
+  line-height:1.15;
+  max-width:min(720px,70vw);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  display:inline-block;
+}
+
+.protection-item.has-bulk-checkbox .protection-remove-btn{
+  flex:0 0 auto;
+}
+
+.protection-empty.compact,
+.protection-empty{
+  min-height:52px;
+  height:auto;
+}

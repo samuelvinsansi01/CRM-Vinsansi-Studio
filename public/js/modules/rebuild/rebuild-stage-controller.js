@@ -3813,7 +3813,7 @@
     const checked = state.operationSelected.has(key);
     const locked = isOperationRowLocked(row);
     return `
-      <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:center;gap:12px">
+      <div class="empresa-card has-bulk-checkbox" data-lead-id="${esc(row.id)}">
         <label class="bulk-row-check" aria-label="Selecionar lead">
           <input class="bulk-checkbox" type="checkbox" ${checked ? 'checked' : ''} ${locked || state.operationBusy ? 'disabled' : ''}
             onclick="event.stopPropagation()"
