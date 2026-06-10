@@ -3208,11 +3208,11 @@ body.auth-locked .app{
 }
 .queue-dispatch-aside{
   position:absolute;
-  top:118px;
+  top:18px;
   right:18px;
   bottom:18px;
   z-index:80;
-  width:min(560px, calc(100vw - 42px));
+  width:min(560px, calc(100vw - 36px));
   pointer-events:none;
 }
 .queue-dispatch-aside-panel{
@@ -3228,35 +3228,8 @@ body.auth-locked .app{
 }
 .queue-dispatch-aside.is-closed .queue-dispatch-aside-panel{
   transform:translateX(calc(100% + 24px));
-  opacity:.18;
-}
-.queue-dispatch-aside-toggle{
-  position:absolute;
-  left:-96px;
-  top:22px;
-  width:94px;
-  height:36px;
-  border:1px solid var(--accent);
-  border-radius:10px 0 0 10px;
-  background:var(--surface2);
-  color:var(--accent);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-  font-family:'DM Mono',monospace;
-  font-size:9px;
-  font-weight:800;
-  cursor:pointer;
-  pointer-events:auto;
-  box-shadow:0 10px 30px rgba(0,0,0,.28);
-}
-.queue-dispatch-aside.is-closed .queue-dispatch-aside-toggle{
-  left:-82px;
-}
-.queue-dispatch-aside-toggle span:first-child{
-  font-size:17px;
-  line-height:1;
+  opacity:0;
+  pointer-events:none;
 }
 .queue-dispatch-aside-body{
   height:100%;
@@ -3316,19 +3289,9 @@ body.auth-locked .app{
 }
 @media (max-width: 760px){
   .queue-dispatch-aside{
-    top:96px;
+    top:10px;
     right:10px;
     bottom:10px;
     width:calc(100vw - 20px);
-  }
-  .queue-dispatch-aside-toggle{
-    left:auto;
-    right:0;
-    top:-42px;
-    border-radius:10px;
-    width:108px;
-  }
-  .queue-dispatch-aside.is-closed .queue-dispatch-aside-toggle{
-    left:auto;
   }
 }

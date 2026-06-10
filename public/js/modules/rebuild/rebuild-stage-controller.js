@@ -3011,11 +3011,7 @@
 
   function syncDispatchAsideState() {
     const aside = document.getElementById('queueDispatchAside');
-    const toggle = document.getElementById('queueDispatchAsideToggle');
-    const icon = document.getElementById('queueDispatchAsideIcon');
     if (aside) aside.classList.toggle('is-closed', !state.dispatchAsideOpen);
-    if (toggle) toggle.setAttribute('aria-label', state.dispatchAsideOpen ? 'Fechar disparos' : 'Abrir disparos');
-    if (icon) icon.textContent = state.dispatchAsideOpen ? '›' : '‹';
   }
 
   window.toggleQueueDispatchAsideRebuild648 = function toggleQueueDispatchAsideRebuild648(force) {
@@ -3623,6 +3619,7 @@
             <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// operação diária · ao virar o dia, não enviadas e em fila retornam ao backlog</div>
           </div>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px;border-color:var(--accent);color:var(--accent)" onclick="toggleQueueDispatchAsideRebuild648(true)">‹ Disparos</button>
             <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
             <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="generateDispatchBatchesRebuild622()">Gerar lotes</button>
           </div>
