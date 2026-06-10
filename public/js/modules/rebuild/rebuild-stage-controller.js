@@ -245,11 +245,84 @@
 
     if (!response.ok) {
       if (response.status === 404) {
-        throw new Error('RPC rpc_assignment_lead_action nao encontrado. Execute o SQL 6.27 no Supabase e recarregue a pagina.');
+        console.warn('[validation-v687] rpc_assignment_lead_action ausente. Usando fallback direto.', { leadId, bucket });
+        return directValidationBacklogFallbackV687(userId, leadId, bucket);
       }
       throw new Error(data?.message || data?.details || `Falha ao enviar ao backlog (${response.status}).`);
     }
     return data;
+  }
+
+  async function directValidationBacklogFallbackV687(userId, leadId, bucket) {
+    const now = new Date().toISOString();
+    const channel = bucket === 'insta' ? 'instagram' : 'whatsapp';
+    const currentStatus = bucket === 'insta' ? 'backlog_instagram' : 'backlog_whatsapp';
+    const headers = await getHeaders(true);
+
+    const existingParams = new URLSearchParams({
+      select: 'id,lead_id,channel,bucket,status',
+      user_id: `eq.${userId}`,
+      lead_id: `eq.${leadId}`,
+      channel: `eq.${channel}`,
+      limit: '1'
+    });
+
+    const existingResponse = await fetch(`${SUPABASE_URL}/rest/v1/backlog_items?${existingParams.toString()}`, {
+      headers: await getHeaders()
+    });
+    const existing = await readJson(existingResponse).catch(() => []);
+    if (!existingResponse.ok) throw existing || new Error(`Falha ao consultar backlog (${existingResponse.status}).`);
+
+    if (Array.isArray(existing) && existing[0]?.id) {
+      const patchResponse = await fetch(`${SUPABASE_URL}/rest/v1/backlog_items?id=eq.${existing[0].id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          status: 'backlog',
+          bucket,
+          moved_to_queue_item_id: null,
+          updated_at: now
+        })
+      });
+      const patchData = await readJson(patchResponse).catch(() => null);
+      if (!patchResponse.ok) throw patchData || new Error(`Falha ao atualizar backlog (${patchResponse.status}).`);
+    } else {
+      const insertPayload = {
+        user_id: userId,
+        lead_id: leadId,
+        channel,
+        bucket,
+        status: 'backlog',
+        moved_to_queue_item_id: null,
+        created_at: now,
+        updated_at: now
+      };
+
+      const insertResponse = await fetch(`${SUPABASE_URL}/rest/v1/backlog_items`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(insertPayload)
+      });
+      const insertData = await readJson(insertResponse).catch(() => null);
+      if (!insertResponse.ok) throw insertData || new Error(`Falha ao criar backlog (${insertResponse.status}).`);
+    }
+
+    const leadPatch = {
+      current_stage: 'backlog',
+      current_status: currentStatus,
+      lead_channel: channel,
+      updated_at: now
+    };
+
+    const leadResponse = await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${leadId}&user_id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(leadPatch)
+    });
+    const leadData = await readJson(leadResponse).catch(() => null);
+    if (!leadResponse.ok) throw leadData || new Error(`Falha ao atualizar lead (${leadResponse.status}).`);
+
+    return { ok: true, fallback: true, lead_id: leadId, bucket, channel };
   }
 
   function normalizeLeadForRuntime(row = {}) {
@@ -1342,39 +1415,57 @@
   }
 
   async function fetchPersistedChips() {
-    const cached = dedupeChips([
+    const sources = [
       ...(Array.isArray(window.__crmChipsCache) ? window.__crmChipsCache : []),
       ...(typeof window.getChips === 'function' ? window.getChips() || [] : [])
-    ]);
+    ];
 
     try {
       if (typeof window.CRMHydrateChipsCache === 'function') {
         const hydrated = await window.CRMHydrateChipsCache();
-        if (Array.isArray(hydrated)) return dedupeChips(hydrated);
+        if (Array.isArray(hydrated)) sources.push(...hydrated);
       }
     } catch (error) {
       console.warn('[rebuild625] hydrate chips falhou:', error);
     }
 
     const userId = await getCurrentUserId();
-    if (!userId) return cached;
 
-    try {
-      const params = new URLSearchParams({
-        select: '*',
-        user_id: `eq.${userId}`,
-        order: 'updated_at.desc'
-      });
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_instances?${params.toString()}`, {
-        headers: await getHeaders()
-      });
-      const data = await readJson(response);
-      if (!response.ok) throw data || new Error(`Falha ao carregar chips (${response.status}).`);
-      return dedupeChips(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.warn('[rebuild625] fetch chips falhou:', error);
-      return cached;
+    if (userId) {
+      try {
+        const params = new URLSearchParams({
+          select: '*',
+          user_id: `eq.${userId}`,
+          archived_at: 'is.null',
+          active: 'eq.true',
+          order: 'updated_at.desc'
+        });
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/whatsapp_instances?${params.toString()}`, {
+          headers: await getHeaders()
+        });
+        const data = await readJson(response);
+        if (!response.ok) throw data || new Error(`Falha ao carregar chips (${response.status}).`);
+        if (Array.isArray(data)) sources.push(...data);
+      } catch (error) {
+        console.warn('[rebuild625] fetch chips falhou:', error);
+      }
     }
+
+    const chips = dedupeChips(sources);
+    const priority = (chip = {}) => {
+      const stateText = chipStateTextV686(chip);
+      if (['open','connected','conectado'].includes(stateText)) return 0;
+      if (['connecting','conectando'].includes(stateText)) return 1;
+      if (['saved','closed','disconnected','desconectado'].includes(stateText)) return 3;
+      return 2;
+    };
+
+    return chips.sort((a, b) => {
+      const pa = priority(a);
+      const pb = priority(b);
+      if (pa !== pb) return pa - pb;
+      return String(a.name || a.label || a.instance || '').localeCompare(String(b.name || b.label || b.instance || ''));
+    });
   }
 
   function getActiveChip() {
@@ -1403,14 +1494,24 @@
     const list = [];
     const push = (chip) => {
       if (!chip) return;
-      const id = String(chip.id || chip.instance || '');
-      if (seen.has(id)) return;
+      const id = String(chip.id || chip.instance || chip.chip_id || '');
+      if (!id || seen.has(id)) return;
       seen.add(id);
       list.push(chip);
     };
-    push(active);
+
+    // Primeiro chips realmente marcados como open/connected no banco/cache.
     state.chips.filter(isChipUsableForValidationV686).forEach(push);
-    state.chips.filter((chip) => chip.active !== false && !['saved','closed','disconnected','desconectado','connecting','conectando'].includes(chipStateTextV686(chip))).forEach(push);
+
+    // Depois o ativo, caso não esteja na lista, para não perder seleção manual.
+    push(active);
+
+    // Não tenta saved/desconectado/conectando antes dos conectados.
+    state.chips
+      .filter((chip) => chip.active !== false)
+      .filter((chip) => !['saved','closed','disconnected','desconectado','connecting','conectando'].includes(chipStateTextV686(chip)))
+      .forEach(push);
+
     return list;
   }
 
@@ -1589,7 +1690,7 @@
   }
 
   async function validateLeadWithChip(leadId, options = {}) {
-    if (!state.chips.length) await refreshValidationChips();
+    await refreshValidationChips();
     const chip = getActiveChip();
     if (!chip) {
       notifyUser('// cadastre ou selecione um chip antes de validar', 'warn');
@@ -1700,7 +1801,7 @@
     }
 
     const retryAll = options === true || options?.retryAll === true;
-    if (!state.chips.length) await refreshValidationChips();
+    await refreshValidationChips();
     const chip = getActiveChip();
     if (!chip) {
       notifyUser('// cadastre ou selecione um chip antes de validar', 'warn');
