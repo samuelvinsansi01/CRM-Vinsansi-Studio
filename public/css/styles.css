@@ -3366,3 +3366,47 @@ body.auth-locked .app{
   align-items:center;
   justify-content:center;
 }
+
+
+/* 6.72 dispatch focus: aside overlay, mini remove, bulk chips */
+.queue-dispatch-aside{
+  left:0 !important;
+  top:0 !important;
+  right:0 !important;
+  bottom:0 !important;
+  width:auto !important;
+  padding:18px !important;
+  background:rgba(0,0,0,.12);
+  pointer-events:auto !important;
+}
+.queue-dispatch-aside.is-closed{
+  pointer-events:none !important;
+  background:transparent;
+}
+.queue-dispatch-aside-panel{
+  width:min(760px, calc(100vw - 36px));
+  margin-left:auto;
+}
+.queue-lead-remove-mini{
+  border:1px solid rgba(255,80,80,.35);
+  color:#ff8b8b;
+  background:rgba(255,80,80,.08);
+  border-radius:999px;
+  padding:4px 8px;
+  font-family:'DM Mono',monospace;
+  font-size:8px;
+  font-weight:800;
+  cursor:pointer;
+  flex:0 0 auto;
+}
+.queue-lead-remove-mini:hover:not(:disabled){
+  border-color:#ff8b8b;
+  background:rgba(255,80,80,.16);
+}
+.queue-lead-remove-mini:disabled{
+  opacity:.38;
+  cursor:not-allowed;
+}
+.bulk-list-actions .btn{
+  white-space:nowrap;
+}

@@ -2424,6 +2424,29 @@
     return { chip: null, nextIndex: startIndex };
   }
 
+  function chooseSequentialAvailableChipRebuild672(activeChips = [], usage = null, startIndex = 0) {
+    const currentUsage = usage || buildChipUsage(activeChips);
+    const limits = new Map(activeChips.map((chip) => [String(chip.id), Number(chip.dailyLimit || 120)]));
+    for (let attempt = 0; attempt < activeChips.length; attempt++) {
+      const index = (startIndex + attempt) % activeChips.length;
+      const chip = activeChips[index];
+      const key = String(chip.id);
+      if ((currentUsage.get(key) || 0) < (limits.get(key) || 120)) {
+        currentUsage.set(key, (currentUsage.get(key) || 0) + 1);
+        return { chip, nextIndex:index };
+      }
+    }
+    return { chip:null, nextIndex:startIndex };
+  }
+
+  function chipStartIndexRebuild672(activeChips = [], chipId = '') {
+    const target = String(chipId || '');
+    const idx = activeChips.findIndex((chip) => [chip.id, chip.dbId, chip.instance, chip.name, chip.nome]
+      .map((value) => String(value || ''))
+      .includes(target));
+    return idx >= 0 ? idx : 0;
+  }
+
   function queuePayloadFor(row, chip, reason = 'manual') {
     return {
       source: 'fase-6.27',
@@ -2890,6 +2913,13 @@
     return `<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" ${disabled} title="${esc(title)}" onclick="removeDispatchLeadFromBatchRebuild648('${esc(operationRowKey(row))}','${esc(slot)}')">Remover do lote</button>`;
   }
 
+  function dispatchLeadRemoveButtonCompactRebuild672(row = {}, slot = -1) {
+    const allowed = isDispatchLeadRemovalAllowedRebuild648(row, slot);
+    const disabled = allowed && !state.dispatchBusy ? '' : 'disabled';
+    const title = dispatchLeadRemovalTitleRebuild648(row, slot);
+    return `<button class="queue-lead-remove-mini" type="button" data-queue621-lead="${esc(row.id)}" ${disabled} title="${esc(title)}" onclick="event.stopPropagation();removeDispatchLeadFromBatchRebuild648('${esc(operationRowKey(row))}','${esc(slot)}')">Remover</button>`;
+  }
+
   async function directBackToBacklogForUnsentDispatchLeadRebuild648(row = {}) {
     const userId = await getCurrentUserId();
     if (!userId) throw new Error('Usuario autenticado nao encontrado.');
@@ -3025,6 +3055,7 @@
                 <div style="flex:0 0 auto;display:flex;align-items:center;gap:6px;white-space:nowrap">
                   <span class="q-badge ${templateTypeLabel(row) === 'Com site' ? 'info' : 'warn'}">${esc(templateTypeLabel(row))}</span>
                   <span class="fila-item-status q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
+                  ${dispatchLeadRemoveButtonCompactRebuild672(row, slot)}
                 </div>
               </summary>
               <div id="lead-${esc(batchDomId)}-${index}" style="border-top:1px solid var(--border);padding:10px">
@@ -3034,7 +3065,6 @@
                 <textarea class="queue-aside-message" oninput="updateDispatchLeadMessageRebuild648('${esc(operationRowKey(row))}','mensagem2',this.value)">${esc(row.mensagem2 || row.template_part2 || '')}</textarea>
                 <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:10px;flex-wrap:wrap">
                   <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
-                  ${dispatchLeadRemoveButtonRebuild648(row, slot)}
                 </div>
               </div>
             </details>
@@ -3751,7 +3781,10 @@
           ${stats.selectedCount ? `<span class="q-badge ok">${selectedLabel}</span>` : ''}
         </div>
         <div class="bulk-list-actions ${stats.selectedCount ? 'is-visible' : ''}">
-          <button class="btn btn-primary" type="button" ${!stats.toQueueCount || state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsRebuild648()">Entrar na fila</button>
+          <button class="btn btn-primary" type="button" ${!stats.toQueueCount || state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsRebuild648()">Auto chips</button>
+          ${stats.toQueueCount ? state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false).slice(0, 5).map((chip, idx) => `
+            <button class="btn btn-ghost" type="button" ${state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsToChipRebuild672('${esc(chip.id)}')" title="Preenche este chip ate 120 e depois continua nos proximos">Chip ${idx + 1}</button>
+          `).join('') : ''}
           <button class="btn btn-ghost" type="button" ${!stats.queuedCount || state.operationBusy ? 'disabled' : ''} onclick="backSelectedOperationToBacklogRebuild648()">Voltar backlog</button>
           <button class="btn btn-ghost" type="button" ${!stats.selectedCount || state.operationBusy ? 'disabled' : ''} onclick="clearQueueOperationSelectionRebuild648()">Limpar</button>
           ${state.operationBusy ? '<span class="q-badge warn">Processando</span>' : ''}
@@ -3973,7 +4006,7 @@
 
     try {
       for (const row of rows) {
-        const result = chooseNextAvailableChip(activeChips, usage, chipCursor);
+        const result = chooseSequentialAvailableChipRebuild672(activeChips, usage, chipCursor);
         const chip = result.chip;
         chipCursor = result.nextIndex;
         if (!chip) break;
