@@ -1378,7 +1378,40 @@
   }
 
   function getActiveChip() {
-    return state.chips.find((chip) => String(chip.id) === String(state.activeChipId) || String(chip.instance) === String(state.activeChipId)) || state.chips[0] || null;
+    return state.chips.find((chip) => String(chip.id) === String(state.activeChipId) || String(chip.instance) === String(state.activeChipId)) || getPreferredValidationChipV686() || state.chips[0] || null;
+  }
+
+  function chipStateTextV686(chip = {}) {
+    return String(chip.connectionState || chip.connection_state || chip.status || chip.payload?.status || '').trim().toLowerCase();
+  }
+
+  function isChipUsableForValidationV686(chip = {}) {
+    const stateText = chipStateTextV686(chip);
+    return chip.active !== false && ['open','connected','conectado'].includes(stateText);
+  }
+
+  function getPreferredValidationChipV686(excludeIds = new Set()) {
+    return state.chips.find((chip) => {
+      const id = String(chip.id || chip.instance || '');
+      return !excludeIds.has(id) && isChipUsableForValidationV686(chip);
+    }) || null;
+  }
+
+  function getValidationChipCandidatesV686() {
+    const active = getActiveChip();
+    const seen = new Set();
+    const list = [];
+    const push = (chip) => {
+      if (!chip) return;
+      const id = String(chip.id || chip.instance || '');
+      if (seen.has(id)) return;
+      seen.add(id);
+      list.push(chip);
+    };
+    push(active);
+    state.chips.filter(isChipUsableForValidationV686).forEach(push);
+    state.chips.filter((chip) => chip.active !== false && !['saved','closed','disconnected','desconectado','connecting','conectando'].includes(chipStateTextV686(chip))).forEach(push);
+    return list;
   }
 
   function renderChipTabs() {
@@ -1396,7 +1429,7 @@
     }
 
     if (!state.activeChipId || !state.chips.some((chip) => String(chip.id) === String(state.activeChipId))) {
-      const preferredChip = state.chips.find((chip) => ['open','connected','conectado'].includes(String(chip.connectionState || chip.status || '').toLowerCase())) || state.chips[0];
+      const preferredChip = getPreferredValidationChipV686() || state.chips[0];
       state.activeChipId = preferredChip.id;
     }
 
@@ -1584,39 +1617,61 @@
     setValidationChipButtonsDisabled(leadId, true);
 
     try {
-      const raw = await callEvolutionValidation(chip, [phone]);
-      const parsed = parseValidationResult(findResultForPhone(raw, phone) || raw);
+      const candidates = getValidationChipCandidatesV686();
+      let lastConnectionError = null;
+      let lastError = null;
 
-      if (!parsed.definitive) {
-        await rpcValidationChipAction(lead, 'validation_error', {
-          chip,
-          phone,
-          reason: 'Resposta da Evolution sem resultado definitivo',
-          raw
-        });
-        if (!options.silent) notifyUser('// resposta sem resultado definitivo. Lead continua pendente.', 'warn');
-        return { ok: false, error: true };
+      for (const candidateChip of candidates) {
+        try {
+          const raw = await callEvolutionValidation(candidateChip, [phone]);
+          const parsed = parseValidationResult(findResultForPhone(raw, phone) || raw);
+
+          if (!parsed.definitive) {
+            await rpcValidationChipAction(lead, 'validation_error', {
+              chip: candidateChip,
+              phone,
+              reason: 'Resposta da Evolution sem resultado definitivo',
+              raw
+            });
+            if (!options.silent) notifyUser('// resposta sem resultado definitivo. Lead continua pendente.', 'warn');
+            return { ok: false, error: true };
+          }
+
+          state.activeChipId = candidateChip.id;
+          renderChipTabs();
+
+          await rpcValidationChipAction(lead, parsed.exists ? 'approve_whatsapp' : 'reject_validation', {
+            chip: candidateChip,
+            phone,
+            exists: parsed.exists,
+            reason: parsed.exists ? null : 'Numero sem WhatsApp pela Evolution',
+            raw
+          });
+
+          if (!options.silent) {
+            notifyUser(parsed.exists ? `Numero validado: ${lead.nome || lead.company_name}` : `Sem WhatsApp: ${lead.nome || lead.company_name}`, parsed.exists ? '' : 'warn');
+          }
+
+          return { ok: true, exists: parsed.exists, chip: candidateChip };
+        } catch (error) {
+          lastError = error;
+          if (error?.connectionError) {
+            lastConnectionError = error;
+            console.warn('[validation-v686] chip indisponivel, tentando proximo:', candidateChip.instance, error?.message);
+            continue;
+          }
+          throw error;
+        }
       }
 
-      await rpcValidationChipAction(lead, parsed.exists ? 'approve_whatsapp' : 'reject_validation', {
-        chip,
-        phone,
-        exists: parsed.exists,
-        reason: parsed.exists ? null : 'Numero sem WhatsApp pela Evolution',
-        raw
-      });
-
-      if (!options.silent) {
-        notifyUser(parsed.exists ? `Numero validado: ${lead.nome || lead.company_name}` : `Sem WhatsApp: ${lead.nome || lead.company_name}`, parsed.exists ? '' : 'warn');
-      }
-
-      return { ok: true, exists: parsed.exists };
+      const finalError = lastConnectionError || lastError || new Error('Nenhum chip conectado para validar.');
+      throw finalError;
     } catch (error) {
       await rpcValidationChipAction(lead, 'validation_error', {
         chip,
         phone,
         reason: error?.message || 'Falha ao consultar Evolution',
-        raw: { source: 'fase-6.25', error: error?.message || String(error) }
+        raw: { source: 'fase-6.86', error: error?.message || String(error) }
       }).catch((rpcError) => console.warn('[rebuild625] erro nao registrado:', rpcError));
       if (!options.silent) notifyUser(error?.message || 'Falha ao validar numero.', 'err');
       return { ok: false, error: true, connectionError: !!error?.connectionError, message: error?.message || '' };
