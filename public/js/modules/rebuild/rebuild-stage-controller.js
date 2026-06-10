@@ -1865,10 +1865,14 @@
     rows: [],
     operationSelected: new Set(),
     operationBusy: false,
+    dispatchAsideOpen: false,
+    openDispatchChipKey: '',
+    dispatchBusy: false,
     loading: false
   };
 
   const queueLeadCache = new Map();
+  const dispatchMessageSaveTimers = new Map();
 
   function esc(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -2577,33 +2581,61 @@
   }
 
 
-  window.onRebuildKanbanLoteRamoChange = function onRebuildKanbanLoteRamoChange(chipId, batchIndex, ramoId, isSlot, slot, batchId) {
+  window.onRebuildKanbanLoteRamoChange = async function onRebuildKanbanLoteRamoChange(chipId, batchIndex, ramoId, isSlot, slot, batchId) {
     try {
       if (typeof onLoteRamoChange === 'function') onLoteRamoChange(chipId, batchIndex, ramoId, isSlot, slot);
     } catch (_) {}
     const targetBatch = String(batchId || '');
-    const rows = readTestDispatchRows();
-    let changed = false;
-    rows.forEach((row) => {
-      if (String(row.batchId || row.batch_id || '') !== targetBatch) return;
+    const changedRows = [];
+    const applyTemplate = (row) => {
       row.ramoId = ramoId || null;
+      row.ramo_id = ramoId || null;
       if (ramoId && typeof pickTemplate === 'function') {
-        const picked = pickTemplate(row.nome || row.company_name || 'Lead teste', ramoId, row.templateType || row.siteSegment || 'sem-site');
+        const picked = pickTemplate(row.nome || row.company_name || 'Lead', ramoId, row.templateType || row.siteSegment || row.template_type || 'sem-site');
         row.mensagem = picked?.text || '';
         row.mensagem2 = picked?.text2 || '';
         row.template_part1 = row.mensagem;
         row.template_part2 = row.mensagem2;
+        row.templateIdx = Number.isFinite(Number(picked?.idx)) ? Number(picked.idx) : -1;
         row.template_index = Number.isFinite(Number(picked?.idx)) ? Number(picked.idx) : null;
       } else {
         row.mensagem = '';
         row.mensagem2 = '';
         row.template_part1 = '';
         row.template_part2 = '';
+        row.templateIdx = -1;
         row.template_index = null;
       }
+    };
+
+    [state.rows, state.weekRows].forEach((list) => {
+      (list || []).forEach((row) => {
+        const rowBatch = String(row.batchId || row.batch_id || '');
+        const rowChip = rowChipCandidates(row);
+        const sameBatch = targetBatch && rowBatch
+          ? rowBatch === targetBatch
+          : Number(row.batchIndex || row.batch_index || 1) === Number(batchIndex || 1);
+        if (!sameBatch || !rowChip.includes(String(chipId || ''))) return;
+        applyTemplate(row);
+        changedRows.push(row);
+      });
+    });
+
+    const rows = readTestDispatchRows();
+    let changed = false;
+    rows.forEach((row) => {
+      if (String(row.batchId || row.batch_id || '') !== targetBatch) return;
+      applyTemplate(row);
       changed = true;
     });
     if (changed) saveTestDispatchRows(rows);
+    if (changedRows.length && typeof updateDispatchCheckpointV635 === 'function') {
+      await Promise.all(changedRows.map((row) => updateDispatchCheckpointV635(row, {
+        template_part1: row.template_part1 || '',
+        template_part2: row.template_part2 || '',
+        template_index: Number.isFinite(Number(row.template_index)) ? Number(row.template_index) : null
+      })));
+    }
     renderRightPanel();
   };
 
@@ -2633,8 +2665,8 @@
               <img data-lote-img-key="${esc(imageKey)}" src="${esc(imageSrc || '')}" style="${imageSrc ? '' : 'display:none;'}width:40px;height:40px;object-fit:cover;border-radius:7px;border:1px solid var(--border)" />
               <span class="fila-img-label" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);${imageSrc ? 'display:none' : ''}">Sem imagem</span>
               <span class="fila-img-ok" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--accent);${imageSrc ? '' : 'display:none'}">Imagem salva</span>
-              <input type="file" accept="image/*" onchange="typeof onLoteImgChange==='function'&&onLoteImgChange('${esc(chipId)}',${batchIndex},this,true,${slot})" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
-              <button class="fila-remove-btn add-btn" type="button" onclick="event.stopPropagation();typeof onLoteImgRemove==='function'&&onLoteImgRemove('${esc(chipId)}',${batchIndex},true,${slot})" style="margin-left:auto;${imageSrc ? '' : 'display:none'}">Remover</button>
+              <input type="file" accept="image/*" onchange="typeof onLoteImgChange==='function'&&onLoteImgChange('${esc(chipId)}',${batchIndex},this,true,${slot});setTimeout(function(){typeof renderQueueDispatchAsideRebuild648==='function'&&renderQueueDispatchAsideRebuild648()},420)" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+              <button class="fila-remove-btn add-btn" type="button" onclick="event.stopPropagation();typeof onLoteImgRemove==='function'&&onLoteImgRemove('${esc(chipId)}',${batchIndex},true,${slot});setTimeout(function(){typeof renderQueueDispatchAsideRebuild648==='function'&&renderQueueDispatchAsideRebuild648()},220)" style="margin-left:auto;${imageSrc ? '' : 'display:none'}">Remover</button>
             </div>
           </div>
         </div>
@@ -2642,47 +2674,149 @@
     `;
   }
 
+  function dispatchChipsForControls() {
+    try {
+      const legacy = typeof getChips === 'function' ? getChips() : [];
+      if (Array.isArray(legacy) && legacy.length) return legacy;
+    } catch (_) {}
+    return state.chips || [];
+  }
+
+  function dispatchChipKey(chip = {}, slot = 0) {
+    return String(chip.id || chip.dbId || chip.instance || chip.phone || chip.name || slot);
+  }
+
+  function dispatchChipSlotFromKey(key) {
+    const target = String(key ?? '').trim();
+    const chips = dispatchChipsForControls();
+    if (/^\d+$/.test(target) && chips[Number(target)]) return Number(target);
+    return chips.findIndex((chip, index) => {
+      if (String(index) === target) return true;
+      return chipKeyCandidates(chip).includes(target);
+    });
+  }
+
+  function selectedDispatchRowsForChip(slotOrKey, dispatchDate = selectedQueueDateForDispatch()) {
+    const chips = dispatchChipsForControls();
+    const slot = dispatchChipSlotFromKey(slotOrKey);
+    const chip = chips[slot] || null;
+    if (!chip) return { chip:null, slot:-1, rows:[] };
+    const rows = queueRowsForDispatchDate(dispatchDate).filter((row) => chipMatchesRow(chip, row));
+    return { chip, slot, rows };
+  }
+
+  function dispatchRowStateMatches(row = {}, key = '') {
+    const target = String(key || '');
+    return operationRowKey(row) === target
+      || String(row.queueItemId || row.todayRowId || row.queue_item_id || '') === target
+      || String(row.leadId || row.lead_id || '') === target;
+  }
+
+  function updateDispatchRowsInState(rowKey, updater) {
+    let changed = false;
+    [state.rows, state.weekRows].forEach((list) => {
+      (list || []).forEach((row) => {
+        if (!dispatchRowStateMatches(row, rowKey)) return;
+        updater(row);
+        changed = true;
+      });
+    });
+    return changed;
+  }
+
+  function findDispatchRowInState(rowKey) {
+    return [...(state.rows || []), ...(state.weekRows || [])].find((row) => dispatchRowStateMatches(row, rowKey)) || null;
+  }
+
+  function scheduleDispatchRowMessageSave(rowKey, row, patch) {
+    if (!row || row.isTestLead) return;
+    const timerKey = `${rowKey}:${Object.keys(patch).sort().join(',')}`;
+    clearTimeout(dispatchMessageSaveTimers.get(timerKey));
+    dispatchMessageSaveTimers.set(timerKey, setTimeout(async () => {
+      dispatchMessageSaveTimers.delete(timerKey);
+      if (typeof updateDispatchCheckpointV635 === 'function') {
+        await updateDispatchCheckpointV635(row, patch);
+      }
+    }, 650));
+  }
+
+  window.updateDispatchLeadMessageRebuild648 = function updateDispatchLeadMessageRebuild648(rowKey, field, value) {
+    const key = String(rowKey || '');
+    const safeField = field === 'mensagem2' ? 'mensagem2' : 'mensagem';
+    const patch = safeField === 'mensagem2'
+      ? { template_part2: value || '' }
+      : { template_part1: value || '' };
+
+    let updatedRow = null;
+    updateDispatchRowsInState(key, (row) => {
+      row[safeField] = value || '';
+      if (safeField === 'mensagem2') row.template_part2 = value || '';
+      else row.template_part1 = value || '';
+      updatedRow = row;
+    });
+
+    const testRows = readTestDispatchRows();
+    let testChanged = false;
+    testRows.forEach((row) => {
+      if (!dispatchRowStateMatches(row, key)) return;
+      row[safeField] = value || '';
+      if (safeField === 'mensagem2') row.template_part2 = value || '';
+      else row.template_part1 = value || '';
+      testChanged = true;
+    });
+    if (testChanged) saveTestDispatchRows(testRows);
+
+    const legacyRows = Object.values(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}).flat();
+    legacyRows.forEach((row) => {
+      if (!dispatchRowStateMatches(row, key)) return;
+      row[safeField] = value || '';
+      if (safeField === 'mensagem2') row.template_part2 = value || '';
+      else row.template_part1 = value || '';
+    });
+    if (updatedRow) scheduleDispatchRowMessageSave(key, updatedRow, patch);
+    try { if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ reason:'dispatch-aside-message-update' }); } catch (_) {}
+  };
+
   function batchBlock(chip, slot, group) {
     const batchDomId = `batch-${slot}-${String(group.batchId).replace(/[^a-zA-Z0-9_-]/g, '')}`;
     const loteNumber = String(Number(group.batchIndex || 1) || 1).padStart(2, '0');
     const label = group.isTestBatch || String(group.batchId || '').startsWith('teste-') ? 'Lote teste' : `Lote ${loteNumber}`;
     return `
-      <div style="border:1px solid var(--border);border-radius:13px;background:var(--bg);margin-bottom:10px;overflow:hidden">
-        <button type="button" onclick="toggleBatchLeadDetailsRebuild631('${esc(batchDomId)}')" style="width:100%;border:0;background:var(--surface2);color:var(--text);padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;text-align:left">
+      <details class="queue-aside-lote" data-batch-id="${esc(group.batchId || group.id || '')}">
+        <summary class="queue-aside-lote-summary" style="padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:11px;font-weight:900;color:var(--accent);letter-spacing:.08em">${esc(label)}</span>
           <span style="display:flex;align-items:center;gap:7px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">
             <span>${group.rows.length} lead${group.rows.length !== 1 ? 's' : ''}</span>
             <span class="q-badge ${statusClassForRow({ statusRaw: group.statusRaw })}">${esc(batchStatusLabel(group.statusRaw))}</span>
-            <span id="arrow-${esc(batchDomId)}" style="display:inline-block;transition:transform .2s ease">▼</span>
           </span>
-        </button>
-        <div id="${esc(batchDomId)}" style="display:block;padding:10px;max-height:520px;overflow:auto">
+        </summary>
+        <div id="${esc(batchDomId)}" style="padding:10px;max-height:620px;overflow:auto">
           ${batchConfigBlock(chip, slot, group)}
           ${group.rows.map((row, index) => `
-            <div style="border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:10px;margin-bottom:8px">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;min-width:0" onclick="toggleBatchLeadDetailsRebuild631('lead-${esc(batchDomId)}-${index}')">
+            <details class="queue-aside-lead fila-item ${esc(row.statusRaw || row.status || 'aguardando')}" id="fila-item-${slot}-${esc(row.id)}">
+              <summary class="queue-aside-lead-summary" style="padding:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0">
                 <div style="min-width:0;flex:1 1 auto;overflow:hidden">
                   <div style="font-size:10px;line-height:14px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%">${esc(row.nome || row.company_name || 'Lead')}</div>
                 </div>
                 <div style="flex:0 0 auto;display:flex;align-items:center;gap:6px;white-space:nowrap">
                   <span class="q-badge ${templateTypeLabel(row) === 'Com site' ? 'info' : 'warn'}">${esc(templateTypeLabel(row))}</span>
-                  <span class="q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
+                  <span class="fila-item-status q-badge ${statusClassForRow(row)}">${esc(statusLabelForRow(row))}</span>
                 </div>
-              </div>
-              <div id="lead-${esc(batchDomId)}-${index}" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
-                <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:6px">Mensagem 1</div>
-                <div style="font-size:10px;line-height:1.5;color:var(--text);background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:9px;padding:9px;white-space:pre-wrap">${esc(row.mensagem || row.template_part1 || 'Mensagem ainda não sorteada')}</div>
-                <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin:10px 0 6px">Mensagem 2</div>
-                <div style="font-size:10px;line-height:1.5;color:var(--text);background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:9px;padding:9px;white-space:pre-wrap">${esc(row.mensagem2 || row.template_part2 || 'Mensagem ainda não sorteada')}</div>
+              </summary>
+              <div id="lead-${esc(batchDomId)}-${index}" style="border-top:1px solid var(--border);padding:10px">
+                <label style="display:block;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:6px">Mensagem 1</label>
+                <textarea class="queue-aside-message" oninput="updateDispatchLeadMessageRebuild648('${esc(operationRowKey(row))}','mensagem',this.value)">${esc(row.mensagem || row.template_part1 || '')}</textarea>
+                <label style="display:block;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin:10px 0 6px">Mensagem 2</label>
+                <textarea class="queue-aside-message" oninput="updateDispatchLeadMessageRebuild648('${esc(operationRowKey(row))}','mensagem2',this.value)">${esc(row.mensagem2 || row.template_part2 || '')}</textarea>
                 <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:10px;flex-wrap:wrap">
                   <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
                   ${!['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw) ? `<button class="add-btn" type="button" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>` : ''}
                 </div>
               </div>
-            </div>
+            </details>
           `).join('')}
         </div>
-      </div>
+      </details>
     `;
   }
 
@@ -2875,70 +3009,262 @@
     return String(dispatchDate || '').slice(0, 10) === localDateISO() ? '' : ' title="Disparo permitido apenas para o dia de hoje"';
   }
 
+  function syncDispatchAsideState() {
+    const aside = document.getElementById('queueDispatchAside');
+    const toggle = document.getElementById('queueDispatchAsideToggle');
+    const icon = document.getElementById('queueDispatchAsideIcon');
+    if (aside) aside.classList.toggle('is-closed', !state.dispatchAsideOpen);
+    if (toggle) toggle.setAttribute('aria-label', state.dispatchAsideOpen ? 'Fechar disparos' : 'Abrir disparos');
+    if (icon) icon.textContent = state.dispatchAsideOpen ? '›' : '‹';
+  }
+
+  window.toggleQueueDispatchAsideRebuild648 = function toggleQueueDispatchAsideRebuild648(force) {
+    state.dispatchAsideOpen = typeof force === 'boolean' ? force : !state.dispatchAsideOpen;
+    syncDispatchAsideState();
+    renderRightPanel();
+  };
+
+  window.toggleDispatchChipAccordionRebuild648 = function toggleDispatchChipAccordionRebuild648(key) {
+    const cleanKey = String(key || '');
+    state.openDispatchChipKey = state.openDispatchChipKey === cleanKey ? '' : cleanKey;
+    renderRightPanel();
+  };
+
+  function updateLocalWeekForLegacyDispatch(rows = [], chip = {}, dispatchDate = localDateISO()) {
+    if (dispatchDate !== localDateISO()) return;
+    try {
+      if (typeof ensureWeekData !== 'function' || typeof saveWeekData !== 'function' || typeof todayStr !== 'function') return;
+      const today = todayStr();
+      const data = ensureWeekData();
+      data.days = data.days || {};
+      data.days[today] = data.days[today] || [];
+      const ids = new Set(rows.map((row) => String(row.id || row.leadId || row.lead_id || '')).filter(Boolean));
+      data.days[today] = (data.days[today] || []).filter((lead) => !ids.has(String(lead.id || '')));
+      rows.forEach((row) => {
+        data.days[today].push({
+          ...row,
+          id: String(row.id || row.leadId || row.lead_id || ''),
+          nome: row.nome || row.company_name || 'Lead',
+          whatsapp: row.whatsapp || row.phone || row.normalized_phone || '',
+          phone: row.phone || row.whatsapp || row.normalized_phone || '',
+          status: 'Em fila',
+          queueStatus: 'aguardando',
+          chipId: chip.id || chip.dbId || chip.instance || '',
+          assignedChipId: chip.id || chip.dbId || chip.instance || '',
+          chipName: chip.name || chip.nome || chip.instance || '',
+          chipLabel: chip.nome || chip.name || chip.instance || ''
+        });
+      });
+      saveWeekData(data);
+    } catch (error) {
+      console.warn('[rebuild648] falha ao atualizar semana local para disparo:', error);
+    }
+  }
+
+  function legacyDispatchItemFromRow(row = {}, chip = {}) {
+    const statusRaw = String(row.statusRaw || row.status || '').toLowerCase();
+    const status = statusRaw === 'error' ? 'erro' : statusRaw === 'sent' || statusRaw === 'completed' || statusRaw === 'batch_completed' ? 'enviado' : 'aguardando';
+    const phone = String(row.whatsapp || row.phone || row.normalized_phone || '').replace(/\D+/g, '');
+    return {
+      ...row,
+      id: String(row.id || row.leadId || row.lead_id || ''),
+      leadId: String(row.leadId || row.lead_id || row.id || ''),
+      queueItemId: row.queueItemId || row.todayRowId || row.queue_item_id || '',
+      todayRowId: row.todayRowId || row.queueItemId || row.queue_item_id || '',
+      nome: row.nome || row.company_name || 'Lead',
+      whatsapp: phone,
+      phone,
+      telefone: phone,
+      site: row.site || row.website || '',
+      mensagem: row.mensagem || row.template_part1 || '',
+      mensagem2: row.mensagem2 || row.template_part2 || '',
+      template_part1: row.mensagem || row.template_part1 || '',
+      template_part2: row.mensagem2 || row.template_part2 || '',
+      templateIdx: Number.isFinite(Number(row.templateIdx ?? row.template_index)) ? Number(row.templateIdx ?? row.template_index) : -1,
+      template_index: Number.isFinite(Number(row.templateIdx ?? row.template_index)) ? Number(row.templateIdx ?? row.template_index) : null,
+      ramoId: row.ramoId || row.ramo_id || null,
+      templateType: row.templateType || row.siteSegment || row.template_type || 'sem-site',
+      siteSegment: row.siteSegment || row.templateType || row.template_type || 'sem-site',
+      chipId: chip.id || chip.dbId || chip.instance || '',
+      assignedChipId: chip.id || chip.dbId || chip.instance || '',
+      chipName: chip.name || chip.nome || chip.instance || '',
+      chipLabel: chip.nome || chip.name || chip.instance || '',
+      status,
+      scheduledFor: row.scheduledFor || row.scheduled_for || localDateISO(),
+      scheduled_for: row.scheduled_for || row.scheduledFor || localDateISO(),
+      aberto: false
+    };
+  }
+
+  async function hydrateDispatchImagesForBatches(chip, groups = []) {
+    if (typeof idbGet !== 'function' || typeof getLoteImgKey !== 'function') return;
+    const chipId = chip.id || chip.dbId || chip.instance || '';
+    await Promise.all(groups.map(async (group) => {
+      const loteNum = Number(group.batchIndex || 1) || 1;
+      const key = getLoteImgKey(chipId, loteNum);
+      if (typeof _imgCache !== 'undefined' && _imgCache[key] !== undefined) return;
+      try { _imgCache[key] = (await idbGet(key)) || null; } catch (_) { if (typeof _imgCache !== 'undefined') _imgCache[key] = null; }
+    }));
+  }
+
+  async function bridgeDispatchRowsToLegacyQueue(slot, dispatchDate = selectedQueueDateForDispatch()) {
+    const chips = dispatchChipsForControls();
+    const chip = chips[slot] || null;
+    if (!chip) return { ok:false, error:'Chip nao encontrado para disparo.' };
+    if (dispatchDate !== localDateISO()) return { ok:false, error:'Disparo permitido apenas para o dia de hoje.' };
+
+    const rows = queueRowsForDispatchDate(dispatchDate)
+      .filter((row) => chipMatchesRow(chip, row))
+      .filter((row) => !['sent', 'completed', 'batch_completed', 'batch_sending'].includes(String(row.statusRaw || row.status || '').toLowerCase()));
+    if (!rows.length) return { ok:false, error:'Nenhum lead pronto para este chip.' };
+
+    const missingMessages = rows.filter((row) => !String(row.mensagem || row.template_part1 || '').trim() || !String(row.mensagem2 || row.template_part2 || '').trim());
+    if (missingMessages.length) return { ok:false, error:`${missingMessages.length} lead(s) sem mensagens. Selecione o ramo do lote antes de disparar.` };
+
+    const groups = groupRowsByBatch(rows);
+    await hydrateDispatchImagesForBatches(chip, groups);
+    const chipId = chip.id || chip.dbId || chip.instance || '';
+    const missingImages = groups
+      .filter((group) => group.rows.some((row) => !['sent', 'completed', 'batch_completed'].includes(String(row.statusRaw || row.status || '').toLowerCase())))
+      .map((group) => Number(group.batchIndex || 1) || 1)
+      .filter((loteNum) => typeof getLoteImagem === 'function' && !getLoteImagem(chipId, loteNum));
+    if (missingImages.length) return { ok:false, error:`Lote(s) ${missingImages.join(', ')} sem imagem.` };
+
+    try {
+      if (typeof todayStr === 'function') disparoDay = todayStr();
+      updateLocalWeekForLegacyDispatch(rows, chip, dispatchDate);
+      const legacyRows = rows
+        .slice()
+        .sort((a, b) => Number(a.batchIndex || a.batch_index || 0) - Number(b.batchIndex || b.batch_index || 0)
+          || Number(a.batchPosition || a.batch_position || a.queuePosition || 0) - Number(b.batchPosition || b.batch_position || b.queuePosition || 0))
+        .map((row) => legacyDispatchItemFromRow(row, chip));
+      filaDisparo[chipId] = legacyRows;
+      if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-bridge' });
+    } catch (error) {
+      return { ok:false, error:error?.message || 'Falha ao preparar fila local para disparo.' };
+    }
+    return { ok:true, chip, rows };
+  }
+
   function renderRightPanel() {
     const right = document.getElementById('zapRight');
     if (!right) return;
+    syncDispatchAsideState();
 
-    if (!state.chips.length) {
-      right.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;flex:1;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum chip ativo encontrado</div>`;
+    const chips = dispatchChipsForControls();
+    if (!chips.length) {
+      right.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:40px">// nenhum chip ativo encontrado</div>`;
       return;
     }
+    try {
+      while (chipSlotState.length < chips.length) {
+        chipSlotState.push({ filaLotes:[], loteAtual:0, lotesTotal:0, aguardandoLote:false, disparoEmAndamento:false, loteEsperaFim:null, loteEsperaTimer:null, loteCountdownInt:null, loteHistorico:[], retryItems:[], retryDisparado:false, ultimoLoteFimTs:null, pausado:false });
+      }
+    } catch (_) {}
 
     const dispatchDate = selectedQueueDateForDispatch();
     const dispatchLabel = selectedQueueDateLabel(dispatchDate);
     const dispatchRows = queueRowsForDispatchDate(dispatchDate);
     const disabledAttr = dispatchControlsDisabledAttr(dispatchDate);
     const disabledTitle = dispatchControlsTitle(dispatchDate);
+    const actionDisabled = state.dispatchBusy ? 'disabled' : disabledAttr;
+    const actionTitle = state.dispatchBusy ? ' title="Processando acao atual"' : disabledTitle;
+    const readyTotal = dispatchRows.filter((row) => ['queued_dispatch', 'batch_ready'].includes(row.statusRaw)).length;
+    const sendingTotal = dispatchRows.filter((row) => row.statusRaw === 'batch_sending').length;
+    const sentTotal = dispatchRows.filter((row) => ['sent', 'completed', 'batch_completed'].includes(row.statusRaw)).length;
+    const errorTotal = dispatchRows.filter((row) => row.statusRaw === 'error').length;
+
     right.innerHTML = `
       <div style="height:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden;width:100%">
-        ${dispatchAgendaHtml(dispatchDate)}
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;flex-shrink:0">
-          <div>
-            <div class="card-title" style="margin:0">Kanban dos disparos · ${esc(dispatchLabel)}</div>
-            <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">// somente execução do dia selecionado · alocação fica na aba Operação</div>
+        <div style="padding:14px 14px 12px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px">
+            <div style="min-width:0">
+              <div class="card-title" style="margin:0">Disparos</div>
+              <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px">${esc(dispatchLabel)} · ${esc(dispatchDate)}</div>
+            </div>
+            <button class="add-btn" type="button" onclick="toggleQueueDispatchAsideRebuild648(false)">Fechar</button>
           </div>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+            <span class="q-badge ok">${readyTotal} prontos</span>
+            <span class="q-badge info">${sendingTotal} disparo</span>
+            <span class="q-badge ok">${sentTotal} enviados</span>
+            <span class="q-badge err">${errorTotal} erro</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <button class="btn btn-ghost" type="button" style="font-size:10px;padding:8px 10px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
+            <button class="btn btn-primary" type="button" style="font-size:10px;padding:8px 10px" onclick="generateDispatchBatchesRebuild622()">Gerar lotes</button>
           </div>
         </div>
-        <div style="display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;min-height:0;flex:1;padding-bottom:8px;width:100%">
-          ${state.chips.map((chip, slot) => {
+        <div style="overflow:auto;min-height:0;flex:1;padding:12px">
+          ${chips.map((chip, slot) => {
+            const chipKey = dispatchChipKey(chip, slot);
+            const isOpen = state.openDispatchChipKey === chipKey;
             const rows = dispatchRows.filter((row) => chipMatchesRow(chip, row));
             const groups = groupRowsByBatch(rows);
             const ready = rows.filter((row) => ['queued_dispatch', 'batch_ready'].includes(row.statusRaw)).length;
             const sending = rows.filter((row) => row.statusRaw === 'batch_sending').length;
             const sent = rows.filter((row) => ['sent', 'completed', 'batch_completed'].includes(row.statusRaw)).length;
+            const error = rows.filter((row) => row.statusRaw === 'error').length;
+            const withSite = rows.filter((row) => templateTypeLabel(row) === 'Com site').length;
+            const withoutSite = rows.filter((row) => templateTypeLabel(row) !== 'Com site').length;
             const chipLabel = chip.name || chip.nome || `Chip ${slot + 1}`;
             const chipInstance = chip.instance || chip.numero || chip.phone || '';
             return `
-              <section style="min-width:430px;flex:1 0 430px;height:100%;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden">
-                <div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--surface2);flex-shrink:0">
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-                    <div style="min-width:0">
-                      <div style="font-size:12px;font-weight:900;color:var(--accent);letter-spacing:.08em">CHIP ${slot + 1}</div>
-                      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px">${esc(chipLabel)} ${chipInstance ? `· ${esc(chipInstance)}` : ''}</div>
-                    </div>
-                    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${rows.length} empresa${rows.length !== 1 ? 's' : ''}</div>
+              <section class="queue-aside-chip">
+                <button class="queue-aside-chip-header" type="button" onclick="toggleDispatchChipAccordionRebuild648('${esc(chipKey)}')" style="padding:12px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+                  <div style="min-width:0;display:flex;flex-direction:column;gap:4px">
+                    <div style="font-size:12px;font-weight:900;color:var(--accent);letter-spacing:.08em">CHIP ${slot + 1}</div>
+                    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(chipLabel)}${chipInstance ? ` · ${esc(chipInstance)}` : ''}</div>
                   </div>
-                </div>
-                <div style="padding:12px;overflow:auto;min-height:0;flex:1">
-                  <div style="border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);padding:9px 10px;font-size:11px;color:var(--text);margin-bottom:10px">${esc(chipInstance || chipLabel)} · ${esc(chipLabel)}</div>
-                  <div style="display:grid;grid-template-columns:110px 1fr;gap:8px;margin-bottom:10px">
-                    <button class="btn btn-ghost" type="button" style="font-size:10px;padding:9px 10px" onclick="clearChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')" ${disabledAttr}${disabledTitle}>Limpar fila</button>
-                    <button class="btn btn-primary" type="button" style="font-size:11px;padding:9px 10px" onclick="dispatchChipQueueRebuild643('${esc(chip.id || chip.chipId || chip.instance || slot)}')" ${disabledAttr}${disabledTitle}>🌐 Disparar</button>
-                  </div>
-                  <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
                     <span class="q-badge ok">${ready} prontos</span>
                     <span class="q-badge info">${sending} disparo</span>
                     <span class="q-badge ok">${sent} enviados</span>
-                    <span class="q-badge err">${rows.filter((row) => row.statusRaw === 'error').length} erro</span>
+                    <span class="q-badge err">${error} erro</span>
+                    <span style="font-family:'DM Mono',monospace;font-size:13px;color:var(--muted)">${isOpen ? '-' : '+'}</span>
                   </div>
-                  <div style="font-size:10px;font-weight:900;color:var(--accent);letter-spacing:.08em;margin-bottom:10px">FILA CHIP ${slot + 1}</div>
-                  ${testLeadBoxRebuild632(chip, slot, dispatchDate)}
-                  ${groups.length
-                    ? groups.map((group) => batchBlock(chip, slot, group)).join('')
-                    : '<div class="fila-empty" style="min-height:140px">// sem lotes neste chip</div>'}
-                </div>
+                </button>
+                ${isOpen ? `
+                  <div style="padding:12px;border-top:1px solid var(--border)">
+                    <div style="border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);padding:9px 10px;font-size:11px;color:var(--text);margin-bottom:10px">
+                      ${esc(chipInstance || chipLabel)} · ${esc(chipLabel)}
+                    </div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+                      <span class="q-badge info">${withSite} com site</span>
+                      <span class="q-badge warn">${withoutSite} sem site</span>
+                      <span class="q-badge ok">${rows.length} em fila</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                      <button class="btn btn-ghost" type="button" style="font-size:10px;padding:9px 10px" onclick="clearChipQueueRebuild643('${esc(slot)}')" ${actionDisabled}${actionTitle}>Limpar fila</button>
+                      <button class="btn btn-primary" id="btnDisparar${slot}" type="button" style="font-size:11px;padding:9px 10px" onclick="dispatchChipQueueRebuild643('${esc(slot)}')" ${actionDisabled}${actionTitle}>
+                        <div class="spinner" id="spinner${slot}"></div>
+                        <span id="disparoBtn${slot}">Disparar</span>
+                      </button>
+                    </div>
+                    <button class="btn btn-ghost" id="btnPausa${slot}" type="button" onclick="togglePausaChip(${slot})" style="display:none;font-size:10px;border-color:var(--warning);color:var(--warning);margin-bottom:8px">Pausar</button>
+                    <div class="lote-espera-panel" id="loteEsperaPanel${slot}" style="display:none;margin-bottom:10px">
+                      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                        <div style="flex:1">
+                          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:4px" id="loteEsperaTitle${slot}">Aguardando lote...</div>
+                          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Proximo lote em <span id="loteCountdown${slot}" style="color:var(--text2)">--:--</span></div>
+                        </div>
+                        <button class="add-btn" type="button" onclick="cancelarLotesChip(${slot})">Cancelar</button>
+                        <button class="add-btn added" id="btnProximoLote${slot}" type="button" onclick="confirmarProximoLoteChip(${slot})" disabled>Proximo</button>
+                      </div>
+                      <div style="margin-top:8px;background:var(--surface2);border-radius:6px;height:3px;overflow:hidden">
+                        <div id="loteProgressBar${slot}" style="height:100%;background:var(--accent);width:0%;transition:width .5s linear"></div>
+                      </div>
+                    </div>
+                    ${testLeadBoxRebuild632(chip, slot, dispatchDate)}
+                    <div style="font-size:10px;font-weight:900;color:var(--accent);letter-spacing:.08em;margin:12px 0 10px">FILA CHIP ${slot + 1}</div>
+                    <div id="filaCount${slot}" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:8px">${rows.length} empresa${rows.length !== 1 ? 's' : ''}</div>
+                    <div class="fila-empty" id="filaVazia${slot}" style="${groups.length ? 'display:none' : ''};min-height:90px">// sem lotes neste chip</div>
+                    <div id="filaItens${slot}" style="${groups.length ? 'display:block' : 'display:none'}">
+                      ${groups.map((group) => batchBlock(chip, slot, group)).join('')}
+                    </div>
+                    <div class="disparo-log" id="disparoLog${slot}"></div>
+                  </div>
+                ` : ''}
               </section>
             `;
           }).join('')}
@@ -2964,13 +3290,12 @@
     const operation = document.getElementById('queueOperationView');
     const dispatch = document.getElementById('queueDispatchView');
     if (tabs) {
-      tabs.innerHTML = `
-        <div class="day-tab${state.activeQueueMode === 'operation' ? ' active' : ''}" onclick="setQueueModeRebuild643('operation')">Operação</div>
-        <div class="day-tab${state.activeQueueMode === 'dispatch' ? ' active' : ''}" onclick="setQueueModeRebuild643('dispatch')">Fila de disparos</div>
-      `;
+      tabs.innerHTML = '';
+      tabs.style.display = 'none';
     }
-    if (operation) operation.style.display = state.activeQueueMode === 'operation' ? 'flex' : 'none';
-    if (dispatch) dispatch.style.display = state.activeQueueMode === 'dispatch' ? 'flex' : 'none';
+    if (operation) operation.style.display = 'flex';
+    if (dispatch) dispatch.style.display = 'none';
+    syncDispatchAsideState();
   }
 
   function rowsForWeekDate(iso) {
@@ -3300,7 +3625,6 @@
           <div style="display:flex;gap:7px;flex-wrap:wrap">
             <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="renderQueueStageFromSupabase621()">Atualizar</button>
             <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 12px" onclick="generateDispatchBatchesRebuild622()">Gerar lotes</button>
-            <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 12px" onclick="setQueueModeRebuild643('dispatch')">Ir para disparos</button>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px">
@@ -3501,26 +3825,96 @@
     }
   };
 
-  window.clearChipQueueRebuild643 = function clearChipQueueRebuild643() {
-    if (typeof notify === 'function') notify('Limpar fila por chip ainda não foi executado aqui. Use voltar backlog por lead/lote enquanto finalizamos essa ação.', 'warn');
+  window.clearChipQueueRebuild643 = async function clearChipQueueRebuild643(slotOrKey) {
+    if (state.dispatchBusy) return;
+    const dispatchDate = selectedQueueDateForDispatch();
+    const { chip, slot, rows } = selectedDispatchRowsForChip(slotOrKey, dispatchDate);
+    if (!chip || slot < 0) {
+      if (typeof notify === 'function') notify('Chip nao encontrado.', 'err');
+      return;
+    }
+
+    const movableRows = rows.filter((row) => {
+      const raw = String(row.statusRaw || row.status || '').toLowerCase();
+      return !['sent', 'completed', 'batch_completed', 'batch_sending'].includes(raw);
+    });
+    if (!movableRows.length) {
+      if (typeof notify === 'function') notify('// nenhum lead limpavel neste chip', 'warn');
+      return;
+    }
+
+    state.dispatchBusy = true;
+    renderRightPanel();
+    let moved = 0;
+    try {
+      for (const row of movableRows) {
+        if (row.isTestLead) {
+          moved++;
+          continue;
+        }
+        try {
+          await rpcQueueAction(row.id, 'back_to_backlog');
+          moved++;
+        } catch (error) {
+          console.warn('[rebuild648] falha ao limpar lead do chip:', row.id, error);
+        }
+      }
+
+      const chipId = chip.id || chip.dbId || chip.instance || '';
+      const ids = new Set(movableRows.map((row) => String(row.id || row.leadId || row.lead_id || '')).filter(Boolean));
+      const testRows = readTestDispatchRows().filter((row) => !(ids.has(String(row.id || row.leadId || '')) && testRowChipMatchesKey(row, chipId)));
+      saveTestDispatchRows(testRows);
+      try {
+        if (filaDisparo?.[chipId]) {
+          filaDisparo[chipId] = (filaDisparo[chipId] || []).filter((row) => !ids.has(String(row.id || row.leadId || '')));
+          if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-chip-clear' });
+        }
+      } catch (_) {}
+      if (typeof notify === 'function') notify(`${moved} lead${moved !== 1 ? 's' : ''} voltou${moved !== 1 ? 'aram' : ''} ao backlog.`);
+    } finally {
+      state.dispatchBusy = false;
+      await renderQueueStageFromSupabase();
+    }
   };
 
-  window.dispatchChipQueueRebuild643 = function dispatchChipQueueRebuild643() {
-    if (typeof notify === 'function') notify('Disparo por chip usa os lotes abaixo. Abra o lote e use Disparar lote.', 'warn');
+  window.dispatchChipQueueRebuild643 = async function dispatchChipQueueRebuild643(slotOrKey) {
+    if (state.dispatchBusy) return;
+    const slot = dispatchChipSlotFromKey(slotOrKey);
+    if (slot < 0) {
+      if (typeof notify === 'function') notify('Chip nao encontrado para disparo.', 'err');
+      return;
+    }
+    const dispatchDate = selectedQueueDateForDispatch();
+    const bridge = await bridgeDispatchRowsToLegacyQueue(slot, dispatchDate);
+    if (!bridge.ok) {
+      if (typeof notify === 'function') notify(`// ${bridge.error}`, 'err');
+      return;
+    }
+    if (typeof iniciarDisparoChip !== 'function') {
+      if (typeof notify === 'function') notify('Motor de disparo nao carregado.', 'err');
+      return;
+    }
+
+    state.dispatchBusy = true;
+    renderRightPanel();
+    try {
+      await iniciarDisparoChip(slot);
+    } finally {
+      state.dispatchBusy = false;
+      await renderQueueStageFromSupabase();
+    }
   };
 
   function renderQueueView() {
     renderQueueModeTabs();
     renderTabs();
     renderOperationView();
-    if (state.activeQueueMode === 'dispatch') {
-      renderLeftList();
-      renderRightPanel();
-    }
+    renderRightPanel();
   }
 
   window.setQueueModeRebuild643 = function setQueueModeRebuild643(mode) {
-    state.activeQueueMode = mode === 'dispatch' ? 'dispatch' : 'operation';
+    state.activeQueueMode = 'operation';
+    if (mode === 'dispatch') state.dispatchAsideOpen = true;
     renderQueueView();
   };
 
@@ -3647,6 +4041,7 @@
     window.openQueueLeadDrawerRebuild621 = openQueueLeadDrawer;
     window.setQueueTabRebuild621 = setQueueTab;
     window.toggleQueueChipAccordion621 = toggleChipAccordion;
+    window.renderQueueDispatchAsideRebuild648 = renderRightPanel;
     window.setDisparoDay = function setDisparoDayRebuild621(day) {
       state.activeTab = day === 'today' || day !== 'backlog' ? 'today' : 'backlog';
       renderQueueView();

@@ -492,10 +492,7 @@
     <div>
       <div class="page-title">Fila <span>WhatsApp.</span></div>
       <div class="page-sub" id="filaZapSub">// operação WhatsApp · organize a fila, gere lotes e execute disparos</div>
-      <div class="day-tabs" id="queueModeTabs" style="margin-top:12px;flex-shrink:0">
-        <div class="day-tab active" onclick="setQueueModeRebuild643('operation')">Operação</div>
-        <div class="day-tab" onclick="setQueueModeRebuild643('dispatch')">Fila de disparos</div>
-      </div>
+      <div class="day-tabs" id="queueModeTabs" style="display:none;margin-top:12px;flex-shrink:0"></div>
     </div>
   </div>
 
@@ -504,6 +501,18 @@
       <div class="fila-empty">// carregando fila WhatsApp...</div>
     </div>
   </div>
+
+  <aside id="queueDispatchAside" class="queue-dispatch-aside is-closed" aria-label="Disparos WhatsApp">
+    <button id="queueDispatchAsideToggle" class="queue-dispatch-aside-toggle" type="button" onclick="toggleQueueDispatchAsideRebuild648()" aria-label="Abrir disparos">
+      <span id="queueDispatchAsideIcon">‹</span>
+      <span>Disparos</span>
+    </button>
+    <div class="queue-dispatch-aside-panel">
+      <div id="zapRight" class="queue-dispatch-aside-body">
+        <div class="fila-empty">// carregando disparos...</div>
+      </div>
+    </div>
+  </aside>
 
   <div id="queueDispatchView" style="display:none;flex:1;min-height:0;overflow:hidden;padding:16px 20px;">
     <!-- Área técnica mantida oculta para compatibilidade com funções antigas de backlog/fila -->
@@ -516,7 +525,7 @@
     </div>
 
     <!-- Kanban full-width: somente execução dos disparos por chip -->
-    <div class="zapRight" id="zapRight" style="flex:1;min-width:0;width:100%;overflow:hidden;">
+    <div class="zapRight" id="zapRightLegacy" style="display:none;flex:1;min-width:0;width:100%;overflow:hidden;">
       <!-- preenchido dinamicamente por renderRightPanel() -->
     </div>
   </div>
