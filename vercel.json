@@ -2,7 +2,7 @@
   "version": 2,
   "headers": [
     {
-      "source": "/js/(.*)",
+      "source": "/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -22,11 +22,11 @@
     },
     {
       "source": "/login",
-      "destination": "/public/login.html"
+      "destination": "/login.html"
     },
     {
       "source": "/login/",
-      "destination": "/public/login.html"
+      "destination": "/login.html"
     },
     {
       "source": "/(.*)",

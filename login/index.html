@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Entrar - Painel Samuel Vinsansi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%230b0b0f%27/%3E%3Ctext x=%2732%27 y=%2739%27 font-size=%2726%27 text-anchor=%27middle%27 fill=%27%23b8f059%27 font-family=%27Arial%27%3EV%3C/text%3E%3C/svg%3E">
+<style>
+:root{--bg:#08090d;--panel:#ffffff;--ink:#0c111a;--muted:#687086;--line:#e8ecf3;--green:#b8ff4d;--green2:#78d92f;--dark:#0d1118;--cyan:#24d6c6;}
+*{box-sizing:border-box}html,body{min-height:100%;margin:0}body{font-family:Syne,system-ui,sans-serif;background:radial-gradient(circle at 12% 12%,rgba(184,255,77,.18),transparent 26%),radial-gradient(circle at 88% 10%,rgba(36,214,198,.16),transparent 28%),linear-gradient(135deg,#08090d,#111522 45%,#09110f);display:grid;place-items:center;padding:32px;color:var(--ink);overflow-x:hidden}.login-shell{width:min(1120px,100%);min-height:720px;background:#f9fbff;border:1px solid rgba(255,255,255,.6);border-radius:28px;padding:14px;display:grid;grid-template-columns:1fr 1.05fr;gap:14px;box-shadow:0 30px 90px rgba(0,0,0,.35),0 0 0 10px rgba(255,255,255,.08)}.login-panel{background:#fff;border:1px solid var(--line);border-radius:22px;padding:34px 42px;display:flex;flex-direction:column;min-width:0}.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:#0b1218}.brand-mark{width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,var(--green),var(--cyan));display:grid;place-items:center;color:#07100a;font-weight:900}.login-form-wrap{max-width:390px;width:100%;margin:auto}.eyebrow{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--green2);font-weight:700;margin-bottom:12px}.login-title{font-size:32px;line-height:1.05;margin:0 0 12px;color:#0b1018}.login-sub{font-family:'DM Mono',monospace;font-size:12px;line-height:1.65;color:#657085;margin:0 0 28px}.login-card{display:grid;gap:14px}.form-row{display:grid;gap:8px}.form-row label{font-size:12px;font-weight:700;color:#20283a}.input{height:48px;border:1px solid var(--line);border-radius:12px;padding:0 14px;font:500 13px 'DM Mono',monospace;color:#161d2b;background:#fff;outline:none}.input:focus{border-color:#a5e94a;box-shadow:0 0 0 4px rgba(184,255,77,.18)}.login-btn{height:52px;border:0;border-radius:14px;background:linear-gradient(135deg,#aaff47,#ccff68);color:#081008;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 12px 28px rgba(125,210,50,.25);transition:.18s ease}.login-btn:hover{transform:translateY(-1px);filter:saturate(1.08)}.google-btn{height:52px;border:1px solid var(--line);border-radius:14px;background:#fff;color:#172033;font-weight:800;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}.google-icon{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;font-weight:900;color:#4285f4;background:#f7f9fd}.divider{display:flex;align-items:center;gap:12px;color:#8b92a3;font:11px 'DM Mono',monospace;margin:8px 0}.divider:before,.divider:after{content:'';height:1px;background:var(--line);flex:1}.helper{display:flex;justify-content:space-between;align-items:center;gap:10px;font:11px 'DM Mono',monospace;color:#727b90;margin-top:4px}.helper a{color:#111a2c;text-decoration:none;font-weight:700}.side-panel{position:relative;overflow:hidden;border-radius:22px;background:linear-gradient(135deg,#0b2527,#09211e 52%,#05120f);color:white;padding:42px;display:flex;flex-direction:column;justify-content:space-between;min-height:690px}.side-panel:before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(to bottom,rgba(0,0,0,.9),rgba(0,0,0,.35));}.floating-cards{position:relative;height:310px;margin-top:20px}.mini-card{position:absolute;background:rgba(255,255,255,.92);color:#102025;border-radius:18px;padding:18px;box-shadow:0 20px 55px rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.8);font-family:'DM Mono',monospace}.mini-card strong{display:block;font-family:Syne,sans-serif;font-size:22px;margin-bottom:8px}.mini-card.one{width:270px;left:30px;top:20px}.mini-card.two{width:260px;right:18px;top:105px}.mini-card.three{width:210px;left:95px;bottom:4px}.progress{height:9px;background:#e8f1ee;border-radius:999px;overflow:hidden;margin-top:12px}.progress span{display:block;height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));border-radius:999px}.side-copy{position:relative;text-align:center;max-width:520px;margin:0 auto}.side-icon{width:76px;height:76px;border-radius:24px;background:linear-gradient(135deg,var(--cyan),var(--green));display:grid;place-items:center;margin:0 auto 24px;color:#041410;font-size:38px;font-weight:900;box-shadow:0 16px 50px rgba(36,214,198,.22)}.side-copy h2{font-size:34px;line-height:1.05;margin:0 0 14px}.side-copy p{font-family:'DM Mono',monospace;font-size:12px;line-height:1.65;color:rgba(255,255,255,.72);margin:0}.login-footer{font:11px 'DM Mono',monospace;color:#8c94a5;text-align:center;margin-top:auto;padding-top:32px}.login-status{min-height:20px;font:12px 'DM Mono',monospace;color:#cc3344;margin-top:8px}.login-status.ok{color:#2d8a43}@media(max-width:900px){body{padding:16px}.login-shell{grid-template-columns:1fr;min-height:0}.side-panel{display:none}.login-panel{min-height:calc(100vh - 60px);padding:28px 22px}.login-title{font-size:28px}}
+</style>
+</head>
+<body>
+  <main class="login-shell">
+    <section class="login-panel">
+      <div class="brand"><div class="brand-mark">S</div><span>Samuel Vinsansi</span></div>
+      <div class="login-form-wrap">
+        <div class="eyebrow">CRM de prospecção</div>
+        <h1 class="login-title">Entre para acessar seu painel.</h1>
+        <p class="login-sub">Seu ambiente de leads, validação, filas, templates e conversas fica protegido por login.</p>
+        <div class="login-card">
+          <div class="form-row"><label>Email</label><input class="input" type="email" placeholder="seu@email.com" disabled></div>
+          <div class="form-row"><label>Senha</label><input class="input" type="password" placeholder="••••••••" disabled></div>
+          <button class="google-btn" onclick="loginGoogle()"><span class="google-icon">G</span> Entrar com Google</button>
+          <div class="divider">acesso privado</div>
+          <button class="login-btn" onclick="loginGoogle()">Continuar para o painel</button>
+          <div id="loginStatus" class="login-status"></div>
+          <div class="helper"><span>Dados sincronizados no Supabase</span><a href="/">Voltar</a></div>
+        </div>
+      </div>
+      <div class="login-footer">© Samuel Vinsansi · Plataforma privada de prospecção</div>
+    </section>
+    <aside class="side-panel">
+      <div class="floating-cards">
+        <div class="mini-card one"><strong>Leads</strong>Validação, backlog e proteção em uma única operação.<div class="progress"><span style="width:72%"></span></div></div>
+        <div class="mini-card two"><strong>WhatsApp</strong>Fila por chip, lotes e templates controlados por dia.<div class="progress"><span style="width:58%"></span></div></div>
+        <div class="mini-card three"><strong>CRM</strong>Respostas viram conversas e oportunidades.<div class="progress"><span style="width:46%"></span></div></div>
+      </div>
+      <div class="side-copy">
+        <div class="side-icon">V</div>
+        <h2>Prospecção com controle, sem repetir lead.</h2>
+        <p>Importe, valide, proteja, organize e dispare com segurança. O sistema principal fica em / e o login agora tem página própria.</p>
+      </div>
+    </aside>
+  </main>
+<script>
+const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = '<<SUPABASE_PUBLISHABLE_KEY_PLACEHOLDER>>';
+</script>
+<script>
+// A chave real é a mesma usada no prelude do app principal.
+(async function initLogin(){
+  const status = document.getElementById('loginStatus');
+  function setStatus(msg, ok=false){ if(status){ status.textContent = msg || ''; status.className = ok ? 'login-status ok' : 'login-status'; } }
+  const key = await fetch('/js/core/prelude.js').then(r=>r.text()).then(t=>{
+    const m=t.match(/const\s+SUPABASE_PUBLISHABLE_KEY\s*=\s*'([^']+)'/);
+    return m ? m[1] : '';
+  }).catch(()=> '');
+  if(!window.supabase || !key){ setStatus('Não foi possível carregar o login. Recarregue a página.'); return; }
+  window.__loginSb = window.supabase.createClient(SUPABASE_URL, key);
+  const { data } = await window.__loginSb.auth.getSession();
+  if(data?.session?.user){
+    setStatus('Sessão encontrada. Redirecionando...', true);
+    const next = new URLSearchParams(location.search).get('next') || '/';
+    location.replace(next.startsWith('/login') ? '/' : next);
+  }
+})();
+async function loginGoogle(){
+  const status = document.getElementById('loginStatus');
+  const setStatus = (msg)=>{ if(status) status.textContent = msg || ''; };
+  if(!window.__loginSb){ setStatus('Login ainda carregando. Aguarde alguns segundos.'); return; }
+  const next = new URLSearchParams(location.search).get('next') || '/';
+  const safeNext = next.startsWith('/login') ? '/' : next;
+  const { error } = await window.__loginSb.auth.signInWithOAuth({
+    provider:'google',
+    options:{ redirectTo: `${window.location.origin}${safeNext}` }
+  });
+  if(error){ console.error(error); setStatus('Erro ao entrar com Google. Tente novamente.'); }
+}
+</script>
+</body>
+</html>
