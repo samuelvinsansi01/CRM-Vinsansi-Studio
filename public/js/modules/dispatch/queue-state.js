@@ -1,6 +1,29 @@
 /* ════════════════════════════
    SINCRONIZAR FILA — corrige status de itens já enviados
 ════════════════════════════ */
+const ZAP_BACKLOG_LEGACY_KEY_V648 = 'vin_zap_backlog';
+
+function getZapBacklog() {
+  try {
+    const list = typeof v48StateGetArray === 'function'
+      ? v48StateGetArray(ZAP_BACKLOG_LEGACY_KEY_V648)
+      : JSON.parse(localStorage.getItem(ZAP_BACKLOG_LEGACY_KEY_V648) || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveZapBacklog(list = []) {
+  const safe = Array.isArray(list) ? list : [];
+  try {
+    if (typeof v48StateSet === 'function') v48StateSet(ZAP_BACKLOG_LEGACY_KEY_V648, safe, 'whatsapp-backlog-legacy-save');
+    else localStorage.setItem(ZAP_BACKLOG_LEGACY_KEY_V648, JSON.stringify(safe));
+  } catch (error) {
+    console.warn('[whatsapp-backlog] falha ao salvar backlog legado:', error?.message || error);
+  }
+}
+
 function devolverZapNaoValidadoParaValidacao() {
   const data = ensureWeekData();
   const weekLeadById = new Map(

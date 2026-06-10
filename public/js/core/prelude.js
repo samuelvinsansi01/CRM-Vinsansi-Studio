@@ -475,12 +475,17 @@ function releaseWhatsappSendLockV31(key = '') {
 const LEAD_SENT_OR_CLOSED_STATUSES_V433 = ['enviada','enviado','respondida','nao respondida','recusada','fechada'];
 
 function isTemporaryDispatchLeadV433(lead = {}) {
+  const id = String(lead?.id || lead?.leadId || lead?.lead_id || '').trim().toLowerCase();
   return !!(
     lead?.isTemporaryDispatchLead ||
+    lead?.isTestLead ||
     lead?.temporaryLead ||
     lead?.testDispatchLead ||
     lead?.stage === 'dispatch_test' ||
-    lead?.source === 'Teste temporario'
+    lead?.source === 'Teste temporario' ||
+    id.startsWith('teste-') ||
+    id.startsWith('test-') ||
+    id.includes('teste-chip')
   );
 }
 

@@ -125,7 +125,9 @@ async function fetchLeadRowsForWhatsappCacheV428(table, column, values = []) {
 
 async function hydrateWhatsappConversationLeadCacheV428(rows = []) {
   if (!sbClient || !currentUser?.id) return;
-  const ids = [...new Set((rows || []).map(row => String(row.lead_id || row.leadId || '').trim()).filter(Boolean))];
+  const ids = [...new Set((rows || [])
+    .map(row => String(row.lead_id || row.leadId || '').trim())
+    .filter(id => id && !(typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433({ id }))))];
   const phones = [...new Set((rows || []).map(row => normalizeWhatsappDigitsV412(
     row.phone_normalized || row.phone || row.remote_jid || row.sender_jid || ''
   )).filter(Boolean))];
@@ -1427,6 +1429,9 @@ async function persistOutgoingWhatsappMessageV412(message = {}, options = {}) {
     userId,
     response: message.response || null
   };
+  if (payload.leadId && typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433({ id:payload.leadId, leadId:payload.leadId })) {
+    payload.leadId = '';
+  }
 
   debugWhatsappPersistV413('payload', payload);
   uiSyncLog('supabase-save-start', { entity:'message', id:payload.id, leadId:payload.leadId, instance:payload.instance });

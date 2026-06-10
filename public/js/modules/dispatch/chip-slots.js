@@ -266,6 +266,9 @@ function assertDispatchItemStillQueuedV439(chipId, item = {}, phase = '') {
 
 async function updateDispatchCheckpointV635(item = {}, patch = {}) {
   try {
+    if (typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433(item)) {
+      return { ok:false, skipped:true, reason:'temporary-dispatch-lead' };
+    }
     const queueId = String(item.queueItemId || item.todayRowId || item.queue_item_id || '').trim();
     const leadId = String(item.leadId || item.id || '').trim();
     const userId = typeof getCurrentSupabaseUserIdV412 === 'function'
@@ -294,12 +297,15 @@ async function updateDispatchCheckpointV635(item = {}, patch = {}) {
 async function persistOutgoingWhatsappMediaV635({ chip = {}, item = {}, phone = '', loteNum = null, response = null } = {}) {
   try {
     if (typeof persistOutgoingWhatsappMessageV412 !== 'function') return { ok:false, skipped:true };
+    const leadId = (typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433(item))
+      ? ''
+      : (item.leadId || item.id || '');
     const externalId = typeof getEvolutionWhatsappExternalIdV412 === 'function'
       ? getEvolutionWhatsappExternalIdV412(response, item.id)
       : '';
     return await persistOutgoingWhatsappMessageV412({
       id: externalId || `out_media_${item.id || 'lead'}_${Date.now()}`,
-      leadId: item.leadId || item.id || '',
+      leadId,
       instance: chip.instance,
       phone,
       text: `[imagem do lote ${loteNum || ''}]`,
@@ -325,10 +331,11 @@ async function protectLeadAfterDispatchV639(item = {}, chip = {}, phone = '', me
 
     const normalizedPhone = normalizeDispatchPhoneV432(phone || item.normalized_phone || item.whatsapp || item.phone || item.telefone || '');
     const companyName = item.company_name || item.nome || item.empresa || item.name || '';
+    const temporaryLead = typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433(item);
     const payload = {
       block_type:'already_sent',
       list_type:'already_sent',
-      lead_id:item.leadId || item.lead_id || item.id || null,
+      lead_id:temporaryLead ? null : (item.leadId || item.lead_id || item.id || null),
       company_name:companyName,
       contact_name:companyName,
       phone:item.phone || item.whatsapp || item.telefone || normalizedPhone,
