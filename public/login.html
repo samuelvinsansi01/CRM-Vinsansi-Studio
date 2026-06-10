@@ -206,6 +206,21 @@ body{
 @media(max-width:1060px){.login-shell{grid-template-columns:1fr;max-width:620px;min-height:0}.side-panel{display:none}.login-panel{min-height:calc(100vh - 64px);padding:30px clamp(22px,6vw,44px)}}
 @media(max-width:560px){body{padding:12px}.login-shell{border-radius:24px;padding:10px}.login-panel{border-radius:19px;min-height:calc(100vh - 44px);padding:24px 18px}.login-title{font-size:29px}.login-sub{font-size:11px}.input,.login-btn,.google-btn{height:50px}.login-footer{padding-top:22px}}
 
+
+.field-error{
+  min-height:14px;
+  font-family:'DM Mono',monospace;
+  font-size:10px;
+  color:#e14b5d;
+  margin-top:2px;
+}
+.input.is-error{
+  border-color:#e14b5d;
+  box-shadow:0 0 0 4px rgba(225,75,93,.08);
+}
+.login-status.error{color:#e14b5d}
+.login-status.success{color:#3bbf75}
+
 </style>
 </head>
 <body>
@@ -217,13 +232,12 @@ body{
         <h1 class="login-title">Entre para acessar seu painel.</h1>
         <p class="login-sub">Seu ambiente de leads, validação, filas, templates e conversas fica protegido por login.</p>
         <div class="login-card">
-          <div class="form-row"><label>Email</label><input class="input" type="email" placeholder="seu@email.com" disabled></div>
-          <div class="form-row"><label>Senha</label><input class="input" type="password" placeholder="••••••••" disabled></div>
-          <button class="google-btn" onclick="loginGoogle()"><span class="google-icon">G</span> Entrar com Google</button>
-          <div class="divider">acesso privado</div>
-          <button class="login-btn" onclick="loginGoogle()">Continuar para o painel</button>
+          <div class="form-row"><label>Email</label><input id="loginEmail" class="input" type="email" placeholder="seu@email.com" autocomplete="email"><div class="field-error" id="loginEmailError"></div></div>
+          <div class="form-row"><label>Senha</label><input id="loginPassword" class="input" type="password" placeholder="••••••••" autocomplete="current-password"><div class="field-error" id="loginPasswordError"></div></div>
+          <button class="login-btn" onclick="loginEmailPassword()">Continuar para o painel</button>
           <div id="loginStatus" class="login-status"></div>
-          <div class="helper"><span>Dados sincronizados no Supabase</span><a href="/">Voltar</a></div>
+          <div class="divider">Ou</div>
+          <button class="google-btn" onclick="loginGoogle()"><span class="google-icon">G</span> Entrar com Google</button>
         </div>
       </div>
       <div class="login-footer">© Samuel Vinsansi · Plataforma privada de prospecção</div>
@@ -263,6 +277,54 @@ const SUPABASE_PUBLISHABLE_KEY = '<<SUPABASE_PUBLISHABLE_KEY_PLACEHOLDER>>';
     location.replace(next.startsWith('/login') ? '/' : next);
   }
 })();
+
+async function loginEmailPassword(){
+  const emailEl = document.getElementById('loginEmail');
+  const passEl = document.getElementById('loginPassword');
+  const emailErr = document.getElementById('loginEmailError');
+  const passErr = document.getElementById('loginPasswordError');
+  const status = document.getElementById('loginStatus');
+  const email = (emailEl?.value || '').trim();
+  const password = (passEl?.value || '').trim();
+
+  emailEl?.classList.remove('is-error');
+  passEl?.classList.remove('is-error');
+  if(emailErr) emailErr.textContent = '';
+  if(passErr) passErr.textContent = '';
+  if(status){ status.textContent = ''; status.className = 'login-status'; }
+
+  let hasError = false;
+  if(!email || !/^\S+@\S+\.\S+$/.test(email)){
+    if(emailErr) emailErr.textContent = 'Informe um email válido.';
+    emailEl?.classList.add('is-error');
+    hasError = true;
+  }
+  if(!password){
+    if(passErr) passErr.textContent = 'Informe sua senha.';
+    passEl?.classList.add('is-error');
+    hasError = true;
+  }
+  if(hasError) return;
+
+  try{
+    if(status){ status.textContent = 'Validando acesso...'; status.className = 'login-status'; }
+    let supabase = window.supabaseClient;
+    if(!supabase && window.supabase && window.SUPABASE_URL && window.SUPABASE_ANON_KEY){
+      supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+      window.supabaseClient = supabase;
+    }
+    if(!supabase) throw new Error('Cliente Supabase não inicializado.');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    if(status){ status.textContent = 'Acesso validado. Redirecionando...'; status.className = 'login-status success'; }
+    window.location.href = '/';
+  }catch(err){
+    if(status){ status.textContent = err?.message || 'Não foi possível entrar com email e senha.'; status.className = 'login-status error'; }
+    passEl?.classList.add('is-error');
+  }
+}
+
+
 async function loginGoogle(){
   const status = document.getElementById('loginStatus');
   const setStatus = (msg)=>{ if(status) status.textContent = msg || ''; };
