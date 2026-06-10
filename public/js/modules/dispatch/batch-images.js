@@ -2,7 +2,9 @@
 const LOTE_CFG_KEY = 'vs_lote_cfg_v1';
 function getLoteCfg() {
   try {
-    const cfg = (typeof v48StateGetObject === 'function') ? v48StateGetObject(LOTE_CFG_KEY) : {};
+    const cfg = (typeof v48StateGetObject === 'function')
+      ? v48StateGetObject(LOTE_CFG_KEY)
+      : JSON.parse(localStorage.getItem(LOTE_CFG_KEY) || '{}');
     return cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? cfg : {};
   } catch(e) {
     return {};
@@ -11,10 +13,19 @@ function getLoteCfg() {
 function saveLoteCfg(cfg) {
   try {
     if (typeof v48StateSet === 'function') v48StateSet(LOTE_CFG_KEY, cfg, 'dispatch-batch-config-update');
-    uiSyncLog('optimistic-update', { entity:'dispatch-batch-config', action:'save-local-cache', count:Object.keys(cfg || {}).length });
-    scheduleOperationalSync({ delay:400, reason:'dispatch-batch-config-update' });
+    else localStorage.setItem(LOTE_CFG_KEY, JSON.stringify(cfg || {}));
+    if (typeof uiSyncLog === 'function') {
+      uiSyncLog('optimistic-update', { entity:'dispatch-batch-config', action:'save-local-cache', count:Object.keys(cfg || {}).length });
+    }
+    if (typeof scheduleOperationalSync === 'function') {
+      scheduleOperationalSync({ delay:400, reason:'dispatch-batch-config-update' });
+    }
   } catch(e) {
-    uiSyncLog('supabase-save-error', { entity:'dispatch-batch-config', action:'save-local-cache', error:e?.message || e });
+    if (typeof uiSyncLog === 'function') {
+      uiSyncLog('supabase-save-error', { entity:'dispatch-batch-config', action:'save-local-cache', error:e?.message || e });
+    } else {
+      console.warn('[dispatch-batch-config] falha ao salvar cache local:', e?.message || e);
+    }
   }
 }
 function getLoteCfgKey(chipId, loteNum) { return `chip-${chipId}-lote-${loteNum}`; }
@@ -144,6 +155,7 @@ function limparImagensOlfas() {
 function onLoteRamoChange(chipId, loteNum, ramoId, isSlot, slot) {
   setLoteRamo(chipId, loteNum, ramoId);
   const LOTE_SIZE = getLoteSize();
+  if (typeof getFilaChipNoDia !== 'function') return;
   // Usa fila filtrada pelo dia — mesmos itens e mesma ordem que o render
   const filaDia = getFilaChipNoDia(chipId, disparoDay);
   const loteIdx = loteNum - 1;
@@ -196,4 +208,3 @@ function onLoteImgRemove(chipId, loteNum, isSlot, slot) {
     if (isSlot) renderFilaSlot(slot, disparoDay); else renderFila();
   });
 }
-

@@ -2581,12 +2581,29 @@
   }
 
 
+  function selectedRamoForBatchRebuild648(chipId, batchIndex, group = {}) {
+    const rowRamos = [...new Set((group.rows || [])
+      .map((row) => String(row.ramoId || row.ramo_id || '').trim())
+      .filter(Boolean))];
+    if (rowRamos.length === 1) return rowRamos[0];
+    try {
+      if (typeof getLoteRamo === 'function') return getLoteRamo(chipId, batchIndex) || '';
+    } catch (_) {}
+    return '';
+  }
+
   window.onRebuildKanbanLoteRamoChange = async function onRebuildKanbanLoteRamoChange(chipId, batchIndex, ramoId, isSlot, slot, batchId) {
     try {
-      if (typeof onLoteRamoChange === 'function') onLoteRamoChange(chipId, batchIndex, ramoId, isSlot, slot);
-    } catch (_) {}
+      if (typeof setLoteRamo === 'function') setLoteRamo(chipId, batchIndex, ramoId);
+    } catch (error) {
+      console.warn('[rebuild648] falha ao salvar ramo local do lote:', error?.message || error);
+    }
     const targetBatch = String(batchId || '');
-    const changedRows = [];
+    const changedRowsByKey = new Map();
+    const rememberChangedRow = (row) => {
+      const key = String(row.queueItemId || row.todayRowId || row.queue_item_id || row.id || row.leadId || row.lead_id || Math.random());
+      changedRowsByKey.set(key, row);
+    };
     const applyTemplate = (row) => {
       row.ramoId = ramoId || null;
       row.ramo_id = ramoId || null;
@@ -2617,7 +2634,7 @@
           : Number(row.batchIndex || row.batch_index || 1) === Number(batchIndex || 1);
         if (!sameBatch || !rowChip.includes(String(chipId || ''))) return;
         applyTemplate(row);
-        changedRows.push(row);
+        rememberChangedRow(row);
       });
     });
 
@@ -2629,6 +2646,9 @@
       changed = true;
     });
     if (changed) saveTestDispatchRows(rows);
+    renderRightPanel();
+
+    const changedRows = [...changedRowsByKey.values()];
     if (changedRows.length && typeof updateDispatchCheckpointV635 === 'function') {
       await Promise.all(changedRows.map((row) => updateDispatchCheckpointV635(row, {
         template_part1: row.template_part1 || '',
@@ -2636,13 +2656,12 @@
         template_index: Number.isFinite(Number(row.template_index)) ? Number(row.template_index) : null
       })));
     }
-    renderRightPanel();
   };
 
   function batchConfigBlock(chip, slot, group) {
     const batchIndex = Number(group.batchIndex || 1) || 1;
     const chipId = chip.id || chip.dbId || chip.instance || String(slot);
-    const selectedRamo = (typeof getLoteRamo === 'function') ? getLoteRamo(chipId, batchIndex) : '';
+    const selectedRamo = selectedRamoForBatchRebuild648(chipId, batchIndex, group);
     const ramos = (typeof getRamos === 'function' ? getRamos() : []) || [];
     const imageKey = (typeof getLoteImgKey === 'function') ? getLoteImgKey(chipId, batchIndex) : `chip-${chipId}-lote-${batchIndex}`;
     const imageSrc = (typeof getLoteImagem === 'function') ? getLoteImagem(chipId, batchIndex) : null;
