@@ -362,34 +362,10 @@ function recoverSingleChipQueueAssignmentsV431() {
 const CHIP_LIMIT = WHATSAPP_CHIP_DAILY_LIMIT_V426; // maximo de leads por chip por dia
 
 function getFilaChipNoDia(chipId, day) {
-  // Retorna itens da fila do chip para o dia informado.
-  // 6.60: além do vínculo antigo via ensureWeekData().days[pt-BR], aceita
-  // itens temporários de teste e itens da tela nova com scheduled_for ISO.
+  // Retorna apenas os itens da fila do chip que pertencem ao dia informado
   const data = ensureWeekData();
-  const targetBR = String(day || (typeof todayStr === 'function' ? todayStr() : '')).trim();
-  let targetISO = '';
-  try {
-    if (/^\d{4}-\d{2}-\d{2}$/.test(targetBR)) {
-      targetISO = targetBR;
-    } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(targetBR)) {
-      const [d, m, y] = targetBR.split('/');
-      targetISO = `${y}-${m}-${d}`;
-    } else if (typeof localDateISO === 'function') {
-      targetISO = localDateISO();
-    }
-  } catch (_) {
-    targetISO = typeof localDateISO === 'function' ? localDateISO() : '';
-  }
-
-  const idsNoDia = new Set((data.days?.[targetBR] || data.days?.[targetISO] || []).map(e => String(e.id || '')));
-  return getFilaChip(chipId).filter(f => {
-    const id = String(f?.id || f?.leadId || f?.lead_id || '');
-    if (idsNoDia.has(id)) return true;
-    if (typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433(f)) return true;
-    if (f?.isTestLead) return true;
-    const scheduled = String(f?.scheduledFor || f?.scheduled_for || '').slice(0, 10);
-    return !!targetISO && scheduled === targetISO;
-  });
+  const idsNoDia = new Set((data.days[day]||[]).map(e => e.id));
+  return getFilaChip(chipId).filter(f => idsNoDia.has(f.id));
 }
 
 function toggleFilaSlotEmpresa(slot, empId) {

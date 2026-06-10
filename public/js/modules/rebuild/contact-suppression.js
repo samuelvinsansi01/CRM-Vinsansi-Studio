@@ -396,13 +396,13 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       renderContactSuppressionPanelV629();
-      setTimeout(() => loadContactSuppressionEntriesV629({ silent: true }), 1200);
+      loadContactSuppressionEntriesV629({ silent: true });
       setTimeout(() => { if (!loaded) loadContactSuppressionEntriesV629({ silent: true }); }, 3500);
       setTimeout(() => { if (!loaded) loadContactSuppressionEntriesV629({ silent: true }); }, 7000);
     });
   } else {
     renderContactSuppressionPanelV629();
-    setTimeout(() => loadContactSuppressionEntriesV629({ silent: true }), 1200);
+    loadContactSuppressionEntriesV629({ silent: true });
     setTimeout(() => { if (!loaded) loadContactSuppressionEntriesV629({ silent: true }); }, 3500);
     setTimeout(() => { if (!loaded) loadContactSuppressionEntriesV629({ silent: true }); }, 7000);
   }

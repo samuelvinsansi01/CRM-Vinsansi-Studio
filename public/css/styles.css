@@ -3295,3 +3295,74 @@ body.auth-locked .app{
     width:calc(100vw - 20px);
   }
 }
+
+/* 6.70 list selection and protection density */
+.bulk-list-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-bottom:12px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--surface2);
+  padding:9px 10px;
+}
+.bulk-list-left,
+.bulk-list-actions{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  flex-wrap:wrap;
+}
+.bulk-list-actions .btn,
+.bulk-select-btn{
+  font-size:10px;
+  padding:7px 10px;
+}
+.bulk-select-btn{
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--text);
+  border-radius:10px;
+  font-weight:800;
+  cursor:pointer;
+}
+.bulk-select-btn:hover:not(:disabled){
+  border-color:var(--accent-border);
+  color:var(--accent);
+}
+.bulk-select-btn:disabled{opacity:.45;cursor:not-allowed;}
+.bulk-row-check{
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+}
+.bulk-checkbox{
+  width:15px;
+  height:15px;
+  border-radius:4px;
+  accent-color:var(--accent);
+  cursor:pointer;
+}
+.bulk-checkbox:disabled{opacity:.45;cursor:not-allowed;}
+.protection-item-title span{
+  font-size:12px;
+  line-height:1.2;
+  letter-spacing:-.02em;
+}
+.protection-item{
+  padding:10px 12px;
+}
+.protection-list{
+  min-height:180px;
+}
+.protection-empty{
+  min-height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}

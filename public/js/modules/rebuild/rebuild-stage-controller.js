@@ -3358,32 +3358,8 @@
         .sort((a, b) => Number(a.batchIndex || a.batch_index || 0) - Number(b.batchIndex || b.batch_index || 0)
           || Number(a.batchPosition || a.batch_position || a.queuePosition || 0) - Number(b.batchPosition || b.batch_position || b.queuePosition || 0))
         .map((row) => legacyDispatchItemFromRow(row, chip));
-
-      // 6.59 — ponte robusta para o motor legado de disparo.
-      // O motor antigo procura a fila por chip.id, mas a tela nova pode
-      // identificar o mesmo chip por dbId, instance, phone, name ou slot.
-      // Quando o lead teste vinha da tela nova, ele aparecia no Kanban,
-      // mas iniciarDisparoChip lia outra chave e retornava "// fila vazia".
-      const legacyChipKeys = Array.from(new Set([
-        chipId,
-        chip.id,
-        chip.dbId,
-        chip.instance,
-        chip.phone,
-        chip.name,
-        chip.nome,
-        String(slot)
-      ].map((value) => String(value || '').trim()).filter(Boolean)));
-
-      if (!legacyChipKeys.length) {
-        return { ok:false, error:'Chave do chip nao encontrada para preparar a fila.' };
-      }
-
-      legacyChipKeys.forEach((key) => {
-        filaDisparo[key] = legacyRows.map((item) => ({ ...item }));
-      });
-
-      if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-bridge-v659' });
+      filaDisparo[chipId] = legacyRows;
+      if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-bridge' });
     } catch (error) {
       return { ok:false, error:error?.message || 'Falha ao preparar fila local para disparo.' };
     }
@@ -3765,20 +3741,19 @@
 
   function operationSelectionToolbar(allRows = []) {
     const stats = operationSelectionStats(allRows);
+    const selectDisabled = !stats.selectableCount || state.operationBusy;
+    const selectedLabel = `${stats.selectedCount} selecionado${stats.selectedCount !== 1 ? 's' : ''}`;
     return `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface2);padding:9px 10px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:10px;font-weight:900;color:var(--text);cursor:${stats.selectableCount ? 'pointer' : 'not-allowed'}">
-          <input id="queueOperationSelectAll" type="checkbox" ${stats.allSelected ? 'checked' : ''} ${!stats.selectableCount || state.operationBusy ? 'disabled' : ''}
-            onchange="toggleQueueOperationSelectAllRebuild648(this.checked)"
-            style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer" />
-          <span>Selecionar todos</span>
+      <div class="bulk-list-toolbar">
+        <div class="bulk-list-left">
+          <button class="bulk-select-btn" type="button" ${selectDisabled ? 'disabled' : ''} onclick="toggleQueueOperationSelectAllRebuild648(true)">Selecionar todos</button>
           <span class="q-badge info">${allRows.length} filtrado${allRows.length !== 1 ? 's' : ''}</span>
-          ${stats.selectedCount ? `<span class="q-badge ok">${stats.selectedCount} selecionado${stats.selectedCount !== 1 ? 's' : ''}</span>` : ''}
-        </label>
-        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <button class="btn btn-primary" type="button" style="font-size:10px;padding:7px 10px" ${!stats.toQueueCount || state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsRebuild648()">Entrar na fila</button>
-          <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 10px" ${!stats.queuedCount || state.operationBusy ? 'disabled' : ''} onclick="backSelectedOperationToBacklogRebuild648()">Voltar backlog</button>
-          <button class="btn btn-ghost" type="button" style="font-size:10px;padding:7px 10px" ${!stats.selectedCount || state.operationBusy ? 'disabled' : ''} onclick="clearQueueOperationSelectionRebuild648()">Limpar</button>
+          ${stats.selectedCount ? `<span class="q-badge ok">${selectedLabel}</span>` : ''}
+        </div>
+        <div class="bulk-list-actions ${stats.selectedCount ? 'is-visible' : ''}">
+          <button class="btn btn-primary" type="button" ${!stats.toQueueCount || state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsRebuild648()">Entrar na fila</button>
+          <button class="btn btn-ghost" type="button" ${!stats.queuedCount || state.operationBusy ? 'disabled' : ''} onclick="backSelectedOperationToBacklogRebuild648()">Voltar backlog</button>
+          <button class="btn btn-ghost" type="button" ${!stats.selectedCount || state.operationBusy ? 'disabled' : ''} onclick="clearQueueOperationSelectionRebuild648()">Limpar</button>
           ${state.operationBusy ? '<span class="q-badge warn">Processando</span>' : ''}
         </div>
       </div>
@@ -3791,11 +3766,10 @@
     const locked = isOperationRowLocked(row);
     return `
       <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:center;gap:12px">
-        <label aria-label="Selecionar lead" style="flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:${locked || state.operationBusy ? 'not-allowed' : 'pointer'}">
-          <input type="checkbox" ${checked ? 'checked' : ''} ${locked || state.operationBusy ? 'disabled' : ''}
+        <label class="bulk-row-check" aria-label="Selecionar lead">
+          <input class="bulk-checkbox" type="checkbox" ${checked ? 'checked' : ''} ${locked || state.operationBusy ? 'disabled' : ''}
             onclick="event.stopPropagation()"
-            onchange="toggleQueueOperationSelectionRebuild648('${esc(key)}')"
-            style="width:15px;height:15px;accent-color:var(--accent);cursor:${locked || state.operationBusy ? 'not-allowed' : 'pointer'}" />
+            onchange="toggleQueueOperationSelectionRebuild648('${esc(key)}')" />
         </label>
         <div class="empresa-info" style="min-width:0">
           <div class="empresa-nome">${esc(row.nome || row.company_name || 'Lead')}</div>
