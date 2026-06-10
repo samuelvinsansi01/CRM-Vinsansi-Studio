@@ -360,12 +360,36 @@
       return { created: 0, total: rows.length, fallback: true, reason: 'no-approved-rows' };
     }
 
+    const existingPhones = new Set();
+    try {
+      const phoneRes = await fetch(`${SUPABASE_URL}/rest/v1/leads?select=normalized_phone,phone&user_id=eq.${encodeURIComponent(user.id)}&limit=5000`, {
+        headers
+      });
+      const phoneText = await phoneRes.text();
+      const phoneJson = phoneText ? JSON.parse(phoneText) : [];
+      if (phoneRes.ok && Array.isArray(phoneJson)) {
+        phoneJson.forEach((item) => {
+          const phone = String(item.normalized_phone || item.phone || '').replace(/\D+/g, '');
+          if (phone) existingPhones.add(phone);
+        });
+      }
+    } catch (error) {
+      console.warn('[import-v684] não foi possível montar índice de duplicados:', error);
+    }
+
     const batchPayload = {
       user_id: user.id,
       source,
       source_file_name: 'importacao_manual_json_fallback',
-      total_rows: rows.length,
-      created_at: new Date().toISOString()
+      source_file_hash: null,
+      quantity_total: rows.length,
+      quantity_created: 0,
+      quantity_merged: 0,
+      raw_metadata: {
+        origin: 'fallback_v684',
+        approved_preview: approved.length,
+        created_at_client: new Date().toISOString()
+      }
     };
 
     let batchId = null;
@@ -388,6 +412,14 @@
 
     for (const item of approved) {
       const leadPayload = leadPayloadForDirectInsertV682(item.row, item.analysis);
+      const leadPhone = String(leadPayload.normalized_phone || leadPayload.phone || '').replace(/\D+/g, '');
+      if (leadPhone && existingPhones.has(leadPhone)) {
+        console.warn('[import-v684] lead ignorado no fallback por telefone já existente:', {
+          company: leadPayload.company_name,
+          phone: leadPhone
+        });
+        continue;
+      }
       try {
         const leadRes = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
           method: 'POST',
@@ -403,6 +435,7 @@
         if (!leadRes.ok) throw leadJson || new Error(`leads ${leadRes.status}`);
         const lead = Array.isArray(leadJson) ? leadJson[0] : leadJson;
         if (!lead?.id) throw new Error('Lead criado sem id.');
+        if (leadPhone) existingPhones.add(leadPhone);
 
         if (item.row.location) {
           try {
@@ -444,6 +477,21 @@
           phone: leadPayload.phone,
           error
         });
+      }
+    }
+
+    if (batchId) {
+      try {
+        await fetch(`${SUPABASE_URL}/rest/v1/import_batches?id=eq.${encodeURIComponent(batchId)}`, {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quantity_created: created,
+            quantity_merged: Math.max(0, approved.length - created - failed)
+          })
+        });
+      } catch (error) {
+        console.warn('[import-v684] falha ao atualizar totais do import_batch:', error);
       }
     }
 
