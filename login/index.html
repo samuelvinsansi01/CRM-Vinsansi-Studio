@@ -376,6 +376,24 @@ body{
   }
 }
 
+
+/* 6.68 login user spacing */
+.login-title{
+  font-size:clamp(30px,2.75vw,32px);
+  line-height:.96;
+  letter-spacing:-.045em;
+  margin-bottom:12px;
+}
+.eyebrow{
+  margin:40px 0 12px 0;
+}
+.login-card{
+  gap:12px;
+}
+.divider{
+  margin:16px 0 16px;
+}
+
 </style>
 </head>
 <body>
@@ -387,10 +405,9 @@ body{
         <h1 class="login-title">Entre para acessar seu painel.</h1>
         <p class="login-sub">Seu ambiente de leads, validação, filas, templates e conversas fica protegido por login.</p>
         <div class="login-card">
-          <div class="form-row"><label>Email</label><input id="loginEmail" class="input" type="email" placeholder="seu@email.com" autocomplete="email"><div class="field-error" id="loginEmailError"></div></div>
-          <div class="form-row"><label>Senha</label><input id="loginPassword" class="input" type="password" placeholder="••••••••" autocomplete="current-password"><div class="field-error" id="loginPasswordError"></div></div>
+          <div class="form-row"><label>Email</label><input id="loginEmail" class="input" type="email" placeholder="seu@email.com" autocomplete="email"></div>
+          <div class="form-row"><label>Senha</label><input id="loginPassword" class="input" type="password" placeholder="••••••••" autocomplete="current-password"></div>
           <button class="login-btn" onclick="loginEmailPassword()">Continuar para o painel</button>
-          <div id="loginStatus" class="login-status"></div>
           <div class="divider">Ou</div>
           <button class="google-btn" onclick="loginGoogle()"><span class="google-icon">G</span> Entrar com Google</button>
         </div>
