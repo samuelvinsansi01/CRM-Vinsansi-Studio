@@ -11,6 +11,7 @@
   let activeType = 'already_sent';
   let loading = false;
   let loaded = false;
+  const selectedIds = new Set();
 
   function escHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -140,6 +141,42 @@
     if (badge) badge.textContent = String(entries.filter((entry) => !entry.archived_at).length);
   }
 
+
+  function visibleProtectionEntries() {
+    return entries
+      .filter((entry) => !entry.archived_at)
+      .filter((entry) => entry.list_type === activeType);
+  }
+
+  function syncSelectedProtectionIds() {
+    const visibleIds = new Set(visibleProtectionEntries().map((entry) => String(entry.id || '')).filter(Boolean));
+    [...selectedIds].forEach((id) => {
+      if (!visibleIds.has(String(id))) selectedIds.delete(id);
+    });
+  }
+
+  function protectionSelectionToolbar(filtered = []) {
+    const selectable = filtered.filter((entry) => entry.id);
+    const selectedCount = selectable.filter((entry) => selectedIds.has(String(entry.id))).length;
+    const allSelected = selectable.length && selectedCount === selectable.length;
+    return `
+      <div class="bulk-list-toolbar protection-bulk-toolbar">
+        <div class="bulk-list-left">
+          <button class="bulk-select-btn" type="button" ${!selectable.length || loading ? 'disabled' : ''} onclick="toggleAllProtectionEntriesV674(${allSelected ? 'false' : 'true'})">
+            ${allSelected ? 'Limpar seleção' : 'Selecionar todos'}
+          </button>
+          <span class="q-badge info">${filtered.length} registro${filtered.length !== 1 ? 's' : ''}</span>
+          ${selectedCount ? `<span class="q-badge ok">${selectedCount} selecionado${selectedCount !== 1 ? 's' : ''}</span>` : ''}
+        </div>
+        <div class="bulk-list-actions ${selectedCount ? 'is-visible' : ''}">
+          <button class="btn btn-ghost" type="button" ${!selectedCount || loading ? 'disabled' : ''} onclick="removeSelectedProtectionEntriesV674()">Remover selecionados</button>
+          <button class="btn btn-ghost" type="button" ${!selectedCount || loading ? 'disabled' : ''} onclick="clearProtectionSelectionV674()">Limpar</button>
+        </div>
+      </div>
+    `;
+  }
+
+
   async function loadContactSuppressionEntriesV629(options = {}) {
     const silent = options.silent === true;
     if (loading) return entries;
@@ -167,10 +204,12 @@
 
       loaded = true;
       publishEntries((data || []).filter((entry) => entry?.active !== false && !entry?.removed_at));
+      loading = false;
       renderContactSuppressionPanelV629();
       return entries;
     } catch (error) {
       publishEntries([]);
+      loading = false;
       renderContactSuppressionPanelV629(error?.message || 'Falha ao carregar protecao.');
       if (!silent && typeof notify === 'function') notify('Execute a SQL 00637 para ativar Protecao por contato.', 'warn');
       return entries;
@@ -287,6 +326,7 @@
 
   function setProtectionTypeV629(type) {
     activeType = TYPES[type] ? type : 'already_sent';
+    selectedIds.clear();
     renderContactSuppressionPanelV629();
   }
 
@@ -313,6 +353,8 @@
   function renderEntry(entry) {
     const title = entry.company_name || entry.contact_name || entry.phone_normalized || entry.instagram_username || entry.website_host || 'Contato protegido';
     const type = TYPES[entry.list_type] || TYPES.already_sent;
+    const id = String(entry.id || '');
+    const checked = id && selectedIds.has(id);
     const meta = [
       entry.contact_name ? `Contato: ${entry.contact_name}` : '',
       entry.reason ? `Motivo: ${entry.reason}` : '',
@@ -322,6 +364,10 @@
 
     return `
       <div class="protection-item ${type.tone}">
+        <label class="bulk-row-check protection-row-check" aria-label="Selecionar registro">
+          <input class="bulk-checkbox" type="checkbox" ${checked ? 'checked' : ''} ${!id || loading ? 'disabled' : ''}
+            onchange="toggleProtectionEntrySelectionV674('${escHtml(id)}')" />
+        </label>
         <div class="protection-item-main">
           <div class="protection-item-title">
             <span>${escHtml(title)}</span>
@@ -331,7 +377,7 @@
           <div class="protection-chip-row">${identityChips(entry)}</div>
           ${entry.notes ? `<div class="protection-notes">${escHtml(entry.notes)}</div>` : ''}
         </div>
-        <button class="btn btn-ghost protection-remove-btn" onclick="archiveContactSuppressionEntryV629('${entry.id}')">Remover</button>
+        <button class="btn btn-ghost protection-remove-btn" onclick="archiveContactSuppressionEntryV629('${escHtml(id)}')" ${!id ? 'disabled' : ''}>Remover</button>
       </div>
     `;
   }
@@ -368,19 +414,71 @@
       return;
     }
 
-    const filtered = activeEntries.filter((entry) => entry.list_type === activeType);
+    const filtered = visibleProtectionEntries();
+    syncSelectedProtectionIds();
     if (!filtered.length) {
-      list.innerHTML = `<div class="protection-empty">Nenhum registro em ${escHtml(TYPES[activeType].label)}.</div>`;
+      list.innerHTML = `<div class="protection-empty compact">Nenhum registro em ${escHtml(TYPES[activeType].label)}.</div>`;
       return;
     }
 
-    list.innerHTML = filtered.map(renderEntry).join('');
+    list.innerHTML = protectionSelectionToolbar(filtered) + filtered.map(renderEntry).join('');
   }
 
   function renderProtecao() {
     renderContactSuppressionPanelV629();
     if (!loaded && !loading) loadContactSuppressionEntriesV629({ silent: true });
   }
+
+
+  window.toggleProtectionEntrySelectionV674 = function toggleProtectionEntrySelectionV674(id) {
+    const key = String(id || '');
+    if (!key) return;
+    if (selectedIds.has(key)) selectedIds.delete(key);
+    else selectedIds.add(key);
+    renderContactSuppressionPanelV629();
+  };
+
+  window.toggleAllProtectionEntriesV674 = function toggleAllProtectionEntriesV674(checked) {
+    visibleProtectionEntries().forEach((entry) => {
+      const id = String(entry.id || '');
+      if (!id) return;
+      if (checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+    });
+    renderContactSuppressionPanelV629();
+  };
+
+  window.clearProtectionSelectionV674 = function clearProtectionSelectionV674() {
+    selectedIds.clear();
+    renderContactSuppressionPanelV629();
+  };
+
+  window.removeSelectedProtectionEntriesV674 = async function removeSelectedProtectionEntriesV674() {
+    const ids = [...selectedIds].filter(Boolean);
+    if (!ids.length) return;
+    const run = async () => {
+      loading = true;
+      renderContactSuppressionPanelV629();
+      let removed = 0;
+      for (const id of ids) {
+        try {
+          await archiveContactSuppressionEntryNow(id);
+          removed++;
+        } catch (error) {
+          console.warn('[protection] bulk archive:', id, error);
+        }
+      }
+      selectedIds.clear();
+      await loadContactSuppressionEntriesV629({ silent: true });
+      if (typeof notify === 'function') notify(`${removed} registro${removed !== 1 ? 's' : ''} removido${removed !== 1 ? 's' : ''} da proteção.`);
+    };
+    if (typeof abrirModalConfirm === 'function') {
+      abrirModalConfirm(`Remover ${ids.length} registro(s) da Proteção?`, run);
+      return;
+    }
+    if (window.confirm && !window.confirm(`Remover ${ids.length} registro(s) da Proteção?`)) return;
+    await run();
+  };
 
   window.renderProtecao = renderProtecao;
   window.renderContactSuppressionPanelV629 = renderContactSuppressionPanelV629;

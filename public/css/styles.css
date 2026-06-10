@@ -3410,3 +3410,36 @@ body.auth-locked .app{
 .bulk-list-actions .btn{
   white-space:nowrap;
 }
+
+
+/* 6.74 Proteção: seleção em massa e lista compacta */
+.protection-bulk-toolbar{
+  margin:0 0 10px;
+}
+.protection-item{
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+}
+.protection-row-check{
+  margin-top:8px;
+  flex:0 0 auto;
+}
+.protection-item-title span{
+  font-size:14px;
+  line-height:1.15;
+  max-width:720px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  display:inline-block;
+  vertical-align:middle;
+}
+.protection-empty.compact,
+.protection-empty{
+  min-height:52px;
+  height:auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
