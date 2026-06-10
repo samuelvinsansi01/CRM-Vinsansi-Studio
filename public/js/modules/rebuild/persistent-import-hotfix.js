@@ -494,9 +494,10 @@
     const rpcCreated = Number(result?.created || 0);
     const rpcErrors = Number(result?.errors || 0);
 
-    if (!rpcCreated && !rpcErrors && previewApproved > 0) {
-      console.warn('[import-v682] RPC não criou leads apesar da prévia aprovada. Aplicando fallback direto.', {
+    if (!rpcCreated && previewApproved > 0) {
+      console.warn('[import-v683] RPC criou 0 lead(s). Aplicando fallback direto mesmo com erros da RPC.', {
         previewApproved,
+        rpcErrors,
         result
       });
       const fallback = await directImportApprovedRowsV682(rows, analyses, 'apify_json_fallback');

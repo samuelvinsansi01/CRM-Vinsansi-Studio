@@ -923,3 +923,23 @@ function upsertUniqueLeadByDedupeV47(list = [], lead = {}) {
   else arr.push(lead);
   return arr;
 }
+
+
+/* 6.83 fallback seguro para botão mobile/sidebar */
+if (typeof window.toggleSidebar !== 'function') {
+  window.toggleSidebar = function toggleSidebarFallbackV683() {
+    try {
+      const body = document.body;
+      const sidebar =
+        document.querySelector('.sidebar') ||
+        document.querySelector('#sidebar') ||
+        document.querySelector('.app-sidebar') ||
+        document.querySelector('aside');
+      body?.classList.toggle('sidebar-open');
+      sidebar?.classList.toggle('open');
+      sidebar?.classList.toggle('is-open');
+    } catch (error) {
+      console.warn('[sidebar-v683]', error);
+    }
+  };
+}
