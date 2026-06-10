@@ -3640,3 +3640,59 @@ body.auth-locked .app{
     justify-content:flex-start;
   }
 }
+
+
+/* 6.77 Proteção: busca e área compacta */
+.protection-search-wrap{
+  margin:0 0 10px;
+  width:100%;
+}
+.protection-search-field{
+  width:100%;
+  min-height:42px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:rgba(5,6,10,.72);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:0 12px;
+}
+.protection-search-field span{
+  flex:0 0 auto;
+  font-size:13px;
+  opacity:.9;
+}
+.protection-search-field input{
+  width:100%;
+  min-width:0;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--text);
+  font-family:'DM Mono',monospace;
+  font-size:10px;
+  height:40px;
+}
+.protection-search-field input::placeholder{
+  color:var(--muted);
+}
+.protection-search-field button{
+  width:24px;
+  height:24px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:rgba(18,18,26,.8);
+  color:var(--muted);
+  cursor:pointer;
+}
+.protection-search-field button:hover{
+  color:var(--accent);
+  border-color:var(--accent);
+}
+#protectionListV629{
+  min-height:0 !important;
+}
+#panel-protecao .card:has(#protectionListV629){
+  padding-bottom:12px !important;
+}

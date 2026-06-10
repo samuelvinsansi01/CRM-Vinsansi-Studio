@@ -11,6 +11,7 @@
   let activeType = 'already_sent';
   let loading = false;
   let loaded = false;
+  let searchTerm = '';
   const selectedIds = new Set();
 
   function escHtml(value) {
@@ -152,10 +153,58 @@
   }
 
 
+
+  function normalizeSearchText(value = '') {
+    return String(value || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
+
+  function protectionSearchHaystack(entry = {}) {
+    return normalizeSearchText([
+      entry.company_name,
+      entry.contact_name,
+      entry.phone,
+      entry.phone_normalized,
+      entry.normalized_phone,
+      entry.instagram_username,
+      entry.instagram,
+      entry.instagram_url,
+      entry.website,
+      entry.website_host,
+      entry.place_id,
+      entry.reason,
+      entry.source,
+      entry.notes
+    ].filter(Boolean).join(' '));
+  }
+
+  function protectionSearchHtml() {
+    return `
+      <div class="protection-search-wrap">
+        <div class="protection-search-field">
+          <span>🔍</span>
+          <input
+            id="protectionSearchInputV677"
+            type="search"
+            placeholder="Buscar por empresa, telefone, Instagram, site ou motivo..."
+            value="${escHtml(searchTerm)}"
+            oninput="setProtectionSearchV677(this.value)"
+          />
+          ${searchTerm ? `<button type="button" onclick="setProtectionSearchV677('')" title="Limpar busca">×</button>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
   function visibleProtectionEntries() {
+    const term = normalizeSearchText(searchTerm);
     return entries
       .filter((entry) => !entry.archived_at)
-      .filter((entry) => entry.list_type === activeType);
+      .filter((entry) => entry.list_type === activeType)
+      .filter((entry) => !term || protectionSearchHaystack(entry).includes(term));
   }
 
   function syncSelectedProtectionIds() {
@@ -456,13 +505,17 @@
     }
 
     const filtered = visibleProtectionEntries();
+    const search = protectionSearchHtml();
     syncSelectedProtectionIds();
     if (!filtered.length) {
-      list.innerHTML = `<div class="protection-empty compact">Nenhum registro em ${escHtml(TYPES[activeType].label)}.</div>`;
+      const emptyText = searchTerm
+        ? `Nenhum registro encontrado para "${escHtml(searchTerm)}".`
+        : `Nenhum registro em ${escHtml(TYPES[activeType].label)}.`;
+      list.innerHTML = search + `<div class="protection-empty compact">${emptyText}</div>`;
       return;
     }
 
-    list.innerHTML = protectionSelectionToolbar(filtered) + filtered.map(renderEntry).join('');
+    list.innerHTML = search + protectionSelectionToolbar(filtered) + filtered.map(renderEntry).join('');
   }
 
   function renderProtecao() {
@@ -470,6 +523,20 @@
     if (!loaded && !loading) loadContactSuppressionEntriesV629({ silent: true });
   }
 
+
+
+  window.setProtectionSearchV677 = function setProtectionSearchV677(value) {
+    searchTerm = String(value || '').trim();
+    selectedIds.clear();
+    renderContactSuppressionPanelV629();
+    setTimeout(() => {
+      const input = document.getElementById('protectionSearchInputV677');
+      if (input && document.activeElement !== input) {
+        input.focus();
+        try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) {}
+      }
+    }, 0);
+  };
 
   window.openProtectionLeadFichaV676 = openProtectionLeadFichaV676;
 
