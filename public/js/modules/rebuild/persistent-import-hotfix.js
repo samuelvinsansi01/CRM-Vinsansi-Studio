@@ -319,6 +319,143 @@
     window.importPreview = patched;
   }
 
+
+  function importRouteIsApprovedV682(analysis = {}) {
+    return analysis.route === 'whatsapp-validation' || analysis.route === 'instagram-backlog';
+  }
+
+  function importAnalysisIsBlockedV682(analysis = {}) {
+    return !!(
+      analysis.protectedContact ||
+      analysis.alreadyImported ||
+      analysis.payloadDuplicate ||
+      analysis.route === 'skip'
+    );
+  }
+
+  function leadPayloadForDirectInsertV682(row = {}, analysis = {}) {
+    const lead = row.lead || {};
+    const isInstagram = analysis.route === 'instagram-backlog';
+    const hasWebsite = !!lead.website;
+
+    return {
+      ...lead,
+      current_stage: isInstagram ? 'assignment' : 'validation',
+      current_status: isInstagram ? 'backlog_instagram' : 'pending_validation',
+      whatsapp_status: lead.phone ? 'pending' : 'unknown',
+      website_type: lead.website_type || (hasWebsite ? 'external' : 'none'),
+      has_own_site: lead.has_own_site === true,
+      lead_channel: isInstagram ? 'instagram' : 'whatsapp'
+    };
+  }
+
+  async function directImportApprovedRowsV682(rows = [], analyses = [], source = 'apify_json') {
+    const { user, headers } = await getAuthContext();
+    const approved = rows
+      .map((row, index) => ({ row, analysis: analyses[index] || {} }))
+      .filter(({ analysis }) => importRouteIsApprovedV682(analysis) && !importAnalysisIsBlockedV682(analysis));
+
+    if (!approved.length) {
+      console.warn('[import-v682] fallback sem aprovados reais', { totalRows: rows.length, analyses: analyses.length });
+      return { created: 0, total: rows.length, fallback: true, reason: 'no-approved-rows' };
+    }
+
+    const batchPayload = {
+      user_id: user.id,
+      source,
+      source_file_name: 'importacao_manual_json_fallback',
+      total_rows: rows.length,
+      created_at: new Date().toISOString()
+    };
+
+    let batchId = null;
+    try {
+      const batchRes = await fetch(`${SUPABASE_URL}/rest/v1/import_batches`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify(batchPayload)
+      });
+      const batchText = await batchRes.text();
+      const batchJson = batchText ? JSON.parse(batchText) : [];
+      if (batchRes.ok && Array.isArray(batchJson) && batchJson[0]?.id) batchId = batchJson[0].id;
+      else console.warn('[import-v682] import_batches fallback sem batch id:', batchRes.status, batchJson);
+    } catch (error) {
+      console.warn('[import-v682] falha ao criar import_batch fallback:', error);
+    }
+
+    let created = 0;
+    let failed = 0;
+
+    for (const item of approved) {
+      const leadPayload = leadPayloadForDirectInsertV682(item.row, item.analysis);
+      try {
+        const leadRes = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify({
+            user_id: user.id,
+            ...leadPayload
+          })
+        });
+
+        const leadText = await leadRes.text();
+        const leadJson = leadText ? JSON.parse(leadText) : [];
+        if (!leadRes.ok) throw leadJson || new Error(`leads ${leadRes.status}`);
+        const lead = Array.isArray(leadJson) ? leadJson[0] : leadJson;
+        if (!lead?.id) throw new Error('Lead criado sem id.');
+
+        if (item.row.location) {
+          try {
+            await fetch(`${SUPABASE_URL}/rest/v1/lead_locations`, {
+              method: 'POST',
+              headers: { ...headers, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                user_id: user.id,
+                lead_id: lead.id,
+                ...item.row.location
+              })
+            });
+          } catch (error) {
+            console.warn('[import-v682] falha ao salvar location:', error);
+          }
+        }
+
+        try {
+          await fetch(`${SUPABASE_URL}/rest/v1/lead_imports`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: user.id,
+              import_batch_id: batchId,
+              lead_id: lead.id,
+              original_payload: item.row.original || item.row.analysis || {},
+              normalized_payload: item.row
+            })
+          });
+        } catch (error) {
+          console.warn('[import-v682] falha ao salvar lead_import:', error);
+        }
+
+        created++;
+      } catch (error) {
+        failed++;
+        console.warn('[import-v682] falha no fallback direto:', {
+          company: leadPayload.company_name,
+          phone: leadPayload.phone,
+          error
+        });
+      }
+    }
+
+    return {
+      fallback: true,
+      total: rows.length,
+      approved: approved.length,
+      created,
+      failed
+    };
+  }
+
   async function importarLeadsPersistente() {
     const { user } = await getAuthContext();
     const rawRows = getImportJson();
@@ -344,12 +481,34 @@
     });
     lastPreviewStats = getSeparatedPreviewStats(analyses);
 
-    const result = await rpcImport({
+    let result = await rpcImport({
       p_user_id: user.id,
       p_rows: rows,
       p_source: 'apify_json',
       p_source_file_name: 'importacao_manual_json'
     });
+
+    console.warn('[import-v682-rpc-result]', result);
+
+    const previewApproved = lastPreviewStats?.approved || 0;
+    const rpcCreated = Number(result?.created || 0);
+    const rpcErrors = Number(result?.errors || 0);
+
+    if (!rpcCreated && !rpcErrors && previewApproved > 0) {
+      console.warn('[import-v682] RPC não criou leads apesar da prévia aprovada. Aplicando fallback direto.', {
+        previewApproved,
+        result
+      });
+      const fallback = await directImportApprovedRowsV682(rows, analyses, 'apify_json_fallback');
+      result = {
+        ...result,
+        ...fallback,
+        total: result.total || fallback.total,
+        created: fallback.created,
+        ignored: Math.max(0, (result.total || fallback.total || 0) - (fallback.created || 0)),
+        errors: fallback.failed || 0
+      };
+    }
 
     const total = result.total || 0;
     const created = result.created || 0;
