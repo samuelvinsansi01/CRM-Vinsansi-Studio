@@ -7,9 +7,87 @@ let leadBasePage = 1;
 let LEAD_BASE_PG = 20;
 const leadBaseSelected = new Set();
 
+function getPermanentLeadPhone(lead = {}) {
+  return String(lead.whatsapp || lead.phone || lead.telefone || lead.normalized_phone || '').replace(/\D+/g, '');
+}
+
+function normalizePermanentStatusV679(value = '') {
+  return normalizeStr(String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/-/g, ' ')
+  );
+}
+
+function isStatusSentLikeV679(value = '') {
+  const status = normalizePermanentStatusV679(value);
+  return [
+    'enviada',
+    'enviado',
+    'sent',
+    'already sent',
+    'ja enviado',
+    'ja enviada',
+    'respondida',
+    'respondido',
+    'nao respondida',
+    'nao respondido',
+    'recusada',
+    'recusado',
+    'fechada',
+    'fechado',
+    'completed',
+    'batch completed'
+  ].includes(status);
+}
+
+function getProtectedAlreadySentEntriesV678() {
+  try {
+    const entries = typeof getContactSuppressionEntriesV629 === 'function'
+      ? getContactSuppressionEntriesV629()
+      : (window.contactSuppressionEntriesV629 || window.__contactSuppressionEntriesV629 || []);
+    return (Array.isArray(entries) ? entries : []).filter(entry => {
+      const type = String(entry.list_type || entry.block_type || '').toLowerCase();
+      return !entry.archived_at && entry.active !== false && (type === 'already_sent' || type === 'ja_enviado' || type === 'sent');
+    });
+  } catch (_) {
+    return [];
+  }
+}
+
+function isPermanentLeadProtectedAsSent(lead = {}) {
+  const id = String(lead.id || lead.lead_id || '');
+  const phone = getPermanentLeadPhone(lead);
+  const instagram = normalizeStr(lead.instagram || lead.instagram_url || '');
+  const site = normalizeStr(lead.site || lead.website || '');
+  const name = normalizeStr(lead.nome || lead.company_name || lead.name || '');
+
+  return getProtectedAlreadySentEntriesV678().some(entry => {
+    const entryLeadId = String(entry.lead_id || entry.lead?.id || '');
+    const entryPhone = String(entry.phone_normalized || entry.normalized_phone || entry.phone || entry.lead?.normalized_phone || entry.lead?.phone || '').replace(/\D+/g, '');
+    const entryInstagram = normalizeStr(entry.instagram_username || entry.instagram || entry.instagram_url || entry.lead?.instagram_url || '');
+    const entrySite = normalizeStr(entry.website_host || entry.website || entry.lead?.website || '');
+    const entryName = normalizeStr(entry.company_name || entry.lead?.company_name || '');
+
+    if (id && entryLeadId && id === entryLeadId) return true;
+    if (phone && entryPhone && (phone === entryPhone || phone.endsWith(entryPhone.slice(-8)) || entryPhone.endsWith(phone.slice(-8)))) return true;
+    if (instagram && entryInstagram && instagram.includes(entryInstagram)) return true;
+    if (site && entrySite && site.includes(entrySite)) return true;
+    if (name && entryName && name === entryName) return true;
+    return false;
+  });
+}
+
 function isPermanentLeadSent(lead = {}) {
-  const status = normalizeStr(lead.status || '');
-  return ['enviada','enviado','respondida','nao respondida','recusada','fechada'].includes(status);
+  if (isStatusSentLikeV679(lead.current_status || lead.currentStatus || lead.whatsappStatus || lead.dispatchStatus || '')) return true;
+  if (isPermanentLeadProtectedAsSent(lead)) return true;
+  return isStatusSentLikeV679(lead.status || '');
+}
+
+function permanentLeadStatusLabelV678(lead = {}) {
+  if (isStatusSentLikeV679(lead.current_status || lead.currentStatus || lead.whatsappStatus || lead.dispatchStatus || '')) return 'Enviado';
+  if (isPermanentLeadProtectedAsSent(lead)) return 'Enviado';
+  if (isPermanentLeadSent(lead)) return 'Enviado';
+  return lead.status || lead.current_status || lead.currentStatus || 'Não enviada';
 }
 
 function getPermanentLeadDate(lead = {}) {
@@ -246,7 +324,7 @@ function renderLeadBasePanel() {
           <td class="td-name">${escHtml(lead.nome || 'Lead sem nome')}</td>
           <td style="font-family:'DM Mono',monospace;font-size:9px">${escHtml(lead.whatsapp || '—')}</td>
           <td><span class="q-badge ${outside ? 'warn' : 'info'}">${escHtml(location.label)}</span></td>
-          <td><span class="q-badge ${isPermanentLeadSent(lead) ? 'ok' : 'warn'}">${escHtml(lead.status || 'Não enviada')}</span></td>
+          <td><span class="q-badge ${isPermanentLeadSent(lead) ? 'ok' : 'warn'}">${escHtml(permanentLeadStatusLabelV678(lead))}</span></td>
           <td style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${escHtml(lead.baseSource || 'Fluxo local')}</td>
           <td style="white-space:nowrap">
             <button class="btn btn-ghost" style="font-size:9px;padding:4px 8px" onclick="openLeadDrawer('${escHtml(lead.id)}')">Ficha</button>
