@@ -21,6 +21,14 @@
       "destination": "/public/r.html"
     },
     {
+      "source": "/login",
+      "destination": "/public/login.html"
+    },
+    {
+      "source": "/login/",
+      "destination": "/public/login.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/public/index.html"
     }

@@ -542,16 +542,25 @@ function isAuthenticated() {
   return identity.ok;
 }
 
+function getLoginUrlV662() {
+  try {
+    const next = `${window.location.pathname || '/'}${window.location.search || ''}${window.location.hash || ''}`;
+    const safeNext = next && !next.startsWith('/login') ? next : '/';
+    return `/login?next=${encodeURIComponent(safeNext)}`;
+  } catch {
+    return '/login';
+  }
+}
+
 function showAuthGate() {
-  const gate = document.getElementById('authGate');
-  if (gate) gate.classList.add('open');
-  document.documentElement.classList.add('auth-locked');
-  document.body.classList.add('auth-locked');
+  // V6.62: login saiu do modal e virou página própria.
+  // Se o usuário não estiver autenticado dentro do app principal, manda para /login.
+  if (window.location.pathname !== '/login' && !window.location.pathname.startsWith('/login/')) {
+    window.location.replace(getLoginUrlV662());
+  }
 }
 
 function hideAuthGate() {
-  const gate = document.getElementById('authGate');
-  if (gate) gate.classList.remove('open');
   document.documentElement.classList.remove('auth-locked');
   document.body.classList.remove('auth-locked');
 }
@@ -576,7 +585,7 @@ function getAuthRedirectUrl() {
     return window.location.origin;
   }
 
-  return window.location.origin;
+  return `${window.location.origin}/`;
 }
 
 function getUserDisplayName(user) {
@@ -805,7 +814,7 @@ async function logoutSupabase(confirmed = false) {
   if (typeof renderInicio === 'function') renderInicio();
   if (typeof updateBadges === 'function') updateBadges();
 
-  showAuthGate();
+  window.location.replace('/login');
 
   if (!sbClient) {
     notify('Conta desconectada');
