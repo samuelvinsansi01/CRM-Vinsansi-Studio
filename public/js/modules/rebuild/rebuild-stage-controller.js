@@ -1964,7 +1964,7 @@
     const params = new URLSearchParams({
       select: '*',
       user_id: `eq.${userId}`,
-      order: 'created_at.desc'
+      order: 'created_at.asc'
     });
 
     try {
@@ -2400,6 +2400,14 @@
     return rows.some((rowKey) => chips.includes(rowKey));
   }
 
+
+  function operationActiveChipsRebuild673() {
+    const source = (typeof dispatchChipsForControls === 'function' ? dispatchChipsForControls() : state.chips) || [];
+    return source
+      .map((chip) => (typeof normalizeChip === 'function' ? normalizeChip(chip) : chip))
+      .filter((chip) => chip && (chip.id || chip.dbId || chip.instance) && chip.status !== 'disabled' && chip.active !== false);
+  }
+
   function buildChipUsage(activeChips = []) {
     const usage = new Map(activeChips.map((chip) => [String(chip.id), 0]));
     state.rows.filter((row) => row.inTodayQueue).forEach((row) => {
@@ -2719,11 +2727,15 @@
   }
 
   function dispatchChipsForControls() {
+    const persisted = Array.isArray(state.chips) ? state.chips.filter((chip) => chip && chip.active !== false && chip.status !== 'disabled') : [];
+    if (persisted.length) return persisted;
     try {
       const legacy = typeof getChips === 'function' ? getChips() : [];
-      if (Array.isArray(legacy) && legacy.length) return legacy;
+      if (Array.isArray(legacy) && legacy.length) {
+        return legacy.filter((chip) => chip && chip.active !== false && chip.status !== 'disabled');
+      }
     } catch (_) {}
-    return state.chips || [];
+    return [];
   }
 
   function dispatchChipKey(chip = {}, slot = 0) {
@@ -3687,7 +3699,7 @@
   }
 
   function operationLeadActions(row = {}) {
-    const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
+    const activeChips = operationActiveChipsRebuild673();
     const locked = ['sent', 'completed', 'batch_completed', 'batch_sending'].includes(String(row.statusRaw || '').toLowerCase());
     const disabled = state.operationBusy ? 'disabled' : '';
     const base = `<button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>`;
@@ -3782,9 +3794,12 @@
         </div>
         <div class="bulk-list-actions ${stats.selectedCount ? 'is-visible' : ''}">
           <button class="btn btn-primary" type="button" ${!stats.toQueueCount || state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsRebuild648()">Auto chips</button>
-          ${stats.toQueueCount ? state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false).slice(0, 5).map((chip, idx) => `
-            <button class="btn btn-ghost" type="button" ${state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsToChipRebuild672('${esc(chip.id)}')" title="Preenche este chip ate 120 e depois continua nos proximos">Chip ${idx + 1}</button>
-          `).join('') : ''}
+          ${stats.toQueueCount ? operationActiveChipsRebuild673().slice(0, 5).map((chip, idx) => {
+            const chipKey = dispatchChipKey(chip, idx);
+            return `
+            <button class="btn btn-ghost" type="button" ${state.operationBusy ? 'disabled' : ''} onclick="queueSelectedOperationLeadsToChipRebuild672('${esc(chipKey)}')" title="Preenche este chip ate 120 e depois continua nos proximos">Chip ${idx + 1}</button>
+          `;
+          }).join('') : ''}
           <button class="btn btn-ghost" type="button" ${!stats.queuedCount || state.operationBusy ? 'disabled' : ''} onclick="backSelectedOperationToBacklogRebuild648()">Voltar backlog</button>
           <button class="btn btn-ghost" type="button" ${!stats.selectedCount || state.operationBusy ? 'disabled' : ''} onclick="clearQueueOperationSelectionRebuild648()">Limpar</button>
           ${state.operationBusy ? '<span class="q-badge warn">Processando</span>' : ''}
@@ -3993,7 +4008,7 @@
       return;
     }
 
-    const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
+    const activeChips = operationActiveChipsRebuild673();
     if (!activeChips.length) {
       if (typeof notify === 'function') notify('// configure pelo menos um chip ativo antes de preencher a fila', 'warn');
       return;
@@ -4019,6 +4034,51 @@
       }
       if (typeof notify === 'function') {
         notify(`${moved} lead${moved !== 1 ? 's' : ''} entrou${moved !== 1 ? 'aram' : ''} na fila.`);
+      }
+    } finally {
+      state.operationSelected.clear();
+      state.operationBusy = false;
+      await renderQueueStageFromSupabase();
+    }
+  };
+
+  window.queueSelectedOperationLeadsToChipRebuild672 = async function queueSelectedOperationLeadsToChipRebuild672(chipKey) {
+    if (state.operationBusy) return;
+    const rows = selectedOperationRows(operationRowsForActiveFilter())
+      .filter((row) => !isOperationRowLocked(row) && !isOperationRowQueued(row));
+    if (!rows.length) {
+      if (typeof notify === 'function') notify('// selecione ao menos 1 lead fora da fila', 'warn');
+      return;
+    }
+
+    const activeChips = operationActiveChipsRebuild673();
+    if (!activeChips.length) {
+      if (typeof notify === 'function') notify('// configure pelo menos um chip ativo antes de preencher a fila', 'warn');
+      return;
+    }
+
+    const startIndex = chipStartIndexRebuild672(activeChips, chipKey);
+    setQueueOperationBulkBusy(true);
+
+    const usage = buildChipUsage(activeChips);
+    let chipCursor = startIndex;
+    let moved = 0;
+
+    try {
+      for (const row of rows) {
+        const result = chooseSequentialAvailableChipRebuild672(activeChips, usage, chipCursor);
+        const chip = result.chip;
+        chipCursor = result.nextIndex;
+        if (!chip) break;
+        try {
+          await rpcQueueAction(row.id, 'queue_today', queuePayloadFor(row, chip, 'operation_bulk_selected_chip'));
+          moved++;
+        } catch (error) {
+          console.warn('[rebuild673] falha ao colocar lead selecionado no chip:', row.id, chipKey, error);
+        }
+      }
+      if (typeof notify === 'function') {
+        notify(`${moved} lead${moved !== 1 ? 's' : ''} entrou${moved !== 1 ? 'aram' : ''} na fila respeitando a ordem dos chips.`);
       }
     } finally {
       state.operationSelected.clear();
@@ -4199,7 +4259,7 @@
       if (!state.rows.length) await fetchQueueState();
       const row = state.rows.find((item) => String(item.id) === String(leadId));
       if (!row) throw new Error('Lead nao encontrado no backlog.');
-      const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
+      const activeChips = operationActiveChipsRebuild673();
       if (!activeChips.length) throw new Error('Configure pelo menos um chip ativo antes de preencher a fila.');
       const { chip } = chooseNextAvailableChip(activeChips);
       if (!chip) throw new Error('Todos os chips atingiram o limite diario de 120 leads.');
@@ -4235,7 +4295,7 @@
       if (typeof notify === 'function') notify('// nenhum lead no backlog para colocar na fila', 'warn');
       return;
     }
-    const activeChips = state.chips.filter((chip) => chip && chip.id && chip.status !== 'disabled' && chip.active !== false);
+    const activeChips = operationActiveChipsRebuild673();
     if (!activeChips.length) {
       if (typeof notify === 'function') notify('// configure pelo menos um chip ativo antes de preencher o dia', 'warn');
       return;
@@ -4593,7 +4653,7 @@
     const params = new URLSearchParams({
       select: '*',
       user_id: `eq.${userId}`,
-      order: 'created_at.desc'
+      order: 'created_at.asc'
     });
 
     try {
