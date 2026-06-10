@@ -3212,7 +3212,7 @@ body.auth-locked .app{
   right:18px;
   bottom:18px;
   z-index:80;
-  width:min(560px, calc(100vw - 36px));
+  width:min(760px, calc(100vw - 36px));
   pointer-events:none;
 }
 .queue-dispatch-aside-panel{

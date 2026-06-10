@@ -2197,6 +2197,8 @@
       ramoId: inferRamoId(lead),
       queueType: inToday ? 'queue_items' : 'backlog_items',
       queueItemId: row.id,
+      sourceBacklogItemId: row.source_backlog_item_id || '',
+      source_backlog_item_id: row.source_backlog_item_id || '',
       queuePosition: row.position || 0,
       scheduledFor: row.scheduled_for || '',
       batchId: row.batch_id || '',
@@ -2796,6 +2798,209 @@
     try { if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ reason:'dispatch-aside-message-update' }); } catch (_) {}
   };
 
+  function hasDispatchLeadMessageSentRebuild648(row = {}) {
+    const raw = String(row.statusRaw || row.status || row.current_status || '').toLowerCase();
+    return !!(
+      row.textSent || row.text2Sent || row.mediaSent ||
+      row.text1SentAt || row.text2SentAt || row.mediaSentAt ||
+      row.text1_sent_at || row.text2_sent_at || row.media_sent_at ||
+      row.completedAt || row.completed_at ||
+      ['sent', 'completed', 'batch_completed'].includes(raw)
+    );
+  }
+
+  function isDispatchLeadRemovalAllowedRebuild648(row = {}, slot = -1) {
+    if (!row || hasDispatchLeadMessageSentRebuild648(row)) return false;
+    const raw = String(row.statusRaw || row.status || row.current_status || '').toLowerCase();
+    const currentPart = String(row.currentPart || row.current_part || '').toLowerCase();
+    const dispatchStatus = String(row.dispatchStatus || row.dispatch_status || '').toLowerCase();
+    if (raw === 'batch_sending' || row.dispatchStartedAt || row.dispatch_started_at) {
+      const st = chipSlotState?.[slot] || {};
+      return !!(st.pausado || dispatchStatus === 'paused' || currentPart === 'paused' || row.pausedAt || row.paused_at);
+    }
+    return true;
+  }
+
+  function dispatchLeadRemovalTitleRebuild648(row = {}, slot = -1) {
+    if (hasDispatchLeadMessageSentRebuild648(row)) return 'Lead com mensagem ou imagem ja enviada nao pode ser removido do lote.';
+    const raw = String(row.statusRaw || row.status || row.current_status || '').toLowerCase();
+    if (raw === 'batch_sending' && !isDispatchLeadRemovalAllowedRebuild648(row, slot)) {
+      return 'Pause o chip antes de remover um lead que esta em disparo.';
+    }
+    return 'Remover do lote e voltar ao backlog.';
+  }
+
+  function removeDispatchLeadLocallyRebuild648(row = {}, chipId = '', slot = -1) {
+    const rowKey = operationRowKey(row);
+    const ids = new Set([rowKey, row.id, row.leadId, row.lead_id, row.queueItemId, row.todayRowId, row.queue_item_id]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean));
+    const matches = (item = {}) => [...ids].some((id) => dispatchRowStateMatches(item, id) || operationRowKey(item) === id);
+
+    const testRows = readTestDispatchRows().filter((item) => !matches(item));
+    saveTestDispatchRows(testRows);
+
+    try {
+      if (chipId && filaDisparo?.[chipId]) {
+        filaDisparo[chipId] = (filaDisparo[chipId] || []).filter((item) => !matches(item));
+        if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-lead-remove' });
+      }
+      if (slot >= 0 && typeof removeDispatchItemFromRuntimeV439 === 'function') {
+        ids.forEach((id) => removeDispatchItemFromRuntimeV439(slot, id));
+      }
+    } catch (error) {
+      console.warn('[rebuild648] falha ao limpar fila local do lead:', error?.message || error);
+    }
+
+    state.weekRows = (state.weekRows || []).filter((item) => !matches(item));
+    (state.rows || []).forEach((item) => {
+      if (!matches(item)) return;
+      item.inTodayQueue = false;
+      item.inScheduledQueue = false;
+      item.statusRaw = 'backlog';
+      item.status = 'backlog';
+      item.chipId = '';
+      item.assignedChipId = '';
+      item.chipName = '';
+      item.chipInstance = '';
+      item.batchId = '';
+      item.batchIndex = null;
+      item.batchPosition = null;
+    });
+
+    try {
+      if (typeof ensureWeekData === 'function' && typeof saveWeekData === 'function') {
+        const data = ensureWeekData();
+        Object.keys(data.days || {}).forEach((day) => {
+          (data.days[day] || []).forEach((lead) => {
+            if (!ids.has(String(lead.id || '')) || lead.status !== 'Em fila') return;
+            if (typeof clearChipLinkFromDayLeadV48 === 'function') clearChipLinkFromDayLeadV48(lead);
+            else lead.status = 'Não enviada';
+          });
+        });
+        saveWeekData(data);
+      }
+    } catch (_) {}
+  }
+
+  function dispatchLeadRemoveButtonRebuild648(row = {}, slot = -1) {
+    const allowed = isDispatchLeadRemovalAllowedRebuild648(row, slot);
+    const disabled = allowed && !state.dispatchBusy ? '' : 'disabled';
+    const title = dispatchLeadRemovalTitleRebuild648(row, slot);
+    return `<button class="add-btn" type="button" data-queue621-lead="${esc(row.id)}" ${disabled} title="${esc(title)}" onclick="removeDispatchLeadFromBatchRebuild648('${esc(operationRowKey(row))}','${esc(slot)}')">Remover do lote</button>`;
+  }
+
+  async function directBackToBacklogForUnsentDispatchLeadRebuild648(row = {}) {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Usuario autenticado nao encontrado.');
+    const leadId = String(row.leadId || row.lead_id || row.id || '').trim();
+    const queueId = String(row.queueItemId || row.todayRowId || row.queue_item_id || '').trim();
+    if (!leadId && !queueId) throw new Error('Lead sem identificador para remover do lote.');
+
+    const headers = await getHeaders(true);
+    const now = new Date().toISOString();
+    const backlogId = String(row.backlogRowId || row.sourceBacklogItemId || row.source_backlog_item_id || '').trim();
+    const backlogParams = new URLSearchParams({
+      user_id: `eq.${userId}`,
+      channel: `eq.${QUEUE_CHANNEL}`
+    });
+    if (backlogId) backlogParams.set('id', `eq.${backlogId}`);
+    else backlogParams.set('lead_id', `eq.${leadId}`);
+
+    const backlogResponse = await fetch(`${SUPABASE_URL}/rest/v1/backlog_items?${backlogParams.toString()}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        status:'backlog',
+        moved_to_queue_item_id:null,
+        updated_at:now
+      })
+    });
+    if (!backlogResponse.ok) throw await readJson(backlogResponse);
+
+    const queueParams = new URLSearchParams({
+      user_id: `eq.${userId}`,
+      channel: `eq.${QUEUE_CHANNEL}`
+    });
+    if (queueId) queueParams.set('id', `eq.${queueId}`);
+    else {
+      queueParams.set('lead_id', `eq.${leadId}`);
+      queueParams.set('scheduled_for', `eq.${String(row.scheduledFor || row.scheduled_for || localDateISO()).slice(0, 10)}`);
+    }
+
+    const queueResponse = await fetch(`${SUPABASE_URL}/rest/v1/queue_items?${queueParams.toString()}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        status:'removed',
+        chip_id:null,
+        chip_name:null,
+        chip_instance:null,
+        batch_id:null,
+        batch_index:null,
+        batch_position:null,
+        dispatch_status:null,
+        current_part:null,
+        updated_at:now,
+        last_checkpoint_at:now
+      })
+    });
+    if (!queueResponse.ok) throw await readJson(queueResponse);
+    return { ok:true };
+  }
+
+  async function removeDispatchLeadFromBatchNowRebuild648(rowKey, slotOrKey) {
+    if (state.dispatchBusy) return;
+    const dispatchDate = selectedQueueDateForDispatch();
+    const { chip, slot, rows } = selectedDispatchRowsForChip(slotOrKey, dispatchDate);
+    const key = String(rowKey || '');
+    const row = (rows || []).find((item) => dispatchRowStateMatches(item, key) || operationRowKey(item) === key)
+      || queueRowsForDispatchDate(dispatchDate).find((item) => dispatchRowStateMatches(item, key) || operationRowKey(item) === key);
+    if (!row) {
+      if (typeof notify === 'function') notify('Lead nao encontrado no lote.', 'err');
+      return;
+    }
+    if (!isDispatchLeadRemovalAllowedRebuild648(row, slot)) {
+      if (typeof notify === 'function') notify(dispatchLeadRemovalTitleRebuild648(row, slot), 'warn');
+      return;
+    }
+
+    state.dispatchBusy = true;
+    renderRightPanel();
+    try {
+      const chipId = chip?.id || chip?.dbId || chip?.instance || row.chipId || row.chip_id || '';
+      if (!row.isTestLead) {
+        try {
+          await rpcQueueAction(row.id, 'back_to_backlog');
+        } catch (rpcError) {
+          console.warn('[rebuild648] RPC back_to_backlog falhou, tentando fallback para lead sem envio:', rpcError?.message || rpcError);
+          await directBackToBacklogForUnsentDispatchLeadRebuild648(row);
+        }
+      }
+      removeDispatchLeadLocallyRebuild648(row, chipId, slot);
+      if (typeof notify === 'function') notify('Lead removido do lote e devolvido ao backlog.');
+      await renderQueueStageFromSupabase();
+    } catch (error) {
+      console.error('[rebuild648] erro ao remover lead do lote:', error);
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao remover lead do lote.', 'err');
+    } finally {
+      state.dispatchBusy = false;
+      renderRightPanel();
+    }
+  }
+
+  window.removeDispatchLeadFromBatchRebuild648 = function removeDispatchLeadFromBatchRebuild648(rowKey, slotOrKey) {
+    const run = () => removeDispatchLeadFromBatchNowRebuild648(rowKey, slotOrKey);
+    const row = queueRowsForDispatchDate(selectedQueueDateForDispatch())
+      .find((item) => dispatchRowStateMatches(item, String(rowKey || '')) || operationRowKey(item) === String(rowKey || ''));
+    const name = row?.nome || row?.company_name || 'este lead';
+    if (typeof abrirModalConfirm === 'function') {
+      abrirModalConfirm(`Remover <strong>${esc(name)}</strong> do lote e voltar ao backlog?`, run);
+    } else if (confirm(`Remover ${name} do lote e voltar ao backlog?`)) {
+      run();
+    }
+  };
+
   function batchBlock(chip, slot, group) {
     const batchDomId = `batch-${slot}-${String(group.batchId).replace(/[^a-zA-Z0-9_-]/g, '')}`;
     const loteNumber = String(Number(group.batchIndex || 1) || 1).padStart(2, '0');
@@ -2829,7 +3034,7 @@
                 <textarea class="queue-aside-message" oninput="updateDispatchLeadMessageRebuild648('${esc(operationRowKey(row))}','mensagem2',this.value)">${esc(row.mensagem2 || row.template_part2 || '')}</textarea>
                 <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:10px;flex-wrap:wrap">
                   <button class="add-btn" type="button" onclick="openQueueLeadDrawerRebuild621('${esc(row.id)}')">Ficha</button>
-                  ${!['sent', 'completed', 'batch_completed', 'batch_sending'].includes(row.statusRaw) ? `<button class="add-btn" type="button" onclick="backToBacklogRebuild621('${esc(row.id)}')">Voltar backlog</button>` : ''}
+                  ${dispatchLeadRemoveButtonRebuild648(row, slot)}
                 </div>
               </div>
             </details>
