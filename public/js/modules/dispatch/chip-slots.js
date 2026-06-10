@@ -635,12 +635,36 @@ async function iniciarDisparoChip(slot) {
   const chip = getChipBySlot(slot);
   if (!chip) { notify('// chip ' + (slot+1) + ' não configurado','err'); return; }
   if (blockChipDispatchReloadLockV432(slot, chip)) return;
-  const fila = getFilaChipNoDia(chip.id, todayStr()).filter(f => f.status !== 'enviado');
-  if (!fila.length) { notify('// fila vazia','warn'); return; }
+  const chipQueueKeysV659 = Array.from(new Set([
+    chip.id,
+    chip.dbId,
+    chip.instance,
+    chip.phone,
+    chip.name,
+    chip.nome,
+    String(slot)
+  ].map((value) => String(value || '').trim()).filter(Boolean)));
+
+  let activeChipQueueKeyV659 = chip.id;
+  let fila = [];
+  for (const key of chipQueueKeysV659) {
+    const tentativa = getFilaChipNoDia(key, todayStr()).filter(f => f.status !== 'enviado');
+    if (tentativa.length) {
+      activeChipQueueKeyV659 = key;
+      fila = tentativa;
+      break;
+    }
+  }
+
+  if (!fila.length) {
+    try { console.warn('[whatsapp-send-empty-queue-v659]', { slot, chip, keys:chipQueueKeysV659, day:todayStr() }); } catch(e) {}
+    notify('// fila vazia','warn');
+    return;
+  }
 
   // Congela o lote — snapshot dos itens aguardando
   const LOTE_SIZE = getLoteSize();
-  const filaCompleta = getFilaChipNoDia(chip.id, todayStr());
+  const filaCompleta = getFilaChipNoDia(activeChipQueueKeyV659, todayStr());
   const pendentes = filaCompleta.filter(f => f.status === 'aguardando');
   if (!pendentes.length) { notify('// nenhum item aguardando — todos já enviados','warn'); return; }
   const preflight = await validateDispatchPreflightV432(slot, pendentes);

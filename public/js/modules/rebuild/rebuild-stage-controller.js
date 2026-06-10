@@ -3358,8 +3358,32 @@
         .sort((a, b) => Number(a.batchIndex || a.batch_index || 0) - Number(b.batchIndex || b.batch_index || 0)
           || Number(a.batchPosition || a.batch_position || a.queuePosition || 0) - Number(b.batchPosition || b.batch_position || b.queuePosition || 0))
         .map((row) => legacyDispatchItemFromRow(row, chip));
-      filaDisparo[chipId] = legacyRows;
-      if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-bridge' });
+
+      // 6.59 — ponte robusta para o motor legado de disparo.
+      // O motor antigo procura a fila por chip.id, mas a tela nova pode
+      // identificar o mesmo chip por dbId, instance, phone, name ou slot.
+      // Quando o lead teste vinha da tela nova, ele aparecia no Kanban,
+      // mas iniciarDisparoChip lia outra chave e retornava "// fila vazia".
+      const legacyChipKeys = Array.from(new Set([
+        chipId,
+        chip.id,
+        chip.dbId,
+        chip.instance,
+        chip.phone,
+        chip.name,
+        chip.nome,
+        String(slot)
+      ].map((value) => String(value || '').trim()).filter(Boolean)));
+
+      if (!legacyChipKeys.length) {
+        return { ok:false, error:'Chave do chip nao encontrada para preparar a fila.' };
+      }
+
+      legacyChipKeys.forEach((key) => {
+        filaDisparo[key] = legacyRows.map((item) => ({ ...item }));
+      });
+
+      if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-bridge-v659' });
     } catch (error) {
       return { ok:false, error:error?.message || 'Falha ao preparar fila local para disparo.' };
     }
