@@ -1396,7 +1396,8 @@
     }
 
     if (!state.activeChipId || !state.chips.some((chip) => String(chip.id) === String(state.activeChipId))) {
-      state.activeChipId = state.chips[0].id;
+      const preferredChip = state.chips.find((chip) => ['open','connected','conectado'].includes(String(chip.connectionState || chip.status || '').toLowerCase())) || state.chips[0];
+      state.activeChipId = preferredChip.id;
     }
 
     const html = state.chips.map((chip, index) => {
@@ -1503,8 +1504,16 @@
       });
       const data = await response.json().catch(() => ({}));
       if (response.ok && !data?.error) return data;
+      if (response.status === 409 || data?.error === 'INSTANCE_NOT_CONNECTED') {
+        const stateLabel = data?.state ? ` (${data.state})` : '';
+        const err = new Error(data?.message || `Chip ${chip.instance || chip.name || ''} nao esta conectado${stateLabel}`);
+        err.connectionError = true;
+        err.details = data;
+        throw err;
+      }
       if (![404, 405].includes(response.status)) {
-        throw new Error(data?.error || data?.message || `Proxy validacao ${response.status}`);
+        const detail = data?.message || data?.error || data?.details?.message || `Proxy validacao ${response.status}`;
+        throw new Error(detail);
       }
     } catch (error) {
       if (!/Failed to fetch|404|405/i.test(error?.message || '')) throw error;
@@ -1610,7 +1619,7 @@
         raw: { source: 'fase-6.25', error: error?.message || String(error) }
       }).catch((rpcError) => console.warn('[rebuild625] erro nao registrado:', rpcError));
       if (!options.silent) notifyUser(error?.message || 'Falha ao validar numero.', 'err');
-      return { ok: false, error: true };
+      return { ok: false, error: true, connectionError: !!error?.connectionError, message: error?.message || '' };
     } finally {
       setValidationChipButtonsDisabled(leadId, false);
     }
@@ -1667,6 +1676,11 @@
     try {
       for (const lead of rows) {
         const result = await validateLeadWithChip(lead.id, { silent: true });
+        if (result?.connectionError) {
+          failed++;
+          notifyUser(result.message || 'Chip nao conectado. Validação interrompida.', 'err');
+          break;
+        }
         if (result?.skipped || result?.invalidPhone) skipped++;
         else if (result?.ok && result.exists) valid++;
         else if (result?.ok && !result.exists) invalid++;
