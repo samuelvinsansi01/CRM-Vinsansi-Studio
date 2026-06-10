@@ -656,8 +656,80 @@ async function iniciarDisparoChip(slot) {
     }
   }
 
+  // 6.61 — fallback final: se a ponte do Kanban/tela nova gravou a fila em
+  // outra chave do mesmo chip, procura em TODA a fila local antes de dizer
+  // "fila vazia". Isso cobre principalmente Lead Teste e diferenças entre
+  // chip.id / dbId / instance / phone / slot.
   if (!fila.length) {
-    try { console.warn('[whatsapp-send-empty-queue-v659]', { slot, chip, keys:chipQueueKeysV659, day:todayStr() }); } catch(e) {}
+    try {
+      const targetBR = String(typeof todayStr === 'function' ? todayStr() : '').trim();
+      let targetISO = '';
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(targetBR)) {
+        const [d, m, y] = targetBR.split('/');
+        targetISO = `${y}-${m}-${d}`;
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(targetBR)) {
+        targetISO = targetBR;
+      } else if (typeof localDateISO === 'function') {
+        targetISO = localDateISO();
+      }
+
+      const chipKeySetV661 = new Set(chipQueueKeysV659.map((value) => String(value || '').trim()).filter(Boolean));
+      const fallbackRowsV661 = [];
+      Object.entries(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}).forEach(([queueKey, list]) => {
+        (Array.isArray(list) ? list : []).forEach((item) => {
+          if (!item) return;
+          const rawStatus = String(item.status || item.statusRaw || item.queueStatus || '').toLowerCase();
+          if (['enviado', 'sent', 'completed', 'batch_completed', 'removido', 'removed'].includes(rawStatus)) return;
+
+          const scheduled = String(item.scheduledFor || item.scheduled_for || item.diaDestinoISO || item.dispatchDate || '').slice(0, 10);
+          const isTemp = (typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433(item)) || item.isTestLead || item.testDispatchLead;
+          const dayOk = isTemp || !scheduled || scheduled === targetISO;
+          if (!dayOk) return;
+
+          const rowKeys = [
+            queueKey,
+            item.chipId,
+            item.assignedChipId,
+            item.chip_id,
+            item.chipName,
+            item.chipLabel,
+            item.chipInstance,
+            item.chip_name,
+            item.chip_instance,
+            item.whatsapp_instance_id,
+            item.instance,
+            item.chipSlot,
+            item.slot
+          ].map((value) => String(value || '').trim()).filter(Boolean);
+
+          const chipOk = rowKeys.some((key) => chipKeySetV661.has(key)) || rowKeys.includes(String(slot));
+          if (!chipOk) return;
+
+          fallbackRowsV661.push({
+            ...item,
+            status: rawStatus && rawStatus !== 'queued_dispatch' ? item.status : 'aguardando',
+            scheduledFor: item.scheduledFor || item.scheduled_for || targetISO,
+            scheduled_for: item.scheduled_for || item.scheduledFor || targetISO
+          });
+        });
+      });
+
+      if (fallbackRowsV661.length) {
+        activeChipQueueKeyV659 = chip.id || chip.dbId || chip.instance || chipQueueKeysV659[0] || String(slot);
+        fila = fallbackRowsV661;
+        chipQueueKeysV659.forEach((key) => {
+          filaDisparo[key] = fallbackRowsV661.map((item) => ({ ...item }));
+        });
+        if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-empty-queue-fallback-v661' });
+        try { console.warn('[whatsapp-send-empty-queue-recovered-v661]', { slot, activeChipQueueKeyV659, count:fila.length, day:targetBR, iso:targetISO }); } catch(e) {}
+      }
+    } catch (fallbackError) {
+      try { console.warn('[whatsapp-send-empty-queue-fallback-error-v661]', fallbackError); } catch(e) {}
+    }
+  }
+
+  if (!fila.length) {
+    try { console.warn('[whatsapp-send-empty-queue-v661]', { slot, chip, keys:chipQueueKeysV659, day:todayStr(), filaKeys:Object.keys(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}) }); } catch(e) {}
     notify('// fila vazia','warn');
     return;
   }
