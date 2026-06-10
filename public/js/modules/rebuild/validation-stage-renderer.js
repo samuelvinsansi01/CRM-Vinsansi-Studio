@@ -66,25 +66,72 @@
     if (!userId) throw new Error('Usuário não encontrado para carregar Validação.');
 
     const headers = await getHeaders();
-    const query = new URLSearchParams({
-      select: '*',
-      user_id: `eq.${userId}`,
-      order: 'created_at.desc'
-    });
 
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/v_validation_leads_rebuild?${query.toString()}`, {
-      method: 'GET',
-      headers
-    });
-
-    const text = await response.text();
-    const data = text ? JSON.parse(text) : [];
-
-    if (!response.ok) {
-      throw data || new Error(`Falha ao carregar Validação (${response.status}).`);
+    async function fetchJson(endpoint, params) {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}?${params.toString()}`, {
+        method: 'GET',
+        headers
+      });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : [];
+      if (!response.ok) throw data || new Error(`Falha ao carregar ${endpoint} (${response.status}).`);
+      return Array.isArray(data) ? data : [];
     }
 
-    return Array.isArray(data) ? data : [];
+    function normalizeValidationRowV681(row = {}) {
+      const lead = row.leads || row.lead || {};
+      return {
+        ...lead,
+        ...row,
+        id: row.id || row.lead_id || lead.id,
+        lead_id: row.lead_id || row.id || lead.id,
+        company_name: row.company_name || row.nome || lead.company_name || 'Empresa sem nome',
+        phone: row.phone || row.whatsapp || row.telefone || lead.phone || '',
+        normalized_phone: row.normalized_phone || row.phone_normalized || lead.normalized_phone || '',
+        website: row.website || row.site || lead.website || '',
+        has_own_site: row.has_own_site ?? row.hasOwnSite ?? lead.has_own_site ?? !!(row.website || row.site || lead.website),
+        instagram_url: row.instagram_url || row.instagram || lead.instagram_url || '',
+        current_stage: row.current_stage || lead.current_stage || 'validation',
+        current_status: row.current_status || lead.current_status || 'pending_validation',
+        whatsapp_status: row.whatsapp_status || lead.whatsapp_status || 'pending'
+      };
+    }
+
+    function isValidationCandidateV681(row = {}) {
+      const stage = String(row.current_stage || '').toLowerCase();
+      const status = String(row.current_status || '').toLowerCase();
+      const wa = String(row.whatsapp_status || '').toLowerCase();
+      const removed = row.removed_at || row.deleted_at || row.archived_at;
+      if (removed) return false;
+      if (['sent','platform_removed','archived','blocked','rejected','rejected_validation'].includes(status)) return false;
+      if (stage === 'validation') return true;
+      if (status === 'pending_validation') return true;
+      if (wa === 'pending' && row.phone) return true;
+      return false;
+    }
+
+    const attempts = [];
+
+    for (const attempt of [
+      ['v_validation_leads_rebuild', { select:'*', user_id:`eq.${userId}`, order:'created_at.desc', limit:'1000' }],
+      ['v_lead_cards_persistent', { select:'*', user_id:`eq.${userId}`, current_stage:'eq.validation', order:'created_at.desc', limit:'1000' }],
+      ['v_lead_cards_persistent', { select:'*', user_id:`eq.${userId}`, order:'created_at.desc', limit:'1000' }],
+      ['leads', { select:'*', user_id:`eq.${userId}`, order:'created_at.desc', limit:'1000' }]
+    ]) {
+      try {
+        const params = new URLSearchParams(attempt[1]);
+        const rows = await fetchJson(attempt[0], params);
+        const normalized = rows.map(normalizeValidationRowV681);
+        const candidates = attempt[1].current_stage ? normalized : normalized.filter(isValidationCandidateV681);
+        if (candidates.length) return candidates;
+        attempts.push(`${attempt[0]} retornou ${rows.length}, candidatos ${candidates.length}`);
+      } catch (error) {
+        attempts.push(`${attempt[0]} falhou: ${error?.message || JSON.stringify(error)}`);
+      }
+    }
+
+    console.warn('[validation-stage-v681-empty]', attempts);
+    return [];
   }
 
   function renderCounters(rows) {

@@ -94,22 +94,117 @@
   }
 
   async function fetchValidationLeads() {
-    const userId = await getCurrentUserIdRebuild();
-    const params = new URLSearchParams({
-      select: '*',
-      current_stage: 'eq.validation',
-      order: 'created_at.desc'
-    });
+    const userId = await getCurrentUserIdRebuild?.() || await getUserId?.() || window.currentUser?.id || (typeof currentUser !== 'undefined' ? currentUser?.id : null);
+    if (!userId) throw new Error('Usuario nao encontrado para carregar Validacao.');
 
-    if (userId) params.set('user_id', `eq.${userId}`);
+    const headers = await getHeaders();
 
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/v_lead_cards_persistent?${params.toString()}`, {
-      headers: await getHeaders()
-    });
-    const data = await readJson(response);
+    async function fetchJson(endpoint, params) {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}?${params.toString()}`, { headers });
+      const data = await readJson ? await readJson(response) : await response.json().catch(() => []);
+      if (!response.ok) throw data || new Error(`Falha ao carregar ${endpoint} (${response.status}).`);
+      return Array.isArray(data) ? data : [];
+    }
 
-    if (!response.ok) throw data || new Error(`Falha ao carregar Validacao (${response.status}).`);
-    return Array.isArray(data) ? data : [];
+    function normalizeValidationRowV681(row = {}) {
+      const lead = row.leads || row.lead || {};
+      return {
+        ...lead,
+        ...row,
+        id: row.id || row.lead_id || lead.id,
+        lead_id: row.lead_id || row.id || lead.id,
+        company_name: row.company_name || row.nome || lead.company_name || 'Empresa sem nome',
+        phone: row.phone || row.whatsapp || row.telefone || lead.phone || '',
+        normalized_phone: row.normalized_phone || row.phone_normalized || lead.normalized_phone || '',
+        website: row.website || row.site || lead.website || '',
+        has_own_site: row.has_own_site ?? row.hasOwnSite ?? lead.has_own_site ?? !!(row.website || row.site || lead.website),
+        instagram_url: row.instagram_url || row.instagram || lead.instagram_url || '',
+        current_stage: row.current_stage || lead.current_stage || 'validation',
+        current_status: row.current_status || lead.current_status || 'pending_validation',
+        whatsapp_status: row.whatsapp_status || lead.whatsapp_status || 'pending'
+      };
+    }
+
+    function isValidationCandidateV681(row = {}) {
+      const stage = String(row.current_stage || '').toLowerCase();
+      const status = String(row.current_status || '').toLowerCase();
+      const wa = String(row.whatsapp_status || '').toLowerCase();
+      const removed = row.removed_at || row.deleted_at || row.archived_at;
+      if (removed) return false;
+      if (['sent','platform_removed','archived','blocked','rejected','rejected_validation'].includes(status)) return false;
+      if (stage === 'validation') return true;
+      if (status === 'pending_validation') return true;
+      if (wa === 'pending' && row.phone) return true;
+      return false;
+    }
+
+    const attempts = [];
+
+    // 1) View principal da Validação
+    try {
+      const params = new URLSearchParams({
+        select: '*',
+        user_id: `eq.${userId}`,
+        current_stage: 'eq.validation',
+        order: 'created_at.desc',
+        limit: '1000'
+      });
+      const rows = await fetchJson('v_lead_cards_persistent', params);
+      if (rows.length) return rows.map(normalizeValidationRowV681);
+      attempts.push('v_lead_cards_persistent stage=validation retornou 0');
+    } catch (error) {
+      attempts.push(`v_lead_cards_persistent stage=validation falhou: ${error?.message || JSON.stringify(error)}`);
+    }
+
+    // 2) View antiga/específica, se existir
+    try {
+      const params = new URLSearchParams({
+        select: '*',
+        user_id: `eq.${userId}`,
+        order: 'created_at.desc',
+        limit: '1000'
+      });
+      const rows = await fetchJson('v_validation_leads_rebuild', params);
+      if (rows.length) return rows.map(normalizeValidationRowV681).filter(isValidationCandidateV681);
+      attempts.push('v_validation_leads_rebuild retornou 0');
+    } catch (error) {
+      attempts.push(`v_validation_leads_rebuild falhou: ${error?.message || JSON.stringify(error)}`);
+    }
+
+    // 3) View geral sem filtro rígido de stage
+    try {
+      const params = new URLSearchParams({
+        select: '*',
+        user_id: `eq.${userId}`,
+        order: 'created_at.desc',
+        limit: '1000'
+      });
+      const rows = await fetchJson('v_lead_cards_persistent', params);
+      const candidates = rows.map(normalizeValidationRowV681).filter(isValidationCandidateV681);
+      if (candidates.length) return candidates;
+      attempts.push(`v_lead_cards_persistent geral retornou ${rows.length}, candidatos 0`);
+    } catch (error) {
+      attempts.push(`v_lead_cards_persistent geral falhou: ${error?.message || JSON.stringify(error)}`);
+    }
+
+    // 4) Fallback direto na tabela leads
+    try {
+      const params = new URLSearchParams({
+        select: '*',
+        user_id: `eq.${userId}`,
+        order: 'created_at.desc',
+        limit: '1000'
+      });
+      const rows = await fetchJson('leads', params);
+      const candidates = rows.map(normalizeValidationRowV681).filter(isValidationCandidateV681);
+      if (candidates.length) return candidates;
+      attempts.push(`leads retornou ${rows.length}, candidatos 0`);
+    } catch (error) {
+      attempts.push(`leads falhou: ${error?.message || JSON.stringify(error)}`);
+    }
+
+    console.warn('[validation-v681-empty]', attempts);
+    return [];
   }
 
   async function rpcValidationAction(leadId, action, reason = null) {
