@@ -122,7 +122,10 @@ let filaDisparo      = (() => { try { return JSON.parse(localStorage.getItem('vs
 let disparoEmAndamento = false;
 let aguardandoLote   = false;
 let filaLotes = [], loteAtual = 0, lotesTotal = 0;
-let loteEsperaTimer = null, loteEsperaFim = null, loteCountdownInt = null;
+// Timers globais preservados em window para evitar redeclaração entre scripts clássicos.
+window.loteEsperaTimer = window.loteEsperaTimer || null;
+window.loteEsperaFim = window.loteEsperaFim || null;
+window.loteCountdownInt = window.loteCountdownInt || null;
 let activeChipId     = null;
 let valTab           = 'com-site';
 let instaStatus      = 'pendente';
