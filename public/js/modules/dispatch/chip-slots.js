@@ -909,8 +909,35 @@ async function dispararLoteChip(slot) {
     atualizarStatusFilaSlot(slot, item.id, 'enviando');
     log(`Enviando para <span style="color:var(--text)">${escHtml(item.nome)}</span>...`);
     try {
-      const waNum  = item.whatsapp.replace(/\D/g,'');
+      const rawPhoneV699 = item.whatsapp || item.phone || item.normalized_phone || item.telefone || item.wa_phone || '';
+      const waNum = String(rawPhoneV699 || '').replace(/\D/g,'');
+      if (!waNum) {
+        try {
+          console.warn('[dispatch-item-phone-empty-v699]', {
+            itemId: item.id,
+            leadId: item.leadId,
+            nome: item.nome,
+            keys: Object.keys(item || {}),
+            item
+          });
+        } catch (_) {}
+        throw new Error('Lead sem WhatsApp/telefone para envio.');
+      }
       const numero = waNum.startsWith('55') ? waNum : '55' + waNum;
+      item.whatsapp = numero;
+      item.phone = numero;
+      item.telefone = numero;
+      item.normalized_phone = numero;
+      try {
+        console.warn('[dispatch-item-phone-v699]', {
+          itemId: item.id,
+          leadId: item.leadId,
+          nome: item.nome,
+          phone: numero,
+          chipId: chip.id,
+          instance: chip.instance
+        });
+      } catch (_) {}
       if (!item.mediaLoteNum) item.mediaLoteNum = st.loteAtual;
 
       // MSG 1 — Apresentação
