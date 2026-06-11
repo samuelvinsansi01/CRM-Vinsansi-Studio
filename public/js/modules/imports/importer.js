@@ -58,13 +58,32 @@ function getImportStatsV430(analyses = []) {
   const approvedComSite = approvedWhatsapp.filter(item => item.website?.type === 'commercial');
   const approvedSemSite = approvedWhatsapp.filter(item => item.website?.type !== 'commercial');
 
-  const refusedReasonCount = (predicate) => refused.filter(predicate).length;
-  const foraDoRamo = refusedReasonCount(item => !item.ramoMatch || item.reason === 'fora do ramo');
-  const abaixoQualificacao = refusedReasonCount(item => item.ramoMatch && item.qualification && !item.qualification.approved || item.reason === 'abaixo da qualificacao');
-  const semTelefone = refusedReasonCount(item => !item.hasPhone || item.reason === 'sem telefone e sem instagram');
-  const jaVistos = refusedReasonCount(item => item.alreadyImported || item.payloadDuplicate || String(item.reason || '').includes('duplicado') || String(item.reason || '').includes('existente'));
-  const wixSites = list.filter(item => item.website?.type === 'wixsite').length;
-  const outros = Math.max(0, refused.length - foraDoRamo - abaixoQualificacao - semTelefone - jaVistos);
+  // Contagem exclusiva: cada recusado entra em apenas um motivo para não inflar o total.
+  const refusedBuckets = {
+    outsideBranch: 0,
+    belowQualification: 0,
+    noPhone: 0,
+    alreadySeen: 0,
+    wixSites: 0,
+    outros: 0
+  };
+
+  refused.forEach(item => {
+    const reason = String(item.reason || '').toLowerCase();
+    if (item.alreadyImported || item.payloadDuplicate || reason.includes('duplicado') || reason.includes('existente') || reason.includes('já enviado') || reason.includes('ja enviado')) {
+      refusedBuckets.alreadySeen++;
+    } else if (!item.hasPhone || reason.includes('sem telefone')) {
+      refusedBuckets.noPhone++;
+    } else if (!item.ramoMatch || reason.includes('fora do ramo')) {
+      refusedBuckets.outsideBranch++;
+    } else if ((item.qualification && !item.qualification.approved) || reason.includes('abaixo da qualificacao') || reason.includes('abaixo da qualificação')) {
+      refusedBuckets.belowQualification++;
+    } else if (item.website?.type === 'wixsite') {
+      refusedBuckets.wixSites++;
+    } else {
+      refusedBuckets.outros++;
+    }
+  });
 
   return {
     total: list.length,
@@ -75,12 +94,12 @@ function getImportStatsV430(analyses = []) {
     comSite: approvedComSite.length,
     semSite: approvedSemSite.length,
     instagramBacklog: approvedInstagram.length,
-    wixSites,
-    alreadySeen: jaVistos,
-    outsideBranch: foraDoRamo,
-    belowQualification: abaixoQualificacao,
-    noPhone: semTelefone,
-    outros
+    wixSites: refusedBuckets.wixSites,
+    alreadySeen: refusedBuckets.alreadySeen,
+    outsideBranch: refusedBuckets.outsideBranch,
+    belowQualification: refusedBuckets.belowQualification,
+    noPhone: refusedBuckets.noPhone,
+    outros: refusedBuckets.outros
   };
 }
 
@@ -88,7 +107,7 @@ function buildImportedLeadV430(analysis, route) {
   const isInstagram = route === 'instagram-backlog';
   const isCommercialSite = analysis.website.type === 'commercial';
   return {
-    id: genId(),
+    id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : genId()),
     nome: analysis.name,
     whatsapp: analysis.phone,
     phone: analysis.phone,
@@ -97,6 +116,9 @@ function buildImportedLeadV430(analysis, route) {
     site: isInstagram ? '' : (isCommercialSite ? (analysis.website.site || '') : ''),
     has_own_site: !!isCommercialSite,
     googleUrl: analysis.googleUrl,
+    city: analysis.item?.city || analysis.item?.cidade || '',
+    state: analysis.item?.state || analysis.item?.estado || analysis.item?.region || '',
+    raw_payload: analysis.item || {},
     categoria: analysis.category,
     ramoId: activeRamoId || null,
     reviewsCount: analysis.qualification.reviews,
@@ -219,11 +241,14 @@ async function persistImportedLeadDirectV430(lead = {}) {
   }
 
   const payload = {
-    id: String(lead.id),
+    id: (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(lead.id || '')) ? String(lead.id) : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(lead.id || genId()))),
     user_id: currentUser.id,
     user_email: String(currentUser.email || '').trim().toLowerCase(),
     company_name: lead.nome || lead.company_name || lead.companyName || 'Lead sem nome',
     phone: lead.whatsapp || lead.phone || '',
+    normalized_phone: lead.normalized_phone || (typeof normalizeSentContactPhoneV30 === 'function' ? normalizeSentContactPhoneV30(lead.whatsapp || lead.phone || '') : (typeof normalizePhone === 'function' ? normalizePhone(lead.whatsapp || lead.phone || '') : String(lead.whatsapp || lead.phone || '').replace(/\D/g, ''))),
+    city: lead.city || lead.cidade || '',
+    state: lead.state || lead.estado || '',
     instagram: lead.instagram || '',
     instagram_url: lead.instagram || '',
     website: lead.site || lead.website || '',
@@ -248,6 +273,11 @@ async function persistImportedLeadDirectV430(lead = {}) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const { error } = await sbClient.from('leads').upsert(currentPayload, { onConflict:'id' });
     if (!error) return { ok:true };
+    const errorCode = String(error.code || '');
+    const errorMsg = String(error.message || '');
+    if (errorCode === '23505' || errorMsg.includes('duplicate key')) {
+      return { ok:false, duplicate:true, error };
+    }
 
     const msg = String(error.message || '');
     const missing = msg.match(/Could not find the '([^']+)' column/)?.[1];
