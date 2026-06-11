@@ -3,7 +3,7 @@
 ════════════════════════════ */
 const WHATSAPP_OUTBOX_V412_KEY = 'vs_whatsapp_outbox_v412';
 const WHATSAPP_MESSAGES_CACHE_V412_KEY = 'vs_whatsapp_messages_cache_v412';
-const WHATSAPP_MESSAGES_DEBUG_V413 = true;
+const WHATSAPP_MESSAGES_DEBUG_V413 = false;
 function debugWhatsappPersistV413(step, data = {}) {
   if (!WHATSAPP_MESSAGES_DEBUG_V413) return;
   try {
@@ -217,9 +217,7 @@ let contactMapDrawerStateV418 = {
   debounce:null
 };
 
-function debugContactMapV418(step, data = {}) {
-  try { console.log(`[contact-map]${step}`, data); } catch(e) {}
-}
+function debugContactMapV418(step, data = {}) { return; }
 
 function normalizeLeadForContactMapV418(lead = {}) {
   const id = String(lead.id || lead.lead_id || lead.leadId || '').trim();
@@ -1557,8 +1555,12 @@ function renderInboxV41() {
 }
 
 function startWhatsappMessagesSyncV412() {
-  setTimeout(() => fetchEvolutionResponsesV34({ silent:true }), 2500);
-  setInterval(() => fetchEvolutionResponsesV34({ silent:true }), 30000);
+  // Desativado nesta base operacional: Conversas/Inbox não são prioridade agora.
+  // Evita chamadas automáticas para contact-map e whatsapp_messages enquanto o foco é importação/fila/envio.
+  if (window.ENABLE_WHATSAPP_MESSAGES_SYNC === true) {
+    setTimeout(() => fetchEvolutionResponsesV34({ silent:true }), 2500);
+    setInterval(() => fetchEvolutionResponsesV34({ silent:true }), 30000);
+  }
 }
 
 if (document.readyState === 'loading') {

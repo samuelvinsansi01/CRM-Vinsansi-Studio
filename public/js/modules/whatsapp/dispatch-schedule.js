@@ -103,7 +103,7 @@ function renderDispatchScheduleV31() {
       </div>
     </div>
     <div class="dispatch-v31-warning">
-      Regra ativa: 180 mensagens por chip · 6 blocos de 30 · 120 segundos entre envios · espera 1h entre blocos.
+      Regra ativa: 120 mensagens por chip · 4 blocos de 30 · 120 segundos entre envios · espera 1h entre blocos.
     </div>
   `;
 }

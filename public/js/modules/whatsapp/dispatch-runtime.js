@@ -238,7 +238,7 @@ function renderDispatchRuntimeV32() {
     <div class="dispatch-v32-runtime ${cls}">
       Estado: ${state}<br>
       Próximo envio: ${next}<br>
-      Regra: 120s entre envios · 30 por bloco · 6 blocos · 180 por chip/dia
+      Regra: 120s entre envios · 30 por bloco · 4 blocos · 120 por chip/dia
     </div>
   `;
 }

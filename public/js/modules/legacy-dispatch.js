@@ -206,6 +206,7 @@ function aprovarParaFila(id) {
   atrib.push({
     id: v.id, nome: v.nome, site: v.site || '', whatsapp: v.whatsapp,
     instagram: v.instagram, googleUrl: v.googleUrl,
+    tipo: v.tipo || (v.site ? 'com-site' : 'sem-site'),
     canal: 'zap', // número validado via WhatsApp
     numStatus: 'valido', whatsappValidationStatus: 'valid',
     status: 'Não enviada', criadoEm: v.importadoEm || todayStr(),
@@ -259,8 +260,9 @@ function aprovarTodosParaAtribuicao() {
   val.filter(v => v.numStatus === 'valido' && !existIds.has(v.id)).forEach(v => {
     markLeadWhatsappValidatedForQueue(v);
     atrib.push({
-      id: v.id, nome: v.nome, site: '', whatsapp: v.whatsapp,
+      id: v.id, nome: v.nome, site: v.site || '', whatsapp: v.whatsapp,
       instagram: v.instagram || '', googleUrl: v.googleUrl || '',
+      tipo: v.tipo || (v.site ? 'com-site' : 'sem-site'),
       canal: 'zap',
       numStatus: 'valido', whatsappValidationStatus: 'valid',
       status: 'Não enviada', criadoEm: v.importadoEm || todayStr(),

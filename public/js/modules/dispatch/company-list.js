@@ -305,6 +305,8 @@ function renderFilaSlot(slot, filterDay) {
     // Renderizar itens do lote
     loteItems.forEach((item, itemIdx) => {
       const waNum = item.whatsapp.replace(/\D/g,'');
+      const siteType = item.tipo || (item.site ? 'com-site' : 'sem-site');
+      const siteTypeBadge = siteType === 'com-site' ? `<span class="q-badge" style="font-size:7px;margin-left:4px;color:#5bb8f5;border-color:rgba(91,184,245,0.35)">🌐 com site</span>` : `<span class="q-badge" style="font-size:7px;margin-left:4px;color:var(--accent);border-color:var(--accent-border)">🚫 sem site</span>`;
       const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
       const aberto = item.aberto || false;
       const isEnviado = item.status === 'enviado';
@@ -316,7 +318,7 @@ function renderFilaSlot(slot, filterDay) {
         html += `<div class="fila-item enviado" id="fila-item-${slot}-${item.id}" style="opacity:0.55">
           <div class="fila-item-header" style="cursor:default">
             <div class="fila-item-num" style="color:var(--muted)">${posGlobal}</div>
-            <div class="fila-item-nome" style="color:var(--muted)">${escHtml(item.nome)}</div>
+            <div class="fila-item-nome" style="color:var(--muted)">${escHtml(item.nome)}${siteTypeBadge}</div>
             <div class="fila-item-wa" style="color:var(--muted)">+${waNum}</div>
             <div class="fila-item-status enviado">✓ enviado</div>
             <button class="lead-drawer-open-btn" onclick="event.stopPropagation();openLeadDrawer('${item.id}')">Ficha</button>
@@ -326,7 +328,7 @@ function renderFilaSlot(slot, filterDay) {
         html += `<div class="fila-item ${item.status}" id="fila-item-${slot}-${item.id}">
           <div class="fila-item-header" onclick="toggleFilaItemSlot(${slot},'${item.id}')" style="cursor:pointer;user-select:none">
             <div class="fila-item-num">${posGlobal}</div>
-            <div class="fila-item-nome">${item.site ? `<a href="${escHtml(item.site)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="${escHtml(item.site)}" onclick="event.stopPropagation()">${escHtml(item.nome)}</a>` : escHtml(item.nome)}</div>
+            <div class="fila-item-nome">${item.site ? `<a href="${escHtml(item.site)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="${escHtml(item.site)}" onclick="event.stopPropagation()">${escHtml(item.nome)}</a>` : escHtml(item.nome)}${siteTypeBadge}</div>
             <div class="fila-item-wa">+${waNum}</div>
             <div class="fila-item-status ${item.status}">${labels[item.status]||item.status}</div>
             <button class="lead-drawer-open-btn" onclick="event.stopPropagation();openLeadDrawer('${item.id}')">Ficha</button>

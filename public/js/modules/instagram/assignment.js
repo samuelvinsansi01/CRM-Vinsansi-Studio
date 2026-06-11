@@ -47,7 +47,7 @@ function salvarInstaLeadInline() {
 /* ════════════════════════════
    BASE DE ATRIBUIÇÃO — ABAS
 ════════════════════════════ */
-let atribActiveTab = 'zap'; // 'zap' | 'insta'
+let atribActiveTab = 'zap'; // 'zap' | 'com-site' | 'insta'
 
 function salvarZapLeadManual() {
   const nome     = (document.getElementById('zapLeadNome')?.value||'').trim();
@@ -63,6 +63,7 @@ function salvarZapLeadManual() {
     instagram: '',
     googleUrl: '',
     canal: 'zap',
+    tipo: 'sem-site',
     status: 'Não enviada',
     criadoEm: todayStr(),
     diaDestino: null,
@@ -82,39 +83,46 @@ function salvarZapLeadManual() {
 
 function setAtribTab(tab) {
   atribActiveTab = tab;
-  const tabZap   = document.getElementById('atribTabZap');
-  const tabInsta = document.getElementById('atribTabInsta');
+  const tabZap     = document.getElementById('atribTabZap');
+  const tabComSite = document.getElementById('atribTabComSite');
+  const tabInsta   = document.getElementById('atribTabInsta');
   const panelZap   = document.getElementById('atribPanelZap');
   const panelInsta = document.getElementById('atribPanelInsta');
 
-  if (tab === 'zap') {
-    tabZap.style.borderBottomColor   = 'var(--accent)';
-    tabZap.style.color               = 'var(--accent)';
-    tabInsta.style.borderBottomColor = 'transparent';
-    tabInsta.style.color             = 'var(--muted)';
-    panelZap.style.display   = 'flex';
-    panelInsta.style.display = 'none';
-    renderAtribuicao();
-  } else {
-    tabInsta.style.borderBottomColor = 'var(--insta)';
-    tabInsta.style.color             = 'var(--insta)';
-    tabZap.style.borderBottomColor   = 'transparent';
-    tabZap.style.color               = 'var(--muted)';
-    panelInsta.style.display = 'flex';
-    panelZap.style.display   = 'none';
+  [tabZap, tabComSite, tabInsta].forEach(btn => {
+    if (!btn) return;
+    btn.style.borderBottomColor = 'transparent';
+    btn.style.color = 'var(--muted)';
+  });
+
+  if (tab === 'insta') {
+    if (tabInsta) { tabInsta.style.borderBottomColor = 'var(--insta)'; tabInsta.style.color = 'var(--insta)'; }
+    if (panelInsta) panelInsta.style.display = 'flex';
+    if (panelZap) panelZap.style.display = 'none';
     renderAtribInstaFila();
     updateAtribInstaCorteInfo();
     setTimeout(() => document.getElementById('instaLeadNome')?.focus(), 60);
+  } else {
+    const isComSite = tab === 'com-site';
+    const activeBtn = isComSite ? tabComSite : tabZap;
+    if (activeBtn) { activeBtn.style.borderBottomColor = 'var(--accent)'; activeBtn.style.color = 'var(--accent)'; }
+    if (panelZap) panelZap.style.display = 'flex';
+    if (panelInsta) panelInsta.style.display = 'none';
+    renderAtribuicao();
   }
   updateAtribTabCounts();
 }
 
 function updateAtribTabCounts() {
-  const zapCount   = getAtribuicaoData().length;
+  const atrib = getAtribuicaoData();
+  const zapCount = atrib.filter(l => (l.canal || 'zap') === 'zap' && (l.tipo || (l.site ? 'com-site' : 'sem-site')) !== 'com-site').length;
+  const comSiteCount = atrib.filter(l => (l.canal || 'zap') === 'zap' && (l.tipo || (l.site ? 'com-site' : 'sem-site')) === 'com-site').length;
   const instaCount = getInstaFila().length;
   const elZ = document.getElementById('atribTabZapCount');
+  const elC = document.getElementById('atribTabComSiteCount');
   const elI = document.getElementById('atribTabInstaCount');
   if (elZ) elZ.textContent = zapCount ? `(${zapCount})` : '';
+  if (elC) elC.textContent = comSiteCount ? `(${comSiteCount})` : '';
   if (elI) elI.textContent = instaCount ? `(${instaCount})` : '';
 }
 

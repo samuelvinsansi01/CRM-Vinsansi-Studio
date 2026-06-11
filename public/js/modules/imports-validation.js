@@ -90,7 +90,7 @@ function classifyWebsiteOpportunityV430(item = {}) {
   if (typeof isSiteBlocklisted === 'function' && isSiteBlocklisted(site)) {
     return { type:'external', websiteType:'external', websiteQuality:'weak', route:'whatsapp-validation', site, reason:'link externo sem site proprio' };
   }
-  return { type:'commercial', websiteType:'commercial', websiteQuality:'commercial', route:'skip', site, reason:'site comercial proprio' };
+  return { type:'commercial', websiteType:'commercial', websiteQuality:'commercial', route:'whatsapp-validation', site, reason:'site comercial proprio' };
 }
 
 function getApifyQualificationV430(item = {}) {
@@ -223,8 +223,8 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     analysis.route = 'skip';
     analysis.reason = analysis.website.reason;
   } else if (!analysis.hasPhone) {
-    analysis.route = 'skip';
-    analysis.reason = 'sem telefone';
+    analysis.route = 'instagram-backlog';
+    analysis.reason = 'sem telefone whatsapp validado';
   } else {
     analysis.route = 'whatsapp-validation';
     analysis.reason = analysis.website.reason;

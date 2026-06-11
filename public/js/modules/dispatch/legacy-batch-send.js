@@ -62,7 +62,8 @@ async function dispararLote() {
   if (!chip) { notify('// configure um chip primeiro','err'); return; }
   const delayMin = parseInt((document.getElementById('delayMin')||{}).value)||120;
   const delayMax = parseInt((document.getElementById('delayMax')||{}).value)||180;
-  const MSG_DELAY = 15000; // 15s entre mensagens da mesma empresa
+  const MSG_DELAY_1_TO_2 = 10000; // 10s entre mensagem 1 e mensagem 2
+  const MSG_DELAY_2_TO_IMAGE = 5000; // 5s entre mensagem 2 e imagem
   const logEl    = document.getElementById('disparoLog');
   logEl.style.display = 'block';
   disparoEmAndamento = true;
@@ -81,6 +82,11 @@ async function dispararLote() {
     try {
       const waNum  = item.whatsapp.replace(/\D/g,'');
       const numero = waNum.startsWith('55') ? waNum : '55' + waNum;
+
+      // Trava final de segurança: nunca envia se o telefone já estiver em sent_contacts.
+      if (typeof assertPhoneNotAlreadySentV30 === 'function') {
+        await assertPhoneNotAlreadySentV30(numero);
+      }
 
       // MSG 1 — Apresentação
       const payload1 = { number: numero, options: { delay: 1000 }, textMessage: { text: item.mensagem } };
@@ -106,22 +112,52 @@ async function dispararLote() {
         if (persistence?.ok) log(`  ↳ conversa salva no banco`);
         else log(`  ↳ <span style="color:var(--warning)">conversa pendente de sincronização</span>`);
       }
-      await new Promise(r => setTimeout(r, MSG_DELAY));
+      await new Promise(r => setTimeout(r, MSG_DELAY_1_TO_2));
 
-      // MSG 2 — Imagem redesign (item ou padrão do lote)
+      // MSG 2 — Segunda mensagem
+      if (!String(item.mensagem2 || '').trim()) {
+        const picked2 = typeof pickOtherTemplate === 'function'
+          ? pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null, item.tipo || (item.site ? 'com-site' : 'sem-site'))
+          : { text:'' };
+        item.mensagem2 = picked2.text || '';
+      }
+      if (String(item.mensagem2 || '').trim()) {
+        const payload2 = { number: numero, options: { delay: 1000 }, textMessage: { text: item.mensagem2 } };
+        const res2 = await fetch(`${chip.url}/message/sendText/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload2) });
+        const data2 = await res2.json().catch(() => ({}));
+        if (!res2.ok) throw new Error((data2 && (data2.message || data2.error)) || `sendText 2 HTTP ${res2.status}`);
+        log(`  ② segunda mensagem enviada`);
+        await new Promise(r => setTimeout(r, MSG_DELAY_2_TO_IMAGE));
+      }
+
+      // MSG 3 — Imagem redesign (item ou padrão do lote)
       const loteNumSend = loteAtual;
       const imgRedesign = item.imagem2Base64 || getLoteImagem(disparoChipId, loteNumSend);
       if (imgRedesign) {
-        await new Promise(r => setTimeout(r, MSG_DELAY));
         const b2 = imgRedesign.split(',')[1], m2 = imgRedesign.split(';')[0].split(':')[1] || 'image/jpeg';
         const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: b2, mimetype: m2, caption: '' } };
         await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
-        log(`  ② imagem (redesign) enviada`);
+        log(`  ③ imagem (redesign) enviada`);
       } else {
-        log(`  ② <span style="color:var(--warning)">sem imagem (configure no cabeçalho do lote)</span>`);
+        log(`  ③ <span style="color:var(--warning)">sem imagem (configure no cabeçalho do lote)</span>`);
       }
 
-      item.status='enviado'; atualizarStatusFila(item.id,'enviado');
+      item.status='enviado';
+
+      // Grava na proteção central somente depois que Evolution confirmou o envio.
+      if (typeof markPhoneAsSentV30 === 'function') {
+        const protectionSave = await markPhoneAsSentV30({
+          leadId: item.leadId || item.id || null,
+          companyName: item.nome || item.company_name || '',
+          phone: numero,
+          source: 'dispatch',
+          reason: 'sent_success',
+          rawPayload: { item, chip:{ id:chip.id, instance:chip.instance } }
+        });
+        if (!protectionSave?.ok) throw new Error('Mensagem enviada, mas falhou ao salvar em Já enviados: ' + (protectionSave?.error || 'erro desconhecido'));
+      }
+
+      atualizarStatusFila(item.id,'enviado');
       log(`<span style="color:var(--accent)">✓ ${escHtml(item.nome)}</span>`);
       atualizarStatusEmpresa(item.id,'Enviada');
     } catch(e) {

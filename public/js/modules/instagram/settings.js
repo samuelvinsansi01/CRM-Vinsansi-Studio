@@ -162,41 +162,40 @@ function renderTemplatesConfig() {
   const ramos = getRamos();
   const el = document.getElementById('templatesList');
 
-  // Seletor de ramo apenas (sem abas de tipo)
-  const ramoSel = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+  const ramoSel = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
     <select id="tplRamoSel" onchange="onTplRamoChange()" style="flex:1;min-width:140px;font-size:11px;padding:8px 12px">
       <option value="">— Selecione um ramo —</option>
       ${ramos.map(r => `<option value="${r.id}"${tplRamoId===r.id?' selected':''}>${escHtml(r.nome)}</option>`).join('')}
     </select>
   </div>`;
 
-  let tpls, isRamo;
-  if (tplRamoId) {
-    tpls = getTemplatesForRamoTipo(tplRamoId, 'com-site');
-    isRamo = true;
-  } else {
-    // Sem ramo selecionado — não exibe nada
-    el.innerHTML = ramoSel + `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:16px 0">// Selecione um ramo para ver e editar os templates.</div>`;
+  const tipoTabs = `<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn ${tplTipo==='sem-site'?'btn-primary':'btn-ghost'}" style="font-size:10px;padding:7px 12px" onclick="setTplTipo('sem-site')">🚫 Sem site</button>
+    <button class="btn ${tplTipo==='com-site'?'btn-primary':'btn-ghost'}" style="font-size:10px;padding:7px 12px" onclick="setTplTipo('com-site')">🌐 Com site</button>
+  </div>`;
+
+  if (!tplRamoId) {
+    el.innerHTML = ramoSel + tipoTabs + `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:16px 0">// Selecione um ramo para ver e editar os templates.</div>`;
     return;
   }
 
+  const tipoAtual = tplTipo === 'com-site' ? 'com-site' : 'sem-site';
+  const tpls = getTemplatesForRamoTipo(tplRamoId, tipoAtual);
   const maxTpl = 10;
-  const limitLabel = tplRamoId
-    ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${tpls.length}/${maxTpl} templates</span>`
-    : '';
+  const limitLabel = `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${tpls.length}/${maxTpl} templates · ${tipoAtual === 'com-site' ? 'Com site' : 'Sem site'}</span>`;
 
   const tplsHtml = tpls.map((t, i) => `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:8px;position:relative">
-    <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">TEMPLATE ${i+1}</div>
-    <textarea style="min-height:80px;font-size:10px;line-height:1.6" oninput="${isRamo?`saveRamoTemplate('${tplRamoId}','com-site',${i},this.value)`:`saveTemplate(${i},this.value)`}">${escHtml(t)}</textarea>
-    ${tpls.length>1?`<button class="del-btn" style="position:absolute;top:8px;right:8px" onclick="${isRamo?`removerRamoTemplate('${tplRamoId}','com-site',${i})`:`removerTemplate(${i})`}">✕</button>`:''}
+    <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">TEMPLATE ${i+1} · ${tipoAtual === 'com-site' ? 'COM SITE' : 'SEM SITE'}</div>
+    <textarea style="min-height:80px;font-size:10px;line-height:1.6" oninput="saveRamoTemplate('${tplRamoId}','${tipoAtual}',${i},this.value)">${escHtml(t)}</textarea>
+    ${tpls.length>1?`<button class="del-btn" style="position:absolute;top:8px;right:8px" onclick="removerRamoTemplate('${tplRamoId}','${tipoAtual}',${i})">✕</button>`:''}
   </div>`).join('');
 
   const addBtn = `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
     ${limitLabel}
-    <button class="btn btn-ghost" onclick="${isRamo?`adicionarRamoTemplate('${tplRamoId}','com-site')`:`adicionarTemplate()`}" ${tpls.length>=maxTpl?'disabled':''}>+ Novo template</button>
+    <button class="btn btn-ghost" onclick="adicionarRamoTemplate('${tplRamoId}','${tipoAtual}')" ${tpls.length>=maxTpl?'disabled':''}>+ Novo template</button>
   </div>`;
 
-  el.innerHTML = ramoSel + tplsHtml + addBtn;
+  el.innerHTML = ramoSel + tipoTabs + tplsHtml + addBtn;
 }
 
 function onTplRamoChange() {

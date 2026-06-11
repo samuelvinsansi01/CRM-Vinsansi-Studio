@@ -148,7 +148,8 @@ function createDispatchQueueItemV433(emp = {}, overrides = {}) {
     whatsapp: emp.whatsapp,
     mensagem: '',
     templateIdx: -1,
-    ramoId: null,
+    ramoId: emp.ramoId || null,
+    tipo: emp.tipo || (emp.site ? 'com-site' : 'sem-site'),
     numStatus: emp.numStatus || '',
     whatsappValidationStatus: emp.whatsappValidationStatus || '',
     status: 'aguardando',
@@ -170,7 +171,7 @@ function hydrateRecoveredDispatchMessagesV433(chipId) {
       const loteNum = Math.floor(index / getLoteSize()) + 1;
       const ramoId = getLoteRamo(chipId, loteNum);
       if (!ramoId) return;
-      const { text, idx } = pickTemplate(item.nome, ramoId);
+      const { text, idx } = pickTemplate(item.nome, ramoId, item.tipo || (item.site ? 'com-site' : 'sem-site'));
       item.ramoId = ramoId;
       item.mensagem = text;
       item.templateIdx = idx;
@@ -354,13 +355,15 @@ function renderFila() {
   itensEl.innerHTML = filaAtual.map((item, i) => {
     const waNum = item.whatsapp.replace(/\D/g,'');
     const chip = getChipById(disparoChipId);
+    const siteType = item.tipo || (item.site ? 'com-site' : 'sem-site');
+    const siteTypeBadge = siteType === 'com-site' ? `<span class="q-badge" style="font-size:7px;margin-left:4px;color:#5bb8f5;border-color:rgba(91,184,245,0.35)">🌐 com site</span>` : `<span class="q-badge" style="font-size:7px;margin-left:4px;color:var(--accent);border-color:var(--accent-border)">🚫 sem site</span>`;
     const chipBadge = chip ? `<span class="q-badge ok" style="font-size:7px;margin-left:4px">📱 ${escHtml(chip.nome)}</span>` : '';
     const labels = { aguardando:'aguardando', enviando:'enviando...', enviado:'✓ enviado', erro:'✗ erro' };
     const aberto = item.aberto || false;
     return `<div class="fila-item ${item.status}" id="fila-item-${item.id}">
       <div class="fila-item-header" onclick="toggleFilaItem('${item.id}')" style="cursor:pointer;user-select:none">
         <div class="fila-item-num">${i+1}</div>
-        <div class="fila-item-nome">${item.site ? `<a href="${escHtml(item.site)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="${escHtml(item.site)}" onclick="event.stopPropagation()">${escHtml(item.nome)}</a>` : escHtml(item.nome)}</div>
+        <div class="fila-item-nome">${item.site ? `<a href="${escHtml(item.site)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none" title="${escHtml(item.site)}" onclick="event.stopPropagation()">${escHtml(item.nome)}</a>` : escHtml(item.nome)}${siteTypeBadge}</div>
         <div class="fila-item-wa">+${waNum}${chipBadge}</div>
         <button class="lead-drawer-open-btn" onclick="event.stopPropagation();openLeadDrawer('${item.id}')">Ficha</button>
         <div style="color:var(--muted);font-size:12px;margin-left:4px;transition:transform 0.2s;transform:rotate(${aberto?'90':'0'}deg)">▶</div>
@@ -398,7 +401,7 @@ function shuffleFilaMsgSlot(slot, id) {
   if (!item) return;
   const itemIdx = fila.findIndex(f => f.id === id);
   const loteNum = Math.floor(itemIdx / getLoteSize()) + 1;
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null);
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null, item.tipo || (item.site ? 'com-site' : 'sem-site'));
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${slot}-${id}`);
   if (el) el.value = item.mensagem;
@@ -410,7 +413,7 @@ function shuffleFilaMsg(id) {
   if (!item) return;
   const itemIdx = fila.findIndex(f => f.id === id);
   const loteNum = Math.floor(itemIdx / getLoteSize()) + 1;
-  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null);
+  const { text, idx } = pickOtherTemplate(item.nome, item.templateIdx, item.ramoId || null, item.tipo || (item.site ? 'com-site' : 'sem-site'));
   item.mensagem = text; item.templateIdx = idx;
   const el = document.getElementById(`fila-msg-${id}`);
   if (el) el.value = item.mensagem;
@@ -423,7 +426,7 @@ function onRamoFilaChange(id, ramoId) {
   item.ramoId = ramoId || null;
   saveFilaDisparo();
   // Sortear automaticamente com o novo ramo
-  const { text, idx } = pickTemplate(item.nome, item.ramoId);
+  const { text, idx } = pickTemplate(item.nome, item.ramoId, item.tipo || (item.site ? 'com-site' : 'sem-site'));
   item.mensagem = text; item.templateIdx = idx;
   saveFilaDisparo();
   const el = document.getElementById(`fila-msg-${id}`);

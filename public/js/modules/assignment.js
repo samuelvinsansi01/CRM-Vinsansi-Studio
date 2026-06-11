@@ -13,7 +13,14 @@ function diasEmEspera(criadoEm) {
 }
 
 function renderAtribuicao() {
-  const leads = moveUnvalidatedAtribLeadsToValidationV42(getAtribuicaoData());
+  const allAtribLeads = moveUnvalidatedAtribLeadsToValidationV42(getAtribuicaoData());
+  const tabTipo = atribActiveTab === 'com-site' ? 'com-site' : 'sem-site';
+  const leads = allAtribLeads.filter(l => {
+    const canal = l.canal && l.canal !== 'pendente' ? l.canal : (l.whatsapp ? 'zap' : 'insta');
+    if (canal === 'insta') return false;
+    const tipo = l.tipo || (l.site ? 'com-site' : 'sem-site');
+    return tabTipo === 'com-site' ? tipo === 'com-site' : tipo !== 'com-site';
+  });
   const weekDays = currentWeekDays();
   const today = todayStr();
   if (!atribDiaLote || !weekDays.includes(atribDiaLote)) atribDiaLote = today;
@@ -98,6 +105,13 @@ function renderAtribuicao() {
       voltouBadge = `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--text2);background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:2px 7px">↩ voltou da semana</span>`;
     }
 
+    const leadTipo = lead.tipo || (lead.site ? 'com-site' : 'sem-site');
+    const siteBadge = !isInsta
+      ? (leadTipo === 'com-site'
+        ? `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:#5bb8f5;background:rgba(91,184,245,0.08);border:1px solid rgba(91,184,245,0.3);border-radius:4px;padding:2px 7px">🌐 COM SITE</span>`
+        : `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--accent);background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:4px;padding:2px 7px">🚫 SEM SITE</span>`)
+      : '';
+
     const canalBadge = isInsta
       ? `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--insta);background:rgba(225,48,108,0.08);border:1px solid rgba(225,48,108,0.3);border-radius:4px;padding:2px 7px">📸 INSTA</span>`
       : `<span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:var(--ok);background:rgba(78,203,113,0.08);border:1px solid rgba(78,203,113,0.3);border-radius:4px;padding:2px 7px">💬 ZAP</span>`;
@@ -158,6 +172,8 @@ function renderAtribuicao() {
         </div>
         <div class="empresa-meta">
           ${canalBadge}
+          ${siteBadge}
+          ${!isInsta && lead.site ? `<div class="empresa-site"><a href="${escHtml(lead.site)}" target="_blank" onclick="event.stopPropagation()">${escHtml(lead.site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></div>` : ''}
           ${!isInsta && lead.whatsapp ? `<div class="empresa-phone">📱 ${escHtml(lead.whatsapp)}</div>` : ''}
           ${ageBadge}
           ${voltouBadge}
@@ -240,6 +256,7 @@ function atribuirParaDia(ids, day) {
       whatsapp: lead.whatsapp || '', instagram: lead.instagram || '',
       googleUrl: lead.googleUrl || '',
       ramoId: lead.ramoId || null,
+      tipo: lead.tipo || (lead.site ? 'com-site' : 'sem-site'),
       numStatus: 'valido',
       whatsappValidationStatus: 'valid',
       status: 'Não enviada', criadoEm: lead.criadoEm || todayStr(),
@@ -312,6 +329,8 @@ function mandarParaBacklogZap(id) {
   backlog.push({
     id: lead.id, nome: lead.nome, whatsapp: lead.whatsapp || '',
     instagram: lead.instagram || '', googleUrl: lead.googleUrl || '',
+    site: lead.site || '', ramoId: lead.ramoId || null,
+    tipo: lead.tipo || (lead.site ? 'com-site' : 'sem-site'),
     canal: 'zap', criadoEm: lead.criadoEm || todayStr(),
     entradaBacklogEm: todayStr(),
   });

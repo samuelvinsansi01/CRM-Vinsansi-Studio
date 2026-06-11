@@ -35,14 +35,14 @@ function buildImportedLeadV430(analysis, route) {
     nome: analysis.name,
     whatsapp: analysis.phone,
     instagram: analysis.instagram,
-    site: isInstagram || analysis.website.type === 'none' ? '' : analysis.website.site,
+    site: isInstagram ? '' : (analysis.website.site || ''),
     googleUrl: analysis.googleUrl,
     categoria: analysis.category,
     ramoId: activeRamoId || null,
     reviewsCount: analysis.qualification.reviews,
     totalScore: analysis.qualification.rating,
     numStatus: isInstagram ? 'nao-aplicavel' : 'pendente',
-    tipo: isInstagram ? 'instagram' : 'sem-site',
+    tipo: isInstagram ? 'instagram' : (analysis.website.type === 'commercial' ? 'com-site' : 'sem-site'),
     canal: isInstagram ? 'insta' : 'pendente',
     stage: isInstagram ? 'instagram_backlog' : 'validation',
     website_type: analysis.website.websiteType,
@@ -124,7 +124,7 @@ function importPreview() {
   renderPagination('importPreviewPagination', importPage, totalPrevPages, totalPrev, IMPORT_PG, 'goImportPage', 'changeImportPgSize');
 }
 
-function importarLeads() {
+async function importarLeads() {
   const raw = document.getElementById('importJsonInput').value.trim();
   if (!raw) { notify('// cole o JSON primeiro', 'err'); return; }
   const arr = parseApifyJson(raw);
@@ -137,24 +137,44 @@ function importarLeads() {
   let addedWhatsapp = 0;
   let addedInstagram = 0;
   let skipped = 0;
+  let blockedAlreadySent = 0;
 
   const importSeenKeys = new Set();
   const existingValidationKeys = new Set((typeof dedupeLeadArrayV434 === 'function' ? novaValFila : novaValFila).map(lead => typeof getLeadIdentityKeyV434 === 'function' ? getLeadIdentityKeyV434(lead) : lead.id).filter(Boolean));
   const existingInstagramKeys = new Set((typeof dedupeLeadArrayV434 === 'function' ? novaInstaFila : novaInstaFila).map(lead => typeof getLeadIdentityKeyV434 === 'function' ? getLeadIdentityKeyV434(lead) : lead.id).filter(Boolean));
 
-  analyses.forEach(analysis => {
+  for (const analysis of analyses) {
     if (analysis.route === 'whatsapp-validation') {
       const lead = buildImportedLeadV430(analysis, analysis.route);
       const key = typeof getLeadIdentityKeyV434 === 'function' ? getLeadIdentityKeyV434(lead) : lead.id;
+
+      // Trava de importação: se o telefone já foi enviado, não entra novamente no sistema.
+      if (typeof isPhoneAlreadySentV30 === 'function') {
+        try {
+          const check = await isPhoneAlreadySentV30(lead.whatsapp || analysis.phone || '');
+          if (check.ok && check.blocked) {
+            skipped++;
+            blockedAlreadySent++;
+            qualificationLogV430('qualification-already-sent', { phase:'import', name:lead.nome, phone:lead.whatsapp, normalizedPhone:check.normalizedPhone, reason:'telefone já está em sent_contacts' });
+            continue;
+          }
+          if (!check.ok) {
+            qualificationLogV430('qualification-sent-contacts-check-warning', { phase:'import', name:lead.nome, phone:lead.whatsapp, error:check.error });
+          }
+        } catch (err) {
+          qualificationLogV430('qualification-sent-contacts-check-error', { phase:'import', name:lead.nome, phone:lead.whatsapp, error:err?.message || String(err) });
+        }
+      }
+
       if ((key && importSeenKeys.has(key)) || (key && existingValidationKeys.has(key))) {
         skipped++;
         qualificationLogV430('qualification-duplicate', { phase:'import', name:lead.nome, key, reason:'duplicado na importação atual ou validação' });
-        return;
+        continue;
       }
       if (key) { importSeenKeys.add(key); existingValidationKeys.add(key); }
       novaValFila.push(lead);
       addedWhatsapp++;
-      return;
+      continue;
     }
     if (analysis.route === 'instagram-backlog') {
       const lead = buildImportedLeadV430(analysis, analysis.route);
@@ -162,15 +182,15 @@ function importarLeads() {
       if ((key && importSeenKeys.has(key)) || (key && existingInstagramKeys.has(key))) {
         skipped++;
         qualificationLogV430('qualification-duplicate', { phase:'import', name:lead.nome, key, reason:'duplicado na importação atual ou backlog instagram' });
-        return;
+        continue;
       }
       if (key) { importSeenKeys.add(key); existingInstagramKeys.add(key); }
       novaInstaFila.push(lead);
       addedInstagram++;
-      return;
+      continue;
     }
     skipped++;
-  });
+  }
 
   const cleanValFila = typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(novaValFila, { label:'import-validation-final' }) : novaValFila;
   const cleanInstaFila = typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(novaInstaFila, { label:'import-instagram-final' }) : novaInstaFila;
@@ -192,6 +212,7 @@ function importarLeads() {
   let msg = `✓ ${addedWhatsapp} → Validação WhatsApp`;
   if (addedInstagram) msg += ` · ${addedInstagram} → backlog Instagram`;
   if (stats.alreadySeen) msg += ` · ${stats.alreadySeen} já vistos`;
+  if (blockedAlreadySent) msg += ` · ${blockedAlreadySent} bloqueados por Já enviados`;
   if (skipped) msg += ` · ${skipped} ignoradas`;
   notify(msg, addedWhatsapp || addedInstagram ? '' : 'warn');
 

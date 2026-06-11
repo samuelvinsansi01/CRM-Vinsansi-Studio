@@ -19,7 +19,8 @@
  *   ],
  *   delayMinSeg:  number  – delay mínimo entre empresas (seg, default 15)
  *   delayMaxSeg:  number  – delay máximo entre empresas (seg, default 30)
- *   msgDelaySeg:  number  – delay entre as 3 mensagens da mesma empresa (seg, default 15)
+ *   msgDelay1Seg: number  – delay entre mensagem 1 e 2 (seg, default 10)
+ *   msgDelay2Seg: number  – delay entre mensagem 2 e imagem (seg, default 5)
  * }
  *
  * Retorna:
@@ -131,7 +132,8 @@ export default async function handler(req, res) {
     empresas,
     delayMinSeg = 15,
     delayMaxSeg = 30,
-    msgDelaySeg = 15,
+    msgDelay1Seg = 10,
+    msgDelay2Seg = 5,
   } = req.body || {};
 
   if (!chipId)
@@ -146,7 +148,8 @@ export default async function handler(req, res) {
     return res.status(404).json({ error: `Chip "${chipId}" não encontrado` });
 
   const results = [];
-  const msgDelayMs = msgDelaySeg * 1000;
+  const msgDelay1Ms = msgDelay1Seg * 1000;
+  const msgDelay2Ms = msgDelay2Seg * 1000;
 
   for (let i = 0; i < empresas.length; i++) {
     const emp = empresas[i];
@@ -160,12 +163,12 @@ export default async function handler(req, res) {
     try {
       // MSG 1 — Apresentação
       await evoSendText(chip, numero, emp.mensagem);
-      await sleep(msgDelayMs);
+      await sleep(msgDelay1Ms);
 
       // MSG 2 — Link do site
       const link = emp.linkSite || LINK_PADRAO;
       await evoSendText(chip, numero, link);
-      await sleep(msgDelayMs);
+      await sleep(msgDelay2Ms);
 
       // MSG 3 — Imagem (opcional)
       if (emp.imagemBase64) {

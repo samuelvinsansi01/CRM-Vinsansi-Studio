@@ -223,14 +223,20 @@ function saveTemplates(t) {
   scheduleLegacyOperationalSyncV36({ delay:400, reason:'default-template-update' });
 }
 
-function pickTemplate(nome, ramoId) {
-  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, 'com-site') : getTemplates();
+function normalizeLeadTemplateTipoV45(tipoOrLead) {
+  if (typeof tipoOrLead === 'object' && tipoOrLead) return tipoOrLead.tipo || (tipoOrLead.site ? 'com-site' : 'sem-site');
+  return tipoOrLead === 'com-site' ? 'com-site' : 'sem-site';
+}
+function pickTemplate(nome, ramoId, tipo = 'sem-site') {
+  const templateTipo = normalizeLeadTemplateTipoV45(tipo);
+  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, templateTipo) : getTemplates();
   if (!tpl || !tpl.length) return { text: '', idx: 0 };
   const idx = Math.floor(Math.random() * tpl.length);
   return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
 }
-function pickOtherTemplate(nome, cur, ramoId) {
-  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, 'com-site') : getTemplates();
+function pickOtherTemplate(nome, cur, ramoId, tipo = 'sem-site') {
+  const templateTipo = normalizeLeadTemplateTipoV45(tipo);
+  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, templateTipo) : getTemplates();
   if (!tpl || !tpl.length) return { text: '', idx: 0 };
   let idx; do { idx = Math.floor(Math.random() * tpl.length); } while (idx === cur && tpl.length > 1);
   return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };

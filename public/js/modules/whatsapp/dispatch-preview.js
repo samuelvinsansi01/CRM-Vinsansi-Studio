@@ -69,7 +69,7 @@ function renderDispatchV30Panel() {
             <span class="dispatch-v30-pill">${ready.length} pronto(s)</span>
           </div>
           <div class="dispatch-v30-sub">
-            180 mensagens por chip · 6 lotes de 30 · 120s entre envios · espera 1h
+            120 mensagens por chip · 4 lotes de 30 · 120s entre envios · espera 1h
           </div>
         </div>
         <div class="dispatch-v30-actions">
