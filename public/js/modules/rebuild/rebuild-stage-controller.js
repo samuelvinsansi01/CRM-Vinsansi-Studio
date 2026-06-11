@@ -3615,7 +3615,7 @@
         <div style="font-size:10px;font-weight:900;color:var(--muted);letter-spacing:.08em;margin-bottom:7px">LEAD TESTE</div>
         <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
           <input id="testLeadPhone-${esc(id)}" placeholder="Número para teste" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--border);border-radius:9px;color:var(--text);padding:8px;font-family:'DM Mono',monospace;font-size:9px" />
-          <button class="add-btn added" type="button" onclick="typeof sendTestLeadFromChipRebuild632==='function'?sendTestLeadFromChipRebuild632('${esc(id)}'):notify('Envio teste ainda não configurado', 'warn')" ${disabledAttr}${disabledTitle}>Testar</button>
+          <button class="add-btn added" type="button" onclick="typeof sendTestLeadFromChipRebuild632==='function'?sendTestLeadFromChipRebuild632('${esc(id)}'):notify('Envio teste ainda não configurado', 'warn')" ${disabledAttr}${disabledTitle}>Enviar teste direto</button>
         </div>
       </div>
     `;
@@ -3665,74 +3665,191 @@
     return rowChipCandidates(row).includes(target) || String(row.chipSlot || '') === target;
   }
 
-  window.sendTestLeadFromChipRebuild632 = function sendTestLeadFromChipRebuild632(chipKey) {
+
+  function getChipBaseUrlV701(chip = {}) {
+    return String(
+      chip.base_url ||
+      chip.evolution_url ||
+      chip.url ||
+      chip.api_base_url ||
+      chip.server_url ||
+      chip.raw_payload?.base_url ||
+      chip.raw_payload?.url ||
+      window.EVOLUTION_BASE_URL ||
+      window.EVOLUTION_URL ||
+      ''
+    ).trim().replace(/\/+$/, '');
+  }
+
+  function getChipApiKeyV701(chip = {}) {
+    return String(
+      chip.api_key ||
+      chip.apikey ||
+      chip.key ||
+      chip.token ||
+      chip.raw_payload?.api_key ||
+      chip.raw_payload?.apikey ||
+      window.EVOLUTION_API_KEY ||
+      window.EVOLUTION_APIKEY ||
+      ''
+    ).trim();
+  }
+
+  function getChipInstanceV701(chip = {}) {
+    return String(
+      chip.instance ||
+      chip.instance_name ||
+      chip.name ||
+      chip.label ||
+      ''
+    ).trim();
+  }
+
+  function normalizePhoneV701(value = '') {
+    let phone = String(value || '').replace(/\D/g, '');
+    if (!phone) return '';
+    if (!phone.startsWith('55') && (phone.length === 10 || phone.length === 11)) phone = '55' + phone;
+    return phone;
+  }
+
+  function pickTestLeadTemplateV701(nome = 'Lead teste') {
+    try {
+      const firstRamo = (typeof getRamos === 'function' ? getRamos() : []).find((ramo) => ramo?.id) || {};
+      if (typeof pickTemplate === 'function') {
+        const picked = pickTemplate(nome, firstRamo.id || 'marcenaria');
+        if (String(picked?.text || '').trim()) {
+          return {
+            message1: String(picked.text || '').replaceAll('{EMPRESA}', nome),
+            message2: String(picked.text2 || '').replaceAll('{EMPRESA}', nome),
+            templateIdx: picked.idx ?? 0,
+            ramoId: firstRamo.id || 'marcenaria'
+          };
+        }
+      }
+    } catch (_) {}
+
+    return {
+      message1: `Olá, tudo bem? Me chamo Samuel.\n\nEsta é uma mensagem de teste enviada pela plataforma para validar chip, número e Evolution.`,
+      message2: `Esta é a segunda mensagem de teste. Se você recebeu esta mensagem, o envio direto está funcionando.`,
+      templateIdx: 0,
+      ramoId: 'marcenaria'
+    };
+  }
+
+  function getTestLeadImageForChipV701(chip = {}) {
+    try {
+      if (typeof getLoteImagem === 'function') {
+        return getLoteImagem(chip.id || chip.chip_id || chip.instance || '', 1)
+          || getLoteImagem(chip.chip_id || '', 1)
+          || getLoteImagem(chip.instance || '', 1)
+          || '';
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  async function sendDirectTestLeadV701(chip, phone, nome = 'Lead teste') {
+    const instance = getChipInstanceV701(chip);
+    const baseUrl = getChipBaseUrlV701(chip);
+    const apiKey = getChipApiKeyV701(chip);
+    const template = pickTestLeadTemplateV701(nome);
+    const imageBase64 = getTestLeadImageForChipV701(chip);
+
+    if (!instance) throw new Error('Instância do chip ausente.');
+    if (!baseUrl) throw new Error('URL da Evolution ausente no chip.');
+    if (!apiKey) throw new Error('API Key da Evolution ausente no chip.');
+
+    const payload = {
+      baseUrl,
+      instance,
+      apiKey,
+      phone,
+      message1: template.message1,
+      message2: template.message2,
+      imageBase64
+    };
+
+    console.warn('[direct-test-send-v701][start]', {
+      chipId: chip.id || chip.chip_id || '',
+      instance,
+      baseUrl,
+      phone,
+      hasMessage1: !!payload.message1,
+      hasMessage2: !!payload.message2,
+      hasImage: !!imageBase64
+    });
+
+    const response = await fetch('/api/dispatch/test-send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || !data?.ok) {
+      console.warn('[direct-test-send-v701][error]', data);
+      throw new Error(data?.error || data?.message || `Falha no envio teste (${response.status}).`);
+    }
+
+    console.warn('[direct-test-send-v701][success]', data);
+    return data;
+  }
+
+  window.sendTestLeadFromChipRebuild632 = async function sendTestLeadFromChipRebuild632(chipKey) {
     const key = String(chipKey || '').trim();
     const chip = state.chips.find((item, index) => chipKeyCandidates(item).includes(key) || String(index) === key);
     if (!chip) {
       if (typeof notify === 'function') notify('Chip de teste não encontrado.', 'err');
       return;
     }
+
     const input = document.getElementById(`testLeadPhone-${key}`) || document.getElementById(`testLeadPhone-${chip.id || chip.instance || ''}`);
     const rawPhone = input?.value || '';
-    const phone = digits(rawPhone);
-    if (phone.length < 10) {
+    const phone = normalizePhoneV701(rawPhone);
+
+    if (!phone || phone.length < 12) {
       if (typeof notify === 'function') notify('Informe um número válido para o lead teste.', 'warn');
       return;
     }
-    const dispatchDate = selectedQueueDateForDispatch();
-    if (dispatchDate !== localDateISO()) {
-      if (typeof notify === 'function') notify('Lead teste só pode ser criado para o dia de hoje.', 'warn');
-      return;
+
+    try {
+      if (typeof notify === 'function') notify('Enviando Lead Teste direto pela Evolution...');
+      const result = await sendDirectTestLeadV701(chip, phone, 'Lead teste');
+      if (input) input.value = '';
+
+      // Salva apenas um registro local de auditoria visual, sem alimentar fila/disparo legado.
+      try {
+        const rows = readTestDispatchRows();
+        rows.push({
+          id: `direct-test-${Date.now()}`,
+          leadId: `direct-test-${Date.now()}`,
+          isTestLead: true,
+          directTestSent: true,
+          nome: 'Lead teste',
+          company_name: 'Lead teste',
+          phone,
+          whatsapp: phone,
+          normalized_phone: phone,
+          chipId: chip.id || chip.chip_id || chip.instance || key,
+          chip_id: chip.id || chip.chip_id || chip.instance || key,
+          chipName: chip.name || chip.nome || chip.label || chip.instance || '',
+          chipInstance: getChipInstanceV701(chip),
+          status: 'sent',
+          statusRaw: 'sent',
+          created_at: new Date().toISOString(),
+          sent_at: new Date().toISOString(),
+          response: result
+        });
+        saveTestDispatchRows(rows.slice(-20));
+      } catch (_) {}
+
+      if (typeof notify === 'function') notify('Lead Teste enviado direto pela Evolution.');
+      renderRightPanel();
+    } catch (error) {
+      console.error('[direct-test-send-v701]', error);
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao enviar Lead Teste.', 'err');
     }
-    const chipId = chip.id || chip.dbId || chip.instance || key;
-    const chipName = chip.name || chip.nome || chip.instance || `Chip ${key}`;
-    const chipInstance = chip.instance || chip.phone || chip.numero || '';
-    const now = Date.now();
-    const testRow = {
-      id: `teste-${chipId}-${now}`,
-      leadId: `teste-${chipId}-${now}`,
-      isTestLead: true,
-      nome: 'Lead teste',
-      company_name: 'Lead teste',
-      phone,
-      whatsapp: phone,
-      normalized_phone: phone,
-      site: '',
-      website: '',
-      templateType: 'sem-site',
-      siteSegment: 'sem-site',
-      statusRaw: 'queued_dispatch',
-      status: 'queued_dispatch',
-      numStatus: 'valido',
-      whatsappValidationStatus: 'valid',
-      whatsapp_status: 'valid',
-      isTemporaryDispatchLead: true,
-      temporaryLead: true,
-      testDispatchLead: true,
-      source: 'Teste temporario',
-      canal: 'zap',
-      scheduledFor: dispatchDate,
-      scheduled_for: dispatchDate,
-      chipId,
-      chip_id: chipId,
-      chipName,
-      chip_name: chipName,
-      chipInstance,
-      chip_instance: chipInstance,
-      batchId: `teste-${chipId}-${dispatchDate}`,
-      batch_id: `teste-${chipId}-${dispatchDate}`,
-      batchIndex: 1,
-      batch_index: 1,
-      batchPosition: 1,
-      batch_position: 1,
-      created_at: new Date().toISOString()
-    };
-    const rows = readTestDispatchRows().filter((row) => !(row.isTestLead && String(row.phone || row.whatsapp || '') === phone && testRowChipMatchesKey(row, chipId)));
-    rows.push(testRow);
-    saveTestDispatchRows(rows);
-    if (input) input.value = '';
-    if (typeof notify === 'function') notify('Lead teste adicionado ao lote de teste do chip. Selecione ramo e imagem antes de disparar.');
-    renderRightPanel();
   };
 
   function queueRowsForDispatchDate(iso) {
