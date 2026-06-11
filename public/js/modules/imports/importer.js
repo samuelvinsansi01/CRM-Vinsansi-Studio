@@ -112,7 +112,9 @@ function buildImportedLeadV430(analysis, route) {
   };
 }
 
-function importPreview() {
+let importPreviewSeqV430 = 0;
+
+async function importPreview() {
   const raw = document.getElementById('importJsonInput').value.trim();
   const listEl = document.getElementById('importPreviewList');
   const sumEl = document.getElementById('importSummary');
@@ -131,7 +133,13 @@ function importPreview() {
     return;
   }
 
-  const analyses = analyzeApifyRowsV430(arr, 'preview');
+  const seq = ++importPreviewSeqV430;
+  sumEl.innerHTML = '<span style="color:var(--muted)">// consultando já enviados no Supabase...</span>';
+
+  const analyses = typeof analyzeApifyRowsWithCloudV430 === 'function'
+    ? await analyzeApifyRowsWithCloudV430(arr, 'preview')
+    : analyzeApifyRowsV430(arr, 'preview');
+  if (seq !== importPreviewSeqV430) return;
   const stats = getImportStatsV430(analyses);
   const opportunities = analyses.filter(item => item.route === 'whatsapp-validation' || item.route === 'instagram-backlog');
 
@@ -262,7 +270,9 @@ async function importarLeads() {
 
   const novaValFila = [...getValData()];
   const novaInstaFila = [...getInstaFila()];
-  const analyses = analyzeApifyRowsV430(arr, 'import');
+  const analyses = typeof analyzeApifyRowsWithCloudV430 === 'function'
+    ? await analyzeApifyRowsWithCloudV430(arr, 'import')
+    : analyzeApifyRowsV430(arr, 'import');
   const stats = getImportStatsV430(analyses);
   let addedWhatsapp = 0;
   let addedComSite = 0;

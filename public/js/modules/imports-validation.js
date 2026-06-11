@@ -46,6 +46,8 @@ function extractSite(item) {
 function extractPhone(item) {
   return pickFirstTextV30(
     item.phone,
+    item.normalized_phone,
+    item.phone_normalized,
     item.whatsapp,
     item.phoneNumber,
     item.phone_number,
@@ -203,9 +205,80 @@ function findLeadIdentityDuplicateV430(index, item = {}) {
 }
 
 function getDatabaseLeadCacheV430() {
-  // Fonte de bloqueio da importação: somente sent_contacts e duplicados do JSON atual.
-  // Nunca usar localStorage/operational_data como base de 'já visto'.
+  // Não usar localStorage/operational_data como base de 'já visto'.
+  // Preview/importação devem consultar Supabase em tempo real via getDatabaseLeadCacheAsyncV430().
   return [];
+}
+
+function normalizeImportPhoneV430(value = '') {
+  if (typeof normalizeSentContactPhoneV30 === 'function') return normalizeSentContactPhoneV30(value);
+  return normalizePhone(value);
+}
+
+function getImportUserIdV430() {
+  try { return currentUser?.id ? String(currentUser.id) : ''; } catch (_) { return ''; }
+}
+
+async function getDatabaseLeadCacheAsyncV430(rows = []) {
+  const userId = getImportUserIdV430();
+  if (!userId || typeof sbClient === 'undefined' || !sbClient) return [];
+
+  const phones = Array.from(new Set((Array.isArray(rows) ? rows : [])
+    .map(row => normalizeImportPhoneV430(extractPhone(row)))
+    .filter(Boolean)));
+
+  if (!phones.length) return [];
+
+  const cache = [];
+
+  // 1) Proteção principal: telefones já enviados.
+  try {
+    const { data, error } = await sbClient
+      .from('sent_contacts')
+      .select('company_name,phone,normalized_phone')
+      .eq('user_id', userId)
+      .eq('active', true)
+      .in('normalized_phone', phones);
+    if (!error && Array.isArray(data)) {
+      data.forEach(row => cache.push({
+        nome: row.company_name || '',
+        phone: row.normalized_phone || row.phone || '',
+        normalized_phone: row.normalized_phone || row.phone || '',
+        _already_seen_source: 'sent_contacts'
+      }));
+    } else if (error) {
+      qualificationLogV430('qualification-sent-contacts-preview-warning', { error:error.message || String(error) });
+    }
+  } catch (error) {
+    qualificationLogV430('qualification-sent-contacts-preview-error', { error:error?.message || String(error) });
+  }
+
+  // 2) Leads já existentes no banco, mas ainda não enviados.
+  // Isso evita reimportar telefone que já está no sistema. Se a coluna ainda não existir, não quebra o preview.
+  try {
+    const { data, error } = await sbClient
+      .from('leads')
+      .select('company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url')
+      .eq('user_id', userId)
+      .in('normalized_phone', phones);
+    if (!error && Array.isArray(data)) {
+      data.forEach(row => cache.push({
+        nome: row.company_name || '',
+        phone: row.normalized_phone || row.phone || '',
+        normalized_phone: row.normalized_phone || row.phone || '',
+        site: row.website || '',
+        maps_url: row.maps_url || '',
+        instagram: row.instagram || row.instagram_url || '',
+        _already_seen_source: 'leads'
+      }));
+    } else if (error) {
+      qualificationLogV430('qualification-leads-preview-warning', { error:error.message || String(error) });
+    }
+  } catch (error) {
+    qualificationLogV430('qualification-leads-preview-error', { error:error?.message || String(error) });
+  }
+
+  return cache;
 }
 
 function logApifyAnalysisV430(analysis, phase = 'preview') {
@@ -289,6 +362,17 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
 
 function analyzeApifyRowsV430(rows = [], phase = 'preview') {
   const databaseIndex = createLeadIdentityIndexV430(getDatabaseLeadCacheV430());
+  const payloadIndex = createLeadIdentityIndexV430();
+  return (Array.isArray(rows) ? rows : []).map(item => {
+    const analysis = analyzeApifyLeadV430(item, databaseIndex, payloadIndex, phase);
+    addLeadIdentityToIndexV430(payloadIndex, item);
+    return analysis;
+  });
+}
+
+async function analyzeApifyRowsWithCloudV430(rows = [], phase = 'preview') {
+  const databaseCache = await getDatabaseLeadCacheAsyncV430(rows);
+  const databaseIndex = createLeadIdentityIndexV430(databaseCache);
   const payloadIndex = createLeadIdentityIndexV430();
   return (Array.isArray(rows) ? rows : []).map(item => {
     const analysis = analyzeApifyLeadV430(item, databaseIndex, payloadIndex, phase);
