@@ -731,8 +731,41 @@ async function iniciarDisparoChip(slot) {
 
   // Congela o lote — snapshot dos itens aguardando
   const LOTE_SIZE = getLoteSize();
-  const filaCompleta = getFilaChipNoDia(chip.id, todayStr());
-  const pendentes = filaCompleta.filter(f => f.status === 'aguardando');
+  let filaCompleta = getFilaChipNoDia(chip.id, todayStr());
+
+  if (!filaCompleta.length && Array.isArray(fila) && fila.length) {
+    filaCompleta = fila;
+  }
+
+  let pendentes = filaCompleta.filter(f => f.status === 'aguardando');
+
+  // 6.98: Lead Teste/temporário pode chegar do fallback direto com status do rebuild.
+  // Para teste, qualquer item não enviado/concluído deve virar aguardando.
+  if (!pendentes.length) {
+    const directTempPendentes = (Array.isArray(filaCompleta) ? filaCompleta : [])
+      .filter((item) => item?.isTestLead || item?.testDispatchLead || item?.isTemporaryDispatchLead || item?.temporaryLead)
+      .filter((item) => !['enviado','sent','completed','batch_completed'].includes(String(item.status || item.statusRaw || '').toLowerCase()))
+      .map((item) => ({
+        ...item,
+        status: 'aguardando',
+        numStatus: item.numStatus || 'valido',
+        whatsappValidationStatus: item.whatsappValidationStatus || 'valid',
+        whatsapp_status: item.whatsapp_status || 'valid'
+      }));
+
+    if (directTempPendentes.length) {
+      pendentes = directTempPendentes;
+      try {
+        console.warn('[dispatch-pendentes-temp-v698]', {
+          slot,
+          chipId: chip.id,
+          rows: pendentes.length,
+          ids: pendentes.map((item) => item.id).slice(0, 10)
+        });
+      } catch (_) {}
+    }
+  }
+
   if (!pendentes.length) { notify('// nenhum item aguardando — todos já enviados','warn'); return; }
   const preflight = await validateDispatchPreflightV432(slot, pendentes);
   if (!preflight.ok) return;
