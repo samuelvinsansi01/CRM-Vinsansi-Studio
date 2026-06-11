@@ -676,171 +676,127 @@ async function iniciarDisparoChip(slot) {
     renderFilaZap();
     return;
   }
+
   const st = chipSlotState[slot];
   if (st.disparoEmAndamento || st.aguardandoLote || st.preflightEmAndamento) {
     try { console.warn('[whatsapp-send-blocked]', { reason:'chip-lot-already-starting', slot }); } catch(e) {}
     return;
   }
+
   st.preflightEmAndamento = true;
-  try { console.log('[whatsapp-send]', { action:'chip-lot-lock-start', slot }); } catch(e) {}
+  try { console.log('[whatsapp-send]', { action:'chip-lot-lock-start', slot, engine:'stable-7.02' }); } catch(e) {}
+
   try {
-  const chip = getChipBySlot(slot);
-  if (!chip) { notify('// chip ' + (slot+1) + ' não configurado','err'); return; }
-  if (blockChipDispatchReloadLockV432(slot, chip)) return;
-  let fila = getFilaChipNoDia(chip.id, todayStr()).filter(f => f.status !== 'enviado');
-  if (!fila.length && typeof window.bridgeTestRowsToLegacyQueueV692 === 'function') {
-    try {
-      window.bridgeTestRowsToLegacyQueueV692(slot, chip);
-      fila = getFilaChipNoDia(chip.id, todayStr()).filter(f => f.status !== 'enviado');
-    } catch (error) {
-      console.warn('[test-dispatch-bridge-v692] fallback falhou:', error);
-    }
-  }
-  if (!fila.length) {
-    const directTempFila = getDirectTemporaryFilaForChipV697(chip);
-    if (directTempFila.length) {
-      fila = directTempFila;
+    const chip = getChipBySlot(slot);
+    if (!chip) { notify('// chip ' + (slot+1) + ' não configurado','err'); return; }
+    if (blockChipDispatchReloadLockV432(slot, chip)) return;
+
+    // 7.02 — volta ao modelo estável da V41.10:
+    // o disparo lê a fila real do chip, e não a agenda visual por data.
+    const filaCompleta = (typeof getFilaChip === 'function' ? getFilaChip(chip.id) : [])
+      .filter(Boolean);
+
+    const fila = filaCompleta.filter(f => String(f.status || '').toLowerCase() !== 'enviado');
+    if (!fila.length) {
       try {
-        console.warn('[dispatch-direct-temp-v697]', {
+        console.warn('[dispatch-stable-v702-empty]', {
           slot,
           chipId: chip.id,
-          chipInstance: chip.instance,
-          rows: fila.length,
-          ids: fila.map((item) => item.id).slice(0, 10)
+          instance: chip.instance,
+          filaKeys: Object.keys(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}),
+          chipFilaTotal: filaCompleta.length
         });
-      } catch (_) {}
+      } catch(e) {}
+      notify('// fila vazia','warn');
+      return;
     }
-  }
 
-  if (!fila.length) {
+    const LOTE_SIZE = getLoteSize();
+    let pendentes = filaCompleta.filter(f => String(f.status || '').toLowerCase() === 'aguardando');
+
+    // Segurança para registros que vieram do rebuild com queued_dispatch.
+    if (!pendentes.length) {
+      pendentes = filaCompleta
+        .filter(f => !['enviado','sent','completed','batch_completed'].includes(String(f.status || f.statusRaw || '').toLowerCase()))
+        .map(f => ({ ...f, status:'aguardando' }));
+    }
+
+    if (!pendentes.length) {
+      notify('// nenhum item aguardando — todos já enviados','warn');
+      return;
+    }
+
     try {
-      console.warn('[dispatch-empty-v697]', {
+      console.warn('[dispatch-stable-v702-pendentes]', {
         slot,
         chipId: chip.id,
-        chipInstance: chip.instance,
-        day: todayStr(),
-        todayISO: typeof localDateISO === 'function' ? localDateISO() : '',
-        filaKeys: Object.keys(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}),
-        chipFilaTotal: (typeof getFilaChip === 'function' ? getFilaChip(chip.id) : []).length,
-        directTempTotal: getDirectTemporaryFilaForChipV697(chip).length,
-        dayIds: ((typeof ensureWeekData === 'function' ? ensureWeekData() : {}).days?.[todayStr()] || []).map(x => x.id).slice(0, 10)
+        total: pendentes.length,
+        items: pendentes.map(item => ({
+          id:item.id,
+          nome:item.nome,
+          status:item.status,
+          phone:item.whatsapp || item.phone || item.normalized_phone || item.telefone || '',
+          hasMsg1:!!String(item.mensagem || item.template_part1 || '').trim(),
+          hasMsg2:!!String(item.mensagem2 || item.template_part2 || '').trim()
+        }))
       });
-    } catch (_) {}
-    notify('// fila vazia','warn'); return;
-  }
+    } catch(e) {}
 
-  // Congela o lote — snapshot dos itens aguardando
-  const LOTE_SIZE = getLoteSize();
-  let filaCompleta = getFilaChipNoDia(chip.id, todayStr());
-
-  if (!filaCompleta.length && Array.isArray(fila) && fila.length) {
-    filaCompleta = fila;
-  }
-
-  let pendentes = filaCompleta.filter(f => f.status === 'aguardando');
-
-  // 6.98: Lead Teste/temporário pode chegar do fallback direto com status do rebuild.
-  // Para teste, qualquer item não enviado/concluído deve virar aguardando.
-  if (!pendentes.length) {
-    const directTempPendentes = (Array.isArray(filaCompleta) ? filaCompleta : [])
-      .filter((item) => item?.isTestLead || item?.testDispatchLead || item?.isTemporaryDispatchLead || item?.temporaryLead)
-      .filter((item) => !['enviado','sent','completed','batch_completed'].includes(String(item.status || item.statusRaw || '').toLowerCase()))
-      .map((item) => ({
-        ...item,
-        status: 'aguardando',
-        numStatus: item.numStatus || 'valido',
-        whatsappValidationStatus: item.whatsappValidationStatus || 'valid',
-        whatsapp_status: item.whatsapp_status || 'valid'
-      }));
-
-    if (directTempPendentes.length) {
-      pendentes = directTempPendentes;
-      try {
-        console.warn('[dispatch-pendentes-temp-v698]', {
-          slot,
-          chipId: chip.id,
-          rows: pendentes.length,
-          ids: pendentes.map((item) => item.id).slice(0, 10)
-        });
-      } catch (_) {}
+    const preflight = await validateDispatchPreflightV432(slot, pendentes);
+    if (!preflight.ok) {
+      try { console.warn('[dispatch-stable-v702-preflight-fail]', { slot, chipId:chip.id, preflight }); } catch(e) {}
+      return;
     }
-  }
 
-  if (!pendentes.length) { notify('// nenhum item aguardando — todos já enviados','warn'); return; }
-
-  try {
-    console.warn('[dispatch-pendentes-v700]', {
-      slot,
-      chipId: chip.id,
-      total: pendentes.length,
-      items: pendentes.map((item) => ({
-        id: item.id,
-        nome: item.nome,
-        status: item.status,
-        phone: item.whatsapp || item.phone || item.normalized_phone || item.telefone || '',
-        hasMsg1: !!String(item.mensagem || item.template_part1 || '').trim(),
-        hasMsg2: !!String(item.mensagem2 || item.template_part2 || '').trim(),
-        isTestLead: !!(item.isTestLead || item.testDispatchLead || item.isTemporaryDispatchLead || item.temporaryLead)
-      }))
+    pendentes.forEach((item, index) => {
+      item.status = item.status || 'aguardando';
+      item.mediaLoteNum = Math.floor(index / LOTE_SIZE) + 1;
     });
-  } catch (_) {}
 
-  const preflight = await validateDispatchPreflightV432(slot, pendentes);
-  if (!preflight.ok) {
-    try { console.warn('[dispatch-preflight-fail-v700]', { slot, chipId: chip.id, preflight }); } catch (_) {}
-    return;
-  }
-  pendentes.forEach((item, index) => {
-    item.mediaLoteNum = Math.floor(index / LOTE_SIZE) + 1;
-  });
-  saveFilaDisparo({ delay:0, reason:'dispatch-chip-preflight-ready' });
+    saveFilaDisparo({ delay:0, reason:'dispatch-stable-v702-preflight-ready' });
 
-  // ── Validação: todos os lotes com pendentes devem ter imagem ──
-  // Itera apenas sobre itens aguardando, que é como os lotes são
-  // numerados visualmente e como as imagens são salvas pelo usuário
-  const lotesComPendentes = [];
-  for (let i = 0; i < pendentes.length; i += LOTE_SIZE) {
-    const loteNum = Math.floor(i / LOTE_SIZE) + 1;
-    lotesComPendentes.push(loteNum);
-  }
-
-  // Garante que o cache está populado para cada lote antes de validar
-  await Promise.all(lotesComPendentes.map(async loteNum => {
-    const k = getLoteImgKey(chip.id, loteNum);
-    if (_imgCache[k] === undefined) {
-      try { _imgCache[k] = (await idbGet(k)) || null; } catch { _imgCache[k] = null; }
+    const lotesComPendentes = [];
+    for (let i = 0; i < pendentes.length; i += LOTE_SIZE) {
+      const loteNum = Math.floor(i / LOTE_SIZE) + 1;
+      lotesComPendentes.push(loteNum);
     }
-  }));
 
-  const lotesSemImagem = lotesComPendentes.filter(n => !getLoteImagem(chip.id, n));
-  if (lotesSemImagem.length) {
-    try {
-      console.warn('[dispatch-missing-image-v700]', {
-        slot,
-        chipId: chip.id,
-        chipInstance: chip.instance,
-        lotesSemImagem,
-        lotesComPendentes,
-        imgKeys: lotesComPendentes.map(n => typeof getLoteImgKey === 'function' ? getLoteImgKey(chip.id, n) : `${chip.id}:${n}`)
-      });
-    } catch (_) {}
-    notify(`// Lote${lotesSemImagem.length>1?'s':''} ${lotesSemImagem.join(', ')} sem imagem — insira a imagem antes de disparar`, 'err');
-    return;
-  }
+    await Promise.all(lotesComPendentes.map(async loteNum => {
+      const k = getLoteImgKey(chip.id, loteNum);
+      if (_imgCache[k] === undefined) {
+        try { _imgCache[k] = (await idbGet(k)) || null; } catch { _imgCache[k] = null; }
+      }
+    }));
 
-  st.filaLotes = [];
-  st.loteAtual = 0;
-  st.loteHistorico = st.loteHistorico || [];
-  for (let i = 0; i < pendentes.length; i += LOTE_SIZE) {
-    st.filaLotes.push(pendentes.slice(i, i + LOTE_SIZE));
-  }
-  st.lotesTotal = st.filaLotes.length;
-  const logEl = document.getElementById(`disparoLog${slot}`);
-  if (logEl) { logEl.innerHTML = ''; logEl.style.display = 'block'; }
-  await dispararLoteChip(slot);
+    const lotesSemImagem = lotesComPendentes.filter(n => !getLoteImagem(chip.id, n));
+    if (lotesSemImagem.length) {
+      try {
+        console.warn('[dispatch-stable-v702-missing-image]', {
+          slot,
+          chipId: chip.id,
+          lotesSemImagem,
+          imgKeys: lotesComPendentes.map(n => typeof getLoteImgKey === 'function' ? getLoteImgKey(chip.id, n) : `${chip.id}:${n}`)
+        });
+      } catch(e) {}
+      notify(`// Lote${lotesSemImagem.length>1?'s':''} ${lotesSemImagem.join(', ')} sem imagem — insira a imagem antes de disparar`, 'err');
+      return;
+    }
+
+    st.filaLotes = [];
+    st.loteAtual = 0;
+    st.loteHistorico = st.loteHistorico || [];
+    for (let i = 0; i < pendentes.length; i += LOTE_SIZE) {
+      st.filaLotes.push(pendentes.slice(i, i + LOTE_SIZE));
+    }
+
+    st.lotesTotal = st.filaLotes.length;
+    const logEl = document.getElementById(`disparoLog${slot}`);
+    if (logEl) { logEl.innerHTML = ''; logEl.style.display = 'block'; }
+
+    await dispararLoteChip(slot);
   } finally {
     st.preflightEmAndamento = false;
-    try { console.log('[whatsapp-send]', { action:'chip-lot-lock-release', slot }); } catch(e) {}
+    try { console.log('[whatsapp-send]', { action:'chip-lot-lock-release', slot, engine:'stable-7.02' }); } catch(e) {}
   }
 }
 
