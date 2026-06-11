@@ -788,6 +788,27 @@
     renderPagination(total);
   }
 
+
+  async function renderValidationStageFromSupabase() {
+    try {
+      const rows = await fetchValidationLeads();
+      state.rows = Array.isArray(rows) ? rows.map(normalizeLeadForRuntime) : [];
+      state.selected.clear();
+      state.page = 1;
+      renderActiveValidationTab();
+      if (typeof updateBadges === 'function') updateBadges();
+      return state.rows;
+    } catch (error) {
+      console.error('[validation-v690] erro ao carregar Validação:', error);
+      const list = document.getElementById('valComSiteList');
+      if (list) {
+        list.innerHTML = `<div class="table-empty">${esc(error?.message || 'Falha ao carregar Validação.')}</div>`;
+      }
+      if (typeof notify === 'function') notify(error?.message || 'Falha ao carregar Validação.', 'err');
+      return [];
+    }
+  }
+
   function openValidationLeadDrawerRebuild(leadId) {
     patchFindLeadEverywhere();
 
