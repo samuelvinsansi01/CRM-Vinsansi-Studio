@@ -85,6 +85,13 @@ function devolverZapNaoValidadoParaValidacao() {
 
   Object.keys(filaDisparo || {}).forEach(chipId => {
     filaDisparo[chipId] = (filaDisparo[chipId] || []).filter(item => {
+      if (item?.isTestLead || item?.testDispatchLead || item?.isTemporaryDispatchLead || item?.temporaryLead) {
+        if (!item.numStatus) item.numStatus = 'valido';
+        if (!item.whatsappValidationStatus) item.whatsappValidationStatus = 'valid';
+        if (!item.whatsapp_status) item.whatsapp_status = 'valid';
+        filaEnriquecida = true;
+        return true;
+      }
       const weekLead = weekLeadById.get(item.id) || {};
       const validationCandidate = {
         ...weekLead,

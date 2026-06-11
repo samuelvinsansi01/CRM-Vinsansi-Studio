@@ -644,7 +644,20 @@ async function iniciarDisparoChip(slot) {
       console.warn('[test-dispatch-bridge-v692] fallback falhou:', error);
     }
   }
-  if (!fila.length) { notify('// fila vazia','warn'); return; }
+  if (!fila.length) {
+    try {
+      console.warn('[dispatch-empty-v695]', {
+        slot,
+        chipId: chip.id,
+        chipInstance: chip.instance,
+        day: todayStr(),
+        filaKeys: Object.keys(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}),
+        chipFilaTotal: (typeof getFilaChip === 'function' ? getFilaChip(chip.id) : []).length,
+        dayIds: ((typeof ensureWeekData === 'function' ? ensureWeekData() : {}).days?.[todayStr()] || []).map(x => x.id).slice(0, 10)
+      });
+    } catch (_) {}
+    notify('// fila vazia','warn'); return;
+  }
 
   // Congela o lote — snapshot dos itens aguardando
   const LOTE_SIZE = getLoteSize();
