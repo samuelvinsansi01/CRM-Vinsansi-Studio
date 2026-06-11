@@ -943,3 +943,23 @@ if (typeof window.toggleSidebar !== 'function') {
     }
   };
 }
+
+
+/* 7.00 fallback seguro para sidebar */
+if (typeof window.toggleSidebar !== 'function') {
+  window.toggleSidebar = function toggleSidebarFallbackV700() {
+    try {
+      const body = document.body;
+      const sidebar =
+        document.querySelector('.sidebar') ||
+        document.querySelector('#sidebar') ||
+        document.querySelector('.app-sidebar') ||
+        document.querySelector('aside');
+      body?.classList.toggle('sidebar-open');
+      sidebar?.classList.toggle('open');
+      sidebar?.classList.toggle('is-open');
+    } catch (error) {
+      console.warn('[sidebar-v700]', error);
+    }
+  };
+}

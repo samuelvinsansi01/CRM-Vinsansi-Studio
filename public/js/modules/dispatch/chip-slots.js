@@ -767,8 +767,29 @@ async function iniciarDisparoChip(slot) {
   }
 
   if (!pendentes.length) { notify('// nenhum item aguardando — todos já enviados','warn'); return; }
+
+  try {
+    console.warn('[dispatch-pendentes-v700]', {
+      slot,
+      chipId: chip.id,
+      total: pendentes.length,
+      items: pendentes.map((item) => ({
+        id: item.id,
+        nome: item.nome,
+        status: item.status,
+        phone: item.whatsapp || item.phone || item.normalized_phone || item.telefone || '',
+        hasMsg1: !!String(item.mensagem || item.template_part1 || '').trim(),
+        hasMsg2: !!String(item.mensagem2 || item.template_part2 || '').trim(),
+        isTestLead: !!(item.isTestLead || item.testDispatchLead || item.isTemporaryDispatchLead || item.temporaryLead)
+      }))
+    });
+  } catch (_) {}
+
   const preflight = await validateDispatchPreflightV432(slot, pendentes);
-  if (!preflight.ok) return;
+  if (!preflight.ok) {
+    try { console.warn('[dispatch-preflight-fail-v700]', { slot, chipId: chip.id, preflight }); } catch (_) {}
+    return;
+  }
   pendentes.forEach((item, index) => {
     item.mediaLoteNum = Math.floor(index / LOTE_SIZE) + 1;
   });
@@ -793,6 +814,16 @@ async function iniciarDisparoChip(slot) {
 
   const lotesSemImagem = lotesComPendentes.filter(n => !getLoteImagem(chip.id, n));
   if (lotesSemImagem.length) {
+    try {
+      console.warn('[dispatch-missing-image-v700]', {
+        slot,
+        chipId: chip.id,
+        chipInstance: chip.instance,
+        lotesSemImagem,
+        lotesComPendentes,
+        imgKeys: lotesComPendentes.map(n => typeof getLoteImgKey === 'function' ? getLoteImgKey(chip.id, n) : `${chip.id}:${n}`)
+      });
+    } catch (_) {}
     notify(`// Lote${lotesSemImagem.length>1?'s':''} ${lotesSemImagem.join(', ')} sem imagem — insira a imagem antes de disparar`, 'err');
     return;
   }
