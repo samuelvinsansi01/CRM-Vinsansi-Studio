@@ -169,7 +169,10 @@ function getApifyQualificationV430(item = {}) {
 }
 
 function createLeadIdentityIndexV430(leads = []) {
-  const index = { phones:new Set(), sites:new Set(), maps:new Set(), instagrams:new Set() };
+  // A importação operacional usa telefone como chave forte.
+  // Maps entra apenas como chave secundária para evitar o mesmo place_id duplicado.
+  // Site/Instagram NÃO bloqueiam mais, pois geravam falsos positivos no preview.
+  const index = { phones:new Map(), maps:new Map() };
   (Array.isArray(leads) ? leads : []).forEach(lead => addLeadIdentityToIndexV430(index, lead));
   return index;
 }
@@ -180,27 +183,20 @@ function normalizeIdentityUrlV430(value = '') {
 
 function addLeadIdentityToIndexV430(index, lead = {}) {
   if (!index) return index;
-  const phone = normalizePhone(extractPhone(lead));
-  const site = normalizeWebsiteHostnameV430(extractSite(lead));
+  const phone = normalizeImportPhoneV430(extractPhone(lead));
   const maps = normalizeIdentityUrlV430(extractGoogleUrl(lead));
-  const instagram = normalizeIdentityUrlV430(extractInstagram(lead));
-  if (phone) index.phones.add(phone);
-  if (site) index.sites.add(site);
-  if (maps) index.maps.add(maps);
-  if (instagram) index.instagrams.add(instagram);
+  const source = lead._already_seen_source || lead._duplicate_source || 'payload';
+  if (phone && index.phones && !index.phones.has(phone)) index.phones.set(phone, { field:'phone', value:phone, source });
+  if (maps && index.maps && !index.maps.has(maps)) index.maps.set(maps, { field:'maps', value:maps, source });
   return index;
 }
 
 function findLeadIdentityDuplicateV430(index, item = {}) {
   if (!index) return null;
-  const phone = normalizePhone(extractPhone(item));
-  const site = normalizeWebsiteHostnameV430(extractSite(item));
+  const phone = normalizeImportPhoneV430(extractPhone(item));
   const maps = normalizeIdentityUrlV430(extractGoogleUrl(item));
-  const instagram = normalizeIdentityUrlV430(extractInstagram(item));
-  if (phone && index.phones.has(phone)) return { field:'phone', value:phone };
-  if (site && index.sites.has(site)) return { field:'website', value:site };
-  if (maps && index.maps.has(maps)) return { field:'maps', value:maps };
-  if (instagram && index.instagrams.has(instagram)) return { field:'instagram', value:instagram };
+  if (phone && index.phones?.has(phone)) return index.phones.get(phone);
+  if (maps && index.maps?.has(maps)) return index.maps.get(maps);
   return null;
 }
 
@@ -319,6 +315,7 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     hasPhone: hasValidPhone(item),
     ramoMatch: isRamoMatch(item),
     alreadyImported: !!databaseDuplicate,
+    alreadySeenSource: databaseDuplicate?.source || '',
     payloadDuplicate: !databaseDuplicate && !!payloadDuplicateMatch,
     duplicate: databaseDuplicate || payloadDuplicateMatch || null,
     route: '',
@@ -330,7 +327,9 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     analysis.reason = 'sem nome';
   } else if (analysis.alreadyImported) {
     analysis.route = 'skip';
-    analysis.reason = 'lead ja existente no banco do usuario';
+    analysis.reason = analysis.alreadySeenSource === 'sent_contacts'
+      ? 'ja enviado em sent_contacts'
+      : 'lead ja existente no banco do usuario';
   } else if (analysis.payloadDuplicate) {
     analysis.route = 'skip';
     analysis.reason = 'duplicado no JSON atual';
@@ -389,7 +388,16 @@ let activeRamoId = null;
 function getRamoKeywords() {
   if (!activeRamoId) return null;
   const ramo = getRamos().find(r => r.id === activeRamoId);
-  return ramo ? ramo.keywords : null;
+  if (!ramo) return null;
+  const extrasMarcenaria = [
+    'marcenaria','marceneiro','moveleiro','movelaria','móveis planejados','moveis planejados',
+    'móveis sob medida','moveis sob medida','fornecedor de móveis planejados','fornecedor de moveis planejados',
+    'loja de marcenaria','loja de móveis planejados','loja de moveis planejados','fabricante de móveis',
+    'fabricante de moveis','ambientes planejados','cozinha planejada','cozinhas planejadas',
+    'armários planejados','armarios planejados','planejados','sob medida'
+  ];
+  const base = Array.isArray(ramo.keywords) ? ramo.keywords : [];
+  return Array.from(new Set([...base, ...extrasMarcenaria]));
 }
 
 function isRamoMatch(item) {

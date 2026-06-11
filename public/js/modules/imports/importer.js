@@ -63,15 +63,21 @@ function getImportStatsV430(analyses = []) {
     outsideBranch: 0,
     belowQualification: 0,
     noPhone: 0,
-    alreadySeen: 0,
+    alreadySent: 0,
+    alreadyInDb: 0,
+    payloadDuplicate: 0,
     wixSites: 0,
     outros: 0
   };
 
   refused.forEach(item => {
     const reason = String(item.reason || '').toLowerCase();
-    if (item.alreadyImported || item.payloadDuplicate || reason.includes('duplicado') || reason.includes('existente') || reason.includes('já enviado') || reason.includes('ja enviado')) {
-      refusedBuckets.alreadySeen++;
+    if (item.alreadyImported && item.alreadySeenSource === 'sent_contacts') {
+      refusedBuckets.alreadySent++;
+    } else if (item.alreadyImported) {
+      refusedBuckets.alreadyInDb++;
+    } else if (item.payloadDuplicate || reason.includes('duplicado no json')) {
+      refusedBuckets.payloadDuplicate++;
     } else if (!item.hasPhone || reason.includes('sem telefone')) {
       refusedBuckets.noPhone++;
     } else if (!item.ramoMatch || reason.includes('fora do ramo')) {
@@ -95,7 +101,10 @@ function getImportStatsV430(analyses = []) {
     semSite: approvedSemSite.length,
     instagramBacklog: approvedInstagram.length,
     wixSites: refusedBuckets.wixSites,
-    alreadySeen: refusedBuckets.alreadySeen,
+    alreadySeen: refusedBuckets.alreadySent + refusedBuckets.alreadyInDb,
+    alreadySent: refusedBuckets.alreadySent,
+    alreadyInDb: refusedBuckets.alreadyInDb,
+    payloadDuplicate: refusedBuckets.payloadDuplicate,
     outsideBranch: refusedBuckets.outsideBranch,
     belowQualification: refusedBuckets.belowQualification,
     noPhone: refusedBuckets.noPhone,
@@ -187,7 +196,9 @@ async function importPreview() {
         <div class="summary-card-line-v30"><span>Fora do ramo</span><strong>${stats.outsideBranch}</strong></div>
         <div class="summary-card-line-v30"><span>Abaixo da qualificação</span><strong>${stats.belowQualification}</strong></div>
         <div class="summary-card-line-v30"><span>Sem telefone</span><strong>${stats.noPhone}</strong></div>
-        <div class="summary-card-line-v30"><span>Já vistos</span><strong>${stats.alreadySeen}</strong></div>
+        <div class="summary-card-line-v30"><span>Já enviados</span><strong>${stats.alreadySent}</strong></div>
+        <div class="summary-card-line-v30"><span>Já no banco</span><strong>${stats.alreadyInDb}</strong></div>
+        <div class="summary-card-line-v30"><span>Duplicados no JSON</span><strong>${stats.payloadDuplicate}</strong></div>
         <div class="summary-card-line-v30"><span>Sites Wix</span><strong>${stats.wixSites}</strong></div>
         <div class="summary-card-line-v30"><span>Outros</span><strong>${stats.outros}</strong></div>
       </div>
@@ -298,8 +309,10 @@ async function importarLeads() {
   const arr = parseApifyJson(raw);
   if (!arr || !arr.length) { notify('// JSON inválido ou vazio', 'err'); return; }
 
-  const novaValFila = [...getValData()];
-  const novaInstaFila = [...getInstaFila()];
+  // A importação não usa mais filas antigas do localStorage como base de decisão.
+  // Supabase + sent_contacts são a fonte de verdade; localStorage é apenas cache de tela após persistir.
+  const novaValFila = [];
+  const novaInstaFila = [];
   const analyses = typeof analyzeApifyRowsWithCloudV430 === 'function'
     ? await analyzeApifyRowsWithCloudV430(arr, 'import')
     : analyzeApifyRowsV430(arr, 'import');
@@ -313,13 +326,13 @@ async function importarLeads() {
   const importedLeadsForSupabase = [];
 
   const importSeenKeys = new Set();
-  const existingValidationKeys = new Set((typeof dedupeLeadArrayV434 === 'function' ? novaValFila : novaValFila).map(lead => typeof getLeadIdentityKeyV434 === 'function' ? getLeadIdentityKeyV434(lead) : lead.id).filter(Boolean));
-  const existingInstagramKeys = new Set((typeof dedupeLeadArrayV434 === 'function' ? novaInstaFila : novaInstaFila).map(lead => typeof getLeadIdentityKeyV434 === 'function' ? getLeadIdentityKeyV434(lead) : lead.id).filter(Boolean));
+  const existingValidationKeys = new Set();
+  const existingInstagramKeys = new Set();
 
   for (const analysis of analyses) {
     if (analysis.route === 'whatsapp-validation') {
       const lead = buildImportedLeadV430(analysis, analysis.route);
-      const key = typeof getLeadIdentityKeyV434 === 'function' ? getLeadIdentityKeyV434(lead) : lead.id;
+      const key = lead.normalized_phone || (lead.googleUrl ? `maps:${lead.googleUrl}` : lead.id);
 
       // Trava de importação: se o telefone já foi enviado, não entra novamente no sistema.
       if (typeof isPhoneAlreadySentV30 === 'function') {
@@ -354,7 +367,7 @@ async function importarLeads() {
     }
     if (analysis.route === 'instagram-backlog') {
       const lead = buildImportedLeadV430(analysis, analysis.route);
-      const key = typeof getLeadIdentityKeyV434 === 'function' ? getLeadIdentityKeyV434(lead) : lead.id;
+      const key = lead.normalized_phone || (lead.googleUrl ? `maps:${lead.googleUrl}` : lead.id);
       if ((key && importSeenKeys.has(key)) || (key && existingInstagramKeys.has(key))) {
         skipped++;
         qualificationLogV430('qualification-duplicate', { phase:'import', name:lead.nome, key, reason:'duplicado na importação atual ou backlog instagram' });
@@ -369,42 +382,61 @@ async function importarLeads() {
     skipped++;
   }
 
-  const cleanValFila = typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(novaValFila, { label:'import-validation-final' }) : novaValFila;
-  const cleanInstaFila = typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(novaInstaFila, { label:'import-instagram-final' }) : novaInstaFila;
-
-  if (addedWhatsapp) saveValData(cleanValFila);
-  if (addedInstagram) saveInstaFila(cleanInstaFila);
-  if (addedWhatsapp || addedInstagram) {
-    if (typeof markOperationalDataDirtyV430 === 'function') markOperationalDataDirtyV430('apify-import');
-    if (typeof syncOperationalDataToSupabaseV36 === 'function') {
-      syncOperationalDataToSupabaseV36({ silent:true }).catch(error => {
-        uiSyncLogV426('supabase-save-error', { entity:'apify-import-operational-data', error:error?.message || error });
-      });
-    } else if (typeof scheduleLegacyOperationalSyncV36 === 'function') {
-      scheduleLegacyOperationalSyncV36({ delay:0, reason:'apify-import' });
-    }
-  }
-
   let persistedSupabase = 0;
+  const persistedValFila = [];
+  const persistedInstaFila = [];
   if (importedLeadsForSupabase.length) {
     for (const lead of importedLeadsForSupabase) {
       try {
         const result = await persistImportedLeadDirectV430(lead);
-        if (result?.ok) persistedSupabase++;
+        if (result?.ok) {
+          persistedSupabase++;
+          if (lead.tipo === 'instagram') persistedInstaFila.push(lead);
+          else persistedValFila.push(lead);
+        } else {
+          skipped++;
+          qualificationLogV430('qualification-persist-failed', { phase:'import', name:lead.nome, error:result?.error?.message || result?.error || 'falha ao salvar' });
+        }
       } catch (error) {
+        skipped++;
         console.warn('[import][direct-persist-exception]', error?.message || error);
       }
     }
   }
+
+  if (typeof loadSupabaseLeadsToLocalState === 'function') {
+    try { await loadSupabaseLeadsToLocalState({ preserveWorkflow:false }); } catch (_) {}
+  }
+
+  // Espelha apenas o que foi salvo no Supabase para as telas legadas.
+  // Não agenda sync local -> Supabase e não usa cache antigo como fonte da importação.
+  // Importante: esse cache é gravado DEPOIS do reload do Supabase, porque o reload limpa caches antigos.
+  try {
+    if (persistedValFila.length && typeof VAL_KEY !== 'undefined') {
+      const clean = typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(persistedValFila, { label:'import-validation-persisted-cache' }) : persistedValFila;
+      localStorage.setItem(VAL_KEY, JSON.stringify(clean));
+    }
+    if (persistedInstaFila.length && typeof INSTA_KEY !== 'undefined') {
+      const clean = typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(persistedInstaFila, { label:'import-instagram-persisted-cache' }) : persistedInstaFila;
+      localStorage.setItem(INSTA_KEY, JSON.stringify(clean));
+    }
+  } catch (error) {
+    console.warn('[import][screen-cache-error]', error?.message || error);
+  }
+
+  if (typeof renderValidacao === 'function') renderValidacao();
+  if (typeof renderInstagram === 'function') renderInstagram();
   updateBadges();
 
   let msg = `✓ ${addedWhatsapp} → Validação WhatsApp (${addedComSite} com site · ${addedSemSite} sem site)`;
   if (addedInstagram) msg += ` · ${addedInstagram} → backlog Instagram`;
-  if (stats.alreadySeen) msg += ` · ${stats.alreadySeen} já vistos`;
+  if (stats.alreadySent) msg += ` · ${stats.alreadySent} já enviados`;
+  if (stats.alreadyInDb) msg += ` · ${stats.alreadyInDb} já no banco`;
+  if (stats.payloadDuplicate) msg += ` · ${stats.payloadDuplicate} duplicados no JSON`;
   if (blockedAlreadySent) msg += ` · ${blockedAlreadySent} bloqueados por Já enviados`;
   if (persistedSupabase) msg += ` · ${persistedSupabase} salvos no banco`;
   if (skipped) msg += ` · ${skipped} recusados`;
-  if (addedWhatsapp || addedInstagram) msg += ` · salvo localmente para validação/atribuição`;
+  if (persistedSupabase) msg += ` · espelhado nas telas`;
   if ((addedWhatsapp || addedInstagram) && !persistedSupabase) msg += ` · atenção: nenhum salvo no Supabase`;
   notify(msg, addedWhatsapp || addedInstagram ? '' : 'warn');
 
