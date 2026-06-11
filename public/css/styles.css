@@ -3698,7 +3698,7 @@ body.auth-locked .app{
 }
 
 
-/* 6.89 — Validação em tabela */
+/* 6.91 — Validação em tabela segura */
 .validation-table-shell{
   width:100%;
   overflow:auto;
@@ -3791,7 +3791,7 @@ body.auth-locked .app{
   gap:8px;
 }
 
-.icon-action{
+.validation-icon-action{
   width:30px;
   height:30px;
   border:1px solid var(--border2);
@@ -3805,24 +3805,24 @@ body.auth-locked .app{
   cursor:pointer;
 }
 
-.icon-action svg{
+.validation-icon-action svg{
   width:15px;
   height:15px;
   fill:currentColor;
 }
 
-.icon-action:hover{
+.validation-icon-action:hover{
   color:var(--text);
   border-color:rgba(255,255,255,.22);
   background:rgba(255,255,255,.045);
 }
 
-.icon-action-ok{
+.validation-icon-action.ok{
   color:var(--accent);
   border-color:rgba(182,255,75,.24);
 }
 
-.icon-action-danger{
+.validation-icon-action.danger{
   color:var(--error);
   border-color:rgba(255,92,92,.28);
 }
