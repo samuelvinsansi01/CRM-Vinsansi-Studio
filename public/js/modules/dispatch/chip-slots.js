@@ -617,6 +617,58 @@ async function validateDispatchPreflightV432(slot, items = []) {
 }
 
 /* ─── Iniciar disparo por slot ─── */
+
+function dispatchDateToISOV697(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw.slice(0, 10))) return raw.slice(0, 10);
+  const br = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (br) return `${br[3]}-${String(br[2]).padStart(2, '0')}-${String(br[1]).padStart(2, '0')}`;
+  return raw.slice(0, 10);
+}
+
+function isTemporaryQueueItemForTodayV697(item = {}) {
+  if (!(item.isTestLead || item.testDispatchLead || item.isTemporaryDispatchLead || item.temporaryLead)) return false;
+  const todayISO = typeof localDateISO === 'function'
+    ? localDateISO()
+    : new Date().toISOString().slice(0, 10);
+  const itemISO = dispatchDateToISOV697(item.scheduledFor || item.scheduled_for || item.created_at || todayISO);
+  return !itemISO || itemISO === todayISO;
+}
+
+function getDirectTemporaryFilaForChipV697(chip = {}) {
+  try {
+    const ids = [chip.id, chip.chip_id, chip.instance, chip.name, chip.nome, chip.label]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    const seen = new Set();
+    const rows = [];
+    ids.forEach((id) => {
+      const list = (typeof filaDisparo !== 'undefined' && filaDisparo && Array.isArray(filaDisparo[id])) ? filaDisparo[id] : [];
+      list.forEach((item) => {
+        const key = String(item.id || item.leadId || item.phone || item.whatsapp || '');
+        if (!key || seen.has(key)) return;
+        if (String(item.status || '').toLowerCase() === 'enviado') return;
+        if (!isTemporaryQueueItemForTodayV697(item)) return;
+        seen.add(key);
+        rows.push({
+          ...item,
+          status: item.status === 'enviado' ? item.status : 'aguardando',
+          numStatus: item.numStatus || 'valido',
+          whatsappValidationStatus: item.whatsappValidationStatus || 'valid',
+          whatsapp_status: item.whatsapp_status || 'valid',
+          isTemporaryDispatchLead: true,
+          temporaryLead: true
+        });
+      });
+    });
+    return rows;
+  } catch (error) {
+    console.warn('[dispatch-direct-temp-v697] erro:', error);
+    return [];
+  }
+}
+
 async function iniciarDisparoChip(slot) {
   const devolvidos = devolverZapNaoValidadoParaValidacao();
   if (devolvidos) {
@@ -645,14 +697,32 @@ async function iniciarDisparoChip(slot) {
     }
   }
   if (!fila.length) {
+    const directTempFila = getDirectTemporaryFilaForChipV697(chip);
+    if (directTempFila.length) {
+      fila = directTempFila;
+      try {
+        console.warn('[dispatch-direct-temp-v697]', {
+          slot,
+          chipId: chip.id,
+          chipInstance: chip.instance,
+          rows: fila.length,
+          ids: fila.map((item) => item.id).slice(0, 10)
+        });
+      } catch (_) {}
+    }
+  }
+
+  if (!fila.length) {
     try {
-      console.warn('[dispatch-empty-v695]', {
+      console.warn('[dispatch-empty-v697]', {
         slot,
         chipId: chip.id,
         chipInstance: chip.instance,
         day: todayStr(),
+        todayISO: typeof localDateISO === 'function' ? localDateISO() : '',
         filaKeys: Object.keys(typeof filaDisparo !== 'undefined' ? (filaDisparo || {}) : {}),
         chipFilaTotal: (typeof getFilaChip === 'function' ? getFilaChip(chip.id) : []).length,
+        directTempTotal: getDirectTemporaryFilaForChipV697(chip).length,
         dayIds: ((typeof ensureWeekData === 'function' ? ensureWeekData() : {}).days?.[todayStr()] || []).map(x => x.id).slice(0, 10)
       });
     } catch (_) {}
