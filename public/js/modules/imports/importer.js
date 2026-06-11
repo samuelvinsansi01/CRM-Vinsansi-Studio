@@ -50,17 +50,37 @@ function parseApifyJson(raw) {
 }
 
 function getImportStatsV430(analyses = []) {
+  const list = Array.isArray(analyses) ? analyses : [];
+  const approvedWhatsapp = list.filter(item => item.route === 'whatsapp-validation');
+  const approvedInstagram = list.filter(item => item.route === 'instagram-backlog');
+  const approved = [...approvedWhatsapp, ...approvedInstagram];
+  const refused = list.filter(item => item.route !== 'whatsapp-validation' && item.route !== 'instagram-backlog');
+  const approvedComSite = approvedWhatsapp.filter(item => item.website?.type === 'commercial');
+  const approvedSemSite = approvedWhatsapp.filter(item => item.website?.type !== 'commercial');
+
+  const refusedReasonCount = (predicate) => refused.filter(predicate).length;
+  const foraDoRamo = refusedReasonCount(item => !item.ramoMatch || item.reason === 'fora do ramo');
+  const abaixoQualificacao = refusedReasonCount(item => item.ramoMatch && item.qualification && !item.qualification.approved || item.reason === 'abaixo da qualificacao');
+  const semTelefone = refusedReasonCount(item => !item.hasPhone || item.reason === 'sem telefone e sem instagram');
+  const jaVistos = refusedReasonCount(item => item.alreadyImported || item.payloadDuplicate || String(item.reason || '').includes('duplicado') || String(item.reason || '').includes('existente'));
+  const wixSites = list.filter(item => item.website?.type === 'wixsite').length;
+  const outros = Math.max(0, refused.length - foraDoRamo - abaixoQualificacao - semTelefone - jaVistos);
+
   return {
-    total: analyses.length,
-    validWhatsapp: analyses.filter(item => item.route === 'whatsapp-validation').length,
-    instagramBacklog: analyses.filter(item => item.route === 'instagram-backlog').length,
-    wixSites: analyses.filter(item => item.website.type === 'wixsite').length,
-    alreadySeen: analyses.filter(item => item.alreadyImported).length,
-    outsideBranch: analyses.filter(item => !item.ramoMatch).length,
-    belowQualification: analyses.filter(item => item.ramoMatch && !item.qualification.approved).length,
-    noPhone: analyses.filter(item => !item.hasPhone).length,
-    noSite: analyses.filter(item => item.website.type === 'none' || item.website.type === 'wixsite' || item.website.type === 'instagram' || item.website.type === 'external').length,
-    comSite: analyses.filter(item => item.website.type === 'commercial').length
+    total: list.length,
+    approved: approved.length,
+    refused: refused.length,
+    validWhatsapp: approvedWhatsapp.length,
+    whatsappSemSite: approvedSemSite.length,
+    comSite: approvedComSite.length,
+    semSite: approvedSemSite.length,
+    instagramBacklog: approvedInstagram.length,
+    wixSites,
+    alreadySeen: jaVistos,
+    outsideBranch: foraDoRamo,
+    belowQualification: abaixoQualificacao,
+    noPhone: semTelefone,
+    outros
   };
 }
 
@@ -115,8 +135,8 @@ function importPreview() {
   const stats = getImportStatsV430(analyses);
   const opportunities = analyses.filter(item => item.route === 'whatsapp-validation' || item.route === 'instagram-backlog');
 
-  const aprovados = stats.validWhatsapp + stats.instagramBacklog;
-  const recusados = Math.max(0, stats.total - aprovados);
+  const aprovados = stats.approved;
+  const recusados = stats.refused;
   sumEl.innerHTML = `
     <div class="import-summary-cards-v30">
       <div class="import-summary-card-v30 general">
@@ -127,10 +147,10 @@ function importPreview() {
       </div>
       <div class="import-summary-card-v30 approved">
         <div class="summary-card-title-v30">Aprovados</div>
-        <div class="summary-card-line-v30"><span>WhatsApp</span><strong>${stats.validWhatsapp}</strong></div>
+        <div class="summary-card-line-v30"><span>WhatsApp sem site</span><strong>${stats.whatsappSemSite}</strong></div>
         <div class="summary-card-line-v30"><span>Com site</span><strong>${stats.comSite}</strong></div>
-        <div class="summary-card-line-v30"><span>Sem site</span><strong>${stats.noSite}</strong></div>
         <div class="summary-card-line-v30"><span>Instagram</span><strong>${stats.instagramBacklog}</strong></div>
+        <div class="summary-card-line-v30 ok"><span>Total aprovados</span><strong>${stats.approved}</strong></div>
       </div>
       <div class="import-summary-card-v30 refused">
         <div class="summary-card-title-v30">Recusados</div>
@@ -139,6 +159,7 @@ function importPreview() {
         <div class="summary-card-line-v30"><span>Sem telefone</span><strong>${stats.noPhone}</strong></div>
         <div class="summary-card-line-v30"><span>Já vistos</span><strong>${stats.alreadySeen}</strong></div>
         <div class="summary-card-line-v30"><span>Sites Wix</span><strong>${stats.wixSites}</strong></div>
+        <div class="summary-card-line-v30"><span>Outros</span><strong>${stats.outros}</strong></div>
       </div>
     </div>
   `;
