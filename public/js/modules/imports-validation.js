@@ -7,13 +7,63 @@ function qualificationLogV430(tag, payload = {}) {
   try { console.log(`[${tag}]`, payload); } catch (_) {}
 }
 
-function extractSite(item) {
-  return String(item.website || item.site || item.webSite || item.websiteUrl || item.website_url || '').trim();
+function pickFirstTextV30(...values) {
+  for (const value of values) {
+    if (value == null) continue;
+    if (typeof value === 'string' || typeof value === 'number') {
+      const text = String(value).trim();
+      if (text) return text;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (entry == null) continue;
+        if (typeof entry === 'string' || typeof entry === 'number') {
+          const text = String(entry).trim();
+          if (text) return text;
+        }
+        if (typeof entry === 'object') {
+          const text = pickFirstTextV30(entry.url, entry.link, entry.href, entry.name, entry.title, entry.phone, entry.phoneNumber, entry.number);
+          if (text) return text;
+        }
+      }
+    }
+  }
+  return '';
 }
-function extractPhone(item) { return String(item.phone || item.whatsapp || item.phoneNumber || item.telefone || '').trim(); }
-function extractName(item)  { return capitalizeName(String(item.title || item.name || item.nome || '').trim()); }
+
+function extractSite(item) {
+  return pickFirstTextV30(
+    item.website,
+    item.site,
+    item.webSite,
+    item.websiteUrl,
+    item.website_url,
+    item.urlWebsite,
+    item.companyWebsite,
+    item.websites
+  );
+}
+function extractPhone(item) {
+  return pickFirstTextV30(
+    item.phone,
+    item.whatsapp,
+    item.phoneNumber,
+    item.phone_number,
+    item.phoneUnformatted,
+    item.phone_unformatted,
+    item.telefone,
+    item.telephone,
+    item.contactPhone,
+    item.mobile,
+    item.phones,
+    item.phoneNumbers
+  );
+}
+function extractName(item)  {
+  return capitalizeName(pickFirstTextV30(item.title, item.name, item.nome, item.companyName, item.company_name, item.businessName, item.placeName));
+}
 function extractInstagram(item) {
-  const ig = String(item.instagram || item.instagramUrl || item.instagram_url || '').trim();
+  const ig = pickFirstTextV30(item.instagram, item.instagramUrl, item.instagram_url, item.instagram_link, item.instagramLink);
   if (ig) return ig;
   const site = extractSite(item);
   if (isInstagramWebsiteV430(site)) return site;
@@ -28,10 +78,21 @@ function extractInstagram(item) {
   return '';
 }
 function extractCategory(item) {
-  return String(item.categoryName || item.category || item.categoria || item.type || '').trim();
+  return pickFirstTextV30(
+    item.categoryName,
+    item.category,
+    item.categories,
+    item.categoria,
+    item.type,
+    item.subtype,
+    item.mainCategory,
+    item.businessCategory,
+    item.searchString,
+    item.query
+  );
 }
 function extractGoogleUrl(item) {
-  return String(item.url || item.googleUrl || item.google_url || item.maps_url || item.link || '').trim();
+  return pickFirstTextV30(item.googleUrl, item.google_url, item.maps_url, item.mapsUrl, item.placeUrl, item.url, item.link);
 }
 function hasValidSiteRaw(item) {
   const site = extractSite(item);
@@ -48,7 +109,7 @@ function extractRatingV430(item = {}) {
 }
 
 function extractReviewsCountV430(item = {}) {
-  const value = item.reviewsCount ?? item.reviews ?? item.reviewCount ?? item.totalReviews ?? item.quantidadeAvaliacoes ?? item.avaliacoes;
+  const value = item.reviewsCount ?? item.reviews ?? item.reviewCount ?? item.totalReviews ?? item.reviewsTotal ?? item.numberOfReviews ?? item.quantidadeAvaliacoes ?? item.avaliacoes;
   const number = Number(String(value ?? '').replace(/\D/g, ''));
   return Number.isFinite(number) ? number : 0;
 }
@@ -216,18 +277,20 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
   } else if (!analysis.qualification.approved) {
     analysis.route = 'skip';
     analysis.reason = 'abaixo da qualificacao';
-  } else if (analysis.website.route === 'instagram-backlog') {
-    analysis.route = 'instagram-backlog';
-    analysis.reason = analysis.website.reason;
   } else if (analysis.website.route === 'skip') {
     analysis.route = 'skip';
     analysis.reason = analysis.website.reason;
-  } else if (!analysis.hasPhone) {
+  } else if (analysis.hasPhone) {
+    // Regra operacional: com telefone entra na validação WhatsApp, tendo site ou não.
+    analysis.route = 'whatsapp-validation';
+    analysis.reason = analysis.website.reason;
+  } else if (analysis.instagram) {
+    // Sem telefone validado, mas com Instagram: vai para Instagram.
     analysis.route = 'instagram-backlog';
     analysis.reason = 'sem telefone whatsapp validado';
   } else {
-    analysis.route = 'whatsapp-validation';
-    analysis.reason = analysis.website.reason;
+    analysis.route = 'skip';
+    analysis.reason = 'sem telefone e sem instagram';
   }
 
   logApifyAnalysisV430(analysis, phase);
@@ -258,8 +321,21 @@ function getRamoKeywords() {
 function isRamoMatch(item) {
   const kws = getRamoKeywords();
   if (!kws) return true; // sem ramo selecionado: passa tudo
-  const cat = normalizeStr(extractCategory(item));
-  return kws.some(kw => cat.includes(normalizeStr(kw)));
+  const haystack = normalizeStr([
+    extractCategory(item),
+    extractName(item),
+    item.searchString,
+    item.query,
+    item.description,
+    item.about,
+    Array.isArray(item.categories) ? item.categories.map(c => typeof c === 'string' ? c : (c?.name || c?.title || '')).join(' ') : ''
+  ].filter(Boolean).join(' '));
+
+  // Se o Apify não trouxe categoria/texto útil, não derruba a importação.
+  // O filtro principal continua sendo nota, avaliações e telefone/proteção.
+  if (!haystack) return true;
+
+  return kws.some(kw => haystack.includes(normalizeStr(kw)));
 }
 
 function onRamoChange() {

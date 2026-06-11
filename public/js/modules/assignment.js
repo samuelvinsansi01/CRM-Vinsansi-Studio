@@ -314,13 +314,22 @@ function saveZapBacklog(d) {
   scheduleLegacyOperationalSyncV36();
 }
 
-function mandarParaBacklogZap(id) {
+async function mandarParaBacklogZap(id) {
   const atrib = getAtribuicaoData();
   const lead  = atrib.find(a => a.id === id);
   if (!lead) return;
   if (!isLeadWhatsappValidatedForQueue(lead)) {
     notify('// valide o WhatsApp antes de enviar para a fila Zap', 'warn');
     return;
+  }
+
+  if (typeof assertPhoneNotAlreadySentV30 === 'function') {
+    try {
+      await assertPhoneNotAlreadySentV30(lead.whatsapp || lead.phone || '');
+    } catch (err) {
+      notify('// bloqueado: este telefone já está em Já enviados', 'warn');
+      return;
+    }
   }
 
   const backlog = getZapBacklog();
@@ -341,7 +350,7 @@ function mandarParaBacklogZap(id) {
   addLeadHistory(lead.id, 'Movido para Fila WhatsApp', lead);
   notify(`✓ ${lead.nome} → Backlog Fila Zap`);
 }
-function moverParaBacklogZapDoDia(id, day) {
+async function moverParaBacklogZapDoDia(id, day) {
   const data = ensureWeekData();
   const lead = (data.days[day]||[]).find(e => e.id === id);
   if (!lead) { notify('// lead não encontrado','warn'); return; }
@@ -349,12 +358,21 @@ function moverParaBacklogZapDoDia(id, day) {
     notify('// valide o WhatsApp antes de enviar para a fila Zap', 'warn');
     return;
   }
+  if (typeof assertPhoneNotAlreadySentV30 === 'function') {
+    try {
+      await assertPhoneNotAlreadySentV30(lead.whatsapp || lead.phone || '');
+    } catch (err) {
+      notify('// bloqueado: este telefone já está em Já enviados', 'warn');
+      return;
+    }
+  }
   const backlog = getZapBacklog();
   if (backlog.find(b => b.id === id)) { notify('// já está no Backlog ZAP','warn'); return; }
   backlog.push({
     id: lead.id, nome: lead.nome, whatsapp: lead.whatsapp || '',
     instagram: lead.instagram || '', googleUrl: lead.googleUrl || '',
     site: lead.site || '', ramoId: lead.ramoId || null,
+    tipo: lead.tipo || (lead.site ? 'com-site' : 'sem-site'),
     canal: 'zap', criadoEm: lead.criadoEm || todayStr(),
     entradaBacklogEm: todayStr(),
   });

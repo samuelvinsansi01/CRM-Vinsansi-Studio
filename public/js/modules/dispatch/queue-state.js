@@ -220,7 +220,7 @@ function getFilaChipNoDia(chipId, day) {
   return getFilaChip(chipId).filter(f => idsNoDia.has(f.id));
 }
 
-function toggleFilaSlotEmpresa(slot, empId) {
+async function toggleFilaSlotEmpresa(slot, empId) {
   const chips = getChips();
   const chip = chips[slot] || null;
   if (!chip) { notify('// chip ' + (slot+1) + ' não configurado','warn'); return; }
@@ -253,6 +253,14 @@ function toggleFilaSlotEmpresa(slot, empId) {
   if (!isLeadWhatsappValidatedForQueue(emp)) {
     notify('// valide o WhatsApp antes de adicionar ao chip', 'warn');
     return;
+  }
+  if (typeof assertPhoneNotAlreadySentV30 === 'function') {
+    try {
+      await assertPhoneNotAlreadySentV30(emp.whatsapp || emp.phone || '');
+    } catch (err) {
+      notify('// bloqueado: este telefone já está em Já enviados', 'warn');
+      return;
+    }
   }
 
   // Verificar se o chip alvo tem vaga no dia atual
@@ -305,7 +313,7 @@ function toggleFilaSlotEmpresa(slot, empId) {
   updateBadges();
 }
 
-function toggleFila(empId) {
+async function toggleFila(empId) {
   const chipId = disparoChipId;
   if (!chipId) { notify('// selecione um chip primeiro','warn'); return; }
   const fila = getFilaChip(chipId);
@@ -325,6 +333,14 @@ function toggleFila(empId) {
     if (!isLeadWhatsappValidatedForQueue(emp)) {
       notify('// valide o WhatsApp antes de adicionar ao chip', 'warn');
       return;
+    }
+    if (typeof assertPhoneNotAlreadySentV30 === 'function') {
+      try {
+        await assertPhoneNotAlreadySentV30(emp.whatsapp || emp.phone || '');
+      } catch (err) {
+        notify('// bloqueado: este telefone já está em Já enviados', 'warn');
+        return;
+      }
     }
     const jaEnviado = emp.status === 'Enviada' || emp.status === 'Respondida' || emp.status === 'Não respondida' || emp.status === 'Recusada' || emp.status === 'Fechada';
     const filaStatus = jaEnviado ? 'enviado' : 'aguardando';

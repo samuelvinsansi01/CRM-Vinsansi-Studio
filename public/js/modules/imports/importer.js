@@ -8,10 +8,45 @@ function renderImportarPanel() {
 }
 
 function parseApifyJson(raw) {
-  let arr;
-  try { arr = JSON.parse(raw); } catch { return null; }
-  if (!Array.isArray(arr)) arr = arr.results || arr.items || arr.data || [];
-  return Array.isArray(arr) ? arr : null;
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { return null; }
+
+  const unwrap = (value) => {
+    if (Array.isArray(value)) return value;
+    if (!value || typeof value !== 'object') return null;
+    const directKeys = [
+      'results','items','data','places','records','rows','businesses','companies',
+      'searchResults','organicResults','output','datasetItems'
+    ];
+    for (const key of directKeys) {
+      const candidate = value[key];
+      if (Array.isArray(candidate)) return candidate;
+      if (candidate && typeof candidate === 'object') {
+        const nested = unwrap(candidate);
+        if (Array.isArray(nested)) return nested;
+      }
+    }
+    let best = null;
+    Object.values(value).forEach(candidate => {
+      if (best) return;
+      if (Array.isArray(candidate) && candidate.some(row => row && typeof row === 'object')) best = candidate;
+    });
+    return best;
+  };
+
+  const arr = unwrap(parsed);
+  if (!Array.isArray(arr)) return null;
+
+  // Alguns exports vêm como páginas/lotes com items internos.
+  return arr.flatMap(row => {
+    if (Array.isArray(row)) return row;
+    if (row && typeof row === 'object') {
+      for (const key of ['items','results','places','records','data']) {
+        if (Array.isArray(row[key])) return row[key];
+      }
+    }
+    return [row];
+  }).filter(row => row && typeof row === 'object');
 }
 
 function getImportStatsV430(analyses = []) {
@@ -24,25 +59,30 @@ function getImportStatsV430(analyses = []) {
     outsideBranch: analyses.filter(item => !item.ramoMatch).length,
     belowQualification: analyses.filter(item => item.ramoMatch && !item.qualification.approved).length,
     noPhone: analyses.filter(item => !item.hasPhone).length,
-    noSite: analyses.filter(item => item.website.type === 'none').length
+    noSite: analyses.filter(item => item.website.type === 'none' || item.website.type === 'wixsite' || item.website.type === 'instagram' || item.website.type === 'external').length,
+    comSite: analyses.filter(item => item.website.type === 'commercial').length
   };
 }
 
 function buildImportedLeadV430(analysis, route) {
   const isInstagram = route === 'instagram-backlog';
+  const isCommercialSite = analysis.website.type === 'commercial';
   return {
     id: genId(),
     nome: analysis.name,
     whatsapp: analysis.phone,
+    phone: analysis.phone,
+    normalized_phone: typeof normalizeSentContactPhoneV30 === 'function' ? normalizeSentContactPhoneV30(analysis.phone) : normalizePhone(analysis.phone),
     instagram: analysis.instagram,
-    site: isInstagram ? '' : (analysis.website.site || ''),
+    site: isInstagram ? '' : (isCommercialSite ? (analysis.website.site || '') : ''),
+    has_own_site: !!isCommercialSite,
     googleUrl: analysis.googleUrl,
     categoria: analysis.category,
     ramoId: activeRamoId || null,
     reviewsCount: analysis.qualification.reviews,
     totalScore: analysis.qualification.rating,
     numStatus: isInstagram ? 'nao-aplicavel' : 'pendente',
-    tipo: isInstagram ? 'instagram' : (analysis.website.type === 'commercial' ? 'com-site' : 'sem-site'),
+    tipo: isInstagram ? 'instagram' : (isCommercialSite ? 'com-site' : 'sem-site'),
     canal: isInstagram ? 'insta' : 'pendente',
     stage: isInstagram ? 'instagram_backlog' : 'validation',
     website_type: analysis.website.websiteType,
@@ -77,14 +117,15 @@ function importPreview() {
 
   sumEl.innerHTML = `
     <span class="acc">${stats.total}</span> total ·
-    <span class="acc">${stats.validWhatsapp}</span> válidos WhatsApp ·
+    <span class="acc">${stats.validWhatsapp}</span> para validação WhatsApp ·
+    <span class="acc">${stats.comSite}</span> com site ·
+    <span class="acc">${stats.noSite}</span> sem site ·
     <span class="acc">${stats.instagramBacklog}</span> backlog Instagram ·
     <span class="warn">${stats.wixSites}</span> sites Wix ·
     <span class="warn">${stats.alreadySeen}</span> já vistos ·
     <span class="err">${stats.outsideBranch}</span> fora do ramo ·
     <span class="err">${stats.belowQualification}</span> abaixo da qualificação ·
-    <span class="warn">${stats.noPhone}</span> sem telefone ·
-    <span class="acc">${stats.noSite}</span> sem site
+    <span class="warn">${stats.noPhone}</span> sem telefone
   `;
   countEl.textContent = `· ${opportunities.length} oportunidades`;
 
@@ -106,9 +147,11 @@ function importPreview() {
     const revStr = reviews ? `(${reviews})` : '';
     const routeBadge = analysis.route === 'instagram-backlog'
       ? '<span class="q-badge insta">Instagram backlog</span>'
-      : analysis.website.type === 'wixsite'
-        ? '<span class="q-badge warn">Wix · site fraco</span>'
-        : '<span class="q-badge ok">✓ validar WhatsApp</span>';
+      : analysis.website.type === 'commercial'
+        ? '<span class="q-badge info">🌐 com site · validar WhatsApp</span>'
+        : analysis.website.type === 'wixsite'
+          ? '<span class="q-badge warn">Wix/sem site próprio · validar WhatsApp</span>'
+          : '<span class="q-badge ok">🚫 sem site · validar WhatsApp</span>';
     return `<div class="empresa-card">
       <div class="empresa-info">
         <div class="empresa-nome">${analysis.googleUrl ? `<a href="${escHtml(analysis.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(analysis.name)}</a>` : escHtml(analysis.name)}</div>
@@ -135,6 +178,8 @@ async function importarLeads() {
   const analyses = analyzeApifyRowsV430(arr, 'import');
   const stats = getImportStatsV430(analyses);
   let addedWhatsapp = 0;
+  let addedComSite = 0;
+  let addedSemSite = 0;
   let addedInstagram = 0;
   let skipped = 0;
   let blockedAlreadySent = 0;
@@ -174,6 +219,8 @@ async function importarLeads() {
       if (key) { importSeenKeys.add(key); existingValidationKeys.add(key); }
       novaValFila.push(lead);
       addedWhatsapp++;
+      if (lead.tipo === 'com-site') addedComSite++;
+      else addedSemSite++;
       continue;
     }
     if (analysis.route === 'instagram-backlog') {
@@ -209,7 +256,7 @@ async function importarLeads() {
   }
   updateBadges();
 
-  let msg = `✓ ${addedWhatsapp} → Validação WhatsApp`;
+  let msg = `✓ ${addedWhatsapp} → Validação WhatsApp (${addedComSite} com site · ${addedSemSite} sem site)`;
   if (addedInstagram) msg += ` · ${addedInstagram} → backlog Instagram`;
   if (stats.alreadySeen) msg += ` · ${stats.alreadySeen} já vistos`;
   if (blockedAlreadySent) msg += ` · ${blockedAlreadySent} bloqueados por Já enviados`;

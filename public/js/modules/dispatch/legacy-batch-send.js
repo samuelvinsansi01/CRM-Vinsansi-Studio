@@ -135,11 +135,14 @@ async function dispararLote() {
       const imgRedesign = item.imagem2Base64 || getLoteImagem(disparoChipId, loteNumSend);
       if (imgRedesign) {
         const b2 = imgRedesign.split(',')[1], m2 = imgRedesign.split(';')[0].split(':')[1] || 'image/jpeg';
+        if (!b2) throw new Error('Imagem do lote inválida');
         const payload3 = { number: numero, options: { delay: 1000 }, mediaMessage: { mediatype: 'image', media: b2, mimetype: m2, caption: '' } };
-        await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
+        const res3 = await fetch(`${chip.url}/message/sendMedia/${chip.instance}`, { method:'POST', headers:{'Content-Type':'application/json','apikey':chip.key}, body: JSON.stringify(payload3) });
+        const data3 = await res3.json().catch(() => ({}));
+        if (!res3.ok) throw new Error((data3 && (data3.message || data3.error)) || `sendMedia HTTP ${res3.status}`);
         log(`  ③ imagem (redesign) enviada`);
       } else {
-        log(`  ③ <span style="color:var(--warning)">sem imagem (configure no cabeçalho do lote)</span>`);
+        throw new Error('Imagem do lote não configurada. O lead não será marcado como enviado.');
       }
 
       item.status='enviado';
