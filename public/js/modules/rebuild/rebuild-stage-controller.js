@@ -325,6 +325,101 @@
     return { ok: true, fallback: true, lead_id: leadId, bucket, channel };
   }
 
+
+  async function markValidationLeadAsNotOpportunityV688(leadId, reason = 'site_bom_sem_oportunidade') {
+    const userId = await getCurrentUserIdRebuild();
+    if (!userId) throw new Error('Usuario autenticado nao encontrado.');
+    const now = new Date().toISOString();
+    const headers = await getHeaders(true);
+
+    const leadResponse = await fetch(`${SUPABASE_URL}/rest/v1/leads?id=eq.${leadId}&user_id=eq.${userId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        current_stage: 'archived',
+        current_status: 'not_opportunity',
+        archived_at: now,
+        updated_at: now
+      })
+    });
+    const leadData = await readJson(leadResponse).catch(() => null);
+    if (!leadResponse.ok) throw leadData || new Error(`Falha ao arquivar lead (${leadResponse.status}).`);
+
+    // Remove qualquer entrada operacional pendente para garantir que não vá para backlog/fila.
+    for (const table of ['backlog_items', 'queue_items']) {
+      try {
+        const params = new URLSearchParams({
+          user_id: `eq.${userId}`,
+          lead_id: `eq.${leadId}`
+        });
+        await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params.toString()}`, {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({
+            status: 'removed',
+            updated_at: now
+          })
+        });
+      } catch (error) {
+        console.warn(`[validation-v688] falha ao limpar ${table}:`, error);
+      }
+    }
+
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/lead_events`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          user_id: userId,
+          lead_id: leadId,
+          event_type: 'not_opportunity',
+          event_payload: {
+            reason,
+            source: 'validation_com_site_manual_review_v688',
+            label: 'Site bom / sem oportunidade'
+          },
+          created_at: now
+        })
+      });
+    } catch (error) {
+      console.warn('[validation-v688] lead_events opcional falhou:', error);
+    }
+
+    return { ok: true, lead_id: leadId, reason };
+  }
+
+  async function removeComSiteLeadFromValidationV688(leadId) {
+    const row = state.rows.find((item) => String(item.id) === String(leadId));
+    const label = row?.company_name || row?.nome || 'este lead';
+
+    const run = async () => {
+      try {
+        setActionButtonsDisabled(leadId, true);
+        await markValidationLeadAsNotOpportunityV688(leadId, 'site_bom_sem_oportunidade');
+        state.rows = state.rows.filter((item) => String(item.id) !== String(leadId));
+        state.selected.delete(String(leadId));
+        renderActiveValidationTab();
+        if (typeof updateBadges === 'function') updateBadges();
+        if (typeof notify === 'function') notify('Lead removido da Validação: site bom / sem oportunidade.');
+        return true;
+      } catch (error) {
+        console.error('[validation-v688] erro ao remover lead com site:', error);
+        if (typeof notify === 'function') notify(error?.message || 'Falha ao remover lead da Validação.', 'err');
+        return false;
+      } finally {
+        setActionButtonsDisabled(leadId, false);
+      }
+    };
+
+    if (typeof abrirModalConfirm === 'function') {
+      abrirModalConfirm(`Remover ${label} da Validação? Motivo: site bom / sem oportunidade.`, run);
+      return;
+    }
+
+    if (window.confirm && !window.confirm(`Remover ${label} da Validação?`)) return;
+    await run();
+  }
+
   function normalizeLeadForRuntime(row = {}) {
     const companyName = row.company_name || row.nome || 'Empresa sem nome';
     const website = row.website || row.site || '';
@@ -606,7 +701,10 @@
           ${statusBadge}
           <button class="add-btn" type="button" onclick="openValidationLeadDrawerRebuild('${esc(row.id)}')">Ficha</button>
           ${readyForBacklog
-            ? `<button class="add-btn added" type="button" data-validation-action-id="${esc(row.id)}" onclick="sendValidationLeadToBacklogRebuild629('${esc(row.id)}')">${esc(backlogLabel)}</button>`
+            ? `
+              ${state.activeTab === 'com-site' ? `<button class="add-btn" type="button" style="border-color:rgba(255,92,92,0.32);color:var(--error)" data-validation-action-id="${esc(row.id)}" onclick="removeComSiteLeadFromValidationV688('${esc(row.id)}')">Site bom / Remover</button>` : ''}
+              <button class="add-btn added" type="button" data-validation-action-id="${esc(row.id)}" onclick="sendValidationLeadToBacklogRebuild629('${esc(row.id)}')">${state.activeTab === 'com-site' ? 'Site ruim / Enviar' : esc(backlogLabel)}</button>
+            `
             : `${validateButton}${approveButton}<button class="add-btn" type="button" style="border-color:rgba(255,92,92,0.32);color:var(--error)" data-validation-action-id="${esc(row.id)}" onclick="rejectLeadValidationRebuild('${esc(row.id)}')">Reprovar</button>`
           }
         </div>
@@ -941,6 +1039,7 @@
   window.approveLeadWhatsappRebuild = approveLeadWhatsappRebuild;
   window.rejectLeadValidationRebuild = rejectLeadValidationRebuild;
   window.sendValidationLeadToBacklogRebuild629 = sendValidationLeadToBacklog;
+  window.removeComSiteLeadFromValidationV688 = removeComSiteLeadFromValidationV688;
   window.toggleValidacaoBacklogSel = toggleValidationBacklogSelection;
   window.selecionarTodosValidacaoBacklog = selectVisibleValidationBacklogRows;
   window.limparSelecaoValidacaoBacklog = clearValidationBacklogSelection;
