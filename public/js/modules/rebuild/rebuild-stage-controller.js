@@ -3226,6 +3226,42 @@
     return String(chip.id || chip.dbId || chip.instance || chip.phone || chip.name || slot);
   }
 
+
+  function chipKeySetV693(chip = {}) {
+    return new Set([chip.id, chip.dbId, chip.chip_id, chip.instance, chip.instance_name, chip.name, chip.nome, chip.label, chip.phone, chip.normalized_phone]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean));
+  }
+
+  function chipsShareIdentityV693(a = {}, b = {}) {
+    const ak = chipKeySetV693(a);
+    const bk = chipKeySetV693(b);
+    for (const key of ak) if (bk.has(key)) return true;
+    return false;
+  }
+
+  function legacySlotForDispatchChipV693(dispatchChip = {}, fallbackSlot = -1) {
+    try {
+      const legacy = typeof getChips === 'function' ? getChips() : [];
+      if (!Array.isArray(legacy) || !legacy.length) return fallbackSlot;
+      const idx = legacy.findIndex((chip) => chipsShareIdentityV693(chip, dispatchChip));
+      return idx >= 0 ? idx : fallbackSlot;
+    } catch (_) {
+      return fallbackSlot;
+    }
+  }
+
+  function dispatchChipForLegacySlotV693(legacySlot = -1, fallbackChip = null) {
+    try {
+      const legacyChip = typeof getChipBySlot === 'function' ? getChipBySlot(legacySlot) : null;
+      if (!legacyChip) return fallbackChip;
+      const chips = dispatchChipsForControls();
+      return chips.find((chip) => chipsShareIdentityV693(chip, legacyChip)) || fallbackChip || legacyChip;
+    } catch (_) {
+      return fallbackChip;
+    }
+  }
+
   function dispatchChipSlotFromKey(key) {
     const target = String(key ?? '').trim();
     const chips = dispatchChipsForControls();
@@ -3853,9 +3889,9 @@
     }));
   }
 
-  async function bridgeDispatchRowsToLegacyQueue(slot, dispatchDate = selectedQueueDateForDispatch()) {
+  async function bridgeDispatchRowsToLegacyQueue(slot, dispatchDate = selectedQueueDateForDispatch(), forcedChip = null) {
     const chips = dispatchChipsForControls();
-    const chip = chips[slot] || null;
+    const chip = forcedChip || chips[slot] || null;
     if (!chip) return { ok:false, error:'Chip nao encontrado para disparo.' };
     if (dispatchDate !== localDateISO()) return { ok:false, error:'Disparo permitido apenas para o dia de hoje.' };
 
@@ -3885,7 +3921,8 @@
           || Number(a.batchPosition || a.batch_position || a.queuePosition || 0) - Number(b.batchPosition || b.batch_position || b.queuePosition || 0))
         .map((row) => legacyDispatchItemFromRow(row, chip));
 
-      const legacyChip = typeof getChipBySlot === 'function' ? getChipBySlot(slot) : null;
+      const legacySlot = legacySlotForDispatchChipV693(chip, slot);
+      const legacyChip = typeof getChipBySlot === 'function' ? getChipBySlot(legacySlot) : null;
       const aliasIds = [
         chipId,
         chip.id,
@@ -3917,7 +3954,8 @@
 
       try {
         console.warn('[test-dispatch-bridge-v692]', {
-          slot,
+          dispatchSlot: slot,
+          legacySlot,
           chipId,
           legacyChipId: legacyChip?.id || '',
           aliases: uniqueAliasIds,
@@ -3938,7 +3976,7 @@
       const dispatchDate = selectedQueueDateForDispatch();
       if (dispatchDate !== localDateISO()) return false;
       const chips = dispatchChipsForControls();
-      const chip = chips[slot] || legacyChip || null;
+      const chip = dispatchChipForLegacySlotV693(slot, chips[slot] || legacyChip || null);
       const effectiveChip = chip || legacyChip;
       if (!effectiveChip) return false;
 
@@ -4766,8 +4804,18 @@
       if (typeof notify === 'function') notify('Chip nao encontrado para disparo.', 'err');
       return;
     }
+
+    const chips = dispatchChipsForControls();
+    const dispatchChip = chips[slot] || null;
+    const legacySlot = legacySlotForDispatchChipV693(dispatchChip, slot);
+
+    if (legacySlot < 0) {
+      if (typeof notify === 'function') notify('Chip nao encontrado no motor de disparo.', 'err');
+      return;
+    }
+
     const dispatchDate = selectedQueueDateForDispatch();
-    const bridge = await bridgeDispatchRowsToLegacyQueue(slot, dispatchDate);
+    const bridge = await bridgeDispatchRowsToLegacyQueue(slot, dispatchDate, dispatchChip);
     if (!bridge.ok) {
       if (typeof notify === 'function') notify(`// ${bridge.error}`, 'err');
       return;
@@ -4777,10 +4825,19 @@
       return;
     }
 
+    try {
+      console.warn('[dispatch-slot-v693]', {
+        visualSlot: slot,
+        legacySlot,
+        dispatchChip: dispatchChip?.id || dispatchChip?.instance || dispatchChip?.name || '',
+        legacyChip: (typeof getChipBySlot === 'function' ? (getChipBySlot(legacySlot)?.id || getChipBySlot(legacySlot)?.instance || getChipBySlot(legacySlot)?.name || '') : '')
+      });
+    } catch (_) {}
+
     state.dispatchBusy = true;
     renderRightPanel();
     try {
-      await iniciarDisparoChip(slot);
+      await iniciarDisparoChip(legacySlot);
     } finally {
       state.dispatchBusy = false;
       await renderQueueStageFromSupabase();
