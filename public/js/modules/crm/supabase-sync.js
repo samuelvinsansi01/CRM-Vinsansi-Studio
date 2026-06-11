@@ -130,7 +130,14 @@ async function upsertLeadToSupabase(lead = {}) {
   return { ok: true };
 }
 
-async function syncAllLocalLeadsToSupabase() {
+async function syncAllLocalLeadsToSupabase(options = {}) {
+  // V30 operacional: não reenviar automaticamente caches locais antigos para o Supabase.
+  // Isso evita duplicar/recriar leads vindos de localStorage após login.
+  // A importação e ações manuais continuam salvando diretamente no banco.
+  if (!options.force) {
+    console.log('[supabase] push local desativado para evitar duplicação por localStorage');
+    return { skipped:true, reason:'local-push-disabled' };
+  }
   if (!isSupabaseReady()) return;
 
   const permanentLeads = typeof reconcilePermanentLeadBase === 'function'
@@ -170,9 +177,9 @@ async function loadSupabaseAsPrimarySource(options = {}) {
 
   await loadSupabaseLeadsToLocalState(options);
 
-  syncAllLocalLeadsToSupabase().catch(error => {
-    console.warn('[supabase] reconciliação de leads em segundo plano:', error?.message || error);
-  });
+  // Não reconciliar automaticamente localStorage -> Supabase no login.
+  // Esse push duplicava leads antigos salvos no navegador e bloqueava novas importações.
+  // Use syncAllLocalLeadsToSupabase({ force:true }) apenas em manutenção manual.
   if (typeof scheduleOperationalSyncV36 === 'function') scheduleOperationalSyncV36();
 
   setSyncState({

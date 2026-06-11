@@ -363,7 +363,9 @@ async function importarLeads() {
   if (stats.alreadySeen) msg += ` · ${stats.alreadySeen} já vistos`;
   if (blockedAlreadySent) msg += ` · ${blockedAlreadySent} bloqueados por Já enviados`;
   if (persistedSupabase) msg += ` · ${persistedSupabase} salvos no banco`;
-  if (skipped) msg += ` · ${skipped} recusados/ignorados`;
+  if (skipped) msg += ` · ${skipped} recusados`;
+  if (addedWhatsapp || addedInstagram) msg += ` · salvo localmente para validação/atribuição`;
+  if ((addedWhatsapp || addedInstagram) && !persistedSupabase) msg += ` · atenção: nenhum salvo no Supabase`;
   notify(msg, addedWhatsapp || addedInstagram ? '' : 'warn');
 
   document.getElementById('importJsonInput').value = '';

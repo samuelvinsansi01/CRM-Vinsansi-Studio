@@ -77,36 +77,23 @@ function normalizeChipRowToLocalV22(row = {}){
     blocks: Array.isArray(row.blocks) ? row.blocks : getDefaultWhatsappChipBlocksV426(),
     connectionState: row.status || row.connection_state || 'salvo no banco',
     phone: row.phone || row.number || '',
+    key: row.api_key || row.key || row.apikey || row.apiKey || '',
+    apiKey: row.api_key || row.key || row.apikey || row.apiKey || '',
+    url: row.base_url || row.evolution_url || row.url || 'https://evolution.samuelvinsansi.com.br',
     dbId: row.id || null
   });
 }
 
 function mergeSupabaseWhatsappChipsWithLocalCacheV426(dbChips = []){
-  const cachedChips = getWhatsappChipsV29();
-  const cachedById = new Map(cachedChips.map(chip => [String(chip.id || chip.instance || ''), chip]));
-  const mergedIds = new Set();
-  const merged = dbChips.map(chip => {
-    const chipId = String(chip.id || chip.instance || '');
-    const cached = cachedById.get(chipId) || {};
-    const next = { ...cached, ...chip };
+  // Supabase é a fonte da verdade. Não ressuscitar chips antigos do localStorage,
+  // porque isso causava POST duplicado e erro 409 em whatsapp_instances.
+  return (Array.isArray(dbChips) ? dbChips : []).map(chip => {
+    const next = { ...chip };
     delete next._syncStatus;
     delete next._syncRevision;
     delete next._syncError;
-    mergedIds.add(chipId);
     return next;
   });
-
-  cachedChips.forEach(chip => {
-    const chipId = String(chip.id || chip.instance || '');
-    if (!chipId || mergedIds.has(chipId)) return;
-    merged.push({
-      ...chip,
-      _syncStatus:'pending',
-      _syncError:chip._syncError || 'Aguardando persistencia no Supabase'
-    });
-  });
-
-  return merged;
 }
 
 function mergeWhatsappChipsIntoLegacyCacheV426(chips = []){
@@ -174,10 +161,6 @@ async function loadWhatsappChipsFromSupabaseV22(){
     debugWhatsappChipsV30('[chips][db-load]', { userId, userEmail, count:chips.length });
     debugWhatsappChipsV30('[user-isolation][chip-cache]', { key:scopedWhatsappChipsKeyV22(), count:chips.length });
     updateChipsBadge();
-    if(chips.some(chip => chip._syncStatus === 'pending')){
-      uiSyncLogV426('optimistic-update', { entity:'chip', action:'restore-pending', count:chips.length });
-      saveWhatsappChipsV29(chips);
-    }
     return chips;
   } catch (err) {
     console.warn('[chips][db-load-error]', err?.message || err);
@@ -193,27 +176,47 @@ async function persistWhatsappChipsToSupabaseV22(list = []){
   try {
     const { data:existingRows, error:selectError } = await sbClient
       .from('whatsapp_instances')
-      .select('id,chip_id,user_id,user_email')
+      .select('id,chip_id,user_id,user_email,instance,api_key')
       .eq('user_id', userId)
       .eq('user_email', userEmail);
     if (selectError) throw selectError;
 
     const allowedRows = (existingRows || []).filter(isChipAllowedForCurrentUserV24);
-    const existingByChipId = new Map(allowedRows.map(row => [String(row.chip_id || ''), row]));
+    const existingByChipId = new Map();
+    allowedRows.forEach(row => {
+      const chipKey = String(row.chip_id || row.instance || '').trim();
+      const instKey = String(row.instance || '').trim();
+      if (chipKey) existingByChipId.set(chipKey, row);
+      if (instKey) existingByChipId.set(instKey, row);
+    });
     const activeIds = new Set(chips.map(chip => String(chip.id || chip.instance || '')).filter(Boolean));
 
     for (const chip of chips) {
       const chipId = String(chip.id || chip.instance || '').trim();
       if (!chipId) continue;
+      const instance = String(chip.instance || chip.name || chipId).trim();
+      const apiKey = String(chip.key || chip.apiKey || chip.api_key || '').trim();
       const payload = {
         user_id: userId,
         user_email: userEmail,
         chip_id: chipId,
-        name: chip.name || chip.instance || 'WhatsApp',
-        instance: chip.instance || chip.name || chipId,
+        label: chip.label || chip.name || instance,
+        name: chip.name || chip.label || instance || 'WhatsApp',
+        instance,
+        base_url: chip.base_url || chip.baseUrl || chip.evolution_url || chip.evolutionUrl || chip.url || 'https://evolution.samuelvinsansi.com.br',
+        evolution_url: chip.evolution_url || chip.evolutionUrl || chip.base_url || chip.baseUrl || chip.url || 'https://evolution.samuelvinsansi.com.br',
+        url: chip.url || chip.base_url || chip.baseUrl || chip.evolution_url || chip.evolutionUrl || 'https://evolution.samuelvinsansi.com.br',
+        api_key: apiKey,
+        status: chip.connectionState || chip.status || 'saved',
+        connection_state: chip.connectionState || chip.status || 'saved',
         active: chip.status !== 'disabled',
+        daily_limit: Number(chip.dailyLimit || chip.daily_limit || WHATSAPP_CHIP_DAILY_LIMIT_V426),
+        block_size: Number(chip.blockSize || chip.block_size || WHATSAPP_CHIP_BLOCK_SIZE_V426),
+        interval_seconds: Number(chip.intervalSeconds || chip.interval_seconds || WHATSAPP_CHIP_INTERVAL_SECONDS_V426),
+        blocks: chip.blocks || getDefaultWhatsappChipBlocksV426(),
         updated_at: new Date().toISOString()
       };
+      if (!payload.instance) continue;
 
       const existing = existingByChipId.get(chipId);
       if (existing?.id) {
@@ -225,7 +228,9 @@ async function persistWhatsappChipsToSupabaseV22(list = []){
           .eq('user_email', userEmail);
         if (error) throw error;
       } else {
-        const { error } = await sbClient.from('whatsapp_instances').insert(payload);
+        const { error } = await sbClient
+          .from('whatsapp_instances')
+          .upsert(payload, { onConflict:'user_id,instance' });
         if (error) throw error;
       }
     }

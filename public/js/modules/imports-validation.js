@@ -203,19 +203,23 @@ function findLeadIdentityDuplicateV430(index, item = {}) {
 }
 
 function getDatabaseLeadCacheV430() {
-  const gathered = [];
-  const collect = (items) => {
-    (Array.isArray(items) ? items : []).forEach(lead => { if (lead) gathered.push(lead); });
-  };
-  try { collect(typeof getLeadBaseData === 'function' ? getLeadBaseData() : []); } catch {}
-  try { collect(typeof getValData === 'function' ? getValData() : []); } catch {}
-  try { collect(typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : []); } catch {}
-  try { collect(typeof getInstaFila === 'function' ? getInstaFila() : []); } catch {}
-  try { collect(Object.values(typeof getWeekData === 'function' ? (getWeekData()?.days || {}) : {}).flat()); } catch {}
-  try { collect(Object.values(typeof getAcompData === 'function' ? (getAcompData() || {}) : {}).flat()); } catch {}
-  try { collect(Object.values(window.filaDisparo || {}).flat()); } catch {}
-  try { return typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(gathered, { label:'apify-duplicate-cache' }) : gathered; }
-  catch { return gathered; }
+  // V30 operacional: NÃO usar localStorage como base de bloqueio de importação.
+  // O navegador pode conter leads antigos/stale e isso fazia a importação marcar tudo como
+  // "já visto/duplicado" mesmo com o banco limpo.
+  // A proteção real de reenvio/reimportação é sent_contacts; duplicados do próprio JSON
+  // continuam sendo tratados pelo payloadIndex em analyzeApifyRowsV430.
+  if (window.ENABLE_LEGACY_IMPORT_DUP_CACHE === true) {
+    const gathered = [];
+    const collect = (items) => {
+      (Array.isArray(items) ? items : []).forEach(lead => { if (lead) gathered.push(lead); });
+    };
+    try { collect(typeof getValData === 'function' ? getValData() : []); } catch {}
+    try { collect(typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : []); } catch {}
+    try { collect(typeof getInstaFila === 'function' ? getInstaFila() : []); } catch {}
+    try { return typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(gathered, { label:'apify-duplicate-cache-active-only' }) : gathered; }
+    catch { return gathered; }
+  }
+  return [];
 }
 
 function logApifyAnalysisV430(analysis, phase = 'preview') {
