@@ -369,11 +369,31 @@ function recoverSingleChipQueueAssignmentsV431() {
 
 const CHIP_LIMIT = WHATSAPP_CHIP_DAILY_LIMIT_V426; // maximo de leads por chip por dia
 
+function dispatchDateToISOV696(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw.slice(0, 10))) return raw.slice(0, 10);
+  const br = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (br) return `${br[3]}-${String(br[2]).padStart(2, '0')}-${String(br[1]).padStart(2, '0')}`;
+  return raw.slice(0, 10);
+}
+
+function isTemporaryDispatchItemForDayV696(item = {}, day = '') {
+  if (!(item.isTestLead || item.testDispatchLead || item.isTemporaryDispatchLead || item.temporaryLead)) return false;
+  const targetISO = dispatchDateToISOV696(day);
+  const todayISO = typeof localDateISO === 'function' ? localDateISO() : dispatchDateToISOV696(new Date().toISOString());
+  const scheduledISO = dispatchDateToISOV696(item.scheduledFor || item.scheduled_for || item.created_at || todayISO);
+  return scheduledISO === targetISO || scheduledISO === todayISO;
+}
+
 function getFilaChipNoDia(chipId, day) {
-  // Retorna apenas os itens da fila do chip que pertencem ao dia informado
+  // Retorna apenas os itens da fila do chip que pertencem ao dia informado.
+  // 6.96: Lead Teste/temporário também pode vir do rebuild com data ISO,
+  // enquanto o legado usa todayStr() em formato BR. Faz fallback seguro.
   const data = ensureWeekData();
   const idsNoDia = new Set((data.days[day]||[]).map(e => e.id));
-  return getFilaChip(chipId).filter(f => idsNoDia.has(f.id));
+  const fila = getFilaChip(chipId);
+  return fila.filter(f => idsNoDia.has(f.id) || isTemporaryDispatchItemForDayV696(f, day));
 }
 
 function toggleFilaSlotEmpresa(slot, empId) {
