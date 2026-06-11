@@ -38,6 +38,64 @@ const OPERATIONAL_DATA_KEYS_V36 = {
   evolutionSettings: 'vs_evolution_settings_v1'
 };
 
+// V30 operacional: leads e filas de leads NÃO podem mais ser restaurados a partir do
+// localStorage/operational_data. Isso evitava o bug: apagar leads no Supabase e, ao
+// abrir o sistema, o navegador recriava tudo que estava salvo localmente.
+const OPERATIONAL_LEAD_CACHE_KEYS_DISABLED_V30 = new Set([
+  'leadCrm',
+  'permanentLeads',
+  'weeklyLeads',
+  'weeklyHistory',
+  'monthlyTracking',
+  'validationQueue',
+  'assignmentQueue',
+  'instagramQueue',
+  'instagramWeek',
+  'instagramSchedule',
+  'whatsappBacklog',
+  'whatsappDispatchQueues',
+  'whatsappQueue',
+  'dispatchLogs',
+  'dispatchRuntime',
+  'evolutionResponses',
+  'whatsappOutbox',
+  'chipUsage',
+  'queueControl'
+]);
+
+function isOperationalLeadCacheDisabledV30(name) {
+  return OPERATIONAL_LEAD_CACHE_KEYS_DISABLED_V30.has(name);
+}
+
+function purgeLocalLeadWorkflowCachesV30(reason = 'startup') {
+  try {
+    Object.entries(OPERATIONAL_DATA_KEYS_V36).forEach(([name, key]) => {
+      if (isOperationalLeadCacheDisabledV30(name)) localStorage.removeItem(key);
+    });
+    Object.keys(localStorage).forEach(key => {
+      if (
+        /^vs_leads_base/i.test(key) ||
+        /^vs_empresas/i.test(key) ||
+        /^vs_validacao/i.test(key) ||
+        /^vs_atribuicao/i.test(key) ||
+        /^vs_insta/i.test(key) ||
+        /^vin_zap_backlog/i.test(key) ||
+        /^vs_fila_disparo/i.test(key) ||
+        /^vs_dispatch_runtime/i.test(key) ||
+        /^vs_dispatch_v30_log/i.test(key) ||
+        /^vs_evolution_responses/i.test(key) ||
+        /^vs_whatsapp_outbox/i.test(key) ||
+        /^vs_lead_crm/i.test(key)
+      ) localStorage.removeItem(key);
+    });
+    try { if (typeof filaDisparo !== 'undefined') filaDisparo = {}; } catch(e) {}
+    if (typeof uiSyncLogV426 === 'function') uiSyncLogV426('local-cache-purge', { entity:'lead-workflow-cache', reason });
+  } catch (error) {
+    console.warn('[local-cache-purge]', error?.message || error);
+  }
+}
+
+
 function setPersistenceStatusV36(text, type = '') {
   const box = document.getElementById('persistenceV36Status');
   if (!box) return;
@@ -49,6 +107,7 @@ function setPersistenceStatusV36(text, type = '') {
 function getOperationalSnapshotV36() {
   const data = {};
   Object.entries(OPERATIONAL_DATA_KEYS_V36).forEach(([name, key]) => {
+    if (isOperationalLeadCacheDisabledV30(name)) return;
     try {
       data[name] = JSON.parse(localStorage.getItem(key) || 'null');
     } catch {
@@ -116,6 +175,10 @@ function restoreOperationalSnapshotV36(snapshot = {}) {
   );
 
   Object.entries(OPERATIONAL_DATA_KEYS_V36).forEach(([name, key]) => {
+    if (isOperationalLeadCacheDisabledV30(name)) {
+      localStorage.removeItem(key);
+      return;
+    }
     if (name === 'legacyChips' && preserveLocalLegacyChips) return;
     if (name === 'whatsappDispatchQueues' && preserveLocalDispatchQueue) return;
     if (data[name] === undefined) return;
@@ -245,11 +308,9 @@ async function loadOperationalDataFromSupabaseV36() {
     restoreOperationalSnapshotV36(data.payload);
     setPersistenceStatusV36('Dados carregados do Supabase e aplicados no CRM.', 'ok');
     notify('Dados operacionais carregados.');
-    const restoredData = data.payload?.data || {};
-    return Object.prototype.hasOwnProperty.call(restoredData, 'weeklyLeads')
-      || Object.prototype.hasOwnProperty.call(restoredData, 'validationQueue')
-      || Object.prototype.hasOwnProperty.call(restoredData, 'assignmentQueue')
-      || Object.prototype.hasOwnProperty.call(restoredData, 'whatsappDispatchQueues');
+    // V30: operational_data não define mais o fluxo de leads. O retorno false
+    // força a tela a respeitar somente public.leads, evitando recriação por cache.
+    return false;
   } catch (err) {
     setPersistenceStatusV36(
       'Falha ao carregar. Verifique se a tabela operational_data existe.\n\n' +

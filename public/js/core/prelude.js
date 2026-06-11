@@ -376,6 +376,7 @@ renderAuthUser(currentUser);
     updateAuthGate();
 
     if (currentUser) {
+      if (typeof purgeLocalLeadWorkflowCachesV30 === 'function') purgeLocalLeadWorkflowCachesV30('auth-state-change-before-cloud-load');
       let operationalLoaded = false;
       try { operationalLoaded = await loadOperationalDataFromSupabaseV36(); } catch(e){}
       if (typeof loadSupabaseAsPrimarySource === 'function') {
@@ -397,6 +398,7 @@ renderAuthUser(currentUser);
   });
 
   if (currentUser) {
+    if (typeof purgeLocalLeadWorkflowCachesV30 === 'function') purgeLocalLeadWorkflowCachesV30('initial-auth-before-cloud-load');
     let operationalLoaded = false;
     try { operationalLoaded = await loadOperationalDataFromSupabaseV36(); } catch(e){}
     await loadSupabaseAsPrimarySource({ preserveWorkflow: operationalLoaded });

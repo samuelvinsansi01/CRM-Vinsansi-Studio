@@ -203,22 +203,8 @@ function findLeadIdentityDuplicateV430(index, item = {}) {
 }
 
 function getDatabaseLeadCacheV430() {
-  // V30 operacional: NÃO usar localStorage como base de bloqueio de importação.
-  // O navegador pode conter leads antigos/stale e isso fazia a importação marcar tudo como
-  // "já visto/duplicado" mesmo com o banco limpo.
-  // A proteção real de reenvio/reimportação é sent_contacts; duplicados do próprio JSON
-  // continuam sendo tratados pelo payloadIndex em analyzeApifyRowsV430.
-  if (window.ENABLE_LEGACY_IMPORT_DUP_CACHE === true) {
-    const gathered = [];
-    const collect = (items) => {
-      (Array.isArray(items) ? items : []).forEach(lead => { if (lead) gathered.push(lead); });
-    };
-    try { collect(typeof getValData === 'function' ? getValData() : []); } catch {}
-    try { collect(typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : []); } catch {}
-    try { collect(typeof getInstaFila === 'function' ? getInstaFila() : []); } catch {}
-    try { return typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(gathered, { label:'apify-duplicate-cache-active-only' }) : gathered; }
-    catch { return gathered; }
-  }
+  // Fonte de bloqueio da importação: somente sent_contacts e duplicados do JSON atual.
+  // Nunca usar localStorage/operational_data como base de 'já visto'.
   return [];
 }
 

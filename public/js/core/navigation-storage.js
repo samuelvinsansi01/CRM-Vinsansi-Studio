@@ -126,6 +126,9 @@ function updateBadges() {
 let _supabaseLeadSyncTimer = null;
 const _pendingSupabaseLeadSyncV426 = new Map();
 function scheduleSupabaseLeadSync(leads = []) {
+  // V30 operacional: nunca empurrar automaticamente leads vindos de localStorage
+  // para o Supabase. Importação e ações explícitas salvam diretamente no banco.
+  if (window.ALLOW_LEGACY_LOCAL_LEAD_PUSH !== true) return;
   if (!isSupabaseReady()) return;
   (Array.isArray(leads) ? leads : [leads]).forEach(lead => {
     if (lead?.id) _pendingSupabaseLeadSyncV426.set(lead.id, lead);

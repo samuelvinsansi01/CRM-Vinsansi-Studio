@@ -400,6 +400,12 @@ async function loadSupabaseLeadsToLocalState({ preserveWorkflow = false } = {}) 
     return;
   }
 
+  // Limpa caches locais de fluxo antes de aplicar o que veio do banco.
+  // Se o banco estiver vazio, a tela fica vazia; nada antigo é recriado.
+  if (typeof purgeLocalLeadWorkflowCachesV30 === 'function') {
+    purgeLocalLeadWorkflowCachesV30('before-apply-supabase-leads');
+  }
+
   const today = todayStr();
 
   const leads = (data || []).map(item => ({
