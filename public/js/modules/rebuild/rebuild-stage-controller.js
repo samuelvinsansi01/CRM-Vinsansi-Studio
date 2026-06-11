@@ -3703,6 +3703,14 @@
       siteSegment: 'sem-site',
       statusRaw: 'queued_dispatch',
       status: 'queued_dispatch',
+      numStatus: 'valido',
+      whatsappValidationStatus: 'valid',
+      whatsapp_status: 'valid',
+      isTemporaryDispatchLead: true,
+      temporaryLead: true,
+      testDispatchLead: true,
+      source: 'Teste temporario',
+      canal: 'zap',
       scheduledFor: dispatchDate,
       scheduled_for: dispatchDate,
       chipId,
@@ -3831,6 +3839,14 @@
           phone: row.phone || row.whatsapp || row.normalized_phone || '',
           status: 'Em fila',
           queueStatus: 'aguardando',
+          numStatus: row.numStatus || row.whatsappValidationStatus || row.whatsapp_status || (row.isTestLead ? 'valido' : ''),
+          whatsappValidationStatus: row.whatsappValidationStatus || row.whatsapp_status || (row.isTestLead ? 'valid' : ''),
+          whatsapp_status: row.whatsapp_status || row.whatsappValidationStatus || (row.isTestLead ? 'valid' : ''),
+          isTemporaryDispatchLead: !!(row.isTemporaryDispatchLead || row.temporaryLead || row.testDispatchLead || row.isTestLead),
+          temporaryLead: !!(row.isTemporaryDispatchLead || row.temporaryLead || row.testDispatchLead || row.isTestLead),
+          testDispatchLead: !!(row.testDispatchLead || row.isTestLead),
+          isTestLead: !!row.isTestLead,
+          canal: row.canal || 'zap',
           chipId: chip.id || chip.dbId || chip.instance || '',
           assignedChipId: chip.id || chip.dbId || chip.instance || '',
           chipName: chip.name || chip.nome || chip.instance || '',
@@ -3871,6 +3887,14 @@
       assignedChipId: chip.id || chip.dbId || chip.instance || '',
       chipName: chip.name || chip.nome || chip.instance || '',
       chipLabel: chip.nome || chip.name || chip.instance || '',
+      numStatus: row.numStatus || row.whatsappValidationStatus || row.whatsapp_status || (row.isTestLead ? 'valido' : ''),
+      whatsappValidationStatus: row.whatsappValidationStatus || row.whatsapp_status || (row.isTestLead ? 'valid' : ''),
+      whatsapp_status: row.whatsapp_status || row.whatsappValidationStatus || (row.isTestLead ? 'valid' : ''),
+      isTemporaryDispatchLead: !!(row.isTemporaryDispatchLead || row.temporaryLead || row.testDispatchLead || row.isTestLead),
+      temporaryLead: !!(row.isTemporaryDispatchLead || row.temporaryLead || row.testDispatchLead || row.isTestLead),
+      testDispatchLead: !!(row.testDispatchLead || row.isTestLead),
+      isTestLead: !!row.isTestLead,
+      canal: row.canal || 'zap',
       status,
       scheduledFor: row.scheduledFor || row.scheduled_for || localDateISO(),
       scheduled_for: row.scheduled_for || row.scheduledFor || localDateISO(),
@@ -3948,7 +3972,15 @@
           chipId: aliasId,
           assignedChipId: aliasId,
           chipName: chip.name || chip.nome || legacyChip?.name || legacyChip?.nome || chip.instance || '',
-          chipLabel: chip.nome || chip.name || legacyChip?.nome || legacyChip?.name || chip.instance || ''
+          chipLabel: chip.nome || chip.name || legacyChip?.nome || legacyChip?.name || chip.instance || '',
+          status: 'aguardando',
+          numStatus: item.numStatus || 'valido',
+          whatsappValidationStatus: item.whatsappValidationStatus || 'valid',
+          whatsapp_status: item.whatsapp_status || 'valid',
+          isTemporaryDispatchLead: true,
+          temporaryLead: true,
+          testDispatchLead: !!item.testDispatchLead,
+          isTestLead: !!item.isTestLead
         }));
       });
 
@@ -4006,7 +4038,19 @@
       ].map((value) => String(value || '').trim()).filter(Boolean);
 
       [...new Set(ids)].forEach((id) => {
-        filaDisparo[id] = legacyRows.map((item) => ({ ...item, chipId:id, assignedChipId:id, status:'aguardando' }));
+        filaDisparo[id] = legacyRows.map((item) => ({
+          ...item,
+          chipId:id,
+          assignedChipId:id,
+          status:'aguardando',
+          numStatus:item.numStatus || 'valido',
+          whatsappValidationStatus:item.whatsappValidationStatus || 'valid',
+          whatsapp_status:item.whatsapp_status || 'valid',
+          isTemporaryDispatchLead:true,
+          temporaryLead:true,
+          testDispatchLead:!!item.testDispatchLead,
+          isTestLead:!!item.isTestLead
+        }));
       });
       if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'test-dispatch-bridge-v692-empty-fallback' });
       return true;

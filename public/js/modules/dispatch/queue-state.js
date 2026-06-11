@@ -37,6 +37,7 @@ function devolverZapNaoValidadoParaValidacao() {
   const devolver = (lead = {}) => {
     if (!lead.id || devolvidosIds.has(lead.id)) return;
     if (typeof isLeadSentOrClosedV433 === 'function' && isLeadSentOrClosedV433(lead)) return;
+    if (lead.isTestLead || lead.testDispatchLead || lead.isTemporaryDispatchLead || lead.temporaryLead) return;
     if (typeof isTemporaryDispatchLeadV433 === 'function' && isTemporaryDispatchLeadV433(lead)) return;
     devolvidosIds.add(lead.id);
     if (validacaoIds.has(lead.id)) return;
