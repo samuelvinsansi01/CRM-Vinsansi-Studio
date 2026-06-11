@@ -648,67 +648,84 @@
     return `<span class="empresa-site"><a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a></span>`;
   }
 
-  function renderValidationLeadCard(row) {
-    const lead = normalizeLeadForRuntime(row);
-    const validated = hasValidatedWhatsapp(row);
-    const readyForBacklog = isBacklogReadyTab();
+
+  function validationRowStatusBadgeV689(row = {}) {
     const bucket = bucketForValidation(row);
-    const siteLabel = row.website ? (row.has_own_site ? 'Site proprio' : text(row.website_type, 'Com site')) : 'Sem site';
-    const siteClass = row.website ? (row.has_own_site ? 'info' : 'warn') : 'ok';
-    const location = getStageLocation(row) || 'Local nao informado';
-    const bucketLabel = bucket === 'insta' ? 'Instagram' : bucket === 'com-site' ? 'Com site' : 'WhatsApp';
-    const backlogLabel = bucket === 'insta' ? 'Enviar ao Backlog Instagram' : 'Enviar ao Backlog Zap';
-    const selected = state.selected.has(String(row.id));
-    const selector = readyForBacklog
-      ? `<button type="button" aria-label="Selecionar lead" onclick="toggleValidacaoBacklogSel('${esc(row.id)}')"
-          style="width:18px;height:18px;border-radius:4px;border:2px solid ${selected ? 'var(--accent)' : 'var(--border2)'};
-          background:${selected ? 'var(--accent)' : 'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;
-          transition:all 0.15s;flex-shrink:0;padding:0;margin-right:4px">
-          ${selected ? `<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="#0a0a0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}
-        </button>`
-      : '';
-    const statusBadge = readyForBacklog
-      ? `<span class="q-badge ${bucket === 'insta' ? 'insta' : bucket === 'com-site' ? 'info' : 'ok'}">${esc(bucketLabel)}</span>`
-      : validated
-        ? '<span class="q-badge ok">Numero validado</span>'
-        : '<span class="q-badge warn">Aguardando validacao</span>';
-    const approveButton = !validated
-      ? `<button class="add-btn" type="button" data-validation-action-id="${esc(row.id)}" onclick="approveLeadWhatsappRebuild('${esc(row.id)}')">Aprovar</button>`
-      : '';
-    const validateButton = !validated
-      ? `<button class="add-btn added" type="button" data-validation-chip-action-id="${esc(row.id)}" onclick="validarNumeroUnico('${esc(row.id)}')">Validar</button>`
-      : '';
+    const hasSite = !!(row.website || row.site);
+    if (bucket === 'com-site' || hasSite) return '<span class="q-badge info">Com site</span>';
+    if (bucket === 'insta') return '<span class="q-badge insta">Instagram</span>';
+    return '<span class="q-badge ok">Sem site</span>';
+  }
+
+  function validationLeadRamoV689(row = {}) {
+    return text(row.ramo_nome || row.ramo || row.parent_category || row.category_parent || row.category || row.categoria || 'Sem ramo');
+  }
+
+  function validationLeadStateV689(row = {}) {
+    const location = getStageLocation(row) || '';
+    return text(row.state || row.estado || row.uf || row.location_state || row.lead_locations?.state || (String(location).match(/\b[A-Z]{2}\b/) || [])[0] || '-');
+  }
+
+  function validationLeadCityV689(row = {}) {
+    const location = getStageLocation(row) || '';
+    const fromLocation = String(location).split(',').map((part) => part.trim()).filter(Boolean)[0] || '';
+    return text(row.city || row.cidade || row.location_city || row.lead_locations?.city || fromLocation || '-');
+  }
+
+  function validationLeadPhoneV689(row = {}) {
+    return normalizePhoneLabel(row.phone || row.normalized_phone || row.whatsapp || row.telefone || '');
+  }
+
+  function validationTableActionButtonsV689(row = {}) {
+    const id = esc(row.id);
+    const readyForBacklog = isBacklogReadyTab();
+    const validated = hasValidatedWhatsapp(row);
+    const approveTitle = readyForBacklog
+      ? (state.activeTab === 'com-site' ? 'Site ruim / enviar ao backlog' : 'Enviar ao backlog')
+      : (validated ? 'Já validado' : 'Aprovar manualmente');
+    const approveAction = readyForBacklog ? `sendValidationLeadToBacklogRebuild629('${id}')` : `approveLeadWhatsappRebuild('${id}')`;
+    const archiveAction = state.activeTab === 'com-site' ? `removeComSiteLeadFromValidationV688('${id}')` : `rejectLeadValidationRebuild('${id}')`;
+    const archiveTitle = state.activeTab === 'com-site' ? 'Site bom / remover' : 'Arquivar / reprovar';
 
     return `
-      <div class="empresa-card" data-lead-id="${esc(row.id)}" style="align-items:flex-start">
-        ${selector ? `<div style="flex-shrink:0">${selector}</div>` : ''}
-        <div class="empresa-info">
-          <div class="empresa-nome">${esc(lead.company_name)}</div>
-          <div class="empresa-meta">
-            <span class="q-badge info">Nota ${esc(numberText(row.rating))}</span>
-            <span class="q-badge info">${esc(numberText(row.reviews_count, '0'))} avaliacoes</span>
-            <span class="q-badge ${siteClass}">${esc(siteLabel)}</span>
-            <span class="empresa-phone">${esc(normalizePhoneLabel(row.phone || row.normalized_phone))}</span>
-            <span class="empresa-site">${esc(location)}</span>
-          </div>
-          <div class="empresa-meta" style="margin-top:7px">
-            ${linkHtml(row.website, 'Site')}
-            ${linkHtml(row.google_maps_url, 'Maps')}
+      <div class="validation-table-actions">
+        <button class="icon-action" type="button" title="Ficha" aria-label="Ficha" onclick="openValidationLeadDrawerRebuild('${id}')">
+          <svg viewBox="0 0 24 24"><path d="M12 5c5.2 0 8.7 4.2 9.8 5.8a2 2 0 0 1 0 2.4C20.7 14.8 17.2 19 12 19s-8.7-4.2-9.8-5.8a2 2 0 0 1 0-2.4C3.3 9.2 6.8 5 12 5Zm0 2C7.8 7 4.8 10.3 3.9 12c.9 1.7 3.9 5 8.1 5s7.2-3.3 8.1-5C19.2 10.3 16.2 7 12 7Zm0 2.5A2.5 2.5 0 1 1 12 14.5 2.5 2.5 0 0 1 12 9.5Z"/></svg>
+        </button>
+        <button class="icon-action icon-action-ok" type="button" title="${esc(approveTitle)}" aria-label="${esc(approveTitle)}" data-validation-action-id="${id}" onclick="${approveAction}">
+          <svg viewBox="0 0 24 24"><path d="M9.2 16.6 4.9 12.3l-1.4 1.4 5.7 5.7L21 7.6l-1.4-1.4-10.4 10.4Z"/></svg>
+        </button>
+        <button class="icon-action icon-action-danger" type="button" title="${esc(archiveTitle)}" aria-label="${esc(archiveTitle)}" data-validation-action-id="${id}" onclick="${archiveAction}">
+          <svg viewBox="0 0 24 24"><path d="M5 4h14v4H5V4Zm2 6h10v8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-8Zm2 2v6h6v-6H9Z"/></svg>
+        </button>
+      </div>
+    `;
+  }
+
+  function renderValidationLeadCard(row) {
+    const selected = state.selected.has(String(row.id));
+    return `
+      <tr class="validation-table-row" data-lead-id="${esc(row.id)}">
+        <td class="validation-check-cell">
+          <button type="button" class="validation-check ${selected ? 'is-selected' : ''}" aria-label="Selecionar lead" onclick="toggleValidacaoBacklogSel('${esc(row.id)}')">
+            ${selected ? `<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="#0a0a0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}
+          </button>
+        </td>
+        <td>${validationRowStatusBadgeV689(row)}</td>
+        <td>
+          <div class="validation-company-name">${esc(row.company_name || row.nome || 'Empresa sem nome')}</div>
+          <div class="validation-company-links">
+            ${row.website ? linkHtml(row.website, 'Site') : ''}
+            ${row.google_maps_url ? linkHtml(row.google_maps_url, 'Maps') : ''}
             ${row.instagram_url ? linkHtml(row.instagram_url, 'Instagram') : ''}
           </div>
-        </div>
-        <div class="empresa-actions">
-          ${statusBadge}
-          <button class="add-btn" type="button" onclick="openValidationLeadDrawerRebuild('${esc(row.id)}')">Ficha</button>
-          ${readyForBacklog
-            ? `
-              ${state.activeTab === 'com-site' ? `<button class="add-btn" type="button" style="border-color:rgba(255,92,92,0.32);color:var(--error)" data-validation-action-id="${esc(row.id)}" onclick="removeComSiteLeadFromValidationV688('${esc(row.id)}')">Site bom / Remover</button>` : ''}
-              <button class="add-btn added" type="button" data-validation-action-id="${esc(row.id)}" onclick="sendValidationLeadToBacklogRebuild629('${esc(row.id)}')">${state.activeTab === 'com-site' ? 'Site ruim / Enviar' : esc(backlogLabel)}</button>
-            `
-            : `${validateButton}${approveButton}<button class="add-btn" type="button" style="border-color:rgba(255,92,92,0.32);color:var(--error)" data-validation-action-id="${esc(row.id)}" onclick="rejectLeadValidationRebuild('${esc(row.id)}')">Reprovar</button>`
-          }
-        </div>
-      </div>
+        </td>
+        <td>${esc(validationLeadRamoV689(row))}</td>
+        <td>${esc(validationLeadStateV689(row))}</td>
+        <td>${esc(validationLeadCityV689(row))}</td>
+        <td><span class="empresa-phone">${esc(validationLeadPhoneV689(row))}</span></td>
+        <td>${validationTableActionButtonsV689(row)}</td>
+      </tr>
     `;
   }
 
@@ -738,215 +755,37 @@
     state.page = Math.max(1, Math.min(state.page, pages));
     const start = (state.page - 1) * PAGE_SIZE;
     const pageRows = rows.slice(start, start + PAGE_SIZE);
+    const visibleIds = new Set(pageRows.map((row) => String(row.id)));
+    const selectedVisible = pageRows.length && pageRows.every((row) => state.selected.has(String(row.id)));
 
-    const visibleIds = new Set(rows.map((row) => String(row.id)));
-    [...state.selected].forEach((id) => {
-      if (!visibleIds.has(id)) state.selected.delete(id);
-    });
+    list.innerHTML = `
+      <div class="validation-table-shell">
+        <table class="validation-table">
+          <thead>
+            <tr>
+              <th class="validation-check-cell">
+                <button type="button" class="validation-check ${selectedVisible ? 'is-selected' : ''}" title="Selecionar todos desta página" onclick="toggleValidationPageSelectionV689()">
+                  ${selectedVisible ? `<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="#0a0a0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ''}
+                </button>
+              </th>
+              <th>Status</th>
+              <th>Nome da empresa</th>
+              <th>Ramo</th>
+              <th>Estado</th>
+              <th>Cidade</th>
+              <th>WhatsApp</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pageRows.map(renderValidationLeadCard).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
 
-    list.innerHTML = '<div class="ext-list">' + pageRows.map(renderValidationLeadCard).join('') + '</div>';
+    window.__validationVisiblePageIdsV689 = [...visibleIds];
     renderPagination(total);
-  }
-
-  async function renderValidationStageFromSupabase() {
-    const list = document.getElementById('valComSiteList');
-    if (!list) return [];
-
-    if (!state.rows.length) {
-      list.innerHTML = '<div class="table-empty">Carregando leads da Validacao...</div>';
-    }
-
-    state.loading = true;
-
-    try {
-      const rows = await fetchValidationLeads();
-      state.rows = rows.filter((row) => row.current_stage === 'validation');
-      publishRuntimeLeads(state.rows);
-      renderActiveValidationTab();
-      return state.rows;
-    } catch (error) {
-      console.error('[rebuild618] erro ao carregar Validacao:', error);
-      list.innerHTML = '<div class="table-empty">Erro ao carregar leads da Validacao.</div>';
-      return [];
-    } finally {
-      state.loading = false;
-    }
-  }
-
-  function setValidationResultTab(tab) {
-    state.activeTab = ['validados', 'insta', 'com-site', 'pendentes'].includes(tab) ? tab : 'pendentes';
-    state.page = 1;
-    state.selected.clear();
-    renderActiveValidationTab();
-  }
-
-  function setActionButtonsDisabled(leadId, disabled) {
-    document.querySelectorAll('[data-validation-action-id]').forEach((button) => {
-      if (button.getAttribute('data-validation-action-id') === String(leadId)) {
-        button.disabled = disabled;
-      }
-    });
-  }
-
-  async function approveLeadWhatsappRebuild(leadId) {
-    setActionButtonsDisabled(leadId, true);
-
-    try {
-      await rpcValidationAction(leadId, 'approve_whatsapp', null);
-
-      const row = state.rows.find((item) => String(item.id) === String(leadId));
-      if (row) {
-        row.current_status = 'whatsapp_validated';
-        row.whatsapp_status = 'valid';
-      }
-
-      if (typeof notify === 'function') notify('WhatsApp aprovado.');
-      state.activeTab = 'validados';
-      state.page = 1;
-      renderActiveValidationTab();
-      await renderValidationStageFromSupabase();
-    } catch (error) {
-      console.error('[rebuild618] erro ao aprovar lead:', error);
-      if (typeof notify === 'function') notify(error?.message || 'Falha ao aprovar WhatsApp.', 'err');
-    } finally {
-      setActionButtonsDisabled(leadId, false);
-    }
-  }
-
-  async function rejectLeadValidationRebuild(leadId) {
-    const reason = prompt('Motivo da reprovacao:', 'Numero invalido');
-    if (reason === null) return;
-
-    setActionButtonsDisabled(leadId, true);
-
-    try {
-      await rpcValidationAction(leadId, 'reject_validation', reason || 'Reprovado manualmente');
-      state.rows = state.rows.filter((item) => String(item.id) !== String(leadId));
-
-      if (typeof notify === 'function') notify('Lead reprovado na validacao.');
-      renderActiveValidationTab();
-      await renderValidationStageFromSupabase();
-    } catch (error) {
-      console.error('[rebuild618] erro ao reprovar lead:', error);
-      if (typeof notify === 'function') notify(error?.message || 'Falha ao reprovar lead.', 'err');
-    } finally {
-      setActionButtonsDisabled(leadId, false);
-    }
-  }
-
-  function mirrorInstagramBacklogFromValidation(row = {}) {
-    if (typeof getInstaFila !== 'function' || typeof saveInstaFila !== 'function') return;
-    const lead = normalizeLeadForRuntime(row);
-    const existing = getInstaFila();
-    const nextLead = {
-      ...lead,
-      nome: lead.nome || lead.company_name || '',
-      instagram: lead.instagram || lead.instagram_url || '',
-      instagramUrl: lead.instagram || lead.instagram_url || '',
-      canal: 'insta',
-      status: 'backlog_instagram',
-      entradaBacklogEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0, 10)
-    };
-    saveInstaFila([...existing.filter((item) => String(item.id) !== String(row.id)), nextLead]);
-  }
-
-  function getVisibleBacklogReadyRows() {
-    return isBacklogReadyTab() ? getActiveRows() : [];
-  }
-
-  function toggleValidationBacklogSelection(leadId) {
-    const key = String(leadId || '');
-    if (!key) return;
-    if (state.selected.has(key)) state.selected.delete(key);
-    else state.selected.add(key);
-    renderActiveValidationTab();
-  }
-
-  function selectVisibleValidationBacklogRows() {
-    const rows = getVisibleBacklogReadyRows();
-    if (!rows.length) {
-      if (typeof notify === 'function') notify('// esta aba nao possui leads prontos para backlog', 'warn');
-      return;
-    }
-    rows.forEach((row) => state.selected.add(String(row.id)));
-    renderActiveValidationTab();
-    if (typeof notify === 'function') notify(`${rows.length} lead${rows.length !== 1 ? 's' : ''} selecionado${rows.length !== 1 ? 's' : ''}.`);
-  }
-
-  function clearValidationBacklogSelection() {
-    state.selected.clear();
-    renderActiveValidationTab();
-  }
-
-  async function sendValidationLeadToBacklog(leadId, options = {}) {
-    const row = state.rows.find((item) => String(item.id) === String(leadId));
-    if (!row) {
-      if (!options.silent && typeof notify === 'function') notify('// lead nao encontrado na Validacao', 'warn');
-      return false;
-    }
-
-    const bucket = bucketForValidation(row);
-    setActionButtonsDisabled(leadId, true);
-
-    try {
-      await rpcValidationBacklogAction(leadId, bucket);
-      if (bucket === 'insta') mirrorInstagramBacklogFromValidation(row);
-
-      state.rows = state.rows.filter((item) => String(item.id) !== String(leadId));
-      state.selected.delete(String(leadId));
-
-      if (!options.silent && typeof notify === 'function') {
-        notify(bucket === 'insta' ? 'Lead enviado ao Backlog Instagram.' : 'Lead enviado ao Backlog Zap.');
-      }
-
-      renderActiveValidationTab();
-      if (bucket === 'insta' && typeof renderInstagram === 'function') renderInstagram();
-      if (bucket !== 'insta' && typeof renderQueueStageFromSupabase621 === 'function') renderQueueStageFromSupabase621();
-      if (typeof updateBadges === 'function') updateBadges();
-      return true;
-    } catch (error) {
-      console.error('[rebuild629] erro ao enviar validacao ao backlog:', error);
-      if (!options.silent && typeof notify === 'function') notify(error?.message || 'Falha ao enviar lead ao backlog.', 'err');
-      return false;
-    } finally {
-      setActionButtonsDisabled(leadId, false);
-    }
-  }
-
-  async function sendSelectedValidationToBacklog() {
-    if (!state.selected.size) {
-      if (typeof notify === 'function') notify('// selecione ao menos 1 lead pronto', 'warn');
-      return;
-    }
-
-    const ids = [...state.selected];
-    let moved = 0;
-    for (const id of ids) {
-      if (await sendValidationLeadToBacklog(id, { silent: true })) moved++;
-    }
-
-    state.selected.clear();
-    renderActiveValidationTab();
-    await renderValidationStageFromSupabase();
-    if (typeof notify === 'function') notify(`${moved} lead${moved !== 1 ? 's' : ''} enviado${moved !== 1 ? 's' : ''} ao backlog.`);
-  }
-
-  async function sendVisibleValidationToBacklog() {
-    const rows = getVisibleBacklogReadyRows();
-    if (!rows.length) {
-      if (typeof notify === 'function') notify('// esta aba nao possui leads prontos para backlog', 'warn');
-      return;
-    }
-
-    let moved = 0;
-    for (const row of rows) {
-      if (await sendValidationLeadToBacklog(row.id, { silent: true })) moved++;
-    }
-
-    state.selected.clear();
-    renderActiveValidationTab();
-    await renderValidationStageFromSupabase();
-    if (typeof notify === 'function') notify(`${moved} lead${moved !== 1 ? 's' : ''} enviado${moved !== 1 ? 's' : ''} ao backlog.`);
   }
 
   function openValidationLeadDrawerRebuild(leadId) {
@@ -1041,6 +880,7 @@
   window.sendValidationLeadToBacklogRebuild629 = sendValidationLeadToBacklog;
   window.removeComSiteLeadFromValidationV688 = removeComSiteLeadFromValidationV688;
   window.toggleValidacaoBacklogSel = toggleValidationBacklogSelection;
+  window.toggleValidationPageSelectionV689 = toggleValidationPageSelectionV689;
   window.selecionarTodosValidacaoBacklog = selectVisibleValidationBacklogRows;
   window.limparSelecaoValidacaoBacklog = clearValidationBacklogSelection;
   window.enviarSelecionadosValidacaoAoBacklog = sendSelectedValidationToBacklog;
