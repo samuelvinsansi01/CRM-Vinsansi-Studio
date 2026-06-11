@@ -635,7 +635,15 @@ async function iniciarDisparoChip(slot) {
   const chip = getChipBySlot(slot);
   if (!chip) { notify('// chip ' + (slot+1) + ' não configurado','err'); return; }
   if (blockChipDispatchReloadLockV432(slot, chip)) return;
-  const fila = getFilaChipNoDia(chip.id, todayStr()).filter(f => f.status !== 'enviado');
+  let fila = getFilaChipNoDia(chip.id, todayStr()).filter(f => f.status !== 'enviado');
+  if (!fila.length && typeof window.bridgeTestRowsToLegacyQueueV692 === 'function') {
+    try {
+      window.bridgeTestRowsToLegacyQueueV692(slot, chip);
+      fila = getFilaChipNoDia(chip.id, todayStr()).filter(f => f.status !== 'enviado');
+    } catch (error) {
+      console.warn('[test-dispatch-bridge-v692] fallback falhou:', error);
+    }
+  }
   if (!fila.length) { notify('// fila vazia','warn'); return; }
 
   // Congela o lote — snapshot dos itens aguardando

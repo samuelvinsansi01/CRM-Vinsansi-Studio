@@ -3884,13 +3884,99 @@
         .sort((a, b) => Number(a.batchIndex || a.batch_index || 0) - Number(b.batchIndex || b.batch_index || 0)
           || Number(a.batchPosition || a.batch_position || a.queuePosition || 0) - Number(b.batchPosition || b.batch_position || b.queuePosition || 0))
         .map((row) => legacyDispatchItemFromRow(row, chip));
-      filaDisparo[chipId] = legacyRows;
-      if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-bridge' });
+
+      const legacyChip = typeof getChipBySlot === 'function' ? getChipBySlot(slot) : null;
+      const aliasIds = [
+        chipId,
+        chip.id,
+        chip.dbId,
+        chip.chip_id,
+        chip.instance,
+        chip.name,
+        chip.label,
+        legacyChip?.id,
+        legacyChip?.chip_id,
+        legacyChip?.instance,
+        legacyChip?.name,
+        legacyChip?.label,
+        ...rows.flatMap((row) => [row.chipId, row.chip_id, row.assignedChipId, row.chipInstance, row.chip_instance, row.chipName, row.chip_name])
+      ]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+
+      const uniqueAliasIds = [...new Set(aliasIds)];
+      uniqueAliasIds.forEach((aliasId) => {
+        filaDisparo[aliasId] = legacyRows.map((item) => ({
+          ...item,
+          chipId: aliasId,
+          assignedChipId: aliasId,
+          chipName: chip.name || chip.nome || legacyChip?.name || legacyChip?.nome || chip.instance || '',
+          chipLabel: chip.nome || chip.name || legacyChip?.nome || legacyChip?.name || chip.instance || ''
+        }));
+      });
+
+      try {
+        console.warn('[test-dispatch-bridge-v692]', {
+          slot,
+          chipId,
+          legacyChipId: legacyChip?.id || '',
+          aliases: uniqueAliasIds,
+          rows: legacyRows.length,
+          day: typeof todayStr === 'function' ? todayStr() : ''
+        });
+      } catch (_) {}
+
+      if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'dispatch-aside-bridge-v692' });
     } catch (error) {
       return { ok:false, error:error?.message || 'Falha ao preparar fila local para disparo.' };
     }
     return { ok:true, chip, rows };
   }
+
+  window.bridgeTestRowsToLegacyQueueV692 = function bridgeTestRowsToLegacyQueueV692(slot, legacyChip = null) {
+    try {
+      const dispatchDate = selectedQueueDateForDispatch();
+      if (dispatchDate !== localDateISO()) return false;
+      const chips = dispatchChipsForControls();
+      const chip = chips[slot] || legacyChip || null;
+      const effectiveChip = chip || legacyChip;
+      if (!effectiveChip) return false;
+
+      const rows = readTestDispatchRows()
+        .filter((row) => String(row.scheduledFor || row.scheduled_for || '').slice(0, 10) === localDateISO())
+        .filter((row) => chipMatchesRow(effectiveChip, row) || chipMatchesRow(legacyChip || {}, row))
+        .filter((row) => !['sent', 'completed', 'batch_completed', 'batch_sending'].includes(String(row.statusRaw || row.status || '').toLowerCase()));
+
+      if (!rows.length) return false;
+      if (typeof todayStr === 'function') disparoDay = todayStr();
+      updateLocalWeekForLegacyDispatch(rows, effectiveChip, dispatchDate);
+
+      const legacyRows = rows.map((row) => legacyDispatchItemFromRow(row, effectiveChip));
+      const ids = [
+        effectiveChip.id,
+        effectiveChip.dbId,
+        effectiveChip.chip_id,
+        effectiveChip.instance,
+        effectiveChip.name,
+        effectiveChip.label,
+        legacyChip?.id,
+        legacyChip?.chip_id,
+        legacyChip?.instance,
+        legacyChip?.name,
+        legacyChip?.label,
+        ...rows.flatMap((row) => [row.chipId, row.chip_id, row.assignedChipId, row.chipInstance, row.chip_instance, row.chipName, row.chip_name])
+      ].map((value) => String(value || '').trim()).filter(Boolean);
+
+      [...new Set(ids)].forEach((id) => {
+        filaDisparo[id] = legacyRows.map((item) => ({ ...item, chipId:id, assignedChipId:id, status:'aguardando' }));
+      });
+      if (typeof saveFilaDisparo === 'function') saveFilaDisparo({ delay:0, reason:'test-dispatch-bridge-v692-empty-fallback' });
+      return true;
+    } catch (error) {
+      console.warn('[test-dispatch-bridge-v692] erro:', error);
+      return false;
+    }
+  };
 
   function renderRightPanel() {
     const right = document.getElementById('zapRight');
