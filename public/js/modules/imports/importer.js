@@ -203,6 +203,57 @@ function importPreview() {
   renderPagination('importPreviewPagination', importPage, totalPrevPages, totalPrev, IMPORT_PG, 'goImportPage', 'changeImportPgSize');
 }
 
+
+async function persistImportedLeadDirectV430(lead = {}) {
+  if (!lead || !lead.id) return { skipped:true, reason:'lead-missing' };
+  if (!(typeof sbClient !== 'undefined' && sbClient && typeof currentUser !== 'undefined' && currentUser?.id)) {
+    return { skipped:true, reason:'supabase-not-ready' };
+  }
+
+  const payload = {
+    id: String(lead.id),
+    user_id: currentUser.id,
+    user_email: String(currentUser.email || '').trim().toLowerCase(),
+    company_name: lead.nome || lead.company_name || lead.companyName || 'Lead sem nome',
+    phone: lead.whatsapp || lead.phone || '',
+    instagram: lead.instagram || '',
+    instagram_url: lead.instagram || '',
+    website: lead.site || lead.website || '',
+    maps_url: lead.googleUrl || lead.maps_url || '',
+    category: lead.categoria || lead.category || '',
+    rating: Number(lead.totalScore || lead.rating || 0) || null,
+    reviews_count: Number(lead.reviewsCount || lead.reviews_count || 0) || 0,
+    status: lead.status || 'Não enviada',
+    current_status: lead.current_status || 'new',
+    current_stage: lead.stage || lead.current_stage || 'validation',
+    lead_channel: lead.tipo === 'instagram' ? 'instagram' : 'whatsapp',
+    lead_type: lead.tipo || (lead.has_own_site ? 'com-site' : 'sem-site'),
+    has_own_site: !!lead.has_own_site,
+    pipeline_status: lead.pipeline_status || lead.pipelineStatus || 'imported',
+    raw_payload: lead.raw_payload || lead.rawPayload || {},
+    updated_at: new Date().toISOString()
+  };
+
+  // Compatibilidade: se o schema em produção ainda não tiver alguma coluna,
+  // remove a coluna indicada pelo erro e tenta novamente. Isso evita importação zerada.
+  let currentPayload = { ...payload };
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { error } = await sbClient.from('leads').upsert(currentPayload, { onConflict:'id' });
+    if (!error) return { ok:true };
+
+    const msg = String(error.message || '');
+    const missing = msg.match(/Could not find the '([^']+)' column/)?.[1];
+    if (missing && Object.prototype.hasOwnProperty.call(currentPayload, missing)) {
+      delete currentPayload[missing];
+      continue;
+    }
+
+    console.warn('[import][direct-upsert-error]', msg, currentPayload);
+    return { error };
+  }
+  return { error:new Error('Falha ao compatibilizar payload de lead') };
+}
+
 async function importarLeads() {
   const raw = document.getElementById('importJsonInput').value.trim();
   if (!raw) { notify('// cole o JSON primeiro', 'err'); return; }
@@ -219,6 +270,7 @@ async function importarLeads() {
   let addedInstagram = 0;
   let skipped = 0;
   let blockedAlreadySent = 0;
+  const importedLeadsForSupabase = [];
 
   const importSeenKeys = new Set();
   const existingValidationKeys = new Set((typeof dedupeLeadArrayV434 === 'function' ? novaValFila : novaValFila).map(lead => typeof getLeadIdentityKeyV434 === 'function' ? getLeadIdentityKeyV434(lead) : lead.id).filter(Boolean));
@@ -254,6 +306,7 @@ async function importarLeads() {
       }
       if (key) { importSeenKeys.add(key); existingValidationKeys.add(key); }
       novaValFila.push(lead);
+      importedLeadsForSupabase.push(lead);
       addedWhatsapp++;
       if (lead.tipo === 'com-site') addedComSite++;
       else addedSemSite++;
@@ -269,6 +322,7 @@ async function importarLeads() {
       }
       if (key) { importSeenKeys.add(key); existingInstagramKeys.add(key); }
       novaInstaFila.push(lead);
+      importedLeadsForSupabase.push(lead);
       addedInstagram++;
       continue;
     }
@@ -290,13 +344,26 @@ async function importarLeads() {
       scheduleLegacyOperationalSyncV36({ delay:0, reason:'apify-import' });
     }
   }
+
+  let persistedSupabase = 0;
+  if (importedLeadsForSupabase.length) {
+    for (const lead of importedLeadsForSupabase) {
+      try {
+        const result = await persistImportedLeadDirectV430(lead);
+        if (result?.ok) persistedSupabase++;
+      } catch (error) {
+        console.warn('[import][direct-persist-exception]', error?.message || error);
+      }
+    }
+  }
   updateBadges();
 
   let msg = `✓ ${addedWhatsapp} → Validação WhatsApp (${addedComSite} com site · ${addedSemSite} sem site)`;
   if (addedInstagram) msg += ` · ${addedInstagram} → backlog Instagram`;
   if (stats.alreadySeen) msg += ` · ${stats.alreadySeen} já vistos`;
   if (blockedAlreadySent) msg += ` · ${blockedAlreadySent} bloqueados por Já enviados`;
-  if (skipped) msg += ` · ${skipped} ignoradas`;
+  if (persistedSupabase) msg += ` · ${persistedSupabase} salvos no banco`;
+  if (skipped) msg += ` · ${skipped} recusados/ignorados`;
   notify(msg, addedWhatsapp || addedInstagram ? '' : 'warn');
 
   document.getElementById('importJsonInput').value = '';
