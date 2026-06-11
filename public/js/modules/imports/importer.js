@@ -115,17 +115,32 @@ function importPreview() {
   const stats = getImportStatsV430(analyses);
   const opportunities = analyses.filter(item => item.route === 'whatsapp-validation' || item.route === 'instagram-backlog');
 
+  const aprovados = stats.validWhatsapp + stats.instagramBacklog;
+  const recusados = Math.max(0, stats.total - aprovados);
   sumEl.innerHTML = `
-    <span class="acc">${stats.total}</span> total ·
-    <span class="acc">${stats.validWhatsapp}</span> para validação WhatsApp ·
-    <span class="acc">${stats.comSite}</span> com site ·
-    <span class="acc">${stats.noSite}</span> sem site ·
-    <span class="acc">${stats.instagramBacklog}</span> backlog Instagram ·
-    <span class="warn">${stats.wixSites}</span> sites Wix ·
-    <span class="warn">${stats.alreadySeen}</span> já vistos ·
-    <span class="err">${stats.outsideBranch}</span> fora do ramo ·
-    <span class="err">${stats.belowQualification}</span> abaixo da qualificação ·
-    <span class="warn">${stats.noPhone}</span> sem telefone
+    <div class="import-summary-cards-v30">
+      <div class="import-summary-card-v30 general">
+        <div class="summary-card-title-v30">Geral</div>
+        <div class="summary-card-line-v30"><span>Total</span><strong>${stats.total}</strong></div>
+        <div class="summary-card-line-v30 ok"><span>Aprovados</span><strong>${aprovados}</strong></div>
+        <div class="summary-card-line-v30 danger"><span>Recusados</span><strong>${recusados}</strong></div>
+      </div>
+      <div class="import-summary-card-v30 approved">
+        <div class="summary-card-title-v30">Aprovados</div>
+        <div class="summary-card-line-v30"><span>WhatsApp</span><strong>${stats.validWhatsapp}</strong></div>
+        <div class="summary-card-line-v30"><span>Com site</span><strong>${stats.comSite}</strong></div>
+        <div class="summary-card-line-v30"><span>Sem site</span><strong>${stats.noSite}</strong></div>
+        <div class="summary-card-line-v30"><span>Instagram</span><strong>${stats.instagramBacklog}</strong></div>
+      </div>
+      <div class="import-summary-card-v30 refused">
+        <div class="summary-card-title-v30">Recusados</div>
+        <div class="summary-card-line-v30"><span>Fora do ramo</span><strong>${stats.outsideBranch}</strong></div>
+        <div class="summary-card-line-v30"><span>Abaixo da qualificação</span><strong>${stats.belowQualification}</strong></div>
+        <div class="summary-card-line-v30"><span>Sem telefone</span><strong>${stats.noPhone}</strong></div>
+        <div class="summary-card-line-v30"><span>Já vistos</span><strong>${stats.alreadySeen}</strong></div>
+        <div class="summary-card-line-v30"><span>Sites Wix</span><strong>${stats.wixSites}</strong></div>
+      </div>
+    </div>
   `;
   countEl.textContent = `· ${opportunities.length} oportunidades`;
 
