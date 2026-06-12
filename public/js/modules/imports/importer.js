@@ -257,7 +257,8 @@ async function persistImportedLeadDirectV430(lead = {}) {
     user_email: String(currentUser.email || '').trim().toLowerCase(),
     company_name: lead.nome || lead.company_name || lead.companyName || 'Lead sem nome',
     phone: lead.whatsapp || lead.phone || '',
-    normalized_phone: lead.normalized_phone || (typeof normalizeSentContactPhoneV30 === 'function' ? normalizeSentContactPhoneV30(lead.whatsapp || lead.phone || '') : (typeof normalizePhone === 'function' ? normalizePhone(lead.whatsapp || lead.phone || '') : String(lead.whatsapp || lead.phone || '').replace(/\D/g, ''))),
+    // IMPORTANTE: public.leads.normalized_phone é GENERATED ALWAYS no Supabase
+    // (normalize_br_phone(phone)). Não enviar essa coluna no insert/upsert.
     city: lead.city || lead.cidade || '',
     state: lead.state || lead.estado || '',
     instagram: lead.instagram || '',
@@ -294,6 +295,14 @@ async function persistImportedLeadDirectV430(lead = {}) {
     const missing = msg.match(/Could not find the '([^']+)' column/)?.[1];
     if (missing && Object.prototype.hasOwnProperty.call(currentPayload, missing)) {
       delete currentPayload[missing];
+      continue;
+    }
+
+    const generatedColumn = msg.match(/cannot insert a non-DEFAULT value into column \"([^\"]+)\"/)?.[1]
+      || msg.match(/cannot insert a non-DEFAULT value into column \"([^\"]+)\"/)?.[1]
+      || msg.match(/cannot insert a non-DEFAULT value into column ([a-zA-Z0-9_]+)/)?.[1];
+    if (generatedColumn && Object.prototype.hasOwnProperty.call(currentPayload, generatedColumn)) {
+      delete currentPayload[generatedColumn];
       continue;
     }
 
