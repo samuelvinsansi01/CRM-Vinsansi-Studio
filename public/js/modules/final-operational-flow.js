@@ -265,3 +265,155 @@
 
   document.addEventListener('DOMContentLoaded', () => setTimeout(() => { updateBadges(); loadSentContactsPanel(false); }, 900));
 })();
+
+/* V30.1 — correções finais: paginação sem NaN, renderização forte e badges reais */
+(function(){
+  function nint(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+  }
+  function safeTextV31(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value ?? 0);
+  }
+  function normalizePhoneV31(lead) {
+    const raw = lead?.normalized_phone || lead?.whatsapp || lead?.phone || '';
+    const digits = String(raw).replace(/\D/g, '');
+    if (!digits) return '';
+    return digits.startsWith('55') ? digits : '55' + digits;
+  }
+  function leadNameV31(lead) {
+    return lead?.nome || lead?.company_name || lead?.companyName || lead?.title || 'Lead sem nome';
+  }
+  function leadSiteV31(lead) {
+    return lead?.site || lead?.website || '';
+  }
+  function leadUrlV31(lead) {
+    return lead?.googleUrl || lead?.mapsUrl || lead?.url || '';
+  }
+  function leadTipoV31(lead) {
+    return lead?.tipo || (leadSiteV31(lead) ? 'com-site' : 'sem-site');
+  }
+  function escV31(value) {
+    if (typeof escHtml === 'function') return escHtml(value);
+    return String(value ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  }
+  function renderPagerV31(containerId, cur, total, totalItems, pgSize, onPage, onSize) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const c = nint(cur, 1);
+    const t = Math.max(1, nint(total, 1));
+    const p = Math.max(1, nint(pgSize, 20));
+    const count = Math.max(0, nint(totalItems, 0));
+    if (!count) { el.innerHTML = ''; return; }
+    const start = Math.min(count, (c - 1) * p + 1);
+    const end = Math.min(c * p, count);
+    const pages = [];
+    for (let i = 1; i <= t; i++) pages.push(i);
+    el.innerHTML = `<div class="pagination-bar">
+      <div class="pagination-info">Exibindo <strong>${start}–${end}</strong> de <strong>${count}</strong></div>
+      <div class="pagination-controls">
+        <button class="pg-btn" onclick="${onPage}(${Math.max(1, c-1)})" ${c<=1?'disabled':''}>‹</button>
+        ${pages.map(i => `<button class="pg-btn${i===c?' active':''}" onclick="${onPage}(${i})">${i}</button>`).join('')}
+        <button class="pg-btn" onclick="${onPage}(${Math.min(t, c+1)})" ${c>=t?'disabled':''}>›</button>
+      </div>
+      <select class="pg-size-select" onchange="${onSize}(+this.value)" title="Itens por página">
+        ${[10,20,50,100].map(n=>`<option value="${n}"${p===n?' selected':''}>${n}/pág</option>`).join('')}
+      </select>
+    </div>`;
+  }
+
+  window.goValPage = function goValPageV31(page) {
+    window.valPage = nint(page, 1);
+    if (typeof window.renderValidacao === 'function') window.renderValidacao();
+  };
+  window.changeValPgSize = function changeValPgSizeV31(size) {
+    window.VAL_PG = nint(size, 20);
+    window.valPage = 1;
+    if (typeof window.renderValidacao === 'function') window.renderValidacao();
+  };
+
+  const previousRenderValidacao = window.renderValidacao;
+  window.renderValidacao = function renderValidacaoV31() {
+    const val = typeof getValData === 'function' ? getValData() : [];
+    const pendentes = (Array.isArray(val) ? val : []).filter(v => {
+      const stage = String(v.current_stage || '').toLowerCase();
+      return !stage || stage === 'validation' || v.canal === 'pendente' || v.numStatus === 'pendente';
+    });
+    safeTextV31('valCountSemZap', pendentes.length);
+    safeTextV31('valCountComZap', 0);
+
+    const chips = typeof getChips === 'function' ? getChips() : [];
+    if (!window.activeChipId && chips.length) window.activeChipId = (chips.find(c => String(c.nome || c.label || '').includes('8457')) || chips[0]).id;
+    const tabs = document.getElementById('valChipTabs');
+    if (tabs) {
+      tabs.innerHTML = chips.length
+        ? chips.map(c => `<div class="chip-tab${window.activeChipId===c.id?' active':''}" onclick="setValChip('${escV31(c.id)}')">${escV31(c.nome || c.label || c.instance || 'chip')}</div>`).join('')
+        : '<span style="font-family:\'DM Mono\',monospace;font-size:9px;color:var(--muted)">Nenhum chip configurado</span>';
+    }
+
+    const list = document.getElementById('valComSiteList');
+    if (!list) {
+      if (typeof previousRenderValidacao === 'function') return previousRenderValidacao();
+      return;
+    }
+    if (!pendentes.length) {
+      list.innerHTML = '<div style="font-family:\'DM Mono\',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead pendente para validar</div>';
+      const pg = document.getElementById('valPagination'); if (pg) pg.innerHTML = '';
+      return;
+    }
+
+    const pageSize = nint(window.VAL_PG, 20);
+    const totalPages = Math.max(1, Math.ceil(pendentes.length / pageSize));
+    window.valPage = Math.min(totalPages, nint(window.valPage, 1));
+    const start = (window.valPage - 1) * pageSize;
+    const page = pendentes.slice(start, start + pageSize);
+
+    list.innerHTML = '<div class="ext-list">' + page.map(v => {
+      const nome = leadNameV31(v);
+      const site = leadSiteV31(v);
+      const url = leadUrlV31(v);
+      const tipo = leadTipoV31(v);
+      const phone = v.whatsapp || v.phone || '';
+      const badge = tipo === 'com-site'
+        ? '<span class="q-badge info">🌐 COM SITE</span>'
+        : '<span class="q-badge ok">🚫 SEM SITE</span>';
+      return `<div class="empresa-card" id="val-card-${escV31(v.id || normalizePhoneV31(v) || nome)}">
+        <div class="empresa-info">
+          <div class="empresa-nome">${url ? `<a href="${escV31(url)}" target="_blank" style="color:var(--text);text-decoration:none">${escV31(nome)}</a>` : escV31(nome)}</div>
+          <div class="empresa-meta">
+            ${badge}
+            ${site ? `<div class="empresa-site"><a href="${escV31(site)}" target="_blank">${escV31(site.replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</a></div>` : ''}
+            <div class="empresa-phone">📱 ${escV31(phone || '—')}</div>
+            ${v.city || v.state ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${escV31([v.city,v.state].filter(Boolean).join(' / '))}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+    renderPagerV31('valPagination', window.valPage, totalPages, pendentes.length, pageSize, 'goValPage', 'changeValPgSize');
+  };
+
+  const previousUpdateBadges = window.updateBadges;
+  window.updateBadges = function updateBadgesV31() {
+    try {
+      const valCount = typeof getValData === 'function' ? getValData().length : 0;
+      const atrib = typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : [];
+      const insta = typeof getInstaFila === 'function' ? getInstaFila() : [];
+      const zapCount = atrib.filter(l => (l.canal || 'zap') !== 'insta').length;
+      safeTextV31('badge-validacao', valCount);
+      safeTextV31('badge-atribuicao', zapCount + insta.length);
+      if (typeof updateAtribTabCounts === 'function') updateAtribTabCounts();
+      if (typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
+    } catch (e) {
+      if (typeof previousUpdateBadges === 'function') previousUpdateBadges();
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      try { window.renderValidacao && window.renderValidacao(); } catch(e) {}
+      try { window.renderAtribuicao && window.renderAtribuicao(); } catch(e) {}
+      try { window.updateBadges && window.updateBadges(); } catch(e) {}
+    }, 1200);
+  });
+})();
