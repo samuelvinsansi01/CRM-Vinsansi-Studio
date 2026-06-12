@@ -389,10 +389,38 @@ async function loadSupabaseLeadCrmToLocalState() {
 async function loadSupabaseLeadsToLocalState({ preserveWorkflow = false } = {}) {
   if (!sbClient || !currentUser) return;
 
-  const { data, error } = await sbClient
-    .from('leads')
-    .select('*')
-    .eq('user_id', currentUser.id);
+  const fetchAllSupabaseLeadsV30 = async () => {
+    const pageSize = 1000;
+    let from = 0;
+    let allRows = [];
+
+    while (true) {
+      const to = from + pageSize - 1;
+      const { data: pageRows, error: pageError } = await sbClient
+        .from('leads')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (pageError) {
+        return { data: allRows, error: pageError };
+      }
+
+      const rows = Array.isArray(pageRows) ? pageRows : [];
+      allRows = allRows.concat(rows);
+
+      if (rows.length < pageSize) break;
+      from += pageSize;
+
+      // Trava de segurança para evitar loop infinito caso o Supabase retorne páginas repetidas.
+      if (from > 50000) break;
+    }
+
+    return { data: allRows, error: null };
+  };
+
+  const { data, error } = await fetchAllSupabaseLeadsV30();
 
   if (error) {
     console.error('[supabase] load leads:', error);
