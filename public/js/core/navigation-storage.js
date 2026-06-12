@@ -210,20 +210,33 @@ function normalizeLeadTextV434(value = '') {
     .toLowerCase();
 }
 
-function getLeadIdentityKeyV434(lead = {}) {
+function getLeadIdentityKeyV434(lead = {}, options = {}) {
+  const preferId = options.preferId === true;
+  const id = String(lead?.id || '').trim();
+
+  // Quando o dado vem do Supabase, o id UUID é a identidade mais segura.
+  // Evita o bug onde 28 leads reconstruídos eram reduzidos para 1 porque
+  // telefone/nome/site vinham vazios ou iguais no formato legado.
+  if (preferId && id) return `id:${id}`;
+
+  const normalizedPhone = normalizeLeadPhoneV434(
+    lead.normalized_phone || lead.phone_normalized || lead.normalizedPhone || lead.whatsapp || lead.phone || lead.telefone || ''
+  );
+  if (normalizedPhone) return `phone:${normalizedPhone}`;
+
   const maps = normalizeLeadUrlV434(lead.googleUrl || lead.mapsUrl || lead.maps_url || lead.url || '');
   if (maps) return `maps:${maps}`;
-
-  const phone = normalizeLeadPhoneV434(lead.whatsapp || lead.phone || lead.telefone || '');
-  const name = normalizeLeadTextV434(lead.nome || lead.companyName || lead.company_name || lead.title || '');
-  if (phone && name) return `phone-name:${phone}:${name}`;
-  if (phone) return `phone:${phone}`;
 
   const site = normalizeLeadUrlV434(lead.site || lead.website || '');
   if (site) return `site:${site}`;
 
-  if (name) return `name:${name}`;
-  return lead?.id ? `id:${lead.id}` : '';
+  const name = normalizeLeadTextV434(lead.nome || lead.companyName || lead.company_name || lead.title || '');
+  // Não deduplicar por nome genérico. Isso matava listas inteiras como
+  // "Lead sem nome" quando algum campo do Supabase vinha ausente.
+  if (name && !['lead sem nome','sem nome','lead'].includes(name)) return `name:${name}`;
+
+  if (id) return `id:${id}`;
+  return '';
 }
 
 function mergeDuplicateLeadPayloadV434(previous = {}, incoming = {}) {
@@ -240,23 +253,43 @@ function mergeDuplicateLeadPayloadV434(previous = {}, incoming = {}) {
 }
 
 function dedupeLeadArrayV434(items = [], { label = 'lead-array' } = {}) {
+  const list = Array.isArray(items) ? items : [];
+
+  // Filas reconstruídas do Supabase já vêm deduplicadas pelo banco. Nelas,
+  // preservar cada UUID é mais importante do que tentar deduplicar por campos
+  // legados, pois campos vazios podem colapsar tudo em 1 item.
+  const preserveSupabaseRows = ['validacao','instagram','atribuicao'].includes(String(label || '').toLowerCase())
+    || list.some(item => String(item?.baseSource || '').toLowerCase() === 'supabase');
+
   const byKey = new Map();
   const result = [];
   let removed = 0;
-  (Array.isArray(items) ? items : []).forEach(item => {
+  const keySamples = [];
+
+  list.forEach((item, index) => {
     if (!item) return;
-    const key = getLeadIdentityKeyV434(item) || `id:${item.id || result.length}`;
-    const existingIndex = byKey.get(key);
+    const key = preserveSupabaseRows
+      ? (item.id ? `id:${item.id}` : getLeadIdentityKeyV434(item, { preferId:true }))
+      : getLeadIdentityKeyV434(item);
+
+    // Nunca deduplicar por chave vazia/null/undefined. Mantém o item único.
+    const safeKey = key || `row:${index}`;
+    if (keySamples.length < 8) keySamples.push(safeKey);
+
+    const existingIndex = byKey.get(safeKey);
     if (existingIndex === undefined) {
-      byKey.set(key, result.length);
+      byKey.set(safeKey, result.length);
       result.push(item);
       return;
     }
+
+    // Em filas do Supabase, IDs iguais são o único caso real de duplicidade.
     result[existingIndex] = mergeDuplicateLeadPayloadV434(result[existingIndex], item);
     removed++;
   });
+
   if (removed) {
-    try { console.warn('[dedupe][leads]', { label, before:items.length, after:result.length, removed }); } catch (_) {}
+    try { console.warn('[dedupe][leads]', { label, before:list.length, after:result.length, removed, preserveSupabaseRows, keySamples }); } catch (_) {}
   }
   return result;
 }
