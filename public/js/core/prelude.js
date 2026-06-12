@@ -86,12 +86,21 @@ const RECUPERAR_VALIDACAO_ZAP_KEY = 'vs_recover_validacao_zap_v1';
 const LEAD_CRM_KEY   = 'vs_lead_crm_v1'; // notas, histórico e pipeline comercial
 const LEADS_BASE_KEY = 'vs_leads_base_v1'; // inventário permanente, independente da agenda semanal
 
-// Supabase — usado primeiro apenas para login Google.
-// Ainda não mexe nos leads e ainda não substitui o localStorage.
+// Supabase Auth persistente: mantém login entre recarregamentos/abas e só sai ao clicar em Sair.
 const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
+const SUPABASE_AUTH_STORAGE_KEY_V435 = 'vs_supabase_auth_persistent_v435';
 const sbClient = window.supabase
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage,
+        storageKey: SUPABASE_AUTH_STORAGE_KEY_V435,
+        flowType: 'pkce'
+      }
+    })
   : null;
 let currentUser = null;
 const AUTH_LOCAL_USER_KEY_V423 = 'vs_auth_local_user_v423';
@@ -249,7 +258,8 @@ function renderAuthUser(user) {
   }
 }
 
-function clearLocalSessionData() {
+function clearLocalSessionData(options = {}) {
+  const clearAuthMarkers = !!options.clearAuthMarkers;
   // Segurança multiusuário: ao deslogar/trocar conta, remover caches locais sensíveis.
   // A fonte persistente deve ser o Supabase filtrado por user_id.
   const exactKeys = [
@@ -322,8 +332,10 @@ function clearLocalSessionData() {
   try { filaDisparo = {}; } catch(e){}
   try { supabaseWhatsappMessagesCacheV412 = []; } catch(e){}
   try { whatsappContactMapCacheV418 = []; } catch(e){}
-  try { localStorage.removeItem(AUTH_LOCAL_USER_KEY_V423); } catch(e){}
-  try { localStorage.removeItem(AUTH_LOCAL_EMAIL_KEY_V425); } catch(e){}
+  if (clearAuthMarkers) {
+    try { localStorage.removeItem(AUTH_LOCAL_USER_KEY_V423); } catch(e){}
+    try { localStorage.removeItem(AUTH_LOCAL_EMAIL_KEY_V425); } catch(e){}
+  }
   updateAuthGate();
   try { updateChipsBadge(); } catch(e){}
   try { renderChipsPanel(); } catch(e){}
@@ -346,14 +358,14 @@ async function initAuth() {
   if (currentUser?.id) {
     const currentEmail = String(currentUser.email || '').trim().toLowerCase();
     if ((lastLocalUserId && lastLocalUserId !== currentUser.id) || (lastLocalUserEmail && lastLocalUserEmail !== currentEmail)) {
-      clearLocalSessionData();
+      clearLocalSessionData({ clearAuthMarkers: true });
     }
     localStorage.setItem(AUTH_LOCAL_USER_KEY_V423, currentUser.id);
     localStorage.setItem(AUTH_LOCAL_EMAIL_KEY_V425, currentEmail);
   }
   
   if (!currentUser) {
-    clearLocalSessionData();
+    clearLocalSessionData({ clearAuthMarkers: true });
   }
 renderAuthUser(currentUser);
   updateAuthGate();
@@ -365,7 +377,7 @@ renderAuthUser(currentUser);
     const nextUserId = session?.user?.id || '';
     const nextUserEmail = String(session?.user?.email || '').trim().toLowerCase();
     if ((previousUserId && nextUserId && previousUserId !== nextUserId) || (previousUserEmail && nextUserEmail && previousUserEmail !== nextUserEmail)) {
-      clearLocalSessionData();
+      clearLocalSessionData({ clearAuthMarkers: true });
     }
     currentUser = session?.user || null;
     if (currentUser?.id) {
@@ -389,7 +401,7 @@ renderAuthUser(currentUser);
         if (typeof renderChipsPanel === 'function') renderChipsPanel();
       }
     } else {
-      if (typeof clearLocalSessionData === 'function') clearLocalSessionData();
+      if (typeof clearLocalSessionData === 'function') clearLocalSessionData({ clearAuthMarkers: true });
       localStorage.removeItem('vs_empresas_v2');
       localStorage.removeItem('vs_lead_crm_v1');
       if (typeof renderInicio === 'function') renderInicio();
@@ -432,7 +444,7 @@ async function logoutSupabase() {
   localStorage.removeItem('vs_leads_base_v1');
 
   currentUser = null;
-  if (typeof clearLocalSessionData === 'function') clearLocalSessionData();
+  if (typeof clearLocalSessionData === 'function') clearLocalSessionData({ clearAuthMarkers: true });
 
   renderAuthUser(null);
 
@@ -453,9 +465,11 @@ async function logoutSupabase() {
       notify('Sessão local encerrada. Recarregue se necessário.', 'warn');
       return;
     }
+    try { localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY_V435); } catch(e){}
     notify('Conta desconectada');
   } catch (error) {
     console.warn('[auth] logout remoto:', error?.message || error);
+    try { localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY_V435); } catch(e){}
     notify('Sessão local encerrada. Recarregue se necessário.', 'warn');
   }
 }
