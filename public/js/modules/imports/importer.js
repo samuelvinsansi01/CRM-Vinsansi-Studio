@@ -282,7 +282,11 @@ async function persistImportedLeadDirectV430(lead = {}) {
   // Compatibilidade: se o schema em produção ainda não tiver alguma coluna,
   // remove a coluna indicada pelo erro e tenta novamente. Isso evita importação zerada.
   let currentPayload = { ...payload };
+  // Defesa dupla: essa coluna é GENERATED ALWAYS no banco e nunca pode ir no upsert,
+  // mesmo que algum cache/lead legado ainda traga normalized_phone dentro do objeto.
+  delete currentPayload.normalized_phone;
   for (let attempt = 0; attempt < 8; attempt++) {
+    delete currentPayload.normalized_phone;
     const { error } = await sbClient.from('leads').upsert(currentPayload, { onConflict:'id' });
     if (!error) return { ok:true };
     const errorCode = String(error.code || '');
@@ -437,17 +441,11 @@ async function importarLeads() {
   if (typeof renderInstagram === 'function') renderInstagram();
   updateBadges();
 
-  let msg = `✓ ${addedWhatsapp} → Validação WhatsApp (${addedComSite} com site · ${addedSemSite} sem site)`;
-  if (addedInstagram) msg += ` · ${addedInstagram} → backlog Instagram`;
-  if (stats.alreadySent) msg += ` · ${stats.alreadySent} já enviados`;
-  if (stats.alreadyInDb) msg += ` · ${stats.alreadyInDb} já no banco`;
-  if (stats.payloadDuplicate) msg += ` · ${stats.payloadDuplicate} duplicados no JSON`;
-  if (blockedAlreadySent) msg += ` · ${blockedAlreadySent} bloqueados por Já enviados`;
-  if (persistedSupabase) msg += ` · ${persistedSupabase} salvos no banco`;
-  if (skipped) msg += ` · ${skipped} recusados`;
-  if (persistedSupabase) msg += ` · espelhado nas telas`;
-  if ((addedWhatsapp || addedInstagram) && !persistedSupabase) msg += ` · atenção: nenhum salvo no Supabase`;
-  notify(msg, addedWhatsapp || addedInstagram ? '' : 'warn');
+  const alertTotal = stats.total;
+  const alertAprovados = persistedSupabase;
+  const alertRecusados = Math.max(0, alertTotal - alertAprovados);
+  const msg = `Total: ${alertTotal} · Aprovados: ${alertAprovados} · Recusados: ${alertRecusados}`;
+  notify(msg, alertAprovados ? '' : 'warn');
 
   document.getElementById('importJsonInput').value = '';
   importPreview();
