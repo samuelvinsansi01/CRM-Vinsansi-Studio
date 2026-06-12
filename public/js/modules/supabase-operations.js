@@ -1,3 +1,4 @@
+window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 = true;
 // V30 DB-first: operational_data não é mais fonte de verdade para leads/filas.
 window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 = true;
 /* ════════════════════════════
@@ -135,6 +136,7 @@ function getOperationalDirtyAtV430() {
 }
 
 function markOperationalDataDirtyV430(reason = 'local-change') {
+  return '';
   // V30 DB-first: alterações locais legadas não devem disparar sync operacional.
   // Leads, validação, atribuição e enviados são carregados do Supabase.
   if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return '';
@@ -421,6 +423,7 @@ with check (auth.uid() = user_id);
 }
 
 function scheduleOperationalSyncV36({ delay = 1500 } = {}) {
+  return;
   if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return;
   if (!isSupabaseOperationalReadyV36()) return;
   const safeDelay = Math.max(0, Number(delay) || 0);
@@ -436,6 +439,7 @@ function scheduleOperationalSyncV36({ delay = 1500 } = {}) {
 }
 
 function scheduleLegacyOperationalSyncV36(options = {}) {
+  return;
   if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return;
   markOperationalDataDirtyV430(options.reason || 'legacy-local-change');
   if (typeof scheduleOperationalSyncV36 === 'function') scheduleOperationalSyncV36(options);

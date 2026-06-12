@@ -568,7 +568,7 @@ function recuperarValidacaoZapDoDia() {
    STORAGE — INSTA CRONOGRAMA
 ════════════════════════════ */
 function getInstaSched()  { return getStoredObject(INSTA_SCHED_KEY); }
-function saveInstaSched(d){ localStorage.setItem(INSTA_SCHED_KEY, JSON.stringify(d)); scheduleLegacyOperationalSyncV36(); }
+function saveInstaSched(d){ localStorage.setItem(INSTA_SCHED_KEY, JSON.stringify(d)); if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 !== true) scheduleLegacyOperationalSyncV36(); }
 
 /* ════════════════════════════
    STORAGE — CHIPS
@@ -577,6 +577,7 @@ function getChips()  { return getStoredArray(CHIPS_KEY); }
 function saveChips(c){
   localStorage.setItem(CHIPS_KEY, JSON.stringify(c));
   localStorage.setItem(LEGACY_CHIPS_UPDATED_AT_KEY_V426, new Date().toISOString());
+  if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return;
   uiSyncLogV426('optimistic-update', { entity:'chip', action:'save-legacy-cache', count:Array.isArray(c) ? c.length : 0 });
   scheduleLegacyOperationalSyncV36({ delay:0 });
 }
@@ -593,13 +594,13 @@ function getRamos()  {
     return RAMOS_DEFAULT;
   }
 }
-function saveRamos(r){ localStorage.setItem(RAMOS_KEY, JSON.stringify(r)); scheduleLegacyOperationalSyncV36(); }
+function saveRamos(r){ localStorage.setItem(RAMOS_KEY, JSON.stringify(r)); if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 !== true) scheduleLegacyOperationalSyncV36(); }
 
 /* ════════════════════════════
    EXCLUDED DOMAINS
 ════════════════════════════ */
 function getExcludedDomains() { return getStoredArray(EXCLUDED_KEY); }
-function saveExcludedDomains(arr) { localStorage.setItem(EXCLUDED_KEY, JSON.stringify(arr)); scheduleLegacyOperationalSyncV36(); }
+function saveExcludedDomains(arr) { localStorage.setItem(EXCLUDED_KEY, JSON.stringify(arr)); if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 !== true) scheduleLegacyOperationalSyncV36(); }
 function extractDomain(site) {
   try { return new URL(site.trim()).hostname.replace(/^www\./,'').toLowerCase(); } catch { return null; }
 }

@@ -180,7 +180,7 @@ async function loadSupabaseAsPrimarySource(options = {}) {
   // Não reconciliar automaticamente localStorage -> Supabase no login.
   // Esse push duplicava leads antigos salvos no navegador e bloqueava novas importações.
   // Use syncAllLocalLeadsToSupabase({ force:true }) apenas em manutenção manual.
-  if (typeof scheduleOperationalSyncV36 === 'function') scheduleOperationalSyncV36();
+  // DB-first: não sincronizar operational_data legado após carregar leads.
 
   setSyncState({
     lastLoadedAt: new Date().toISOString()

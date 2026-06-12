@@ -37,6 +37,28 @@
       return n ? (n.startsWith('55') ? n : '55' + n) : '';
     } catch { return ''; }
   }
+
+  function getChipNameV30(chip = {}) {
+    return String(chip.nome || chip.name || chip.label || chip.instance || '').trim();
+  }
+  function getChipApiKeyV30(chip = {}) {
+    return String(chip.key || chip.apiKey || chip.api_key || chip.apikey || '').trim();
+  }
+  function isChipConnectedV30(chip = {}) {
+    const text = `${chip.status || ''} ${chip.connectionState || chip.connection_state || ''}`.toLowerCase();
+    if (!chip || chip.active === false || chip.disabled === true || chip.paused === true) return false;
+    if (text.includes('saved') || text.includes('desconect') || text.includes('disconnect') || text.includes('closed') || text.includes('disabled')) return false;
+    if (text.includes('open') || text.includes('connected') || text.includes('conect')) return true;
+    return !!(chip.instance && getChipApiKeyV30(chip));
+  }
+  function getValidationChipCandidatesV30(selectedId) {
+    const chips = typeof getChips === 'function' ? getChips() : [];
+    const connected = chips.filter(isChipConnectedV30);
+    const selected = chips.find(c => String(c.id) === String(selectedId));
+    const base = selected && isChipConnectedV30(selected) ? [selected, ...connected.filter(c => String(c.id) !== String(selected.id))] : connected;
+    return base.filter(c => c?.url && c?.instance && getChipApiKeyV30(c));
+  }
+
   function leadToSupabaseStagePayloadV30(lead, stage, extra = {}) {
     const payload = {
       current_stage: stage,
@@ -105,8 +127,8 @@
   window.setValChip = function setValChipFinalV30(id) { window.activeChipId = id; window.valPage = 1; renderValidacao(); };
 
   window.validarTodosNumeros = async function validarTodosNumerosFinalV30() {
-    const chip = typeof getChipById === 'function' ? getChipById(window.activeChipId) : null;
-    if (!chip) { notify('// selecione um chip primeiro','warn'); return; }
+    const candidates = getValidationChipCandidatesV30(window.activeChipId);
+    if (!candidates.length) { notify('// nenhum chip conectado/open disponível para validar','warn'); return; }
     const val = typeof getValData === 'function' ? getValData() : [];
     const pendentes = val.filter(v => (v.tipo === 'sem-site' || v.tipo === 'com-site' || !v.tipo));
     if (!pendentes.length) { notify('// nenhum lead pendente','warn'); return; }
@@ -115,32 +137,48 @@
 
     const resultsByNumber = new Map();
     let apiFailed = false;
+    let chipUsed = null;
+    let lastErrorText = '';
     for (let i = 0; i < pendentes.length; i += 10) {
       const lote = pendentes.slice(i, i + 10);
       const numbers = lote.map(normalizeLeadPhoneV30).filter(n => n.length >= 12);
       if (!numbers.length) continue;
-      try {
-        const res = await fetch(`${chip.url}/chat/whatsappNumbers/${chip.instance}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': chip.key },
-          body: JSON.stringify({ numbers })
-        });
-        const data = await res.json();
-        const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
-        numbers.forEach(num => {
-          const found = rows.find(r => String(r?.jid || r?.number || r?.exists || '').includes(num) || String(r?.number || '').replace(/\D/g,'') === num);
-          resultsByNumber.set(num, !!(found?.exists || found?.jid));
-        });
-      } catch(e) {
-        apiFailed = true;
-        console.error('[validation][whatsapp-check-error]', e?.message || e);
+      let okForBatch = false;
+      for (const chip of candidates) {
+        try {
+          const apiKey = getChipApiKeyV30(chip);
+          const endpoint = `${String(chip.url || '').replace(/\/$/,'')}/chat/whatsappNumbers/${chip.instance}`;
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+            body: JSON.stringify({ numbers })
+          });
+          if (!res.ok) {
+            lastErrorText = `chip ${getChipNameV30(chip)} / ${chip.instance}: HTTP ${res.status}`;
+            console.warn('[validation][chip-failed]', lastErrorText);
+            continue;
+          }
+          const data = await res.json();
+          const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+          numbers.forEach(num => {
+            const found = rows.find(r => String(r?.jid || r?.number || r?.exists || '').includes(num) || String(r?.number || '').replace(/\D/g,'') === num);
+            resultsByNumber.set(num, !!(found?.exists || found?.jid));
+          });
+          chipUsed = chip;
+          okForBatch = true;
+          break;
+        } catch(e) {
+          lastErrorText = e?.message || String(e);
+          console.warn('[validation][whatsapp-check-error]', lastErrorText);
+        }
       }
+      if (!okForBatch) apiFailed = true;
       await new Promise(r => setTimeout(r, 500));
     }
 
     if (apiFailed && !resultsByNumber.size) {
       if (spinner) spinner.style.display = 'none';
-      notify('// falha ao validar na Evolution. Nada foi movido.', 'err');
+      notify(`// falha ao validar na Evolution. Nada foi movido. ${lastErrorText}`, 'err');
       return;
     }
 
@@ -176,7 +214,7 @@
     renderValidacao();
     if (typeof renderAtribuicao === 'function') renderAtribuicao();
     if (typeof updateBadges === 'function') updateBadges();
-    notify(`Total: ${pendentes.length} · WhatsApp: ${toZap} · Com site: ${toComSite} · Instagram: ${toInsta}`);
+    notify(`Total: ${pendentes.length} · WhatsApp: ${toZap} · Com site: ${toComSite} · Instagram: ${toInsta}${chipUsed ? ' · Chip: ' + getChipNameV30(chipUsed) : ''}`);
   };
 
   window.aprovarTodosParaAtribuicao = async function(){ return window.validarTodosNumeros(); };
