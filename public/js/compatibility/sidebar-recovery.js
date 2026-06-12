@@ -145,7 +145,8 @@ function buildFinalSidebarV413() {
 
   sidebar.appendChild(createExpandableMenuGroupV413('Envios', [
     { panel:'whatsappQueue', icon:'💬', label:'WhatsApp', badgeId:'badge-whatsapp-queue' },
-    { panel:'instagram', icon:'📸', label:'Instagram', badgeId:'badge-instagram' }
+    { panel:'instagram', icon:'📸', label:'Instagram', badgeId:'badge-instagram' },
+    { panel:'ja-enviados', icon:'✅', label:'Já enviados', badgeId:'badge-ja-enviados' }
   ]));
 
   sidebar.appendChild(createMenuItemV413('conversations', '💬', 'Conversas'));

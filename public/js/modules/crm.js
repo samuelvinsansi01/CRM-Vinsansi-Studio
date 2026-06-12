@@ -461,29 +461,43 @@ async function loadSupabaseLeadsToLocalState({ preserveWorkflow = false } = {}) 
   });
 
   const validationQueue = activeRows
+    .filter(item => String(item.current_stage || '').toLowerCase() === 'validation')
+    .map(mapSupabaseLeadToLegacyV30);
+
+  const attributionQueue = activeRows
     .filter(item => {
       const stage = String(item.current_stage || '').toLowerCase();
-      const channel = String(item.lead_channel || '').toLowerCase();
-      const type = String(item.lead_type || '').toLowerCase();
-      return stage === 'validation' || (channel === 'whatsapp' && type !== 'instagram' && stage !== 'instagram_backlog');
+      return stage === 'assignment_whatsapp' || stage === 'assignment_website' || stage === 'assignment';
     })
-    .map(mapSupabaseLeadToLegacyV30);
+    .map(item => {
+      const lead = mapSupabaseLeadToLegacyV30(item);
+      const stage = String(item.current_stage || '').toLowerCase();
+      lead.canal = 'zap';
+      lead.tipo = stage === 'assignment_website' || lead.has_own_site || lead.site ? 'com-site' : 'sem-site';
+      lead.numStatus = 'valido';
+      return lead;
+    });
 
   const instagramQueue = activeRows
     .filter(item => {
       const stage = String(item.current_stage || '').toLowerCase();
-      const channel = String(item.lead_channel || '').toLowerCase();
-      const type = String(item.lead_type || '').toLowerCase();
-      return stage === 'instagram_backlog' || channel === 'instagram' || type === 'instagram';
+      return stage === 'instagram_backlog' || stage === 'assignment_instagram';
     })
-    .map(mapSupabaseLeadToLegacyV30);
+    .map(item => {
+      const lead = mapSupabaseLeadToLegacyV30(item);
+      lead.canal = 'insta';
+      lead.tipo = 'instagram';
+      return lead;
+    });
 
   try {
     if (typeof saveValData === 'function') saveValData(validationQueue);
     else if (typeof VAL_KEY !== 'undefined') localStorage.setItem(VAL_KEY, JSON.stringify(validationQueue));
+    if (typeof saveAtribuicaoData === 'function') saveAtribuicaoData(attributionQueue);
+    else if (typeof ATRIBUICAO_KEY !== 'undefined') localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(attributionQueue));
     if (typeof saveInstaFila === 'function') saveInstaFila(instagramQueue);
     else if (typeof INSTA_KEY !== 'undefined') localStorage.setItem(INSTA_KEY, JSON.stringify(instagramQueue));
-    console.log('[supabase] Filas reconstruídas:', { validation: validationQueue.length, instagram: instagramQueue.length });
+    console.log('[supabase] Filas reconstruídas:', { validation: validationQueue.length, attribution: attributionQueue.length, instagram: instagramQueue.length });
   } catch (error) {
     console.warn('[supabase] falha ao reconstruir filas locais:', error?.message || error);
   }
