@@ -408,24 +408,85 @@ async function loadSupabaseLeadsToLocalState({ preserveWorkflow = false } = {}) 
 
   const today = todayStr();
 
-  const leads = (data || []).map(item => ({
-    id: item.id,
-    nome: item.company_name || 'Lead sem nome',
-    whatsapp: item.phone || '',
-    phone: item.phone || '',
-    instagram: item.instagram || '',
-    site: item.website || '',
-    website: item.website || '',
-    googleUrl: item.maps_url || '',
-    mapsUrl: item.maps_url || '',
-    status: item.status || 'Não enviada',
-    pipelineStatus: item.pipeline_status || 'contato_enviado',
-    permanentCreatedAt: item.created_at || '',
-    baseSource: 'Supabase',
-    criadoEm: item.created_at
+  const mapSupabaseLeadToLegacyV30 = (item = {}) => {
+    const stage = String(item.current_stage || item.stage || '').trim().toLowerCase();
+    const channel = String(item.lead_channel || '').trim().toLowerCase();
+    const type = String(item.lead_type || item.tipo || '').trim().toLowerCase();
+    const hasOwnSite = item.has_own_site === true || type === 'com-site';
+    const isInstagram = channel === 'instagram' || stage === 'instagram_backlog' || type === 'instagram';
+    const createdLabel = item.created_at
       ? new Date(item.created_at).toLocaleDateString('pt-BR')
-      : today
-  }));
+      : today;
+
+    return {
+      id: item.id,
+      nome: item.company_name || 'Lead sem nome',
+      whatsapp: item.phone || '',
+      phone: item.phone || '',
+      normalized_phone: item.normalized_phone || '',
+      instagram: item.instagram || item.instagram_url || '',
+      site: item.website || '',
+      website: item.website || '',
+      has_own_site: hasOwnSite,
+      googleUrl: item.maps_url || '',
+      mapsUrl: item.maps_url || '',
+      categoria: item.category || '',
+      city: item.city || '',
+      state: item.state || '',
+      reviewsCount: item.reviews_count || 0,
+      totalScore: item.rating || 0,
+      status: item.status || 'Não enviada',
+      current_status: item.current_status || 'new',
+      current_stage: item.current_stage || '',
+      pipelineStatus: item.pipeline_status || 'contato_enviado',
+      permanentCreatedAt: item.created_at || '',
+      baseSource: 'Supabase',
+      criadoEm: createdLabel,
+      importadoEm: createdLabel,
+      numStatus: isInstagram ? 'nao-aplicavel' : (item.numStatus || item.whatsapp_validation_status || 'pendente'),
+      tipo: isInstagram ? 'instagram' : (hasOwnSite ? 'com-site' : 'sem-site'),
+      canal: isInstagram ? 'insta' : 'pendente',
+      raw_payload: item.raw_payload || {}
+    };
+  };
+
+  const leads = (data || []).map(mapSupabaseLeadToLegacyV30);
+
+  // Fonte de verdade do fluxo: Supabase. Além da base permanente, reconstruímos
+  // as filas legadas que alimentam as telas de Validação e Instagram.
+  const activeRows = (data || []).filter(item => {
+    const currentStatus = String(item.current_status || '').toLowerCase();
+    const currentStage = String(item.current_stage || '').toLowerCase();
+    return currentStatus !== 'sent' && currentStage !== 'archived';
+  });
+
+  const validationQueue = activeRows
+    .filter(item => {
+      const stage = String(item.current_stage || '').toLowerCase();
+      const channel = String(item.lead_channel || '').toLowerCase();
+      const type = String(item.lead_type || '').toLowerCase();
+      return stage === 'validation' || (channel === 'whatsapp' && type !== 'instagram' && stage !== 'instagram_backlog');
+    })
+    .map(mapSupabaseLeadToLegacyV30);
+
+  const instagramQueue = activeRows
+    .filter(item => {
+      const stage = String(item.current_stage || '').toLowerCase();
+      const channel = String(item.lead_channel || '').toLowerCase();
+      const type = String(item.lead_type || '').toLowerCase();
+      return stage === 'instagram_backlog' || channel === 'instagram' || type === 'instagram';
+    })
+    .map(mapSupabaseLeadToLegacyV30);
+
+  try {
+    if (typeof saveValData === 'function') saveValData(validationQueue);
+    else if (typeof VAL_KEY !== 'undefined') localStorage.setItem(VAL_KEY, JSON.stringify(validationQueue));
+    if (typeof saveInstaFila === 'function') saveInstaFila(instagramQueue);
+    else if (typeof INSTA_KEY !== 'undefined') localStorage.setItem(INSTA_KEY, JSON.stringify(instagramQueue));
+    console.log('[supabase] Filas reconstruídas:', { validation: validationQueue.length, instagram: instagramQueue.length });
+  } catch (error) {
+    console.warn('[supabase] falha ao reconstruir filas locais:', error?.message || error);
+  }
 
   // Restaura metadados completos da ficha vindos do banco. Isso protege notas,
   // apresentações, pipeline, follow-up e validação contra perda após F5.

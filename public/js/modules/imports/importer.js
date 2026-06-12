@@ -417,25 +417,40 @@ async function importarLeads() {
     }
   }
 
+  // Recarrega do Supabase e deixa o loader reconstruir as filas das telas.
+  // Fallback: se por algum motivo o reload falhar, usa exatamente os leads persistidos.
+  let reloadedFromSupabase = false;
   if (typeof loadSupabaseLeadsToLocalState === 'function') {
-    try { await loadSupabaseLeadsToLocalState({ preserveWorkflow:false }); } catch (_) {}
+    try {
+      await loadSupabaseLeadsToLocalState({ preserveWorkflow:false });
+      reloadedFromSupabase = true;
+    } catch (error) {
+      console.warn('[import][reload-supabase-after-import-error]', error?.message || error);
+    }
   }
 
-  // Espelha apenas o que foi salvo no Supabase para as telas legadas.
-  // Não agenda sync local -> Supabase e não usa cache antigo como fonte da importação.
-  // Importante: esse cache é gravado DEPOIS do reload do Supabase, porque o reload limpa caches antigos.
-  try {
-    if (persistedValFila.length && typeof VAL_KEY !== 'undefined') {
-      const clean = typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(persistedValFila, { label:'import-validation-persisted-cache' }) : persistedValFila;
-      localStorage.setItem(VAL_KEY, JSON.stringify(clean));
+  if (!reloadedFromSupabase) {
+    try {
+      if (typeof saveValData === 'function') saveValData(persistedValFila);
+      else if (typeof VAL_KEY !== 'undefined') localStorage.setItem(VAL_KEY, JSON.stringify(persistedValFila));
+      if (typeof saveInstaFila === 'function') saveInstaFila(persistedInstaFila);
+      else if (typeof INSTA_KEY !== 'undefined') localStorage.setItem(INSTA_KEY, JSON.stringify(persistedInstaFila));
+    } catch (error) {
+      console.warn('[import][screen-cache-error]', error?.message || error);
     }
-    if (persistedInstaFila.length && typeof INSTA_KEY !== 'undefined') {
-      const clean = typeof dedupeLeadArrayV434 === 'function' ? dedupeLeadArrayV434(persistedInstaFila, { label:'import-instagram-persisted-cache' }) : persistedInstaFila;
-      localStorage.setItem(INSTA_KEY, JSON.stringify(clean));
-    }
-  } catch (error) {
-    console.warn('[import][screen-cache-error]', error?.message || error);
   }
+
+  console.log('[import][final-counts]', {
+    total: stats.total,
+    approvedPreview: stats.approved,
+    persistedSupabase,
+    validationPersisted: persistedValFila.length,
+    instagramPersisted: persistedInstaFila.length,
+    validationScreen: typeof getValData === 'function' ? getValData().length : null,
+    instagramScreen: typeof getInstaFila === 'function' ? getInstaFila().length : null,
+    skipped,
+    blockedAlreadySent
+  });
 
   if (typeof renderValidacao === 'function') renderValidacao();
   if (typeof renderInstagram === 'function') renderInstagram();
