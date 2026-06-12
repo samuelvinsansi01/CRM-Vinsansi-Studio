@@ -302,27 +302,53 @@
     if (typeof escHtml === 'function') return escHtml(value);
     return String(value ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
   }
+  function getCompactPagesV31(cur, total) {
+    const c = Math.max(1, Math.min(nint(cur, 1), nint(total, 1)));
+    const t = Math.max(1, nint(total, 1));
+    if (t <= 9) return Array.from({ length: t }, (_, i) => i + 1);
+    const keep = new Set([1, 2, t - 1, t, c - 2, c - 1, c, c + 1, c + 2]);
+    const out = [];
+    let last = 0;
+    for (let i = 1; i <= t; i++) {
+      if (!keep.has(i) || i < 1 || i > t) continue;
+      if (last && i - last > 1) out.push('…');
+      out.push(i);
+      last = i;
+    }
+    return out;
+  }
+
   function renderPagerV31(containerId, cur, total, totalItems, pgSize, onPage, onSize) {
     const el = document.getElementById(containerId);
     if (!el) return;
-    const c = nint(cur, 1);
     const t = Math.max(1, nint(total, 1));
+    const c = Math.max(1, Math.min(nint(cur, 1), t));
     const p = Math.max(1, nint(pgSize, 20));
     const count = Math.max(0, nint(totalItems, 0));
     if (!count) { el.innerHTML = ''; return; }
     const start = Math.min(count, (c - 1) * p + 1);
     const end = Math.min(c * p, count);
-    const pages = [];
-    for (let i = 1; i <= t; i++) pages.push(i);
-    el.innerHTML = `<div class="pagination-bar">
+    const pages = getCompactPagesV31(c, t);
+    const jumpId = `${containerId}_jump`;
+    el.innerHTML = `<div class="pagination-bar compact-pagination">
       <div class="pagination-info">Exibindo <strong>${start}–${end}</strong> de <strong>${count}</strong></div>
       <div class="pagination-controls">
+        <button class="pg-btn" onclick="${onPage}(1)" ${c<=1?'disabled':''}>«</button>
         <button class="pg-btn" onclick="${onPage}(${Math.max(1, c-1)})" ${c<=1?'disabled':''}>‹</button>
-        ${pages.map(i => `<button class="pg-btn${i===c?' active':''}" onclick="${onPage}(${i})">${i}</button>`).join('')}
+        ${pages.map(i => i === '…'
+          ? `<span class="pg-ellipsis">…</span>`
+          : `<button class="pg-btn${i===c?' active':''}" onclick="${onPage}(${i})">${i}</button>`
+        ).join('')}
         <button class="pg-btn" onclick="${onPage}(${Math.min(t, c+1)})" ${c>=t?'disabled':''}>›</button>
+        <button class="pg-btn" onclick="${onPage}(${t})" ${c>=t?'disabled':''}>»</button>
+      </div>
+      <div class="pagination-jump">
+        <span>pág.</span>
+        <input id="${jumpId}" type="number" min="1" max="${t}" value="${c}" onkeydown="if(event.key==='Enter'){${onPage}(Math.max(1,Math.min(${t},+this.value||1)))}" />
+        <span>/ ${t}</span>
       </div>
       <select class="pg-size-select" onchange="${onSize}(+this.value)" title="Itens por página">
-        ${[10,20,50,100].map(n=>`<option value="${n}"${p===n?' selected':''}>${n}/pág</option>`).join('')}
+        ${[20,50,100,200].map(n=>`<option value="${n}"${p===n?' selected':''}>${n}/pág</option>`).join('')}
       </select>
     </div>`;
   }
