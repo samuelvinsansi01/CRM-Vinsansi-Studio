@@ -417,3 +417,123 @@
     }, 1200);
   });
 })();
+
+/* V30.2 — Conteúdo real em Atribuição Instagram, Já Enviados e badges consistentes */
+(function(){
+  function escV32(value) {
+    if (typeof escHtml === 'function') return escHtml(value);
+    return String(value ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+  }
+  function textV32(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value ?? 0);
+  }
+  function onlyDigitsV32(value) { return String(value || '').replace(/\D/g, ''); }
+  function leadNameV32(lead) { return lead?.nome || lead?.company_name || lead?.title || 'Lead sem nome'; }
+  function leadInstaV32(lead) { return lead?.instagram || lead?.instagram_url || lead?.instagramUrl || ''; }
+  function leadPhoneV32(lead) { return lead?.whatsapp || lead?.phone || ''; }
+
+  window.renderAtribInstaFila = function renderAtribInstaFilaV32() {
+    const listEl = document.getElementById('atribInstaList');
+    if (!listEl) return;
+
+    const filaAll = Array.isArray(typeof getInstaFila === 'function' ? getInstaFila() : []) ? getInstaFila() : [];
+    const buscaEl = document.getElementById('atribInstaBusca');
+    const buscaQ = String(buscaEl?.value || '').trim().toLowerCase();
+    const buscaDigits = onlyDigitsV32(buscaQ);
+    const fila = buscaQ
+      ? filaAll.filter(e =>
+          String(leadNameV32(e)).toLowerCase().includes(buscaQ) ||
+          String(leadInstaV32(e)).toLowerCase().includes(buscaQ) ||
+          String(leadPhoneV32(e)).toLowerCase().includes(buscaQ) ||
+          (buscaDigits && onlyDigitsV32(leadPhoneV32(e)).includes(buscaDigits))
+        )
+      : filaAll;
+
+    const totalEl = document.getElementById('atribInstaFilaTotalBadge');
+    if (totalEl) totalEl.textContent = fila.length ? `· ${fila.length} lead${fila.length !== 1 ? 's' : ''}` : '';
+
+    if (!fila.length) {
+      listEl.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead aguardando atribuição Instagram</div>`;
+      const pg = document.getElementById('atribInstaPagination'); if (pg) pg.innerHTML = '';
+      return;
+    }
+
+    const pageSize = 30;
+    window.atribInstaPage = Number.isFinite(Number(window.atribInstaPage)) ? Number(window.atribInstaPage) : 0;
+    const totalPages = Math.max(1, Math.ceil(fila.length / pageSize));
+    if (window.atribInstaPage >= totalPages) window.atribInstaPage = totalPages - 1;
+    if (window.atribInstaPage < 0) window.atribInstaPage = 0;
+    const page = fila.slice(window.atribInstaPage * pageSize, (window.atribInstaPage + 1) * pageSize);
+
+    listEl.innerHTML = '<div class="ext-list">' + page.map(e => {
+      const id = escV32(e.id || leadNameV32(e));
+      const nome = leadNameV32(e);
+      const insta = leadInstaV32(e);
+      const phone = leadPhoneV32(e);
+      const rating = e.totalScore || e.rating || '';
+      const reviews = e.reviewsCount || e.reviews_count || '';
+      const maps = e.googleUrl || e.mapsUrl || e.url || '';
+      return `<div class="empresa-card" id="atrib-insta-card-${id}" style="border-color:rgba(225,48,108,0.22)">
+        <div class="empresa-info">
+          <div class="empresa-nome">${maps ? `<a href="${escV32(maps)}" target="_blank" style="color:var(--text);text-decoration:none">${escV32(nome)}</a>` : escV32(nome)}</div>
+          <div class="empresa-meta">
+            <span class="q-badge" style="color:var(--insta);border-color:rgba(225,48,108,0.35);background:rgba(225,48,108,0.08)">📸 INSTAGRAM</span>
+            ${phone ? `<div class="empresa-phone">📱 ${escV32(phone)}</div>` : '<span style="font-family:\'DM Mono\',monospace;font-size:8px;color:var(--muted)">sem WhatsApp</span>'}
+            ${rating ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">⭐ ${escV32(rating)}${reviews ? ` (${escV32(reviews)} av.)` : ''}</span>` : ''}
+            ${e.city || e.state ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${escV32([e.city,e.state].filter(Boolean).join(' / '))}</span>` : ''}
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+            <a href="https://www.google.com/search?q=site:instagram.com+${encodeURIComponent('"' + nome + '"')}" target="_blank"
+              style="background:none;border:1px solid rgba(225,48,108,0.25);color:var(--insta);border-radius:6px;font-size:11px;padding:5px 9px;text-decoration:none">🔍</a>
+            <input id="atrib-insta-link-${id}" type="text" value="${escV32(insta)}" placeholder="Cole ou confirme o Instagram..."
+              style="flex:1;background:rgba(225,48,108,0.06);border:1px solid rgba(225,48,108,0.25);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;padding:6px 9px;outline:none"
+              onkeydown="if(event.key==='Enter') atribInstaConfirmarLink('${id}')" />
+          </div>
+        </div>
+        <div class="empresa-actions" style="flex-direction:column;gap:6px;align-items:flex-end">
+          <button onclick="atribInstaConfirmarLink('${id}')" style="background:var(--insta);color:#fff;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:6px 12px;cursor:pointer">✓ Confirmar</button>
+          <button onclick="mandarParaFilaInsta('${id}')" style="background:none;border:1px solid rgba(225,48,108,0.35);color:var(--insta);border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:6px 12px;cursor:pointer">→ Fila Insta</button>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+
+    const pg = document.getElementById('atribInstaPagination');
+    if (pg) {
+      const start = window.atribInstaPage * pageSize + 1;
+      const end = Math.min((window.atribInstaPage + 1) * pageSize, fila.length);
+      pg.innerHTML = `<div class="pagination-bar"><div class="pagination-info">Exibindo <strong>${start}–${end}</strong> de <strong>${fila.length}</strong></div><div class="pagination-controls"><button class="pg-btn" onclick="atribInstaPage=Math.max(0,atribInstaPage-1);renderAtribInstaFila()" ${window.atribInstaPage<=0?'disabled':''}>‹</button><button class="pg-btn active">${window.atribInstaPage+1}</button><button class="pg-btn" onclick="atribInstaPage=Math.min(${totalPages-1},atribInstaPage+1);renderAtribInstaFila()" ${window.atribInstaPage>=totalPages-1?'disabled':''}>›</button></div></div>`;
+    }
+  };
+
+  const previousUpdateBadgesV32 = window.updateBadges;
+  window.updateBadges = function updateBadgesV32() {
+    try {
+      const val = Array.isArray(typeof getValData === 'function' ? getValData() : []) ? getValData() : [];
+      const atrib = Array.isArray(typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : []) ? getAtribuicaoData() : [];
+      const instaAtrib = Array.isArray(typeof getInstaFila === 'function' ? getInstaFila() : []) ? getInstaFila() : [];
+      const zapBacklog = Array.isArray(typeof getZapBacklog === 'function' ? getZapBacklog() : []) ? getZapBacklog() : [];
+      const instaWeek = typeof getInstaWeek === 'function' ? getInstaWeek() : {};
+      const instaEnvios = Object.values(instaWeek || {}).flat().length;
+
+      textV32('badge-validacao', val.length);
+      textV32('badge-atribuicao', atrib.length + instaAtrib.length);
+      textV32('badge-whatsapp-queue', zapBacklog.length);
+      textV32('badge-fila-zap', zapBacklog.length);
+      textV32('badge-instagram', instaEnvios);
+      textV32('badge-import', 0);
+      textV32('badge-importar', 0);
+      if (typeof updateAtribTabCounts === 'function') updateAtribTabCounts();
+      if (typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
+    } catch (e) {
+      if (typeof previousUpdateBadgesV32 === 'function') previousUpdateBadgesV32();
+    }
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+      try { if (window.atribActiveTab === 'insta') window.renderAtribInstaFila(); } catch(e) {}
+      try { window.updateBadges && window.updateBadges(); } catch(e) {}
+    }, 1500);
+  });
+})();
