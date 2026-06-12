@@ -519,15 +519,18 @@ async function loadSupabaseLeadsToLocalState({ preserveWorkflow = false } = {}) 
     });
 
   try {
-    if (typeof saveValData === 'function') saveValData(validationQueue);
-    else if (typeof VAL_KEY !== 'undefined') localStorage.setItem(VAL_KEY, JSON.stringify(validationQueue));
-    if (typeof saveAtribuicaoData === 'function') saveAtribuicaoData(attributionQueue);
-    else if (typeof ATRIBUICAO_KEY !== 'undefined') localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(attributionQueue));
-    if (typeof saveInstaFila === 'function') saveInstaFila(instagramQueue);
-    else if (typeof INSTA_KEY !== 'undefined') localStorage.setItem(INSTA_KEY, JSON.stringify(instagramQueue));
+    // DB-first: ao reconstruir filas a partir do Supabase, NÃO chamar os savers
+    // legados, pois eles marcam operational_data como dirty e criam loop
+    // load -> save local -> sync operational -> load.
+    window.__SUPABASE_REBUILDING_LEADS_V30 = true;
+    if (typeof VAL_KEY !== 'undefined') localStorage.setItem(VAL_KEY, JSON.stringify(validationQueue));
+    if (typeof ATRIBUICAO_KEY !== 'undefined') localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(attributionQueue));
+    if (typeof INSTA_KEY !== 'undefined') localStorage.setItem(INSTA_KEY, JSON.stringify(instagramQueue));
     console.log('[supabase] Filas reconstruídas:', { validation: validationQueue.length, attribution: attributionQueue.length, instagram: instagramQueue.length });
   } catch (error) {
     console.warn('[supabase] falha ao reconstruir filas locais:', error?.message || error);
+  } finally {
+    window.__SUPABASE_REBUILDING_LEADS_V30 = false;
   }
 
   // Restaura metadados completos da ficha vindos do banco. Isso protege notas,

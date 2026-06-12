@@ -433,7 +433,8 @@
       safeTextV31('badge-validacao', valCount);
       safeTextV31('badge-atribuicao', zapCount + insta.length);
       if (typeof updateAtribTabCounts === 'function') updateAtribTabCounts();
-      if (typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
+      // Não carregar sent_contacts a cada updateBadges. A aba Já enviados carrega sob demanda.
+      if (document.getElementById('panel-fila-zap')?.classList.contains('active') && typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
     } catch (e) {
       if (typeof previousUpdateBadges === 'function') previousUpdateBadges();
     }
@@ -554,7 +555,8 @@
       textV32('badge-import', 0);
       textV32('badge-importar', 0);
       if (typeof updateAtribTabCounts === 'function') updateAtribTabCounts();
-      if (typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
+      // Não carregar sent_contacts a cada updateBadges. A aba Já enviados carrega sob demanda.
+      if (document.getElementById('panel-fila-zap')?.classList.contains('active') && typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
     } catch (e) {
       if (typeof previousUpdateBadgesV32 === 'function') previousUpdateBadgesV32();
     }

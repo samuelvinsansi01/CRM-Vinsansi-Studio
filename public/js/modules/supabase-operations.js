@@ -1,3 +1,5 @@
+// V30 DB-first: operational_data não é mais fonte de verdade para leads/filas.
+window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 = true;
 /* ════════════════════════════
    PERSISTÊNCIA SUPABASE V36
 ════════════════════════════ */
@@ -133,6 +135,9 @@ function getOperationalDirtyAtV430() {
 }
 
 function markOperationalDataDirtyV430(reason = 'local-change') {
+  // V30 DB-first: alterações locais legadas não devem disparar sync operacional.
+  // Leads, validação, atribuição e enviados são carregados do Supabase.
+  if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return '';
   if (!currentUser?.id || !currentUser?.email) return '';
   const dirtyAt = new Date().toISOString();
   localStorage.setItem(getOperationalDirtyKeyV430(), dirtyAt);
@@ -151,6 +156,7 @@ function getOperationalRemoteUpdatedAtV430(row = {}) {
 }
 
 function shouldPreserveLocalOperationalDataV430(row = {}) {
+  if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return false;
   const dirtyAt = getOperationalDirtyAtV430();
   const remoteUpdatedAt = getOperationalRemoteUpdatedAtV430(row);
   if (!dirtyAt) return false;
@@ -218,6 +224,10 @@ function isSupabaseOperationalReadyV36() {
 }
 
 async function syncOperationalDataToSupabaseV36({ silent = false } = {}) {
+  if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) {
+    setPersistenceStatusV36('Fluxo DB-first ativo. operational_data legado desativado.', 'ok');
+    return { ok:true, skipped:true };
+  }
   if (!isSupabaseOperationalReadyV36()) {
     setPersistenceStatusV36('Supabase indisponível ou usuário não conectado.', 'warn');
     if (!silent) notify('Entre na conta antes de sincronizar.', 'warn');
@@ -261,6 +271,11 @@ async function syncOperationalDataToSupabaseV36({ silent = false } = {}) {
 }
 
 async function loadOperationalDataFromSupabaseV36() {
+  if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) {
+    try { clearOperationalDataDirtyV430(); } catch (_) {}
+    setPersistenceStatusV36('Fluxo DB-first ativo. Dados operacionais legados ignorados.', 'ok');
+    return false;
+  }
   if (!isSupabaseOperationalReadyV36()) {
     setPersistenceStatusV36('Supabase indisponível ou usuário não conectado.', 'warn');
     notify('Entre na conta antes de carregar.', 'warn');
@@ -406,6 +421,7 @@ with check (auth.uid() = user_id);
 }
 
 function scheduleOperationalSyncV36({ delay = 1500 } = {}) {
+  if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return;
   if (!isSupabaseOperationalReadyV36()) return;
   const safeDelay = Math.max(0, Number(delay) || 0);
   const dueAt = Date.now() + safeDelay;
@@ -420,6 +436,7 @@ function scheduleOperationalSyncV36({ delay = 1500 } = {}) {
 }
 
 function scheduleLegacyOperationalSyncV36(options = {}) {
+  if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return;
   markOperationalDataDirtyV430(options.reason || 'legacy-local-change');
   if (typeof scheduleOperationalSyncV36 === 'function') scheduleOperationalSyncV36(options);
 }

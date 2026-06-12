@@ -503,6 +503,7 @@ function getValData()  { return getStoredArray(VAL_KEY); }
 function saveValData(d){
   const clean = dedupeLeadArrayV434(d, { label:'validacao' });
   localStorage.setItem(VAL_KEY, JSON.stringify(clean));
+  if (window.__SUPABASE_REBUILDING_LEADS_V30 || window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return;
   mergeLeadsIntoPermanentBase(clean, { source:'Validação' });
   scheduleLegacyOperationalSyncV36();
 }
@@ -514,6 +515,7 @@ function getAtribuicaoData()  { return getStoredArray(ATRIBUICAO_KEY); }
 function saveAtribuicaoData(d){
   const clean = dedupeLeadArrayV434(d, { label:'atribuicao' });
   localStorage.setItem(ATRIBUICAO_KEY, JSON.stringify(clean));
+  if (window.__SUPABASE_REBUILDING_LEADS_V30 || window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return;
   mergeLeadsIntoPermanentBase(clean, { source:'Atribuição' });
   scheduleLegacyOperationalSyncV36();
 }
@@ -523,6 +525,7 @@ function getInstaFila()  { return getStoredArray(INSTA_KEY); }
 function saveInstaFila(d){
   const clean = dedupeLeadArrayV434(d, { label:'instagram' });
   localStorage.setItem(INSTA_KEY, JSON.stringify(clean));
+  if (window.__SUPABASE_REBUILDING_LEADS_V30 || window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true) return;
   mergeLeadsIntoPermanentBase(clean, { source:'Instagram' });
   scheduleLegacyOperationalSyncV36();
 }
