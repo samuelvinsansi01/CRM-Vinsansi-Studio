@@ -185,13 +185,16 @@
     if (!force && sentContactsCacheV30.length && Date.now() - sentContactsLoadedAtV30 < 15000) { renderSentContactsPanel(); return; }
     const user = await getUserV30();
     if (!user?.id || !window.sbClient) { sentContactsCacheV30 = []; renderSentContactsPanel(); return; }
+    // Alguns já enviados importados de backup antigo podem ter user_id NULL.
+    // A tela deve mostrar os contatos do usuário atual e também esses contatos globais/importados,
+    // mantendo a proteção funcionando sem exigir reimportação manual.
     const { data, error } = await sbClient
       .from('sent_contacts')
-      .select('id,company_name,phone,normalized_phone,source,reason,block_type,dispatched_at,created_at,active')
-      .eq('user_id', user.id)
+      .select('id,user_id,company_name,phone,normalized_phone,source,reason,block_type,dispatched_at,created_at,active')
+      .or(`user_id.eq.${user.id},user_id.is.null`)
       .eq('active', true)
       .order('created_at', { ascending:false })
-      .limit(2000);
+      .limit(5000);
     if (error) {
       console.warn('[sent_contacts][load-error]', error.message);
       sentContactsCacheV30 = [];
@@ -207,7 +210,8 @@
     const el = document.getElementById('sentContactsList');
     if (!el) return;
     const q = String(document.getElementById('sentContactsSearch')?.value || '').trim().toLowerCase();
-    const rows = q ? sentContactsCacheV30.filter(r => String(r.company_name||'').toLowerCase().includes(q) || String(r.normalized_phone||r.phone||'').includes(q.replace(/\D/g,''))) : sentContactsCacheV30;
+    const baseRows = uniqueBy(sentContactsCacheV30, r => r.normalized_phone || r.phone || r.id);
+    const rows = q ? baseRows.filter(r => String(r.company_name||'').toLowerCase().includes(q) || String(r.normalized_phone||r.phone||'').includes(q.replace(/\D/g,''))) : baseRows;
     if (!rows.length) {
       el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">// nenhum contato enviado encontrado</div>';
       return;
