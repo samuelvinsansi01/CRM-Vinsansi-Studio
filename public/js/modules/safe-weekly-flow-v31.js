@@ -557,3 +557,46 @@
   };
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{updateAtribCounts(); if(document.getElementById('panel-atribuicao')?.classList.contains('active')) renderAtribuicaoPanelV31();},1400));
 })();
+
+
+/* V31.4 — Correção final de navegação Envios.
+   Evita que panel-pre-envio fique ativo quando o usuário abre WhatsApp/Instagram. */
+(function(){
+  const previousSwitchPanelV314 = window.switchPanel;
+  function activateOnlyPanel(panelId, activeLabel){
+    document.querySelectorAll('.panel').forEach(el => el.classList.toggle('active', el.id === panelId));
+    document.querySelectorAll('.nav-item').forEach(el => {
+      const label = el.getAttribute('data-label') || '';
+      el.classList.toggle('active', label === activeLabel);
+    });
+  }
+  window.switchPanel = function switchPanelV314(name){
+    if (name === 'fila-zap' || name === 'whatsapp') {
+      activateOnlyPanel('panel-fila-zap', 'WhatsApp');
+      if (typeof window.renderFilaZap === 'function') window.renderFilaZap();
+      if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+      else if (typeof window.updateBadges === 'function') window.updateBadges();
+      return;
+    }
+    if (name === 'instagram') {
+      activateOnlyPanel('panel-instagram', 'Instagram');
+      if (typeof window.renderInstagram === 'function') window.renderInstagram();
+      if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+      else if (typeof window.updateBadges === 'function') window.updateBadges();
+      return;
+    }
+    if (name === 'pre-envio') {
+      activateOnlyPanel('panel-pre-envio', 'Pré-envio');
+      if (typeof window.renderPreEnvioPanelV31 === 'function') window.renderPreEnvioPanelV31();
+      if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+      return;
+    }
+    if (name === 'ja-enviados') {
+      activateOnlyPanel('panel-ja-enviados', 'Já enviados');
+      if (typeof window.renderSentContactsPanelV31 === 'function') window.renderSentContactsPanelV31();
+      if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+      return;
+    }
+    return previousSwitchPanelV314 ? previousSwitchPanelV314(name) : undefined;
+  };
+})();

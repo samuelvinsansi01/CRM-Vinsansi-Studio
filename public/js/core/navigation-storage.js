@@ -49,7 +49,7 @@ function toggleSidebar() {
   s.classList.toggle('collapsed', open);
   localStorage.setItem(SIDEBAR_KEY, open ? '0' : '1');
 }
-const PANELS = ['audit','conversations','responses','chips','whatsappQueue','evolution','inicio','inbox','importar','validacao','atribuicao','instagram','fila-zap','kanban','followups','acompanhamento','redirecionamentos','configuracoes','conta'];
+const PANELS = ['audit','conversations','responses','chips','whatsappQueue','evolution','inicio','inbox','importar','validacao','atribuicao','pre-envio','instagram','fila-zap','ja-enviados','kanban','followups','acompanhamento','redirecionamentos','configuracoes','conta'];
 function switchPanel(name) {
   PANELS.forEach(p => {
     const el = document.getElementById('panel-'+p);
@@ -57,7 +57,7 @@ function switchPanel(name) {
   });
   document.querySelectorAll('.nav-item').forEach(el => {
     const label = el.getAttribute('data-label') || '';
-    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','WhatsApp':'fila-zap','Instagram':'instagram','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Configurações':'configuracoes','Minha conta':'conta'};
+    const panelMap = {'Início':'inicio','Caixa de Entrada':'inbox','Importar':'importar','Validação':'validacao','Atribuição':'atribuicao','Pré-envio':'pre-envio','WhatsApp':'fila-zap','Instagram':'instagram','Já enviados':'ja-enviados','Fila WhatsApp':'fila-zap','Conversas':'conversations','Follow-ups':'followups','Kanban':'kanban','Acompanhamento':'acompanhamento','Acompanhamentos':'acompanhamento','Redirecionamentos':'redirecionamentos','Auditoria':'audit','Configurações':'configuracoes','Minha conta':'conta'};
     el.classList.toggle('active', panelMap[label] === name);
   });
   if (name==='inicio')         renderInicio();
@@ -66,6 +66,8 @@ function switchPanel(name) {
   if (name==='atribuicao')     { renderAtribuicao(); updateAtribTabCounts(); if (atribActiveTab==='insta') { renderAtribInstaFila(); updateAtribInstaCorteInfo(); } }
   if (name==='instagram')      renderInstagram();
   if (name==='fila-zap')       renderFilaZap();
+  if (name==='pre-envio' && typeof window.renderPreEnvioPanelV31 === 'function') window.renderPreEnvioPanelV31();
+  if (name==='ja-enviados' && typeof window.renderSentContactsPanelV31 === 'function') window.renderSentContactsPanelV31();
   if (name==='inbox')          { renderInboxV41(); fetchEvolutionResponsesV34({ silent:true }); }
   if (name==='conversations')  { renderConversationsV38(); fetchEvolutionResponsesV34({ silent:true }); }
   if (name==='responses')      renderResponsesPanelV34();
