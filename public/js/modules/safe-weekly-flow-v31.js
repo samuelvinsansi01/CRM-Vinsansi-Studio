@@ -38,9 +38,9 @@
     return 'sem-site';
   }
   function stageForType(type){
-    if (type === 'instagram') return 'assignment_instagram';
-    if (type === 'com-site') return 'assignment_website';
-    return 'assignment_whatsapp';
+    if (type === 'instagram') return 'instagram_backlog';
+    if (type === 'com-site') return 'attribution_site';
+    return 'attribution_whatsapp';
   }
   function channelForType(type){ return type === 'instagram' ? 'instagram' : 'whatsapp'; }
 
@@ -61,16 +61,19 @@
 
   async function fetchAssignmentCounts(){
     const sb = client(); if (!sb) return { whatsapp:0, website:0, instagram:0 };
-    const { data, error } = await sb
-      .from('leads')
-      .select('current_stage')
-      .eq('user_id', userId())
-      .in('current_stage', ['assignment_whatsapp','assignment_website','assignment_instagram']);
-    if (error) { console.warn('[v31][assignment-counts]', error.message); return { whatsapp:0, website:0, instagram:0 }; }
+    async function countStage(stage){
+      const { count, error } = await sb
+        .from('leads')
+        .select('id', { count:'exact', head:true })
+        .eq('user_id', userId())
+        .eq('current_stage', stage);
+      if (error) { console.warn('[v31][assignment-count]', stage, error.message); return 0; }
+      return count || 0;
+    }
     return {
-      whatsapp: (data||[]).filter(r => r.current_stage === 'assignment_whatsapp').length,
-      website: (data||[]).filter(r => r.current_stage === 'assignment_website').length,
-      instagram: (data||[]).filter(r => r.current_stage === 'assignment_instagram').length
+      whatsapp: await countStage('attribution_whatsapp'),
+      website: await countStage('attribution_site'),
+      instagram: await countStage('instagram_backlog')
     };
   }
 
@@ -356,4 +359,89 @@
     try { if (oldUpdate) oldUpdate(); } catch(e) {}
     if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
   };
+})();
+
+
+/* V31.1 — Atribuição DB-first final: lê exatamente os stages reais do banco. */
+(function(){
+  const USER_ID_FALLBACK = 'c02fe973-4eb5-4036-9f8d-8787937e8b11';
+  let currentTab = 'zap';
+  let page = 1;
+  const PER_PAGE = 30;
+  function uid(){ try { return window.currentUser?.id || USER_ID_FALLBACK; } catch(e){ return USER_ID_FALLBACK; } }
+  function sb(){ return window.sbClient || null; }
+  function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+  function stage(){ return currentTab === 'com-site' ? 'attribution_site' : currentTab === 'insta' ? 'instagram_backlog' : 'attribution_whatsapp'; }
+  async function countStage(st){ const c=sb(); if(!c) return 0; const {count,error}=await c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('current_stage',st); if(error){console.warn('[v31][count-stage]',st,error.message); return 0;} return count||0; }
+  async function updateAtribCounts(){
+    const w=await countStage('attribution_whatsapp');
+    const s=await countStage('attribution_site');
+    const i=await countStage('instagram_backlog');
+    const badge=document.getElementById('badge-atribuicao'); if(badge) badge.textContent=String(w+s+i);
+    const z=document.getElementById('atribTabZapCount'); if(z) z.textContent=`(${w})`;
+    const cs=document.getElementById('atribTabComSiteCount'); if(cs) cs.textContent=`(${s})`;
+    const ins=document.getElementById('atribTabInstaCount'); if(ins) ins.textContent=`(${i})`;
+    const instaBadge=document.getElementById('badge-instagram'); if(instaBadge) instaBadge.textContent=String(i);
+  }
+  async function fetchRows(){
+    const c=sb(); if(!c) return {rows:[],total:0};
+    const st=stage();
+    const q=(currentTab==='insta' ? (document.getElementById('atribInstaBusca')?.value||'') : (document.getElementById('atribBusca')?.value||'')).trim();
+    let query=c.from('leads').select('id,company_name,phone,normalized_phone,website,instagram_url,city,state,rating,reviews_count,current_stage,created_at',{count:'exact'}).eq('user_id',uid()).eq('current_stage',st).order('created_at',{ascending:true});
+    if(q){ query=query.or(`company_name.ilike.%${q.replaceAll('%','')}%,phone.ilike.%${q.replaceAll('%','')}%,normalized_phone.ilike.%${q.replaceAll('%','')}%`); }
+    const from=(page-1)*PER_PAGE, to=from+PER_PAGE-1;
+    const {data,count,error}=await query.range(from,to);
+    if(error){ console.warn('[v31][atrib-fetch]',error.message); return {rows:[],total:0,error}; }
+    return {rows:data||[],total:count||0};
+  }
+  async function renderAtribuicaoPanelV31(){
+    await updateAtribCounts();
+    const isInsta=currentTab==='insta';
+    const panelZap=document.getElementById('atribPanelZap');
+    const panelInsta=document.getElementById('atribPanelInsta');
+    if(panelZap) panelZap.style.display=isInsta?'none':'flex';
+    if(panelInsta) panelInsta.style.display=isInsta?'flex':'none';
+    ['atribTabZap','atribTabComSite','atribTabInsta'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('active'); });
+    const activeId=currentTab==='com-site'?'atribTabComSite':currentTab==='insta'?'atribTabInsta':'atribTabZap';
+    const active=document.getElementById(activeId); if(active) active.classList.add('active');
+    const list=document.getElementById(isInsta?'atribInstaList':'atribList');
+    const pag=document.getElementById(isInsta?'atribInstaPagination':'atribPagination');
+    const totalBadge=document.getElementById(isInsta?'atribInstaFilaTotalBadge':'atribTotalBadge');
+    if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// carregando atribuição do Supabase...</div>`;
+    const {rows,total,error}=await fetchRows();
+    if(totalBadge) totalBadge.textContent=`${total} lead${total!==1?'s':''}`;
+    if(error && list){ list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--error);text-align:center;padding:32px">// erro ao carregar: ${esc(error.message)}</div>`; return; }
+    if(!rows.length){ if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead em ${esc(stage())}</div>`; if(pag) pag.innerHTML=''; return; }
+    if(list) list.innerHTML='<div class="ext-list">'+rows.map(l=>`<div class="empresa-card">
+      <div class="empresa-info">
+        <div class="empresa-nome">${esc(l.company_name||'Sem nome')}</div>
+        <div class="empresa-meta">
+          <span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:${currentTab==='insta'?'var(--insta)':currentTab==='com-site'?'#5bb8f5':'var(--ok)'};background:rgba(255,255,255,0.04);border:1px solid var(--border2);border-radius:4px;padding:2px 7px">${currentTab==='insta'?'📸 INSTAGRAM':currentTab==='com-site'?'🌐 COM SITE':'💬 WHATSAPP'}</span>
+          <span>📱 ${esc(l.phone||l.normalized_phone||'')}</span>
+          ${l.website?`<span>🌐 ${esc(String(l.website).replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</span>`:''}
+          ${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}
+          ${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}
+        </div>
+      </div>
+      <div class="empresa-actions"><button class="btn btn-primary" style="font-size:9px;padding:5px 10px" onclick="switchPanel('pre-envio')">Planejar no pré-envio</button></div>
+    </div>`).join('')+'</div>';
+    const totalPages=Math.max(1,Math.ceil(total/PER_PAGE));
+    if(pag) pag.innerHTML=`<div style="display:flex;justify-content:center;gap:6px;margin-top:12px;font-family:'DM Mono',monospace;font-size:10px"><button class="btn btn-ghost" onclick="atribGoPageV31(${Math.max(1,page-1)})">←</button><span style="padding:8px;color:var(--muted)">Página ${page} de ${totalPages} · ${total} leads</span><button class="btn btn-ghost" onclick="atribGoPageV31(${Math.min(totalPages,page+1)})">→</button></div>`;
+  }
+  window.setAtribTab=function(tab){ currentTab=tab; page=1; renderAtribuicaoPanelV31(); };
+  window.atribGoPageV31=function(p){ page=Math.max(1,p); renderAtribuicaoPanelV31(); };
+  window.renderAtribuicao=renderAtribuicaoPanelV31;
+  window.renderAtribuicaoPanelV31=renderAtribuicaoPanelV31;
+  const prev=window.switchPanel;
+  window.switchPanel=function(name){
+    if(name==='atribuicao'){
+      document.querySelectorAll('.panel').forEach(el=>el.classList.toggle('active',el.id==='panel-atribuicao'));
+      document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',(el.getAttribute('data-label')||'')==='Atribuição'));
+      renderAtribuicaoPanelV31();
+      if(typeof window.updateSafeBadgesV31==='function') window.updateSafeBadgesV31();
+      return;
+    }
+    return prev?prev(name):undefined;
+  };
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{updateAtribCounts(); if(document.getElementById('panel-atribuicao')?.classList.contains('active')) renderAtribuicaoPanelV31();},1400));
 })();
