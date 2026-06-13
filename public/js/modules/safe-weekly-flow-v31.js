@@ -718,3 +718,131 @@
 
   window.forceEnvioPanelV315 = openEnvioPanelV315;
 })();
+
+/* V31.5 — Correção final: navegação Envios, aprovação do pré-envio e Fila WhatsApp DB-first. */
+(function(){
+  const USER_ID_FALLBACK = 'c02fe973-4eb5-4036-9f8d-8787937e8b11';
+  function uid(){
+    try {
+      if (window.currentUser?.id) return window.currentUser.id;
+      if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id;
+      return localStorage.getItem('vs_auth_local_user_v423') || USER_ID_FALLBACK;
+    } catch(e){ return USER_ID_FALLBACK; }
+  }
+  function sb(){ try { return window.sbClient || (typeof sbClient !== 'undefined' ? sbClient : null); } catch(e){ return null; } }
+  function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+  function notifySafe(msg,type){ if (typeof window.notify === 'function') window.notify(msg,type); else console.log(msg); }
+  function normalizeUrl(url){ const u = String(url||'').trim(); if(!u) return ''; return /^https?:\/\//i.test(u) ? u : `https://${u}`; }
+  function displayPhone(lead){ return String(lead?.phone || lead?.normalized_phone || '').trim(); }
+  function setOnlyPanel(panelId, label){
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === panelId));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', (n.getAttribute('data-label')||'') === label));
+  }
+
+  async function fetchFinalWhatsappItems(){
+    const c = sb(); if(!c) return [];
+    const { data, error } = await c
+      .from('pre_dispatch_items')
+      .select('id,lead_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,created_at,leads(company_name,phone,normalized_phone,website,city,state)')
+      .eq('user_id', uid())
+      .eq('status', 'ready_to_dispatch')
+      .order('scheduled_date', { ascending:true })
+      .order('chip_label', { ascending:true })
+      .order('position', { ascending:true });
+    if(error){ console.warn('[v31.5][whatsapp-final-fetch]', error.message); return []; }
+    return data || [];
+  }
+
+  window.renderFilaZap = async function renderFilaZapDbFirstV315(){
+    const panel = document.getElementById('panel-fila-zap');
+    if(!panel) return;
+    setOnlyPanel('panel-fila-zap','WhatsApp');
+    panel.innerHTML = `<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// fila final aprovada no pré-envio · DB-first</div></div></div><div class="card"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:18px">// carregando fila final...</div></div>`;
+    const rows = await fetchFinalWhatsappItems();
+    const badge = document.getElementById('badge-fila-zap'); if(badge) badge.textContent = String(rows.length);
+    if(!rows.length){
+      panel.innerHTML = `<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// fila final aprovada no pré-envio</div></div></div><div class="card"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:36px;text-align:center">// nenhum lead aprovado foi enviado para a fila WhatsApp ainda</div></div>`;
+      return;
+    }
+    const groups = rows.reduce((acc,r)=>{ const key=`${r.scheduled_date}||${r.chip_label||r.chip_instance||'chip'}`; (acc[key] ||= []).push(r); return acc; },{});
+    panel.innerHTML = `<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// ${rows.length} lead(s) na fila final · prontos para disparo</div></div></div>
+      <div class="card"><div class="card-title">Fila final WhatsApp</div>
+      ${Object.entries(groups).map(([key,items])=>{ const [date,chip]=key.split('||'); return `<div style="margin:12px 0 18px">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:8px">${esc(date)} · ${esc(chip)} · ${items.length}/120</div>
+        <div class="ext-list">${items.map(r=>{ const l=r.leads||{}; return `<div class="empresa-card">
+          <div class="empresa-info"><div class="empresa-nome">${esc(l.company_name||'Lead sem nome')}</div>
+            <div class="empresa-meta" style="gap:8px">
+              ${l.website ? `<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;font-weight:700">Site</a>` : `<span style="color:var(--muted)">Sem site</span>`}
+              <span style="color:var(--muted)">|</span>
+              <button type="button" class="link-btn" style="background:none;border:0;color:var(--ok);font:inherit;font-weight:700;cursor:pointer;padding:0" onclick="copyPreEnvioWhatsappV31('${esc(displayPhone(l))}')">WhatsApp</button>
+            </div></div>
+          <div class="empresa-actions"><span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--ok);border:1px solid rgba(78,203,113,.3);border-radius:6px;padding:5px 8px">FILA FINAL</span></div>
+        </div>`}).join('')}</div></div>`}).join('')}
+      </div>`;
+  };
+
+  window.approvePreItemV31 = async function approvePreItemV315(id){
+    const c = sb(); if(!c) return notifySafe('// Supabase indisponível','err');
+    const now = new Date().toISOString();
+    const { data, error } = await c
+      .from('pre_dispatch_items')
+      .update({ status:'approved', updated_at: now })
+      .eq('user_id', uid())
+      .eq('id', id)
+      .select('id,lead_id,status')
+      .maybeSingle();
+    if(error) return notifySafe('// erro ao aprovar: '+error.message,'err');
+    if(!data?.id) return notifySafe('// item não encontrado','warn');
+    if(data.lead_id){
+      await c.from('leads').update({ current_stage:'pre_send_approved', updated_at:now }).eq('user_id',uid()).eq('id',data.lead_id);
+    }
+    notifySafe('✓ aprovado');
+    if(typeof window.renderPreEnvioListV31 === 'function') await window.renderPreEnvioListV31();
+    if(typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+  };
+
+  window.sendApprovedToFinalQueueV31 = async function sendApprovedToFinalQueueV315(dateIso){
+    const c = sb(); if(!c) return notifySafe('// Supabase indisponível','err');
+    const { data, error } = await c.from('pre_dispatch_items').select('id,lead_id').eq('user_id',uid()).eq('scheduled_date',dateIso).eq('status','approved');
+    if(error) return notifySafe('// erro ao liberar fila: '+error.message,'err');
+    if(!data?.length) return notifySafe('// nenhum lead aprovado para liberar','warn');
+    const ids = data.map(x=>x.id);
+    const leadIds = data.map(x=>x.lead_id).filter(Boolean);
+    const now = new Date().toISOString();
+    const { error: e1 } = await c.from('pre_dispatch_items').update({ status:'ready_to_dispatch', updated_at:now }).eq('user_id',uid()).in('id',ids);
+    if(e1) return notifySafe('// erro ao mover para fila: '+e1.message,'err');
+    if(leadIds.length){
+      const { error: e2 } = await c.from('leads').update({ current_stage:'dispatch_queue', updated_at:now }).eq('user_id',uid()).in('id',leadIds);
+      if(e2) console.warn('[v31.5][lead-dispatch-stage]', e2.message);
+    }
+    notifySafe(`✓ ${data.length} lead(s) enviados para a fila WhatsApp`);
+    if(typeof window.renderPreEnvioListV31 === 'function') await window.renderPreEnvioListV31();
+    if(typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+  };
+
+  const previousSwitch = window.switchPanel;
+  window.switchPanel = function switchPanelV315(name){
+    if(name === 'fila-zap' || name === 'whatsapp') { window.renderFilaZap(); return; }
+    if(name === 'pre-envio') { setOnlyPanel('panel-pre-envio','Pré-envio'); if(typeof window.renderPreEnvioPanelV31==='function') window.renderPreEnvioPanelV31(); if(typeof window.updateSafeBadgesV31==='function') window.updateSafeBadgesV31(); return; }
+    if(name === 'instagram') { setOnlyPanel('panel-instagram','Instagram'); if(typeof window.renderInstagram==='function') window.renderInstagram(); if(typeof window.updateSafeBadgesV31==='function') window.updateSafeBadgesV31(); return; }
+    if(name === 'ja-enviados') { setOnlyPanel('panel-ja-enviados','Já enviados'); if(typeof window.renderSentContactsPanelV31==='function') window.renderSentContactsPanelV31(); if(typeof window.updateSafeBadgesV31==='function') window.updateSafeBadgesV31(); return; }
+    return previousSwitch ? previousSwitch(name) : undefined;
+  };
+
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('.nav-item[data-label]');
+    if(!btn) return;
+    const label = btn.getAttribute('data-label');
+    const map = {'Pré-envio':'pre-envio','WhatsApp':'fila-zap','Instagram':'instagram','Já enviados':'ja-enviados'};
+    if(map[label]){ e.preventDefault(); e.stopPropagation(); window.switchPanel(map[label]); }
+  }, true);
+
+  const style = document.createElement('style');
+  style.textContent = `
+    #preEnvioList .empresa-nome{font-size:14px!important;line-height:1.25!important;font-weight:600!important;}
+    #preEnvioList .empresa-meta,#preEnvioList .empresa-meta a,#preEnvioList .empresa-meta button{font-size:10px!important;line-height:1.25!important;}
+    #panel-fila-zap .empresa-nome{font-size:14px!important;line-height:1.25!important;font-weight:600!important;}
+    #panel-fila-zap .empresa-meta,#panel-fila-zap .empresa-meta a,#panel-fila-zap .empresa-meta button{font-size:10px!important;line-height:1.25!important;}
+  `;
+  document.head.appendChild(style);
+})();
