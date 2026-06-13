@@ -600,3 +600,93 @@
     return previousSwitchPanelV314 ? previousSwitchPanelV314(name) : undefined;
   };
 })();
+
+/* V31.5 — Navegação blindada Envios.
+   Correção específica: quando sair de Pré-envio para WhatsApp, o painel Pré-envio
+   ficava visível por estado/inline/cache legado. Aqui forçamos display + active. */
+(function(){
+  function forcePanel(panelId, activeLabel){
+    document.querySelectorAll('.panel').forEach(function(el){
+      const isActive = el.id === panelId;
+      el.classList.toggle('active', isActive);
+      if (isActive) {
+        el.style.display = 'flex';
+        if (panelId === 'panel-fila-zap') {
+          el.style.flexDirection = 'row';
+          el.style.padding = '0';
+          el.style.overflow = 'hidden';
+        } else {
+          el.style.flexDirection = '';
+          el.style.padding = '';
+          el.style.overflow = '';
+        }
+      } else {
+        el.style.display = 'none';
+      }
+    });
+    document.querySelectorAll('.nav-item').forEach(function(el){
+      const label = el.getAttribute('data-label') || '';
+      el.classList.toggle('active', label === activeLabel);
+    });
+  }
+
+  function openEnvioPanelV315(name){
+    if (name === 'fila-zap' || name === 'whatsapp' || name === 'WhatsApp') {
+      forcePanel('panel-fila-zap', 'WhatsApp');
+      setTimeout(function(){
+        forcePanel('panel-fila-zap', 'WhatsApp');
+        if (typeof window.renderFilaZap === 'function') window.renderFilaZap();
+        if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+      }, 0);
+      return true;
+    }
+    if (name === 'pre-envio' || name === 'Pré-envio') {
+      forcePanel('panel-pre-envio', 'Pré-envio');
+      setTimeout(function(){
+        forcePanel('panel-pre-envio', 'Pré-envio');
+        if (typeof window.renderPreEnvioPanelV31 === 'function') window.renderPreEnvioPanelV31();
+        if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+      }, 0);
+      return true;
+    }
+    if (name === 'instagram' || name === 'Instagram') {
+      forcePanel('panel-instagram', 'Instagram');
+      setTimeout(function(){
+        forcePanel('panel-instagram', 'Instagram');
+        if (typeof window.renderInstagram === 'function') window.renderInstagram();
+        if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+      }, 0);
+      return true;
+    }
+    if (name === 'ja-enviados' || name === 'Já enviados') {
+      forcePanel('panel-ja-enviados', 'Já enviados');
+      setTimeout(function(){
+        forcePanel('panel-ja-enviados', 'Já enviados');
+        if (typeof window.renderSentContactsPanelV31 === 'function') window.renderSentContactsPanelV31();
+        if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+      }, 0);
+      return true;
+    }
+    return false;
+  }
+
+  const prevSwitchPanelV315 = window.switchPanel;
+  window.switchPanel = function switchPanelV315(name){
+    if (openEnvioPanelV315(name)) return;
+    return prevSwitchPanelV315 ? prevSwitchPanelV315(name) : undefined;
+  };
+
+  document.addEventListener('click', function(ev){
+    const nav = ev.target && ev.target.closest ? ev.target.closest('.nav-item[data-label]') : null;
+    if (!nav) return;
+    const label = nav.getAttribute('data-label') || '';
+    if (['Pré-envio','WhatsApp','Instagram','Já enviados'].includes(label)) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+      openEnvioPanelV315(label);
+    }
+  }, true);
+
+  window.forceEnvioPanelV315 = openEnvioPanelV315;
+})();
