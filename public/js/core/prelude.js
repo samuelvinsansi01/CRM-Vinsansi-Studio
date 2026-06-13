@@ -1,3 +1,5 @@
+window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 = true;
+window.DB_FIRST_LEADS_ONLY_V30 = true;
 
 /* V41.9 DELAYMIN ERROR GUARD */
 window.addEventListener('error', function(e){
@@ -136,7 +138,10 @@ function userIsolationLogV25(step, data = {}) {
 }
 
 function uiSyncLogV426(step, data = {}) {
-  try { console.log(`[ui-sync][${step}]`, data); } catch(e) {}
+  try {
+    if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 === true && String(data?.entity || '').includes('operational-data')) return;
+    console.log(`[ui-sync][${step}]`, data);
+  } catch(e) {}
 }
 
 const STATUS_OPTIONS = ['Não enviada','Em fila','Enviada','Respondida','Não respondida','Recusada','Fechada'];

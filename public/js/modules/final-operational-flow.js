@@ -126,85 +126,64 @@
 
   window.setValChip = function setValChipFinalV30(id) { window.activeChipId = id; window.valPage = 1; renderValidacao(); };
 
-  window.validarTodosNumeros = async function validarTodosNumerosFinalV30() {
-    const candidates = getValidationChipCandidatesV30(window.activeChipId);
-    if (!candidates.length) { notify('// nenhum chip conectado/open disponível para validar','warn'); return; }
+  window.validarTodosNumeros = async function separarTodosLeadsParaAtribuicaoV30() {
+    // V30 DB-first seguro: não consulta /chat/whatsappNumbers e não faz validação massiva.
+    // A separação é feita por presença de telefone e site:
+    // telefone + sem site -> assignment_whatsapp
+    // telefone + com site -> assignment_website
+    // sem telefone -> instagram_backlog
     const val = typeof getValData === 'function' ? getValData() : [];
-    const pendentes = val.filter(v => (v.tipo === 'sem-site' || v.tipo === 'com-site' || !v.tipo));
-    if (!pendentes.length) { notify('// nenhum lead pendente','warn'); return; }
+    const pendentes = (Array.isArray(val) ? val : []).filter(v => {
+      const stage = String(v.current_stage || '').toLowerCase();
+      return !stage || stage === 'validation' || v.canal === 'pendente' || v.numStatus === 'pendente';
+    });
+    if (!pendentes.length) { notify('// nenhum lead pendente para separar','warn'); return; }
+
     const spinner = document.getElementById('valSpinner');
     if (spinner) spinner.style.display = 'block';
-
-    const resultsByNumber = new Map();
-    let apiFailed = false;
-    let chipUsed = null;
-    let lastErrorText = '';
-    for (let i = 0; i < pendentes.length; i += 10) {
-      const lote = pendentes.slice(i, i + 10);
-      const numbers = lote.map(normalizeLeadPhoneV30).filter(n => n.length >= 12);
-      if (!numbers.length) continue;
-      let okForBatch = false;
-      for (const chip of candidates) {
-        try {
-          const apiKey = getChipApiKeyV30(chip);
-          const endpoint = `${String(chip.url || '').replace(/\/$/,'')}/chat/whatsappNumbers/${chip.instance}`;
-          const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
-            body: JSON.stringify({ numbers })
-          });
-          if (!res.ok) {
-            lastErrorText = `chip ${getChipNameV30(chip)} / ${chip.instance}: HTTP ${res.status}`;
-            console.warn('[validation][chip-failed]', lastErrorText);
-            continue;
-          }
-          const data = await res.json();
-          const rows = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
-          numbers.forEach(num => {
-            const found = rows.find(r => String(r?.jid || r?.number || r?.exists || '').includes(num) || String(r?.number || '').replace(/\D/g,'') === num);
-            resultsByNumber.set(num, !!(found?.exists || found?.jid));
-          });
-          chipUsed = chip;
-          okForBatch = true;
-          break;
-        } catch(e) {
-          lastErrorText = e?.message || String(e);
-          console.warn('[validation][whatsapp-check-error]', lastErrorText);
-        }
-      }
-      if (!okForBatch) apiFailed = true;
-      await new Promise(r => setTimeout(r, 500));
-    }
-
-    if (apiFailed && !resultsByNumber.size) {
-      if (spinner) spinner.style.display = 'none';
-      notify(`// falha ao validar na Evolution. Nada foi movido. ${lastErrorText}`, 'err');
-      return;
-    }
 
     const atrib = typeof getAtribuicaoData === 'function' ? getAtribuicaoData() : [];
     const insta = typeof getInstaFila === 'function' ? getInstaFila() : [];
     const remaining = [];
+    const idsWhats = [];
+    const idsSite = [];
+    const idsInsta = [];
     let toZap = 0, toComSite = 0, toInsta = 0;
 
     for (const lead of val) {
-      const isTarget = pendentes.some(p => p.id === lead.id);
+      const isTarget = pendentes.some(p => String(p.id) === String(lead.id));
       if (!isTarget) { remaining.push(lead); continue; }
       const phone = normalizeLeadPhoneV30(lead);
-      const exists = phone ? resultsByNumber.get(phone) : false;
-      if (exists) {
-        const tipo = lead.tipo || (lead.site ? 'com-site' : 'sem-site');
-        const moved = { ...lead, numStatus:'valido', canal:'zap', tipo, validadoEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0,10) };
+      const hasPhone = phone && phone.length >= 12;
+      const hasSite = !!(lead.site || lead.website);
+      if (hasPhone) {
+        const tipo = hasSite ? 'com-site' : 'sem-site';
+        const moved = { ...lead, canal:'zap', tipo, numStatus:'nao_validado', validadoEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0,10) };
         atrib.push(moved);
-        if (tipo === 'com-site') { toComSite++; await updateLeadStageV30(lead, 'assignment_website', { whatsapp_validation_status:'valid' }); }
-        else { toZap++; await updateLeadStageV30(lead, 'assignment_whatsapp', { whatsapp_validation_status:'valid' }); }
+        if (hasSite) { toComSite++; if (lead.id) idsSite.push(lead.id); }
+        else { toZap++; if (lead.id) idsWhats.push(lead.id); }
       } else {
-        const moved = { ...lead, numStatus:'invalido', canal:'insta', tipo:'instagram', validadoEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0,10) };
+        const moved = { ...lead, canal:'insta', tipo:'instagram', numStatus:'sem_telefone', validadoEm: typeof todayStr === 'function' ? todayStr() : new Date().toISOString().slice(0,10) };
         insta.push(moved);
         toInsta++;
-        await updateLeadStageV30(lead, 'instagram_backlog', { whatsapp_validation_status:'invalid' });
+        if (lead.id) idsInsta.push(lead.id);
       }
     }
+
+    async function batchUpdateStage(ids, stage, extra = {}) {
+      if (!ids.length || !window.sbClient) return;
+      const uniqueIds = Array.from(new Set(ids.map(String).filter(Boolean)));
+      for (let i = 0; i < uniqueIds.length; i += 500) {
+        const part = uniqueIds.slice(i, i + 500);
+        const payload = leadToSupabaseStagePayloadV30(null, stage, extra);
+        const { error } = await sbClient.from('leads').update(payload).in('id', part);
+        if (error) console.warn('[validation][batch-stage-error]', stage, error.message);
+      }
+    }
+
+    await batchUpdateStage(idsWhats, 'assignment_whatsapp', { whatsapp_validation_status:'not_checked' });
+    await batchUpdateStage(idsSite, 'assignment_website', { whatsapp_validation_status:'not_checked' });
+    await batchUpdateStage(idsInsta, 'instagram_backlog', { whatsapp_validation_status:'no_phone' });
 
     if (typeof saveValData === 'function') saveValData(remaining);
     if (typeof saveAtribuicaoData === 'function') saveAtribuicaoData(uniqueBy(atrib, l => l.id || normalizeLeadPhoneV30(l)));
@@ -214,7 +193,7 @@
     renderValidacao();
     if (typeof renderAtribuicao === 'function') renderAtribuicao();
     if (typeof updateBadges === 'function') updateBadges();
-    notify(`Total: ${pendentes.length} · WhatsApp: ${toZap} · Com site: ${toComSite} · Instagram: ${toInsta}${chipUsed ? ' · Chip: ' + getChipNameV30(chipUsed) : ''}`);
+    notify(`Separados: ${pendentes.length} · WhatsApp: ${toZap} · Com site: ${toComSite} · Instagram: ${toInsta}`);
   };
 
   window.aprovarTodosParaAtribuicao = async function(){ return window.validarTodosNumeros(); };
@@ -222,40 +201,75 @@
   window.loadSentContactsPanel = async function loadSentContactsPanel(force = false) {
     if (!force && sentContactsCacheV30.length && Date.now() - sentContactsLoadedAtV30 < 15000) { renderSentContactsPanel(); return; }
     const user = await getUserV30();
-    if (!user?.id || !window.sbClient) { sentContactsCacheV30 = []; renderSentContactsPanel(); return; }
-    // Alguns já enviados importados de backup antigo podem ter user_id NULL.
-    // A tela deve mostrar os contatos do usuário atual e também esses contatos globais/importados,
-    // mantendo a proteção funcionando sem exigir reimportação manual.
-    const { data, error } = await sbClient
+    const list = document.getElementById('sentContactsList');
+    if (!user?.id || !window.sbClient) {
+      sentContactsCacheV30 = [];
+      safeText('badge-ja-enviados', 0);
+      if (list) list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">// aguardando login para carregar já enviados</div>';
+      return;
+    }
+
+    if (list) list.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">// carregando já enviados do Supabase...</div>';
+
+    // Fonte única da tela: public.sent_contacts.
+    // Não filtra por status, lead_id ou source; registros importados têm lead_id null e source import.
+    const selectCols = 'id,user_id,company_name,phone,normalized_phone,source,reason,block_type,dispatched_at,created_at,active,raw_payload';
+    const { data, error, count } = await sbClient
       .from('sent_contacts')
-      .select('id,user_id,company_name,phone,normalized_phone,source,reason,block_type,dispatched_at,created_at,active')
-      .or(`user_id.eq.${user.id},user_id.is.null`)
+      .select(selectCols, { count:'exact' })
+      .eq('user_id', user.id)
       .eq('active', true)
       .order('created_at', { ascending:false })
-      .limit(5000);
+      .limit(10000);
+
     if (error) {
       console.warn('[sent_contacts][load-error]', error.message);
       sentContactsCacheV30 = [];
-    } else {
-      sentContactsCacheV30 = data || [];
-      sentContactsLoadedAtV30 = Date.now();
+      safeText('badge-ja-enviados', 0);
+      if (list) list.innerHTML = `<div style="text-align:center;padding:32px;color:var(--muted)">// erro ao carregar já enviados: ${escHtml(error.message || 'erro desconhecido')}</div>`;
+      return;
     }
-    safeText('badge-ja-enviados', sentContactsCacheV30.length);
+
+    sentContactsCacheV30 = Array.isArray(data) ? data : [];
+    sentContactsLoadedAtV30 = Date.now();
+    safeText('badge-ja-enviados', Number.isFinite(Number(count)) ? count : sentContactsCacheV30.length);
+    window.sentContactsCacheV30 = sentContactsCacheV30;
     renderSentContactsPanel();
   };
+
+  window.sentPageV30 = 1;
+  window.goSentPage = function goSentPageV30(page) { window.sentPageV30 = Math.max(1, Number(page) || 1); renderSentContactsPanel(); };
 
   window.renderSentContactsPanel = function renderSentContactsPanel() {
     const el = document.getElementById('sentContactsList');
     if (!el) return;
     const q = String(document.getElementById('sentContactsSearch')?.value || '').trim().toLowerCase();
+    const digits = q.replace(/\D/g,'');
     const baseRows = uniqueBy(sentContactsCacheV30, r => r.normalized_phone || r.phone || r.id);
-    const rows = q ? baseRows.filter(r => String(r.company_name||'').toLowerCase().includes(q) || String(r.normalized_phone||r.phone||'').includes(q.replace(/\D/g,''))) : baseRows;
+    const rows = q ? baseRows.filter(r =>
+      String(r.company_name||'').toLowerCase().includes(q) ||
+      String(r.normalized_phone||r.phone||'').includes(digits || q) ||
+      String(r.source||'').toLowerCase().includes(q) ||
+      String(r.block_type||'').toLowerCase().includes(q)
+    ) : baseRows;
+
+    safeText('badge-ja-enviados', baseRows.length);
     if (!rows.length) {
       el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">// nenhum contato enviado encontrado</div>';
       return;
     }
-    el.innerHTML = `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:10px">Exibindo ${Math.min(rows.length,SENT_PAGE_SIZE)} de ${rows.length}</div>` +
-      '<div class="ext-list">' + rows.slice(0, SENT_PAGE_SIZE).map(r => `
+
+    const pageSize = SENT_PAGE_SIZE;
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+    window.sentPageV30 = Math.min(totalPages, Math.max(1, Number(window.sentPageV30) || 1));
+    const start = (window.sentPageV30 - 1) * pageSize;
+    const page = rows.slice(start, start + pageSize);
+
+    el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:10px;flex-wrap:wrap">
+        <span>Exibindo <strong>${start + 1}–${Math.min(start + page.length, rows.length)}</strong> de <strong>${rows.length}</strong> · base total: <strong>${baseRows.length}</strong></span>
+        <span>Fonte: Supabase / sent_contacts / active=true</span>
+      </div>` +
+      '<div class="ext-list">' + page.map(r => `
         <div class="empresa-card">
           <div class="empresa-info">
             <div class="empresa-nome">${escHtml(r.company_name || 'Contato sem nome')}</div>
@@ -263,10 +277,19 @@
               <span class="q-badge ok">✅ JÁ ENVIADO</span>
               <div class="empresa-phone">📱 ${escHtml(r.normalized_phone || r.phone || '—')}</div>
               ${r.source ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${escHtml(r.source)}</span>` : ''}
+              ${r.block_type ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${escHtml(r.block_type)}</span>` : ''}
               ${r.created_at ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${escHtml(new Date(r.created_at).toLocaleDateString('pt-BR'))}</span>` : ''}
             </div>
           </div>
-        </div>`).join('') + '</div>';
+        </div>`).join('') + '</div>' +
+      (totalPages > 1 ? `<div class="pagination-bar" style="margin-top:12px">
+        <div class="pagination-info">Página <strong>${window.sentPageV30}</strong> de <strong>${totalPages}</strong></div>
+        <div class="pagination-controls">
+          <button class="pg-btn" onclick="goSentPage(${Math.max(1, window.sentPageV30 - 1)})" ${window.sentPageV30<=1?'disabled':''}>‹</button>
+          <button class="pg-btn active">${window.sentPageV30}</button>
+          <button class="pg-btn" onclick="goSentPage(${Math.min(totalPages, window.sentPageV30 + 1)})" ${window.sentPageV30>=totalPages?'disabled':''}>›</button>
+        </div>
+      </div>` : '');
   };
 
   const oldSwitchPanel = window.switchPanel;
@@ -472,7 +495,7 @@
       safeTextV31('badge-atribuicao', zapCount + insta.length);
       if (typeof updateAtribTabCounts === 'function') updateAtribTabCounts();
       // Não carregar sent_contacts a cada updateBadges. A aba Já enviados carrega sob demanda.
-      if (document.getElementById('panel-fila-zap')?.classList.contains('active') && typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
+      if (document.getElementById('panel-ja-enviados')?.classList.contains('active') && typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
     } catch (e) {
       if (typeof previousUpdateBadges === 'function') previousUpdateBadges();
     }
@@ -594,7 +617,7 @@
       textV32('badge-importar', 0);
       if (typeof updateAtribTabCounts === 'function') updateAtribTabCounts();
       // Não carregar sent_contacts a cada updateBadges. A aba Já enviados carrega sob demanda.
-      if (document.getElementById('panel-fila-zap')?.classList.contains('active') && typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
+      if (document.getElementById('panel-ja-enviados')?.classList.contains('active') && typeof window.loadSentContactsPanel === 'function') window.loadSentContactsPanel(false);
     } catch (e) {
       if (typeof previousUpdateBadgesV32 === 'function') previousUpdateBadgesV32();
     }
