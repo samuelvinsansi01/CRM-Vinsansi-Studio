@@ -8,9 +8,20 @@
   let preCurrentDate = new Date().toISOString().slice(0,10);
 
   function userId(){
-    try { return window.currentUser?.id || USER_ID_FALLBACK; } catch(e){ return USER_ID_FALLBACK; }
+    try {
+      if (window.currentUser?.id) return window.currentUser.id;
+      if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id;
+      const stored = localStorage.getItem('vs_auth_local_user_v423');
+      return stored || USER_ID_FALLBACK;
+    } catch(e){ return USER_ID_FALLBACK; }
   }
-  function client(){ return (typeof window.sbClient !== 'undefined' && window.sbClient) ? window.sbClient : null; }
+  function client(){
+    try {
+      if (window.sbClient) return window.sbClient;
+      if (typeof sbClient !== 'undefined' && sbClient) return sbClient;
+    } catch(e){}
+    return null;
+  }
   function esc(v){
     return String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[c]));
   }
@@ -368,8 +379,8 @@
   let currentTab = 'zap';
   let page = 1;
   const PER_PAGE = 30;
-  function uid(){ try { return window.currentUser?.id || USER_ID_FALLBACK; } catch(e){ return USER_ID_FALLBACK; } }
-  function sb(){ return window.sbClient || null; }
+  function uid(){ try { if (window.currentUser?.id) return window.currentUser.id; if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id; return localStorage.getItem('vs_auth_local_user_v423') || USER_ID_FALLBACK; } catch(e){ return USER_ID_FALLBACK; } }
+  function sb(){ try { return window.sbClient || (typeof sbClient !== 'undefined' ? sbClient : null); } catch(e){ return null; } }
   function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
   function stage(){ return currentTab === 'com-site' ? 'attribution_site' : currentTab === 'insta' ? 'instagram_backlog' : 'attribution_whatsapp'; }
   async function countStage(st){ const c=sb(); if(!c) return 0; const {count,error}=await c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('current_stage',st); if(error){console.warn('[v31][count-stage]',st,error.message); return 0;} return count||0; }

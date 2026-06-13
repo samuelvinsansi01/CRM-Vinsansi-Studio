@@ -105,6 +105,7 @@ const sbClient = window.supabase
     })
   : null;
 let currentUser = null;
+try { window.sbClient = sbClient; window.currentUser = currentUser; } catch(e){}
 const AUTH_LOCAL_USER_KEY_V423 = 'vs_auth_local_user_v423';
 const AUTH_LOCAL_EMAIL_KEY_V425 = 'vs_auth_local_email_v425';
 const supabaseDataAdapter = (sbClient && window.SupabaseAdapter)
@@ -358,6 +359,7 @@ async function initAuth() {
   const { data, error } = await sbClient.auth.getSession();
   if (error) console.warn('[auth] getSession:', error.message);
   currentUser = data?.session?.user || null;
+  try { window.currentUser = currentUser; } catch(e){}
   const lastLocalUserId = localStorage.getItem(AUTH_LOCAL_USER_KEY_V423) || '';
   const lastLocalUserEmail = localStorage.getItem(AUTH_LOCAL_EMAIL_KEY_V425) || '';
   if (currentUser?.id) {
@@ -385,6 +387,7 @@ renderAuthUser(currentUser);
       clearLocalSessionData({ clearAuthMarkers: true });
     }
     currentUser = session?.user || null;
+    try { window.currentUser = currentUser; } catch(e){}
     if (currentUser?.id) {
       localStorage.setItem(AUTH_LOCAL_USER_KEY_V423, currentUser.id);
       localStorage.setItem(AUTH_LOCAL_EMAIL_KEY_V425, String(currentUser.email || '').trim().toLowerCase());
@@ -449,6 +452,7 @@ async function logoutSupabase() {
   localStorage.removeItem('vs_leads_base_v1');
 
   currentUser = null;
+  try { window.currentUser = null; } catch(e){}
   if (typeof clearLocalSessionData === 'function') clearLocalSessionData({ clearAuthMarkers: true });
 
   renderAuthUser(null);

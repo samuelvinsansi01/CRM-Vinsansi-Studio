@@ -83,44 +83,69 @@ function switchPanel(name) {
 }
 
 function updateBadges() {
-  const data = ensureWeekData();
-  const flat = flattenWeekData(data);
-  document.getElementById('badge-inicio').textContent = flat.filter(e => (e.status||'Não enviada')==='Não enviada').length;
-  document.getElementById('badge-importar').textContent = flat.filter(e => e.status === 'Não enviada').length;
-  const val = getValData();
-  document.getElementById('badge-validacao').textContent = val.length;
-  const atribuicaoEl = document.getElementById('badge-atribuicao');
-  if (atribuicaoEl) {
-    // Atribuição = zap sem dia + insta sem link ainda
-    const instaSemLink = getInstaFila().filter(e => !e.instagram).length;
-    atribuicaoEl.textContent = getAtribuicaoData().length + instaSemLink;
-  }
-  const naoEnv = flat.filter(e => (e.status||'Não enviada')==='Não enviada' && e.whatsapp).length;
-  document.getElementById('badge-fila-zap').textContent = naoEnv;
-  const instaEl = document.getElementById('badge-instagram');
-  if (instaEl) {
-    const instaWeek = getInstaWeek();
-    const totalInsta = Object.values(instaWeek).flat().length;
-    // Backlog = insta com link confirmado ainda não alocado em dia
-    const instaBacklog = getInstaFila().filter(e => !!e.instagram).length;
-    instaEl.textContent = totalInsta + instaBacklog;
-  }
-  // Atualiza contadores das abas da base de atribuição
-  updateAtribTabCounts();
-  const fuBadge = document.getElementById('badge-followups');
-  if (fuBadge) {
-    const todayIso = new Date().toISOString().slice(0,10);
-    const crm = getLeadCrmStore ? getLeadCrmStore() : {};
-    fuBadge.textContent = Object.values(crm || {}).filter(item => item?.followUpDate && item.followUpDate <= todayIso).length;
+  // V31.2: função defensiva. Nunca pode quebrar o carregamento da plataforma
+  // porque um badge não existe no DOM.
+  const setBadge = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value ?? 0);
+  };
+
+  try {
+    const data = (typeof ensureWeekData === 'function') ? ensureWeekData() : {};
+    const flat = (typeof flattenWeekData === 'function') ? flattenWeekData(data) : [];
+    setBadge('badge-inicio', flat.filter(e => (e.status||'Não enviada')==='Não enviada').length);
+    setBadge('badge-importar', flat.filter(e => e.status === 'Não enviada').length);
+
+    const val = (typeof getValData === 'function') ? getValData() : [];
+    setBadge('badge-validacao', Array.isArray(val) ? val.length : 0);
+
+    const atribuicaoEl = document.getElementById('badge-atribuicao');
+    if (atribuicaoEl) {
+      const instaFila = (typeof getInstaFila === 'function') ? getInstaFila() : [];
+      const atr = (typeof getAtribuicaoData === 'function') ? getAtribuicaoData() : [];
+      const instaSemLink = Array.isArray(instaFila) ? instaFila.filter(e => !e.instagram).length : 0;
+      atribuicaoEl.textContent = String((Array.isArray(atr) ? atr.length : 0) + instaSemLink);
+    }
+
+    const naoEnv = flat.filter(e => (e.status||'Não enviada')==='Não enviada' && e.whatsapp).length;
+    setBadge('badge-fila-zap', naoEnv);
+
+    const instaEl = document.getElementById('badge-instagram');
+    if (instaEl) {
+      const instaWeek = (typeof getInstaWeek === 'function') ? getInstaWeek() : {};
+      const totalInsta = Object.values(instaWeek || {}).flat().length;
+      const instaFila = (typeof getInstaFila === 'function') ? getInstaFila() : [];
+      const instaBacklog = Array.isArray(instaFila) ? instaFila.filter(e => !!e.instagram).length : 0;
+      instaEl.textContent = String(totalInsta + instaBacklog);
+    }
+
+    if (typeof updateAtribTabCounts === 'function') {
+      try { updateAtribTabCounts(); } catch(e) {}
+    }
+
+    const fuBadge = document.getElementById('badge-followups');
+    if (fuBadge) {
+      const todayIso = new Date().toISOString().slice(0,10);
+      const crm = (typeof getLeadCrmStore === 'function') ? getLeadCrmStore() : {};
+      fuBadge.textContent = Object.values(crm || {}).filter(item => item?.followUpDate && item.followUpDate <= todayIso).length;
+    }
+
+    const acompEl = document.getElementById('badge-acompanhamento');
+    if (acompEl) {
+      const mk = (typeof currentMonthKey === 'function') ? currentMonthKey() : '';
+      const acomp = (typeof getAcompData === 'function') ? getAcompData() : {};
+      acompEl.textContent = ((acomp || {})[mk] || []).length;
+    }
+  } catch (error) {
+    console.warn('[badges][legacy-safe-error]', error?.message || error);
   }
 
-  const acompEl = document.getElementById('badge-acompanhamento');
-  if (acompEl) {
-    const mk = currentMonthKey();
-    const acomp = getAcompData();
-    acompEl.textContent = (acomp[mk]||[]).length;
-  }
+  // Os badges DB-first são atualizados pela V31 quando o módulo já estiver carregado.
+  try {
+    if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+  } catch(e) {}
 }
+
 
 
 let _supabaseLeadSyncTimer = null;

@@ -495,13 +495,13 @@ async function loadSupabaseLeadsToLocalState({ preserveWorkflow = false } = {}) 
   const attributionQueue = activeRows
     .filter(item => {
       const stage = String(item.current_stage || '').toLowerCase();
-      return stage === 'assignment_whatsapp' || stage === 'assignment_website' || stage === 'assignment';
+      return stage === 'attribution_whatsapp' || stage === 'attribution_site' || stage === 'assignment_whatsapp' || stage === 'assignment_website' || stage === 'assignment';
     })
     .map(item => {
       const lead = mapSupabaseLeadToLegacyV30(item);
       const stage = String(item.current_stage || '').toLowerCase();
       lead.canal = 'zap';
-      lead.tipo = stage === 'assignment_website' || lead.has_own_site || lead.site ? 'com-site' : 'sem-site';
+      lead.tipo = stage === 'attribution_site' || stage === 'assignment_website' || lead.has_own_site || lead.site ? 'com-site' : 'sem-site';
       lead.numStatus = 'valido';
       return lead;
     });
