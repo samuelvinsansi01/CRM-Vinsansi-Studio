@@ -222,6 +222,7 @@
         return `<div class="empresa-card">
           <div class="empresa-info">
             <div class="empresa-nome">${esc(l.company_name || 'Lead sem nome')}</div>
+            <div style="margin-top:5px;margin-bottom:4px;font-family:'DM Mono',monospace;font-size:8px;color:${statusColor};text-transform:uppercase;letter-spacing:.04em">${esc(r.status === 'approved' ? 'aprovado' : r.status === 'ready_to_dispatch' ? 'fila final' : r.status === 'invalid_whatsapp' ? 'sem whatsapp' : r.status === 'invalid_phone' ? 'número inválido' : 'em revisão')}</div>
             <div class="empresa-meta" style="gap:8px">
               ${l.website ? `<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;font-weight:700">Site</a>` : `<span style="color:var(--muted)">Sem site</span>`}
               <span style="color:var(--muted)">|</span>
@@ -229,10 +230,10 @@
             </div>
           </div>
           <div class="empresa-actions" style="gap:5px;flex-wrap:wrap;justify-content:flex-end">
-            <button class="btn btn-primary" style="font-size:9px;padding:5px 9px" onclick="approvePreItemV31('${r.id}')">✓ Aprovar</button>
-            <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" onclick="invalidatePreItemV31('${r.id}','invalid_whatsapp')">Sem WhatsApp</button>
-            <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" onclick="invalidatePreItemV31('${r.id}','invalid_phone')">Número inválido</button>
-            <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" onclick="replacePreItemV31('${r.id}')">↻ Trocar</button>
+            ${r.status === 'approved' ? `<button class="btn btn-ghost" style="font-size:9px;padding:5px 9px;border-color:rgba(78,203,113,.45);color:var(--ok)" disabled>✓ Aprovado</button>` : r.status === 'ready_to_dispatch' ? `<button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" disabled>Na fila final</button>` : `<button class="btn btn-primary" style="font-size:9px;padding:5px 9px" onclick="approvePreItemV31('${r.id}')">✓ Aprovar</button>`}
+            <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" onclick="invalidatePreItemV31('${r.id}','invalid_whatsapp')" ${r.status === 'ready_to_dispatch' ? 'disabled' : ''}>Sem WhatsApp</button>
+            <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" onclick="invalidatePreItemV31('${r.id}','invalid_phone')" ${r.status === 'ready_to_dispatch' ? 'disabled' : ''}>Número inválido</button>
+            <button class="btn btn-ghost" style="font-size:9px;padding:5px 9px" onclick="replacePreItemV31('${r.id}')" ${r.status === 'ready_to_dispatch' ? 'disabled' : ''}>↻ Trocar</button>
           </div>
         </div>`;
       }).join('')}</div>
@@ -305,10 +306,37 @@
   }
 
   async function approvePreItemV31(id){
-    const sb = client(); if (!sb) return;
-    const { data, error } = await sb.from('pre_dispatch_items').update({ status:'approved', updated_at:new Date().toISOString() }).eq('user_id', userId()).eq('id', id).select('lead_id').maybeSingle();
-    if (!error && data?.lead_id) await sb.from('leads').update({ current_stage:'pre_send_approved', updated_at:new Date().toISOString() }).eq('user_id', userId()).eq('id', data.lead_id);
-    await renderPreEnvioListV31();
+    const sb = client();
+    if (!sb) return notifySafe('// Supabase indisponível', 'err');
+    try {
+      const now = new Date().toISOString();
+      const { data, error } = await sb
+        .from('pre_dispatch_items')
+        .update({ status:'approved', updated_at: now })
+        .eq('user_id', userId())
+        .eq('id', id)
+        .select('id,lead_id,status')
+        .maybeSingle();
+      if (error) {
+        console.warn('[v31][approve-pre-item-error]', error);
+        return notifySafe('// erro ao aprovar: ' + error.message, 'err');
+      }
+      if (!data?.id) return notifySafe('// item não encontrado para aprovar', 'warn');
+      if (data.lead_id) {
+        const { error: leadErr } = await sb
+          .from('leads')
+          .update({ current_stage:'pre_send_approved', updated_at: now })
+          .eq('user_id', userId())
+          .eq('id', data.lead_id);
+        if (leadErr) console.warn('[v31][approve-lead-stage-error]', leadErr.message);
+      }
+      notifySafe('✓ lead aprovado para pré-envio');
+      await renderPreEnvioListV31();
+      if (typeof window.updateSafeBadgesV31 === 'function') window.updateSafeBadgesV31();
+    } catch(e) {
+      console.warn('[v31][approve-pre-item-exception]', e);
+      notifySafe('// erro inesperado ao aprovar', 'err');
+    }
   }
 
   async function replacePreItemV31(id){
