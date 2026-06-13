@@ -13,7 +13,7 @@ function diasEmEspera(criadoEm) {
 }
 
 function renderAtribuicao() {
-  const allAtribLeads = moveUnvalidatedAtribLeadsToValidationV42(getAtribuicaoData());
+  const allAtribLeads = getAtribuicaoData(); // V31: importação vai direto para Atribuição; sem retorno para Validação
   const tabTipo = atribActiveTab === 'com-site' ? 'com-site' : 'sem-site';
   const leads = allAtribLeads.filter(l => {
     const canal = l.canal && l.canal !== 'pendente' ? l.canal : (l.whatsapp ? 'zap' : 'insta');
@@ -234,10 +234,6 @@ function atribuirParaDia(ids, day) {
   ids.forEach(id => {
     const lead = atrib.find(a => a.id === id);
     if (!lead) return;
-    if (!isLeadWhatsappValidatedForQueue(lead)) {
-      notify(`// valide o WhatsApp de ${lead.nome} antes de atribuir`, 'warn');
-      return;
-    }
 
     // encontra dia com vaga (máx = 60 × nº de chips)
     const dailyLimit = getDailyLimit();
@@ -318,10 +314,6 @@ async function mandarParaBacklogZap(id) {
   const atrib = getAtribuicaoData();
   const lead  = atrib.find(a => a.id === id);
   if (!lead) return;
-  if (!isLeadWhatsappValidatedForQueue(lead)) {
-    notify('// valide o WhatsApp antes de enviar para a fila Zap', 'warn');
-    return;
-  }
 
   if (typeof assertPhoneNotAlreadySentV30 === 'function') {
     try {
@@ -354,10 +346,6 @@ async function moverParaBacklogZapDoDia(id, day) {
   const data = ensureWeekData();
   const lead = (data.days[day]||[]).find(e => e.id === id);
   if (!lead) { notify('// lead não encontrado','warn'); return; }
-  if (!isLeadWhatsappValidatedForQueue(lead)) {
-    notify('// valide o WhatsApp antes de enviar para a fila Zap', 'warn');
-    return;
-  }
   if (typeof assertPhoneNotAlreadySentV30 === 'function') {
     try {
       await assertPhoneNotAlreadySentV30(lead.whatsapp || lead.phone || '');

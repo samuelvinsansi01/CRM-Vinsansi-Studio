@@ -65,9 +65,6 @@
       <button class="nav-item sub" onclick="switchPanel('importar')" data-label="Importar">
         <div class="nav-icon">📥</div><span class="nav-label">Importar</span><span class="nav-badge" id="badge-importar">0</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('validacao')" data-label="Validação">
-        <div class="nav-icon">✅</div><span class="nav-label">Validação</span><span class="nav-badge" id="badge-validacao">0</span>
-      </button>
       <button class="nav-item sub" onclick="switchPanel('atribuicao')" data-label="Atribuição">
         <div class="nav-icon">🗂️</div><span class="nav-label">Atribuição</span><span class="nav-badge" id="badge-atribuicao">0</span>
       </button>
@@ -81,6 +78,9 @@
       </summary>
       <button class="nav-item sub" onclick="switchPanel('fila-zap')" data-label="WhatsApp">
         <div class="nav-icon">💬</div><span class="nav-label">WhatsApp</span><span class="nav-badge" id="badge-fila-zap">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('pre-envio')" data-label="Pré-envio">
+        <div class="nav-icon">🧪</div><span class="nav-label">Pré-envio</span><span class="nav-badge" id="badge-pre-envio">0</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
         <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
@@ -523,6 +523,20 @@
 
   <!-- CONTEÚDO DA ABA ATIVA -->
   <div id="instaTabContent" style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden"></div>
+</div>
+
+
+<!-- ── PRÉ-ENVIO V31 ── -->
+<div class="panel" id="panel-pre-envio">
+  <div id="preEnvioRoot">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Pré-envio <span>semanal.</span></div>
+        <div class="page-sub">// carregando planejamento semanal...</div>
+      </div>
+    </div>
+    <div class="stretch-card" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:28px">// aguardando Supabase</div>
+  </div>
 </div>
 
 <div class="panel" id="panel-fila-zap" style="padding:0;overflow:hidden;flex-direction:row;height:100vh;">
@@ -1446,6 +1460,7 @@
   <script src="js/compatibility/sidebar-recovery.js"></script>
   <script src="js/compatibility/stability-guards.js"></script>
   <script src="js/modules/final-operational-flow.js?v=20260612-1630"></script>
+  <script src="js/modules/safe-weekly-flow-v31.js?v=20260613-0915"></script>
 
 <script>
 (function(){
@@ -1482,9 +1497,6 @@
       <button class="nav-item sub" onclick="switchPanel('importar')" data-label="Importar">
         <div class="nav-icon">📥</div><span class="nav-label">Importar</span><span class="nav-badge" id="badge-importar">0</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('validacao')" data-label="Validação">
-        <div class="nav-icon">✅</div><span class="nav-label">Validação</span><span class="nav-badge" id="badge-validacao">0</span>
-      </button>
       <button class="nav-item sub" onclick="switchPanel('atribuicao')" data-label="Atribuição">
         <div class="nav-icon">🗂️</div><span class="nav-label">Atribuição</span><span class="nav-badge" id="badge-atribuicao">0</span>
       </button>
@@ -1498,6 +1510,9 @@
       </summary>
       <button class="nav-item sub" onclick="switchPanel('fila-zap')" data-label="WhatsApp">
         <div class="nav-icon">💬</div><span class="nav-label">WhatsApp</span><span class="nav-badge" id="badge-fila-zap">0</span>
+      </button>
+      <button class="nav-item sub" onclick="switchPanel('pre-envio')" data-label="Pré-envio">
+        <div class="nav-icon">🧪</div><span class="nav-label">Pré-envio</span><span class="nav-badge" id="badge-pre-envio">0</span>
       </button>
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
         <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>

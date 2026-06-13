@@ -135,7 +135,9 @@ function buildImportedLeadV430(analysis, route) {
     numStatus: isInstagram ? 'nao-aplicavel' : 'pendente',
     tipo: isInstagram ? 'instagram' : (isCommercialSite ? 'com-site' : 'sem-site'),
     canal: isInstagram ? 'insta' : 'pendente',
-    stage: isInstagram ? 'instagram_backlog' : 'validation',
+    // Fluxo V31: importação já separa direto para Atribuição.
+    // WhatsApp sem site => assignment_whatsapp; WhatsApp com site => assignment_website; sem telefone => assignment_instagram.
+    stage: isInstagram ? 'assignment_instagram' : (isCommercialSite ? 'assignment_website' : 'assignment_whatsapp'),
     website_type: analysis.website.websiteType,
     website_quality: analysis.website.websiteQuality,
     qualification_reason: analysis.reason,
@@ -270,7 +272,7 @@ async function persistImportedLeadDirectV430(lead = {}) {
     reviews_count: Number(lead.reviewsCount || lead.reviews_count || 0) || 0,
     status: lead.status || 'Não enviada',
     current_status: lead.current_status || 'new',
-    current_stage: lead.stage || lead.current_stage || 'validation',
+    current_stage: lead.stage || lead.current_stage || (lead.tipo === 'instagram' ? 'assignment_instagram' : (lead.tipo === 'com-site' || lead.has_own_site ? 'assignment_website' : 'assignment_whatsapp')),
     lead_channel: lead.tipo === 'instagram' ? 'instagram' : 'whatsapp',
     lead_type: lead.tipo || (lead.has_own_site ? 'com-site' : 'sem-site'),
     has_own_site: !!lead.has_own_site,
