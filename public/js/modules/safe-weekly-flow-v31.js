@@ -32,6 +32,30 @@
   function notifySafe(msg,type){
     if (typeof window.notify === 'function') window.notify(msg,type); else console.log(msg);
   }
+  function leadStageFromData(lead){
+    const hasPhone = String(lead?.normalized_phone || lead?.phone || '').trim();
+    const hasSite = String(lead?.website || '').trim();
+    if (!hasPhone) return 'instagram_backlog';
+    return hasSite ? 'attribution_site' : 'attribution_whatsapp';
+  }
+  function normalizeUrl(url){
+    const u = String(url || '').trim();
+    if (!u) return '';
+    return /^https?:\/\//i.test(u) ? u : `https://${u}`;
+  }
+  function displayPhone(lead){
+    return String(lead?.phone || lead?.normalized_phone || '').trim();
+  }
+  async function copyTextSafe(text){
+    const value = String(text || '').trim();
+    if (!value) return notifySafe('// telefone vazio', 'warn');
+    try { await navigator.clipboard.writeText(value); notifySafe('✓ WhatsApp copiado'); }
+    catch(e){
+      try {
+        const ta = document.createElement('textarea'); ta.value = value; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); notifySafe('✓ WhatsApp copiado');
+      } catch(err){ notifySafe('// não foi possível copiar', 'err'); }
+    }
+  }
   function sundayOfWeek(base = new Date()){
     const d = new Date(base); d.setHours(0,0,0,0); d.setDate(d.getDate() - d.getDay()); return d;
   }
@@ -152,11 +176,10 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
           <div class="field-group" style="min-width:150px"><label>Dia</label><select id="preCreateDate">${days.map(d=>`<option value="${d}">${brDayLabel(d)}</option>`).join('')}</select></div>
           <div class="field-group" style="min-width:170px"><label>Chip</label><select id="preCreateChip">${chips.map(c=>`<option value="${esc(c.instance)}">${esc(c.label||c.instance)} · ${esc(c.status||'')}</option>`).join('')}</select></div>
-          <div class="field-group" style="min-width:150px"><label>Origem</label><select id="preCreateType"><option value="sem-site">WhatsApp sem site</option><option value="com-site">Com site</option><option value="instagram">Instagram</option></select></div>
           <div class="field-group" style="width:110px"><label>Qtd</label><input id="preCreateQty" type="number" min="1" max="120" value="120"></div>
           <button class="btn btn-primary" onclick="createPreSendBatchV31()">Gerar pré-envio</button>
         </div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:10px">O pré-envio não consulta a Evolution. Você revisa manualmente os 120 do dia e só depois libera para a fila final.</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:10px">O pré-envio mistura automaticamente leads com site e sem site. Você revisa manualmente os 120 do dia e só depois libera para a fila final.</div>
       </div>
       <div class="card" style="margin-bottom:14px">
         <div class="card-title">Revisar dia</div>
@@ -190,7 +213,8 @@
     el.innerHTML = `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">
         <strong style="color:var(--text)">${rows.length}</strong> planejados · <strong style="color:var(--ok)">${rows.filter(r=>r.status==='approved').length}</strong> aprovados · <strong style="color:var(--accent)">${rows.filter(r=>r.status==='ready_to_dispatch').length}</strong> fila final
-        <button class="btn btn-primary" style="margin-left:auto;font-size:10px;padding:7px 12px" onclick="sendApprovedToFinalQueueV31('${preCurrentDate}')">Enviar aprovados para fila final</button>
+        <button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:7px 12px" onclick="returnPreEnvioDayToAttributionV31('${preCurrentDate}')">↩ Voltar dia para atribuição</button>
+        <button class="btn btn-primary" style="font-size:10px;padding:7px 12px" onclick="sendApprovedToFinalQueueV31('${preCurrentDate}')">Enviar aprovados para fila final</button>
       </div>
       <div class="ext-list">${pageRows.map(r => {
         const l = r.leads || {};
@@ -198,13 +222,10 @@
         return `<div class="empresa-card">
           <div class="empresa-info">
             <div class="empresa-nome">${esc(l.company_name || 'Lead sem nome')}</div>
-            <div class="empresa-meta">
-              <span style="color:${statusColor};font-weight:700">${esc(r.status || 'review')}</span>
-              <span>${esc(r.chip_label || r.chip_instance || '')}</span>
-              <span>${esc(r.lead_type || '')}</span>
-              <span>📱 ${esc(l.phone || l.normalized_phone || '')}</span>
-              ${l.website ? `<span>🌐 ${esc(String(l.website).replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</span>` : ''}
-              ${l.city || l.state ? `<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>` : ''}
+            <div class="empresa-meta" style="gap:8px">
+              ${l.website ? `<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;font-weight:700">Site</a>` : `<span style="color:var(--muted)">Sem site</span>`}
+              <span style="color:var(--muted)">|</span>
+              <button type="button" class="link-btn" style="background:none;border:0;color:var(--ok);font:inherit;font-weight:700;cursor:pointer;padding:0" onclick="copyPreEnvioWhatsappV31('${esc(displayPhone(l))}')">WhatsApp</button>
             </div>
           </div>
           <div class="empresa-actions" style="gap:5px;flex-wrap:wrap;justify-content:flex-end">
@@ -222,13 +243,37 @@
       </div>`;
   }
 
+  async function fetchMixedAttributionLeads(limit, excludeIds = []){
+    const sb = client(); if (!sb) return [];
+    async function fetchStage(st, lim){
+      let q = sb.from('leads')
+        .select('id,company_name,phone,normalized_phone,current_stage,website,has_own_site,created_at')
+        .eq('user_id', userId())
+        .eq('current_stage', st)
+        .order('created_at',{ascending:true})
+        .limit(lim);
+      if (excludeIds.length) q = q.not('id','in',`(${excludeIds.map(x=>`"${x}"`).join(',')})`);
+      const { data, error } = await q;
+      if (error) { console.warn('[v31][mixed-leads]', st, error.message); return []; }
+      return data || [];
+    }
+    const half = Math.ceil(limit / 2);
+    const [semSite, comSite] = await Promise.all([
+      fetchStage('attribution_whatsapp', half + 20),
+      fetchStage('attribution_site', half + 20)
+    ]);
+    const mixed = [];
+    let a = 0, b = 0;
+    while (mixed.length < limit && (a < semSite.length || b < comSite.length)) {
+      if (a < semSite.length) mixed.push(semSite[a++]);
+      if (mixed.length < limit && b < comSite.length) mixed.push(comSite[b++]);
+    }
+    return mixed.slice(0, limit);
+  }
+
   async function pullNextLead(type, excludeIds = []){
-    const sb = client(); if (!sb) return null;
-    let q = sb.from('leads').select('id,company_name,phone,current_stage,website,has_own_site').eq('user_id', userId()).eq('current_stage', stageForType(type)).order('created_at',{ascending:true}).limit(1);
-    if (excludeIds.length) q = q.not('id','in',`(${excludeIds.map(x=>`"${x}"`).join(',')})`);
-    const { data, error } = await q;
-    if (error) { console.warn('[v31][next-lead]', error.message); return null; }
-    return (data||[])[0] || null;
+    const rows = await fetchMixedAttributionLeads(1, excludeIds);
+    return rows[0] || null;
   }
 
   async function createPreSendBatchV31(){
@@ -236,26 +281,19 @@
     const date = document.getElementById('preCreateDate')?.value || preCurrentDate;
     const chipInstance = document.getElementById('preCreateChip')?.value || '';
     const chipText = document.getElementById('preCreateChip')?.selectedOptions?.[0]?.textContent || chipInstance;
-    const type = document.getElementById('preCreateType')?.value || 'sem-site';
     const qty = Math.max(1, Math.min(120, Number(document.getElementById('preCreateQty')?.value || 120)));
     if (!chipInstance) return notifySafe('// nenhum chip selecionado','warn');
     const { data: existing } = await sb.from('pre_dispatch_items').select('lead_id').eq('user_id', userId()).eq('scheduled_date', date).eq('chip_instance', chipInstance);
     const existingIds = new Set((existing||[]).map(x=>x.lead_id));
     const need = Math.max(0, qty - existingIds.size);
     if (need <= 0) { notifySafe('// este chip/dia já tem a quantidade solicitada','warn'); preCurrentDate = date; return renderPreEnvioPanelV31(); }
-    const { data: leads, error } = await sb.from('leads')
-      .select('id,company_name')
-      .eq('user_id', userId())
-      .eq('current_stage', stageForType(type))
-      .order('created_at', { ascending:true })
-      .limit(need);
-    if (error) return notifySafe('// erro ao buscar leads: '+error.message,'err');
-    if (!leads?.length) return notifySafe('// não há leads suficientes nessa atribuição','warn');
+    const leads = await fetchMixedAttributionLeads(need, Array.from(existingIds));
+    if (!leads?.length) return notifySafe('// não há leads suficientes na atribuição','warn');
     const rows = leads.map((lead, i) => ({
       user_id: userId(), lead_id: lead.id, chip_instance: chipInstance,
       chip_label: chipText.split('·')[0].trim(), scheduled_date: date,
-      lead_type: type, status: 'review', position: existingIds.size + i + 1,
-      raw_payload: {}
+      lead_type: leadStageFromData(lead) === 'attribution_site' ? 'com-site' : 'sem-site', status: 'review', position: existingIds.size + i + 1,
+      raw_payload: { origin_stage: lead.current_stage }
     }));
     const { error: insErr } = await sb.from('pre_dispatch_items').insert(rows);
     if (insErr) return notifySafe('// erro ao criar pré-envio: '+insErr.message,'err');
@@ -273,7 +311,43 @@
     await renderPreEnvioListV31();
   }
 
-  async function replacePreItemV31(id){ return invalidatePreItemV31(id, 'replaced'); }
+  async function replacePreItemV31(id){
+    const sb = client(); if (!sb) return;
+    const { data: item, error } = await sb
+      .from('pre_dispatch_items')
+      .select('*,leads(id,website,phone,normalized_phone)')
+      .eq('user_id', userId())
+      .eq('id', id)
+      .maybeSingle();
+    if (error || !item) return notifySafe('// item não encontrado','err');
+    if (item.lead_id) {
+      await sb.from('leads')
+        .update({ current_stage: leadStageFromData(item.leads || {}), updated_at:new Date().toISOString() })
+        .eq('user_id', userId())
+        .eq('id', item.lead_id);
+    }
+    const next = await pullNextLead('mixed', [item.lead_id].filter(Boolean));
+    if (!next?.id) {
+      await sb.from('pre_dispatch_items').delete().eq('user_id', userId()).eq('id', id);
+      notifySafe('// lead devolvido, mas não havia substituto disponível', 'warn');
+      await renderPreEnvioListV31();
+      return;
+    }
+    await sb.from('pre_dispatch_items')
+      .update({
+        lead_id: next.id,
+        lead_type: leadStageFromData(next) === 'attribution_site' ? 'com-site' : 'sem-site',
+        status:'review',
+        updated_at:new Date().toISOString(),
+        raw_payload:{ replaced_from:item.lead_id, reason:'manual_swap' }
+      })
+      .eq('user_id', userId())
+      .eq('id', id);
+    await sb.from('leads').update({ current_stage:'pre_send', updated_at:new Date().toISOString() }).eq('user_id', userId()).eq('id', next.id);
+    notifySafe('✓ lead trocado e anterior voltou para atribuição');
+    await renderPreEnvioListV31();
+    if (typeof loadSupabaseLeadsToLocalState === 'function') loadSupabaseLeadsToLocalState();
+  }
 
   async function invalidatePreItemV31(id, reason){
     const sb = client(); if (!sb) return;
@@ -290,6 +364,31 @@
       notifySafe('// sem substituto disponível; item marcado', 'warn');
     }
     await renderPreEnvioListV31();
+    if (typeof loadSupabaseLeadsToLocalState === 'function') loadSupabaseLeadsToLocalState();
+  }
+
+  async function returnPreEnvioDayToAttributionV31(dateIso){
+    const sb = client(); if (!sb) return;
+    if (!confirm(`Voltar todos os leads de ${brDayLabel(dateIso)} para atribuição?`)) return;
+    const { data, error } = await sb
+      .from('pre_dispatch_items')
+      .select('id,lead_id,leads(id,website,phone,normalized_phone)')
+      .eq('user_id', userId())
+      .eq('scheduled_date', dateIso)
+      .neq('status','ready_to_dispatch');
+    if (error) return notifySafe('// erro ao buscar pré-envio: '+error.message,'err');
+    const rows = data || [];
+    for (const item of rows) {
+      if (!item.lead_id) continue;
+      await sb.from('leads')
+        .update({ current_stage: leadStageFromData(item.leads || {}), updated_at:new Date().toISOString() })
+        .eq('user_id', userId())
+        .eq('id', item.lead_id);
+    }
+    if (rows.length) await sb.from('pre_dispatch_items').delete().eq('user_id', userId()).in('id', rows.map(x=>x.id));
+    notifySafe(`✓ ${rows.length} lead(s) voltaram para atribuição`);
+    prePage = 1;
+    await renderPreEnvioPanelV31();
     if (typeof loadSupabaseLeadsToLocalState === 'function') loadSupabaseLeadsToLocalState();
   }
 
@@ -331,6 +430,8 @@
   window.invalidatePreItemV31 = invalidatePreItemV31;
   window.replacePreItemV31 = replacePreItemV31;
   window.sendApprovedToFinalQueueV31 = sendApprovedToFinalQueueV31;
+  window.returnPreEnvioDayToAttributionV31 = returnPreEnvioDayToAttributionV31;
+  window.copyPreEnvioWhatsappV31 = copyTextSafe;
   window.setPreEnvioDateV31 = setPreEnvioDateV31;
   window.preEnvioGoPageV31 = preEnvioGoPageV31;
   window.updateSafeBadgesV31 = updateSafeBadgesV31;
