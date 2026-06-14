@@ -246,7 +246,7 @@ function getImportUserIdV430() {
   try { return currentUser?.id ? String(currentUser.id) : ''; } catch (_) { return ''; }
 }
 
-async async function getDatabaseLeadCacheAsyncV430(rows = []) {
+async function getDatabaseLeadCacheAsyncV430(rows = []) {
   const userId = getImportUserIdV430();
   if (!userId || typeof sbClient === 'undefined' || !sbClient) return [];
 
@@ -540,6 +540,7 @@ function onRamoChange() {
 
 function renderRamoSelect() {
   const sel = document.getElementById('ramoSelect');
+  if (!sel) return;
   const ramos = getRamos();
   sel.innerHTML = '<option value="">Selecionar ramo...</option>' +
     ramos.map(r => `<option value="${r.id}"${activeRamoId===r.id?' selected':''}>${escHtml(r.nome)}</option>`).join('');
