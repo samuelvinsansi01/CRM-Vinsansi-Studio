@@ -353,7 +353,7 @@
     const sb = client(); if (!sb) return;
     const { data: item, error } = await sb
       .from('pre_dispatch_items')
-      .select('*,leads(id,website,phone,normalized_phone)')
+      .select('*,leads(id,website,maps_url,phone,normalized_phone)')
       .eq('user_id', userId())
       .eq('id', id)
       .maybeSingle();
@@ -410,7 +410,7 @@
     if (!confirm(`Voltar todos os leads de ${brDayLabel(dateIso)} para atribuição?`)) return;
     const { data, error } = await sb
       .from('pre_dispatch_items')
-      .select('id,lead_id,leads(id,website,phone,normalized_phone)')
+      .select('id,lead_id,leads(id,website,maps_url,phone,normalized_phone)')
       .eq('user_id', userId())
       .eq('scheduled_date', dateIso)
       .neq('status','ready_to_dispatch');
@@ -522,6 +522,12 @@
   function uid(){ try { if (window.currentUser?.id) return window.currentUser.id; if (typeof currentUser !== 'undefined' && currentUser?.id) return currentUser.id; return localStorage.getItem('vs_auth_local_user_v423') || USER_ID_FALLBACK; } catch(e){ return USER_ID_FALLBACK; } }
   function sb(){ try { return window.sbClient || (typeof sbClient !== 'undefined' ? sbClient : null); } catch(e){ return null; } }
   function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+  function normalizeUrlV311(url){ const u=String(url||'').trim(); if(!u) return ''; return /^https?:\/\//i.test(u)?u:`https://${u}`; }
+  function leadNameHtmlV311(l){
+    const name=esc(l.company_name||'Sem nome');
+    const maps=normalizeUrlV311(l.maps_url||l.googleUrl||l.mapsUrl||l.url||'');
+    return maps ? `<a href="${esc(maps)}" target="_blank" rel="noopener noreferrer" style="color:var(--text);text-decoration:none">${name}</a>` : name;
+  }
   function stage(){ return currentTab === 'com-site' ? 'attribution_site' : currentTab === 'insta' ? 'instagram_backlog' : 'attribution_whatsapp'; }
   async function countStage(st){ const c=sb(); if(!c) return 0; const {count,error}=await c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('current_stage',st); if(error){console.warn('[v31][count-stage]',st,error.message); return 0;} return count||0; }
   async function updateAtribCounts(){
@@ -538,7 +544,7 @@
     const c=sb(); if(!c) return {rows:[],total:0};
     const st=stage();
     const q=(currentTab==='insta' ? (document.getElementById('atribInstaBusca')?.value||'') : (document.getElementById('atribBusca')?.value||'')).trim();
-    let query=c.from('leads').select('id,company_name,phone,normalized_phone,website,instagram_url,city,state,rating,reviews_count,current_stage,created_at',{count:'exact'}).eq('user_id',uid()).eq('current_stage',st).order('created_at',{ascending:true});
+    let query=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,instagram_url,city,state,rating,reviews_count,current_stage,created_at',{count:'exact'}).eq('user_id',uid()).eq('current_stage',st).order('created_at',{ascending:true});
     if(q){ query=query.or(`company_name.ilike.%${q.replaceAll('%','')}%,phone.ilike.%${q.replaceAll('%','')}%,normalized_phone.ilike.%${q.replaceAll('%','')}%`); }
     const from=(page-1)*PER_PAGE, to=from+PER_PAGE-1;
     const {data,count,error}=await query.range(from,to);
@@ -565,7 +571,7 @@
     if(!rows.length){ if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead em ${esc(stage())}</div>`; if(pag) pag.innerHTML=''; return; }
     if(list) list.innerHTML='<div class="ext-list">'+rows.map(l=>`<div class="empresa-card">
       <div class="empresa-info">
-        <div class="empresa-nome">${esc(l.company_name||'Sem nome')}</div>
+        <div class="empresa-nome">${leadNameHtmlV311(l)}</div>
         <div class="empresa-meta">
           <span style="display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px;color:${currentTab==='insta'?'var(--insta)':currentTab==='com-site'?'#5bb8f5':'var(--ok)'};background:rgba(255,255,255,0.04);border:1px solid var(--border2);border-radius:4px;padding:2px 7px">${currentTab==='insta'?'📸 INSTAGRAM':currentTab==='com-site'?'🌐 COM SITE':'💬 WHATSAPP'}</span>
           <span>📱 ${esc(l.phone||l.normalized_phone||'')}</span>
@@ -868,6 +874,7 @@
   function notifySafe(msg,type){ if (typeof window.notify === 'function') window.notify(msg,type); else console.log(msg); }
   function normalizeUrl(url){ const u = String(url||'').trim(); if(!u) return ''; return /^https?:\/\//i.test(u) ? u : `https://${u}`; }
   function displayPhone(lead){ return String(lead?.phone || lead?.normalized_phone || '').trim(); }
+  function leadNameHtml(l){ const name=esc(l?.company_name||'Lead sem nome'); const maps=normalizeUrl(l?.maps_url||l?.googleUrl||l?.mapsUrl||l?.url||''); return maps ? `<a href="${esc(maps)}" target="_blank" rel="noopener noreferrer" style="color:var(--text);text-decoration:none">${name}</a>` : name; }
   function setOnlyPanelFull(panelId, label){
     document.querySelectorAll('.panel').forEach(p => {
       const active = p.id === panelId;
@@ -902,7 +909,7 @@
     if(ids.length){
       const { data: leads, error: leadErr } = await c
         .from('leads')
-        .select('id,company_name,phone,normalized_phone,website,city,state')
+        .select('id,company_name,phone,normalized_phone,website,maps_url,city,state')
         .eq('user_id', uid())
         .in('id', ids);
       if(leadErr) console.warn('[v31.6][whatsapp-final-leads]', leadErr.message);
@@ -928,7 +935,7 @@
       ${Object.entries(groups).map(([key,items])=>{ const [date,chip]=key.split('||'); return `<div style="margin:12px 0 18px">
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:8px">${esc(date)} · ${esc(chip)} · ${items.length}/120</div>
         <div class="ext-list">${items.map(r=>{ const l=r.lead||{}; return `<div class="empresa-card" style="width:100%;max-width:none">
-          <div class="empresa-info"><div class="empresa-nome" style="font-size:14px!important;line-height:1.25!important;font-weight:600!important">${esc(l.company_name||'Lead sem nome')}</div>
+          <div class="empresa-info"><div class="empresa-nome" style="font-size:14px!important;line-height:1.25!important;font-weight:600!important">${leadNameHtml(l)}</div>
             <div class="empresa-meta" style="gap:8px;font-size:10px!important;line-height:1.25!important">
               ${l.website ? `<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none;font-weight:700;font-size:10px!important">Site</a>` : `<span style="color:var(--muted);font-size:10px!important">Sem site</span>`}
               <span style="color:var(--muted);font-size:10px!important">|</span>
@@ -1017,6 +1024,17 @@
     const l = item?.leads || item?.lead || {};
     return stageForLead(l);
   }
+  function leadMapsUrl(l){
+    return String(l?.maps_url || l?.googleUrl || l?.mapsUrl || l?.url || '').trim();
+  }
+  function leadNameHtml(l, extraClass=''){
+    const name = esc(l?.company_name || l?.nome || l?.name || 'Lead sem nome');
+    const maps = normalizeUrl(leadMapsUrl(l));
+    const cls = extraClass ? ` class="${extraClass}"` : '';
+    return maps
+      ? `<a href="${esc(maps)}" target="_blank" rel="noopener noreferrer"${cls} style="color:var(--text);text-decoration:none">${name}</a>`
+      : `<span${cls}>${name}</span>`;
+  }
   async function copyText(value){
     const text=String(value||'').trim();
     if(!text) return notify('// telefone vazio','warn');
@@ -1067,7 +1085,7 @@
     const today=todayIso();
     const expiredStatuses=['review','pending_review','approved','ready_to_dispatch','queued','dispatch_queue','waiting','not_sent'];
     const { data, error } = await c.from('pre_dispatch_items')
-      .select('id,lead_id,status,raw_payload,leads(id,website,phone,normalized_phone)')
+      .select('id,lead_id,status,raw_payload,leads(id,website,maps_url,phone,normalized_phone)')
       .eq('user_id',uid())
       .lt('scheduled_date',today)
       .in('status',expiredStatuses);
@@ -1086,23 +1104,24 @@
   async function fetchMixedAttributionLeadsV317(limit, excludeIds=[]){
     const c=db(); if(!c) return [];
     async function fetchStage(stage, lim){
-      let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,current_stage,created_at').eq('user_id',uid()).eq('current_stage',stage).order('created_at',{ascending:true}).limit(lim);
+      let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,current_stage,created_at').eq('user_id',uid()).eq('current_stage',stage).order('created_at',{ascending:true}).limit(lim);
       if(excludeIds.length) q=q.not('id','in',`(${excludeIds.map(x=>`"${x}"`).join(',')})`);
       const { data, error } = await q;
       if(error){ console.warn('[v31.7][fetch-stage]',stage,error.message); return []; }
       return data||[];
     }
-    // Puxa mais sem-site primeiro, mas preserva mistura com com-site.
+    // Mescla de verdade: alterna sem-site e com-site.
+    // Se uma base acabar, completa com a outra.
     const [sem, com] = await Promise.all([
       fetchStage('attribution_whatsapp', limit + 50),
       fetchStage('attribution_site', limit + 50)
     ]);
     const mixed=[];
     let a=0,b=0;
-    // 1º bloco prioriza sem site
-    while(mixed.length < limit && a < sem.length) mixed.push(sem[a++]);
-    // se faltar, completa com com site
-    while(mixed.length < limit && b < com.length) mixed.push(com[b++]);
+    while(mixed.length < limit && (a < sem.length || b < com.length)) {
+      if (a < sem.length) mixed.push(sem[a++]);
+      if (mixed.length < limit && b < com.length) mixed.push(com[b++]);
+    }
     return mixed.slice(0,limit);
   }
 
@@ -1154,7 +1173,7 @@
   async function fetchPreItemsV317(date, chip='all'){
     const c=db(); if(!c) return [];
     let q=c.from('pre_dispatch_items')
-      .select('id,lead_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,created_at,raw_payload,leads(company_name,phone,normalized_phone,website,city,state,rating,reviews_count)')
+      .select('id,lead_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,created_at,raw_payload,leads(company_name,phone,normalized_phone,website,maps_url,city,state,rating,reviews_count)')
       .eq('user_id',uid())
       .eq('scheduled_date',date)
       .order('chip_label',{ascending:true})
@@ -1198,7 +1217,7 @@
     const siteLabel=String(l.website||'').trim()?`<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" class="pre-card-link pre-site">Site</a>`:`<span class="pre-card-link muted">Sem site</span>`;
     return `<div class="empresa-card pre-card-item" data-pre-id="${esc(r.id)}">
       <div class="empresa-info">
-        <div class="empresa-nome pre-card-name">${esc(l.company_name||'Lead sem nome')}</div>
+        <div class="empresa-nome pre-card-name">${leadNameHtml(l)}</div>
         <div class="empresa-meta pre-card-actions-line">
           ${siteLabel}<span class="pre-sep">|</span><button type="button" class="pre-card-link pre-whatsapp" onclick="copyPreEnvioWhatsappV31('${esc(phoneOf(l))}')">WhatsApp</button>
           <span class="pre-chip-mini">${esc(r.chip_label||r.chip_instance||'')}</span>
@@ -1268,7 +1287,7 @@
     const c=db(); if(!c) return;
     if(!confirm(`Voltar todos os leads de ${dayLabel(dateIso)} para atribuição?`)) return;
     const { data, error } = await c.from('pre_dispatch_items')
-      .select('id,lead_id,raw_payload,leads(id,website,phone,normalized_phone)')
+      .select('id,lead_id,raw_payload,leads(id,website,maps_url,phone,normalized_phone)')
       .eq('user_id',uid())
       .eq('scheduled_date',dateIso)
       .in('status',['review','pending_review','approved','ready_to_dispatch','queued','dispatch_queue','waiting','not_sent']);
@@ -1303,13 +1322,13 @@
     const c=db();
     panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// fila final aprovada no pré-envio</div></div></div><div class="card"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:24px">// carregando fila...</div></div>`;
     if(!c) return;
-    const { data: items, error } = await c.from('pre_dispatch_items').select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position,leads(company_name,phone,normalized_phone,website)').eq('user_id',uid()).in('status',['ready_to_dispatch','queued','dispatch_queue']).order('scheduled_date',{ascending:true}).order('chip_label',{ascending:true}).order('position',{ascending:true});
+    const { data: items, error } = await c.from('pre_dispatch_items').select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position,leads(company_name,phone,normalized_phone,website,maps_url)').eq('user_id',uid()).in('status',['ready_to_dispatch','queued','dispatch_queue']).order('scheduled_date',{ascending:true}).order('chip_label',{ascending:true}).order('position',{ascending:true});
     if(error){ panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div></div></div><div class="card"><div style="color:var(--error);font-family:'DM Mono',monospace;font-size:10px;padding:24px">// erro: ${esc(error.message)}</div></div>`; return; }
     const rows=items||[];
     const badge=document.getElementById('badge-fila-zap'); if(badge) badge.textContent=String(rows.length);
     if(!rows.length){ panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// fila final aprovada no pré-envio</div></div></div><div class="card"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:36px;text-align:center">// nenhum lead aprovado foi enviado para a fila WhatsApp ainda</div></div>`; return; }
     const groups=rows.reduce((acc,r)=>{ const k=`${r.scheduled_date}||${r.chip_label||r.chip_instance||'chip'}`; (acc[k] ||= []).push(r); return acc; },{});
-    panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// ${rows.length} lead(s) prontos para disparo</div></div></div><div class="card"><div class="card-title">Fila final WhatsApp</div>${Object.entries(groups).map(([k,arr])=>{ const [date,chip]=k.split('||'); return `<div style="margin:12px 0 18px"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:8px">${esc(dayLabel(date))} · ${esc(chip)} · ${arr.length}/120</div><div class="ext-list">${arr.map(r=>{ const l=r.leads||{}; return `<div class="empresa-card"><div class="empresa-info"><div class="empresa-nome pre-card-name">${esc(l.company_name||'Lead sem nome')}</div><div class="empresa-meta pre-card-actions-line">${l.website?`<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" class="pre-card-link pre-site">Site</a>`:`<span class="pre-card-link muted">Sem site</span>`}<span class="pre-sep">|</span><button class="pre-card-link pre-whatsapp" onclick="copyPreEnvioWhatsappV31('${esc(phoneOf(l))}')">WhatsApp</button></div></div><div class="empresa-actions"><span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--ok);border:1px solid rgba(78,203,113,.3);border-radius:6px;padding:5px 8px">FILA FINAL</span></div></div>`; }).join('')}</div></div>`; }).join('')}</div>`;
+    panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// ${rows.length} lead(s) prontos para disparo</div></div></div><div class="card"><div class="card-title">Fila final WhatsApp</div>${Object.entries(groups).map(([k,arr])=>{ const [date,chip]=k.split('||'); return `<div style="margin:12px 0 18px"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:8px">${esc(dayLabel(date))} · ${esc(chip)} · ${arr.length}/120</div><div class="ext-list">${arr.map(r=>{ const l=r.leads||{}; return `<div class="empresa-card"><div class="empresa-info"><div class="empresa-nome pre-card-name">${leadNameHtml(l)}</div><div class="empresa-meta pre-card-actions-line">${l.website?`<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" class="pre-card-link pre-site">Site</a>`:`<span class="pre-card-link muted">Sem site</span>`}<span class="pre-sep">|</span><button class="pre-card-link pre-whatsapp" onclick="copyPreEnvioWhatsappV31('${esc(phoneOf(l))}')">WhatsApp</button></div></div><div class="empresa-actions"><span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--ok);border:1px solid rgba(78,203,113,.3);border-radius:6px;padding:5px 8px">FILA FINAL</span></div></div>`; }).join('')}</div></div>`; }).join('')}</div>`;
   }
 
   function setOnlyPanel(panelId,label){
