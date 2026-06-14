@@ -46,6 +46,23 @@
   function displayPhone(lead){
     return String(lead?.phone || lead?.normalized_phone || '').trim();
   }
+
+  async function registerArchivedLeadIdentityV31(lead = {}, reason = 'rejected'){
+    const sb = client();
+    if (!sb || !lead?.id) return;
+    try {
+      const rows = [];
+      const company = lead.company_name || lead.nome || 'Lead sem nome';
+      const phone = String(lead.normalized_phone || lead.phone || '').replace(/\D/g,'');
+      let site = '';
+      try { site = lead.website ? new URL(/^https?:\/\//i.test(lead.website) ? lead.website : `https://${lead.website}`).hostname.replace(/^www\./,'').toLowerCase() : ''; } catch(_){ site = String(lead.website||'').replace(/^https?:\/\//i,'').replace(/^www\./i,'').split('/')[0].toLowerCase(); }
+      const maps = String(lead.maps_url || '').trim().replace(/\/+$/,'').toLowerCase();
+      const ig = String(lead.instagram || lead.instagram_url || '').trim().toLowerCase().replace(/^https?:\/\/(www\.)?instagram\.com\//,'').replace(/^@/,'').split(/[/?#]/)[0];
+      function push(type,value){ if(value) rows.push({ user_id:userId(), lead_id:lead.id, identity_type:type, identity_value:value, company_name:company, source_table:'leads', status:reason, raw_payload:{ archived_at:new Date().toISOString() } }); }
+      push('phone', phone); push('site', site); push('maps', maps); push('instagram', ig);
+      if (rows.length) await sb.from('lead_registry').upsert(rows, { onConflict:'user_id,identity_type,identity_value' });
+    } catch(e){ console.warn('[v31][registry-archive]', e?.message || e); }
+  }
   async function copyTextSafe(text){
     const value = String(text || '').trim();
     if (!value) return notifySafe('// telefone vazio', 'warn');
@@ -389,9 +406,12 @@
 
   async function invalidatePreItemV31(id, reason){
     const sb = client(); if (!sb) return;
-    const { data: item, error } = await sb.from('pre_dispatch_items').select('*').eq('user_id', userId()).eq('id', id).maybeSingle();
+    const { data: item, error } = await sb.from('pre_dispatch_items').select('*,leads(id,company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url)').eq('user_id', userId()).eq('id', id).maybeSingle();
     if (error || !item) return notifySafe('// item não encontrado','err');
-    if (item.lead_id) await sb.from('leads').update({ current_status: reason, current_stage:'archived', updated_at:new Date().toISOString() }).eq('user_id', userId()).eq('id', item.lead_id);
+    if (item.lead_id) {
+      await sb.from('leads').update({ current_status: reason, current_stage:'archived', archived_at:new Date().toISOString(), archived_reason:reason, updated_at:new Date().toISOString() }).eq('user_id', userId()).eq('id', item.lead_id);
+      await registerArchivedLeadIdentityV31(item.leads || { id:item.lead_id }, reason);
+    }
     const next = await pullNextLead(item.lead_type || 'sem-site', []);
     if (next?.id) {
       await sb.from('pre_dispatch_items').update({ lead_id: next.id, status:'review', updated_at:new Date().toISOString(), raw_payload:{ replaced_from:item.lead_id, reason } }).eq('user_id', userId()).eq('id', id);
@@ -544,7 +564,7 @@
     const c=sb(); if(!c) return {rows:[],total:0};
     const st=stage();
     const q=(currentTab==='insta' ? (document.getElementById('atribInstaBusca')?.value||'') : (document.getElementById('atribBusca')?.value||'')).trim();
-    let query=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,instagram_url,city,state,rating,reviews_count,current_stage,created_at',{count:'exact'}).eq('user_id',uid()).eq('current_stage',st).order('created_at',{ascending:true});
+    let query=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,instagram_url,city,state,rating,reviews_count,lead_score,current_stage,created_at',{count:'exact'}).eq('user_id',uid()).eq('current_stage',st).order('lead_score',{ascending:false}).order('created_at',{ascending:true});
     if(q){ query=query.or(`company_name.ilike.%${q.replaceAll('%','')}%,phone.ilike.%${q.replaceAll('%','')}%,normalized_phone.ilike.%${q.replaceAll('%','')}%`); }
     const from=(page-1)*PER_PAGE, to=from+PER_PAGE-1;
     const {data,count,error}=await query.range(from,to);
@@ -1104,7 +1124,7 @@
   async function fetchMixedAttributionLeadsV317(limit, excludeIds=[]){
     const c=db(); if(!c) return [];
     async function fetchStage(stage, lim){
-      let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,current_stage,created_at').eq('user_id',uid()).eq('current_stage',stage).order('created_at',{ascending:true}).limit(lim);
+      let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,current_stage,created_at,lead_score,rating,reviews_count').eq('user_id',uid()).eq('current_stage',stage).order('lead_score',{ascending:false}).order('created_at',{ascending:true}).limit(lim);
       if(excludeIds.length) q=q.not('id','in',`(${excludeIds.map(x=>`"${x}"`).join(',')})`);
       const { data, error } = await q;
       if(error){ console.warn('[v31.7][fetch-stage]',stage,error.message); return []; }
@@ -1455,7 +1475,7 @@
     const [w,s,i,ib] = await Promise.all([
       countLeadStage('attribution_whatsapp'), countLeadStage('attribution_site'), countLeadStage('attribution_instagram'), countLeadStage('instagram_backlog')
     ]);
-    const map={atribTabZapCount:`(${w})`,atribTabComSiteCount:`(${s})`,atribTabInstaCount:`(${i})`,badge-atribuicao:String(w+s+i),badge-instagram:String(ib)};
+    const map={atribTabZapCount:`(${w})`,atribTabComSiteCount:`(${s})`,atribTabInstaCount:`(${i})`,'badge-atribuicao':String(w+s+i),'badge-instagram':String(ib)};
     Object.entries(map).forEach(([id,val])=>{ const el=document.getElementById(id); if(el) el.textContent=val; });
   }
 
@@ -1464,8 +1484,8 @@
     const inputId=atribTabFinal==='insta'?'atribInstaBusca':'atribBusca';
     const q=(document.getElementById(inputId)?.value||'').trim().replaceAll('%','');
     let query=c.from('leads')
-      .select('id,company_name,phone,normalized_phone,website,maps_url,instagram_url,city,state,rating,reviews_count,current_stage,created_at',{count:'exact'})
-      .eq('user_id',uid()).eq('current_stage',stageForTab()).order('created_at',{ascending:true});
+      .select('id,company_name,phone,normalized_phone,website,maps_url,instagram_url,city,state,rating,reviews_count,lead_score,current_stage,created_at',{count:'exact'})
+      .eq('user_id',uid()).eq('current_stage',stageForTab()).order('lead_score',{ascending:false}).order('created_at',{ascending:true});
     if(q) query=query.or(`company_name.ilike.%${q}%,phone.ilike.%${q}%,normalized_phone.ilike.%${q}%`);
     const from=(atribPageFinal-1)*PER_PAGE;
     const { data,count,error }=await query.range(from,from+PER_PAGE-1);
@@ -1639,4 +1659,121 @@
     if(atribBtn){ e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation) e.stopImmediatePropagation(); const id=atribBtn.id; setAtribTab(id==='atribTabComSite'?'com-site':id==='atribTabInsta'?'insta':'zap'); return; }
   },true);
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{ applyFinalStyles(); refreshAtribBadgesFinal(); if(document.getElementById('panel-atribuicao')?.classList.contains('active')) renderAtribuicaoPanelFinal(); if(document.getElementById('panel-instagram')?.classList.contains('active')) renderInstagramFinal(); },1200));
+})();
+
+/* V31.10 — Limpeza de atribuição, Instagram correto e bloqueio visual final */
+(function(){
+  const USER_ID_FALLBACK='c02fe973-4eb5-4036-9f8d-8787937e8b11';
+  let atribTab='zap';
+  let atribPage=1;
+  const PER_PAGE=30;
+  function sb(){ try { return window.sbClient || (typeof sbClient !== 'undefined' ? sbClient : null); } catch(e){ return null; } }
+  function uid(){ try { return window.currentUser?.id || (typeof currentUser !== 'undefined' && currentUser?.id ? currentUser.id : null) || localStorage.getItem('vs_auth_local_user_v423') || USER_ID_FALLBACK; } catch(e){ return USER_ID_FALLBACK; } }
+  function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+  function cleanUrl(url){ const u=String(url||'').trim(); if(!u) return ''; return /^https?:\/\//i.test(u) ? u : `https://${u}`; }
+  function shortSite(url){ try { return new URL(cleanUrl(url)).hostname.replace(/^www\./,''); } catch(e){ return String(url||'').replace(/^https?:\/\/(www\.)?/,'').split('/')[0]; } }
+  function mapsLink(l){ return cleanUrl(l?.maps_url || l?.googleUrl || l?.mapsUrl || l?.url || ''); }
+  function nameLink(l){ const name=esc(l?.company_name || l?.nome || 'Sem nome'); const m=mapsLink(l); return m ? `<a href="${esc(m)}" target="_blank" rel="noopener noreferrer" class="lead-google-link">${name}</a>` : `<span>${name}</span>`; }
+  function stage(){ return atribTab==='com-site'?'attribution_site':atribTab==='insta'?'attribution_instagram':'attribution_whatsapp'; }
+  async function countStage(st){ const c=sb(); if(!c) return 0; const {count}=await c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('current_stage',st); return count||0; }
+  async function refreshCounts(){
+    const [w,s,i,ib]=await Promise.all([countStage('attribution_whatsapp'),countStage('attribution_site'),countStage('attribution_instagram'),countStage('instagram_backlog')]);
+    const pairs={atribTabZapCount:`(${w})`,atribTabComSiteCount:`(${s})`,atribTabInstaCount:`(${i})`,'badge-atribuicao':String(w+s+i),'badge-instagram':String(ib)};
+    Object.entries(pairs).forEach(([id,val])=>{ const el=document.getElementById(id); if(el) el.textContent=val; });
+  }
+  async function fetchRows(){
+    const c=sb(); if(!c) return {rows:[],total:0};
+    const qv=(document.getElementById(atribTab==='insta'?'atribInstaBusca':'atribBusca')?.value||'').trim().replaceAll('%','');
+    let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,instagram_url,city,state,rating,reviews_count,lead_score,current_stage,created_at',{count:'exact'}).eq('user_id',uid()).eq('current_stage',stage()).order('lead_score',{ascending:false}).order('created_at',{ascending:true});
+    if(qv) q=q.or(`company_name.ilike.%${qv}%,phone.ilike.%${qv}%,normalized_phone.ilike.%${qv}%`);
+    const from=(atribPage-1)*PER_PAGE;
+    const {data,count,error}=await q.range(from,from+PER_PAGE-1);
+    return {rows:data||[],total:count||0,error};
+  }
+  function normalCard(l){
+    const isSite=atribTab==='com-site';
+    return `<div class="empresa-card atrib-clean-card">
+      <div class="empresa-info">
+        <div class="empresa-nome atrib-clean-name">${nameLink(l)}</div>
+        <div class="empresa-meta atrib-clean-meta">
+          <span class="atrib-clean-badge ${isSite?'site':'zap'}">${isSite?'🌐 COM SITE':'💬 ZAP'}</span>
+          ${l.website?`<span class="atrib-clean-site">${esc(shortSite(l.website))}</span>`:''}
+          <span>📱 ${esc(l.phone||l.normalized_phone||'')}</span>
+          ${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}
+          ${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}
+        </div>
+      </div>
+    </div>`;
+  }
+  function instaCard(l){
+    return `<div class="empresa-card atrib-clean-card atrib-insta-card" id="atrib-insta-card-${esc(l.id)}">
+      <div class="empresa-info">
+        <div class="empresa-nome atrib-clean-name">${nameLink(l)}</div>
+        <div class="empresa-meta atrib-clean-meta">
+          <span class="atrib-clean-badge insta">📸 INSTAGRAM</span>
+          ${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}
+          ${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}
+        </div>
+      </div>
+      <div class="empresa-actions atrib-insta-input-wrap">
+        <input id="atrib-insta-url-${esc(l.id)}" class="atrib-insta-url-input" type="text" placeholder="Cole o Instagram aqui" value="${esc(l.instagram_url||'')}"
+          onpaste="setTimeout(()=>approveInstagramAttributionV31('${esc(l.id)}'),80)" onchange="approveInstagramAttributionV31('${esc(l.id)}')" onkeydown="if(event.key==='Enter') approveInstagramAttributionV31('${esc(l.id)}')">
+      </div>
+    </div>`;
+  }
+  async function renderAtrib(){
+    await refreshCounts();
+    ['atribTabZap','atribTabComSite','atribTabInsta'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('active'); });
+    const activeId=atribTab==='com-site'?'atribTabComSite':atribTab==='insta'?'atribTabInsta':'atribTabZap';
+    const active=document.getElementById(activeId); if(active) active.classList.add('active');
+    const isInsta=atribTab==='insta';
+    const panelZap=document.getElementById('atribPanelZap');
+    const panelInsta=document.getElementById('atribPanelInsta');
+    if(panelZap) panelZap.style.display=isInsta?'none':'flex';
+    if(panelInsta) panelInsta.style.display=isInsta?'flex':'none';
+    const list=document.getElementById(isInsta?'atribInstaList':'atribList');
+    const pag=document.getElementById(isInsta?'atribInstaPagination':'atribPagination');
+    const badge=document.getElementById(isInsta?'atribInstaFilaTotalBadge':'atribTotalBadge');
+    if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// carregando...</div>`;
+    const {rows,total,error}=await fetchRows();
+    if(badge) badge.textContent=`${total} lead${total!==1?'s':''}`;
+    if(error){ if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--error);text-align:center;padding:32px">// erro: ${esc(error.message)}</div>`; return; }
+    if(!rows.length){ if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead em ${esc(stage())}</div>`; if(pag) pag.innerHTML=''; return; }
+    if(list) list.innerHTML='<div class="ext-list">'+rows.map(isInsta?instaCard:normalCard).join('')+'</div>';
+    const totalPages=Math.max(1,Math.ceil(total/PER_PAGE));
+    if(pag) pag.innerHTML=`<div style="display:flex;justify-content:center;gap:6px;margin-top:12px;font-family:'DM Mono',monospace;font-size:10px"><button class="btn btn-ghost" onclick="atribGoPageV31(${Math.max(1,atribPage-1)})">←</button><span style="padding:8px;color:var(--muted)">Página ${atribPage} de ${totalPages} · ${total} leads</span><button class="btn btn-ghost" onclick="atribGoPageV31(${Math.min(totalPages,atribPage+1)})">→</button></div>`;
+    applyCleanStyles();
+  }
+  window.setAtribTab=function(tab){ atribTab=tab; atribPage=1; renderAtrib(); };
+  window.atribGoPageV31=function(p){ atribPage=Math.max(1,p); renderAtrib(); };
+  window.renderAtribuicaoPanelV31=renderAtrib;
+  window.renderAtribuicao=renderAtrib;
+
+  const oldApprove=window.approveInstagramAttributionV31;
+  window.approveInstagramAttributionV31=async function(id){
+    const c=sb(); if(!c) return;
+    const input=document.getElementById(`atrib-insta-url-${CSS.escape(id)}`);
+    const url=String(input?.value||'').trim();
+    if(!url || !/(instagram\.com|^@)/i.test(url)) { if(input) input.style.borderColor='var(--error)'; return; }
+    const finalUrl=url.startsWith('@') ? `https://instagram.com/${url.slice(1)}` : cleanUrl(url);
+    const {error}=await c.from('leads').update({ instagram_url:finalUrl, current_stage:'instagram_backlog', updated_at:new Date().toISOString() }).eq('user_id',uid()).eq('id',id);
+    if(error){ alert('Erro ao confirmar Instagram: '+error.message); return; }
+    const card=document.getElementById(`atrib-insta-card-${CSS.escape(id)}`); if(card) card.remove();
+    await refreshCounts();
+  };
+
+  function applyCleanStyles(){
+    if(document.getElementById('atrib-clean-v3110-style')) return;
+    const st=document.createElement('style'); st.id='atrib-clean-v3110-style'; st.textContent=`
+      #panel-atribuicao .empresa-card{min-height:68px!important;padding:14px 18px!important;border-color:var(--border2)!important}
+      #panel-atribuicao .empresa-nome,.atrib-clean-name{font-size:14px!important;line-height:1.25!important;font-weight:700!important;color:var(--text)!important}
+      #panel-atribuicao .empresa-meta,.atrib-clean-meta{font-size:10px!important;line-height:1.35!important;gap:8px!important;color:var(--muted)!important}
+      #panel-atribuicao .lead-google-link{color:var(--text)!important;text-decoration:none!important}.lead-google-link:hover{text-decoration:underline!important}
+      .atrib-clean-badge{font-family:'DM Mono',monospace;font-size:8px!important;border:1px solid var(--border2);border-radius:4px;padding:2px 7px;background:rgba(255,255,255,.04)}
+      .atrib-clean-badge.zap{color:var(--ok)}.atrib-clean-badge.site{color:#5bb8f5}.atrib-clean-badge.insta{color:var(--insta)}
+      #panel-atribuicao input[type="checkbox"]{display:none!important}
+      #panel-atribuicao .atrib-insta-url-input{background:rgba(225,48,108,.06);border:1px solid rgba(225,48,108,.28);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:8px 10px;min-width:260px;outline:none}
+    `; document.head.appendChild(st);
+  }
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{applyCleanStyles(); if(document.getElementById('panel-atribuicao')?.classList.contains('active')) renderAtrib();},1200));
 })();

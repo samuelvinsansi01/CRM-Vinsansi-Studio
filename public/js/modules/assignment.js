@@ -145,11 +145,6 @@ function renderAtribuicao() {
     } else {
       // Lead ZAP: botão → Fila Zap (Backlog)
       actionsHtml = `<div class="empresa-actions" style="flex-direction:column;gap:5px;align-items:flex-end">
-        <button onclick="mandarParaBacklogZap('${lead.id}')"
-          style="background:var(--accent);color:#0a0a0d;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:5px 12px;cursor:pointer;white-space:nowrap;transition:opacity 0.18s"
-          onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
-          → Fila Zap
-        </button>
         <button class="del-btn" onclick="removerDaAtribuicao('${lead.id}')">✕</button>
       </div>`;
     }

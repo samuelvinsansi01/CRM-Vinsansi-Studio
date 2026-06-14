@@ -585,7 +585,6 @@
         </div>
         <div class="empresa-actions" style="flex-direction:column;gap:6px;align-items:flex-end">
           <button onclick="atribInstaConfirmarLink('${id}')" style="background:var(--insta);color:#fff;border:none;border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:6px 12px;cursor:pointer">✓ Confirmar</button>
-          <button onclick="mandarParaFilaInsta('${id}')" style="background:none;border:1px solid rgba(225,48,108,0.35);color:var(--insta);border-radius:7px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;padding:6px 12px;cursor:pointer">→ Fila Insta</button>
         </div>
       </div>`;
     }).join('') + '</div>';

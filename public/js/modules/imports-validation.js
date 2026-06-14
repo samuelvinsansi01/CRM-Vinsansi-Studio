@@ -169,10 +169,9 @@ function getApifyQualificationV430(item = {}) {
 }
 
 function createLeadIdentityIndexV430(leads = []) {
-  // A importação operacional usa telefone como chave forte.
-  // Maps entra apenas como chave secundária para evitar o mesmo place_id duplicado.
-  // Site/Instagram NÃO bloqueiam mais, pois geravam falsos positivos no preview.
-  const index = { phones:new Map(), maps:new Map() };
+  // Blindagem V31: telefone, domínio do site, Google/Maps e Instagram são identidades fortes.
+  // Isso impede reimportar a mesma empresa com nomes de filial diferentes.
+  const index = { phones:new Map(), maps:new Map(), sites:new Map(), instagrams:new Map() };
   (Array.isArray(leads) ? leads : []).forEach(lead => addLeadIdentityToIndexV430(index, lead));
   return index;
 }
@@ -180,13 +179,41 @@ function createLeadIdentityIndexV430(leads = []) {
 function normalizeIdentityUrlV430(value = '') {
   return String(value || '').trim().replace(/\/+$/, '').toLowerCase();
 }
+function normalizeIdentitySiteV430(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const u = new URL(withProtocol);
+    return u.hostname.replace(/^www\./i,'').toLowerCase();
+  } catch (_) {
+    return raw.replace(/^https?:\/\//i,'').replace(/^www\./i,'').split('/')[0].trim().toLowerCase();
+  }
+}
+
+function normalizeIdentityInstagramV430(value = '') {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+  try {
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^@/, 'instagram.com/')}`;
+    const u = new URL(withProtocol);
+    if (!u.hostname.replace(/^www\./,'').endsWith('instagram.com')) return raw.replace(/^@/,'').split(/[/?#]/)[0];
+    return (u.pathname || '').replace(/^\/+/, '').split('/')[0].replace(/^@/,'').trim().toLowerCase();
+  } catch (_) {
+    return raw.replace(/^https?:\/\/(www\.)?instagram\.com\//,'').replace(/^@/,'').split(/[/?#]/)[0].trim().toLowerCase();
+  }
+}
 
 function addLeadIdentityToIndexV430(index, lead = {}) {
   if (!index) return index;
   const phone = normalizeImportPhoneV430(extractPhone(lead));
   const maps = normalizeIdentityUrlV430(extractGoogleUrl(lead));
+  const site = normalizeIdentitySiteV430(extractSite(lead) || lead.site || lead.website);
+  const instagram = normalizeIdentityInstagramV430(extractInstagram(lead) || lead.instagram || lead.instagram_url);
   const source = lead._already_seen_source || lead._duplicate_source || 'payload';
   if (phone && index.phones && !index.phones.has(phone)) index.phones.set(phone, { field:'phone', value:phone, source });
+  if (site && index.sites && !index.sites.has(site)) index.sites.set(site, { field:'site', value:site, source });
+  if (instagram && index.instagrams && !index.instagrams.has(instagram)) index.instagrams.set(instagram, { field:'instagram', value:instagram, source });
   if (maps && index.maps && !index.maps.has(maps)) index.maps.set(maps, { field:'maps', value:maps, source });
   return index;
 }
@@ -195,7 +222,11 @@ function findLeadIdentityDuplicateV430(index, item = {}) {
   if (!index) return null;
   const phone = normalizeImportPhoneV430(extractPhone(item));
   const maps = normalizeIdentityUrlV430(extractGoogleUrl(item));
+  const site = normalizeIdentitySiteV430(extractSite(item));
+  const instagram = normalizeIdentityInstagramV430(extractInstagram(item));
   if (phone && index.phones?.has(phone)) return index.phones.get(phone);
+  if (site && index.sites?.has(site)) return index.sites.get(site);
+  if (instagram && index.instagrams?.has(instagram)) return index.instagrams.get(instagram);
   if (maps && index.maps?.has(maps)) return index.maps.get(maps);
   return null;
 }
@@ -219,16 +250,51 @@ async function getDatabaseLeadCacheAsyncV430(rows = []) {
   const userId = getImportUserIdV430();
   if (!userId || typeof sbClient === 'undefined' || !sbClient) return [];
 
-  const phones = Array.from(new Set((Array.isArray(rows) ? rows : [])
-    .map(row => normalizeImportPhoneV430(extractPhone(row)))
-    .filter(Boolean)));
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const phones = Array.from(new Set(sourceRows.map(row => normalizeImportPhoneV430(extractPhone(row))).filter(Boolean)));
+  const sites = Array.from(new Set(sourceRows.map(row => normalizeIdentitySiteV430(extractSite(row))).filter(Boolean)));
+  const instagrams = Array.from(new Set(sourceRows.map(row => normalizeIdentityInstagramV430(extractInstagram(row))).filter(Boolean)));
+  const mapsUrls = Array.from(new Set(sourceRows.map(row => normalizeIdentityUrlV430(extractGoogleUrl(row))).filter(Boolean)));
 
-  if (!phones.length) return [];
+  if (!phones.length && !sites.length && !instagrams.length && !mapsUrls.length) return [];
 
   const cache = [];
 
+  // 0) Proteção permanente: lead_registry guarda telefone/site/instagram/maps mesmo após arquivar/rejeitar/enviar.
+  try {
+    const registryFilters = [];
+    if (phones.length) registryFilters.push(`and(identity_type.eq.phone,identity_value.in.(${phones.join(',')}))`);
+    if (sites.length) registryFilters.push(`and(identity_type.eq.site,identity_value.in.(${sites.join(',')}))`);
+    if (instagrams.length) registryFilters.push(`and(identity_type.eq.instagram,identity_value.in.(${instagrams.join(',')}))`);
+    if (mapsUrls.length) registryFilters.push(`and(identity_type.eq.maps,identity_value.in.(${mapsUrls.map(v=>`"${String(v).replace(/"/g,'')}"`).join(',')}))`);
+    if (registryFilters.length) {
+      const { data, error } = await sbClient
+        .from('lead_registry')
+        .select('identity_type,identity_value,company_name,status,source_table,lead_id')
+        .eq('user_id', userId)
+        .or(registryFilters.join(','));
+      if (!error && Array.isArray(data)) {
+        data.forEach(row => cache.push({
+          nome: row.company_name || '',
+          phone: row.identity_type === 'phone' ? row.identity_value : '',
+          normalized_phone: row.identity_type === 'phone' ? row.identity_value : '',
+          site: row.identity_type === 'site' ? row.identity_value : '',
+          website: row.identity_type === 'site' ? row.identity_value : '',
+          instagram: row.identity_type === 'instagram' ? row.identity_value : '',
+          maps_url: row.identity_type === 'maps' ? row.identity_value : '',
+          _already_seen_source: `lead_registry:${row.identity_type}:${row.status || row.source_table || 'seen'}`
+        }));
+      } else if (error && !String(error.message||'').includes('lead_registry')) {
+        qualificationLogV430('qualification-registry-preview-warning', { error:error.message || String(error) });
+      }
+    }
+  } catch (error) {
+    qualificationLogV430('qualification-registry-preview-error', { error:error?.message || String(error) });
+  }
+
   // 1) Proteção principal: telefones já enviados.
   try {
+    if (phones.length) {
     const { data, error } = await sbClient
       .from('sent_contacts')
       .select('company_name,phone,normalized_phone')
@@ -245,6 +311,7 @@ async function getDatabaseLeadCacheAsyncV430(rows = []) {
     } else if (error) {
       qualificationLogV430('qualification-sent-contacts-preview-warning', { error:error.message || String(error) });
     }
+    }
   } catch (error) {
     qualificationLogV430('qualification-sent-contacts-preview-error', { error:error?.message || String(error) });
   }
@@ -252,23 +319,36 @@ async function getDatabaseLeadCacheAsyncV430(rows = []) {
   // 2) Leads já existentes no banco, mas ainda não enviados.
   // Isso evita reimportar telefone que já está no sistema. Se a coluna ainda não existir, não quebra o preview.
   try {
-    const { data, error } = await sbClient
-      .from('leads')
-      .select('company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url')
-      .eq('user_id', userId)
-      .in('normalized_phone', phones);
-    if (!error && Array.isArray(data)) {
-      data.forEach(row => cache.push({
-        nome: row.company_name || '',
-        phone: row.normalized_phone || row.phone || '',
-        normalized_phone: row.normalized_phone || row.phone || '',
-        site: row.website || '',
-        maps_url: row.maps_url || '',
-        instagram: row.instagram || row.instagram_url || '',
-        _already_seen_source: 'leads'
+    const seenLeadIds = new Set();
+    async function pushLeadRows(query) {
+      const { data, error } = await query;
+      if (error) { qualificationLogV430('qualification-leads-preview-warning', { error:error.message || String(error) }); return; }
+      (Array.isArray(data) ? data : []).forEach(row => {
+        const key = `${row.normalized_phone||row.phone||''}|${row.website||''}|${row.maps_url||''}`;
+        if (seenLeadIds.has(key)) return;
+        seenLeadIds.add(key);
+        cache.push({
+          nome: row.company_name || '',
+          phone: row.normalized_phone || row.phone || '',
+          normalized_phone: row.normalized_phone || row.phone || '',
+          site: row.website || '',
+          website: row.website || '',
+          maps_url: row.maps_url || '',
+          instagram: row.instagram || row.instagram_url || '',
+          _already_seen_source: 'leads'
+        });
+      });
+    }
+    if (phones.length) {
+      await pushLeadRows(sbClient.from('leads').select('company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url').eq('user_id', userId).in('normalized_phone', phones));
+    }
+    if (sites.length) {
+      // Busca por site exato normalizado no cliente. Limitamos para evitar varrer tabela grande demais.
+      const { data, error } = await sbClient.from('leads').select('company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url').eq('user_id', userId).not('website','is',null).limit(5000);
+      if (error) qualificationLogV430('qualification-leads-site-preview-warning', { error:error.message || String(error) });
+      else (Array.isArray(data) ? data : []).filter(row => sites.includes(normalizeIdentitySiteV430(row.website))).forEach(row => cache.push({
+        nome: row.company_name || '', phone: row.normalized_phone || row.phone || '', normalized_phone: row.normalized_phone || row.phone || '', site: row.website || '', website: row.website || '', maps_url: row.maps_url || '', instagram: row.instagram || row.instagram_url || '', _already_seen_source: 'leads'
       }));
-    } else if (error) {
-      qualificationLogV430('qualification-leads-preview-warning', { error:error.message || String(error) });
     }
   } catch (error) {
     qualificationLogV430('qualification-leads-preview-error', { error:error?.message || String(error) });

@@ -112,6 +112,26 @@ function getImportStatsV430(analyses = []) {
   };
 }
 
+
+function calculateLeadPriorityScoreV31(analysisOrLead = {}) {
+  const q = analysisOrLead.qualification || {};
+  const rating = Number(q.rating ?? analysisOrLead.rating ?? analysisOrLead.totalScore ?? 0) || 0;
+  const reviews = Number(q.reviews ?? analysisOrLead.reviewsCount ?? analysisOrLead.reviews_count ?? 0) || 0;
+  const website = analysisOrLead.website || {};
+  const hasOwnSite = !!(analysisOrLead.has_own_site || website.type === 'commercial' || analysisOrLead.site || analysisOrLead.website_url);
+  const websiteType = String(website.websiteType || analysisOrLead.website_type || '').toLowerCase();
+  const websiteQuality = String(website.websiteQuality || analysisOrLead.website_quality || '').toLowerCase();
+  let score = 0;
+  score += Math.min(50, Math.max(0, rating) * 10);
+  score += Math.min(30, Math.log10(Math.max(1, reviews)) * 15);
+  if (!hasOwnSite || websiteType === 'none' || websiteQuality === 'missing') score += 18;
+  else if (websiteQuality === 'weak' || websiteType === 'wixsite' || websiteType === 'instagram' || websiteType === 'external') score += 10;
+  else score += 4;
+  if (rating >= 4.7) score += 8;
+  if (reviews >= 50) score += 6;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 function buildImportedLeadV430(analysis, route) {
   const isInstagram = route === 'instagram-backlog';
   const isCommercialSite = analysis.website.type === 'commercial';
@@ -141,6 +161,7 @@ function buildImportedLeadV430(analysis, route) {
     website_type: analysis.website.websiteType,
     website_quality: analysis.website.websiteQuality,
     qualification_reason: analysis.reason,
+    lead_score: calculateLeadPriorityScoreV31(analysis),
     importadoEm: todayStr()
   };
 }
@@ -247,6 +268,41 @@ async function importPreview() {
 }
 
 
+
+async function registerLeadIdentityAfterImportV31(lead = {}, savedId = '') {
+  try {
+    if (!(typeof sbClient !== 'undefined' && sbClient && typeof currentUser !== 'undefined' && currentUser?.id)) return;
+    const rows = [];
+    const company = lead.nome || lead.company_name || lead.companyName || 'Lead sem nome';
+    const phone = typeof normalizeImportPhoneV430 === 'function' ? normalizeImportPhoneV430(lead.whatsapp || lead.phone || '') : (lead.whatsapp || lead.phone || '');
+    const site = typeof normalizeIdentitySiteV430 === 'function' ? normalizeIdentitySiteV430(lead.site || lead.website || '') : (lead.site || lead.website || '');
+    const maps = typeof normalizeIdentityUrlV430 === 'function' ? normalizeIdentityUrlV430(lead.googleUrl || lead.maps_url || '') : (lead.googleUrl || lead.maps_url || '');
+    const ig = typeof normalizeIdentityInstagramV430 === 'function' ? normalizeIdentityInstagramV430(lead.instagram || lead.instagram_url || '') : (lead.instagram || lead.instagram_url || '');
+    function push(type, value){
+      if (!value) return;
+      rows.push({
+        user_id: currentUser.id,
+        lead_id: savedId || lead.id || null,
+        identity_type: type,
+        identity_value: value,
+        company_name: company,
+        source_table: 'leads',
+        status: lead.current_status || lead.status || 'active',
+        raw_payload: { imported_at: new Date().toISOString() }
+      });
+    }
+    push('phone', phone);
+    push('site', site);
+    push('maps', maps);
+    push('instagram', ig);
+    if (!rows.length) return;
+    const { error } = await sbClient.from('lead_registry').upsert(rows, { onConflict:'user_id,identity_type,identity_value' });
+    if (error && !String(error.message||'').includes('lead_registry')) console.warn('[lead-registry][upsert-warning]', error.message || error);
+  } catch (err) {
+    console.warn('[lead-registry][upsert-error]', err?.message || err);
+  }
+}
+
 async function persistImportedLeadDirectV430(lead = {}) {
   if (!lead || !lead.id) return { skipped:true, reason:'lead-missing' };
   if (!(typeof sbClient !== 'undefined' && sbClient && typeof currentUser !== 'undefined' && currentUser?.id)) {
@@ -270,6 +326,7 @@ async function persistImportedLeadDirectV430(lead = {}) {
     category: lead.categoria || lead.category || '',
     rating: Number(lead.totalScore || lead.rating || 0) || null,
     reviews_count: Number(lead.reviewsCount || lead.reviews_count || 0) || 0,
+    lead_score: Number(lead.lead_score || lead.leadScore || calculateLeadPriorityScoreV31(lead)) || 0,
     status: lead.status || 'Não enviada',
     current_status: lead.current_status || 'new',
     current_stage: lead.stage || lead.current_stage || (lead.tipo === 'instagram' ? 'assignment_instagram' : (lead.tipo === 'com-site' || lead.has_own_site ? 'assignment_website' : 'assignment_whatsapp')),
@@ -290,10 +347,13 @@ async function persistImportedLeadDirectV430(lead = {}) {
   for (let attempt = 0; attempt < 8; attempt++) {
     delete currentPayload.normalized_phone;
     const { error } = await sbClient.from('leads').upsert(currentPayload, { onConflict:'id' });
-    if (!error) return { ok:true };
+    if (!error) {
+      await registerLeadIdentityAfterImportV31(lead, currentPayload.id);
+      return { ok:true };
+    }
     const errorCode = String(error.code || '');
     const errorMsg = String(error.message || '');
-    if (errorCode === '23505' || errorMsg.includes('duplicate key')) {
+    if (errorCode === '23505' || errorCode === 'P0001' || errorMsg.includes('duplicate key') || errorMsg.includes('duplicate_identity')) {
       return { ok:false, duplicate:true, error };
     }
 
