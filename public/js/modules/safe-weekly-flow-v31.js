@@ -1755,11 +1755,28 @@
     const input=document.getElementById(`atrib-insta-url-${CSS.escape(id)}`);
     const url=String(input?.value||'').trim();
     if(!url || !/(instagram\.com|^@)/i.test(url)) { if(input) input.style.borderColor='var(--error)'; return; }
-    const finalUrl=url.startsWith('@') ? `https://instagram.com/${url.slice(1)}` : cleanUrl(url);
-    const {error}=await c.from('leads').update({ instagram_url:finalUrl, current_stage:'instagram_backlog', updated_at:new Date().toISOString() }).eq('user_id',uid()).eq('id',id);
-    if(error){ alert('Erro ao confirmar Instagram: '+error.message); return; }
-    const card=document.getElementById(`atrib-insta-card-${CSS.escape(id)}`); if(card) card.remove();
-    await refreshCounts();
+    const card=document.getElementById(`atrib-insta-card-${CSS.escape(id)}`);
+    if(card){ card.style.opacity='.55'; card.style.pointerEvents='none'; }
+    try{
+      const { data, error } = await c.rpc('approve_instagram_attribution_safe', { p_lead_id:id, p_instagram_url:url });
+      if(error) throw error;
+      const status = data && (data.status || data?.[0]?.status);
+      if(card) card.remove();
+      if(status === 'duplicate'){
+        const dup = data.duplicate_company || 'registro existente';
+        if(window.notify) notify(`Instagram duplicado. Lead arquivado. Já existe em: ${dup}`,'warn');
+        else alert(`Instagram duplicado. Lead arquivado. Já existe em: ${dup}`);
+      } else {
+        if(window.notify) notify('✓ Instagram aprovado e enviado para Backlog');
+      }
+      await refreshCounts();
+      if(typeof renderAtrib === 'function') await renderAtrib();
+      if(document.getElementById('panel-instagram')?.classList.contains('active') && typeof renderInstagramFinal === 'function') renderInstagramFinal();
+    } catch(err){
+      if(card){ card.style.opacity='1'; card.style.pointerEvents=''; }
+      const msg = err?.message || String(err);
+      alert('Erro ao confirmar Instagram: '+msg);
+    }
   };
 
   function applyCleanStyles(){
