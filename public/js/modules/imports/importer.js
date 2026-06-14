@@ -155,9 +155,9 @@ function buildImportedLeadV430(analysis, route) {
     numStatus: isInstagram ? 'nao-aplicavel' : 'pendente',
     tipo: isInstagram ? 'instagram' : (isCommercialSite ? 'com-site' : 'sem-site'),
     canal: isInstagram ? 'insta' : 'pendente',
-    // Fluxo V31: importação já separa direto para Atribuição.
-    // WhatsApp sem site => assignment_whatsapp; WhatsApp com site => assignment_website; sem telefone => assignment_instagram.
-    stage: isInstagram ? 'assignment_instagram' : (isCommercialSite ? 'assignment_website' : 'assignment_whatsapp'),
+    // Fluxo V31 DB-first: importação já separa direto para Atribuição.
+    // WhatsApp sem site => attribution_whatsapp; WhatsApp com site => attribution_site; Instagram => attribution_instagram.
+    stage: isInstagram ? 'attribution_instagram' : (isCommercialSite ? 'attribution_site' : 'attribution_whatsapp'),
     website_type: analysis.website.websiteType,
     website_quality: analysis.website.websiteQuality,
     qualification_reason: analysis.reason,
@@ -270,36 +270,46 @@ async function importPreview() {
 
 
 async function registerLeadIdentityAfterImportV31(lead = {}, savedId = '') {
+  // V31.9: registry permanente correto é company_registry.
+  // Não usa mais lead_registry como fonte obrigatória, porque essa tabela pode não existir.
   try {
     if (!(typeof sbClient !== 'undefined' && sbClient && typeof currentUser !== 'undefined' && currentUser?.id)) return;
-    const rows = [];
+
     const company = lead.nome || lead.company_name || lead.companyName || 'Lead sem nome';
     const phone = typeof normalizeImportPhoneV430 === 'function' ? normalizeImportPhoneV430(lead.whatsapp || lead.phone || '') : (lead.whatsapp || lead.phone || '');
-    const site = typeof normalizeIdentitySiteV430 === 'function' ? normalizeIdentitySiteV430(lead.site || lead.website || '') : (lead.site || lead.website || '');
+    const websiteRaw = lead.site || lead.website || '';
+    const domain = typeof normalizeIdentitySiteV430 === 'function' ? normalizeIdentitySiteV430(websiteRaw) : websiteRaw;
     const maps = typeof normalizeIdentityUrlV430 === 'function' ? normalizeIdentityUrlV430(lead.googleUrl || lead.maps_url || '') : (lead.googleUrl || lead.maps_url || '');
     const ig = typeof normalizeIdentityInstagramV430 === 'function' ? normalizeIdentityInstagramV430(lead.instagram || lead.instagram_url || '') : (lead.instagram || lead.instagram_url || '');
-    function push(type, value){
-      if (!value) return;
-      rows.push({
-        user_id: currentUser.id,
-        lead_id: savedId || lead.id || null,
-        identity_type: type,
-        identity_value: value,
-        company_name: company,
-        source_table: 'leads',
-        status: lead.current_status || lead.status || 'active',
-        raw_payload: { imported_at: new Date().toISOString() }
-      });
+
+    const row = {
+      user_id: currentUser.id,
+      lead_id: savedId || lead.id || null,
+      company_name: company,
+      normalized_phone: phone || null,
+      website: websiteRaw || null,
+      website_domain: domain || null,
+      instagram_url: lead.instagram || lead.instagram_url || null,
+      instagram_username: ig || null,
+      maps_url: maps || null,
+      registry_status: lead.current_status || lead.status || 'seen',
+      source: 'leads_import',
+      first_seen_at: new Date().toISOString(),
+      last_seen_at: new Date().toISOString(),
+      raw_payload: { imported_at: new Date().toISOString(), lead_type: lead.tipo || lead.lead_type || null }
+    };
+
+    const { error } = await sbClient.from('company_registry').insert(row);
+    if (error) {
+      const msg = String(error.message || '');
+      const code = String(error.code || '');
+      // Duplicidade no registry é esperado em alguns casos e não pode derrubar importação.
+      if (code !== '23505' && !msg.includes('duplicate key') && !msg.includes('company_registry')) {
+        console.warn('[company-registry][insert-warning]', msg);
+      }
     }
-    push('phone', phone);
-    push('site', site);
-    push('maps', maps);
-    push('instagram', ig);
-    if (!rows.length) return;
-    const { error } = await sbClient.from('lead_registry').upsert(rows, { onConflict:'user_id,identity_type,identity_value' });
-    if (error && !String(error.message||'').includes('lead_registry')) console.warn('[lead-registry][upsert-warning]', error.message || error);
   } catch (err) {
-    console.warn('[lead-registry][upsert-error]', err?.message || err);
+    console.warn('[company-registry][insert-error]', err?.message || err);
   }
 }
 

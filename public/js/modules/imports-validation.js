@@ -246,7 +246,7 @@ function getImportUserIdV430() {
   try { return currentUser?.id ? String(currentUser.id) : ''; } catch (_) { return ''; }
 }
 
-async function getDatabaseLeadCacheAsyncV430(rows = []) {
+async async function getDatabaseLeadCacheAsyncV430(rows = []) {
   const userId = getImportUserIdV430();
   if (!userId || typeof sbClient === 'undefined' || !sbClient) return [];
 
@@ -259,96 +259,117 @@ async function getDatabaseLeadCacheAsyncV430(rows = []) {
   if (!phones.length && !sites.length && !instagrams.length && !mapsUrls.length) return [];
 
   const cache = [];
+  const seen = new Set();
 
-  // 0) Proteção permanente: lead_registry guarda telefone/site/instagram/maps mesmo após arquivar/rejeitar/enviar.
-  try {
-    const registryFilters = [];
-    if (phones.length) registryFilters.push(`and(identity_type.eq.phone,identity_value.in.(${phones.join(',')}))`);
-    if (sites.length) registryFilters.push(`and(identity_type.eq.site,identity_value.in.(${sites.join(',')}))`);
-    if (instagrams.length) registryFilters.push(`and(identity_type.eq.instagram,identity_value.in.(${instagrams.join(',')}))`);
-    if (mapsUrls.length) registryFilters.push(`and(identity_type.eq.maps,identity_value.in.(${mapsUrls.map(v=>`"${String(v).replace(/"/g,'')}"`).join(',')}))`);
-    if (registryFilters.length) {
-      const { data, error } = await sbClient
-        .from('lead_registry')
-        .select('identity_type,identity_value,company_name,status,source_table,lead_id')
-        .eq('user_id', userId)
-        .or(registryFilters.join(','));
-      if (!error && Array.isArray(data)) {
-        data.forEach(row => cache.push({
-          nome: row.company_name || '',
-          phone: row.identity_type === 'phone' ? row.identity_value : '',
-          normalized_phone: row.identity_type === 'phone' ? row.identity_value : '',
-          site: row.identity_type === 'site' ? row.identity_value : '',
-          website: row.identity_type === 'site' ? row.identity_value : '',
-          instagram: row.identity_type === 'instagram' ? row.identity_value : '',
-          maps_url: row.identity_type === 'maps' ? row.identity_value : '',
-          _already_seen_source: `lead_registry:${row.identity_type}:${row.status || row.source_table || 'seen'}`
-        }));
-      } else if (error && !String(error.message||'').includes('lead_registry')) {
-        qualificationLogV430('qualification-registry-preview-warning', { error:error.message || String(error) });
-      }
-    }
-  } catch (error) {
-    qualificationLogV430('qualification-registry-preview-error', { error:error?.message || String(error) });
+  function pushCache(row = {}, source = 'company_registry') {
+    const key = [
+      row.normalized_phone || '',
+      row.website_domain || row.website || '',
+      row.instagram_username || row.instagram_url || '',
+      row.maps_url || ''
+    ].join('|');
+    if (seen.has(key)) return;
+    seen.add(key);
+    cache.push({
+      nome: row.company_name || '',
+      phone: row.normalized_phone || '',
+      normalized_phone: row.normalized_phone || '',
+      site: row.website_domain || row.website || '',
+      website: row.website_domain || row.website || '',
+      instagram: row.instagram_username || row.instagram_url || '',
+      maps_url: row.maps_url || '',
+      _already_seen_source: `${source}:${row.registry_status || row.status || 'seen'}`
+    });
   }
 
-  // 1) Proteção principal: telefones já enviados.
+  async function fetchRegistryBy(column, values, label) {
+    if (!values.length) return;
+    try {
+      const { data, error } = await sbClient
+        .from('company_registry')
+        .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status,source')
+        .eq('user_id', userId)
+        .in(column, values);
+      if (!error && Array.isArray(data)) {
+        data.forEach(row => pushCache(row, `company_registry:${label}`));
+      } else if (error) {
+        qualificationLogV430('qualification-company-registry-warning', { column, error:error.message || String(error) });
+      }
+    } catch (error) {
+      qualificationLogV430('qualification-company-registry-error', { column, error:error?.message || String(error) });
+    }
+  }
+
+  // Proteção permanente correta: company_registry.
+  // Separar as consultas evita erro de .or() com URLs/caracteres especiais.
+  await fetchRegistryBy('normalized_phone', phones, 'phone');
+  await fetchRegistryBy('website_domain', sites, 'site');
+  await fetchRegistryBy('instagram_username', instagrams, 'instagram');
+  await fetchRegistryBy('maps_url', mapsUrls, 'maps');
+
+  // Proteção principal: contatos já enviados.
   try {
     if (phones.length) {
-    const { data, error } = await sbClient
-      .from('sent_contacts')
-      .select('company_name,phone,normalized_phone')
-      .eq('user_id', userId)
-      .eq('active', true)
-      .in('normalized_phone', phones);
-    if (!error && Array.isArray(data)) {
-      data.forEach(row => cache.push({
-        nome: row.company_name || '',
-        phone: row.normalized_phone || row.phone || '',
-        normalized_phone: row.normalized_phone || row.phone || '',
-        _already_seen_source: 'sent_contacts'
-      }));
-    } else if (error) {
-      qualificationLogV430('qualification-sent-contacts-preview-warning', { error:error.message || String(error) });
-    }
+      const { data, error } = await sbClient
+        .from('sent_contacts')
+        .select('company_name,phone,normalized_phone')
+        .eq('user_id', userId)
+        .eq('active', true)
+        .in('normalized_phone', phones);
+      if (!error && Array.isArray(data)) {
+        data.forEach(row => pushCache({
+          company_name: row.company_name || '',
+          normalized_phone: row.normalized_phone || row.phone || '',
+          registry_status: 'sent'
+        }, 'sent_contacts'));
+      } else if (error) {
+        qualificationLogV430('qualification-sent-contacts-preview-warning', { error:error.message || String(error) });
+      }
     }
   } catch (error) {
     qualificationLogV430('qualification-sent-contacts-preview-error', { error:error?.message || String(error) });
   }
 
-  // 2) Leads já existentes no banco, mas ainda não enviados.
-  // Isso evita reimportar telefone que já está no sistema. Se a coluna ainda não existir, não quebra o preview.
+  // Leads operacionais ainda existentes.
   try {
-    const seenLeadIds = new Set();
+    const seenLeadKeys = new Set();
     async function pushLeadRows(query) {
       const { data, error } = await query;
       if (error) { qualificationLogV430('qualification-leads-preview-warning', { error:error.message || String(error) }); return; }
       (Array.isArray(data) ? data : []).forEach(row => {
         const key = `${row.normalized_phone||row.phone||''}|${row.website||''}|${row.maps_url||''}`;
-        if (seenLeadIds.has(key)) return;
-        seenLeadIds.add(key);
-        cache.push({
-          nome: row.company_name || '',
-          phone: row.normalized_phone || row.phone || '',
+        if (seenLeadKeys.has(key)) return;
+        seenLeadKeys.add(key);
+        pushCache({
+          company_name: row.company_name || '',
           normalized_phone: row.normalized_phone || row.phone || '',
-          site: row.website || '',
           website: row.website || '',
+          website_domain: normalizeIdentitySiteV430(row.website || ''),
           maps_url: row.maps_url || '',
-          instagram: row.instagram || row.instagram_url || '',
-          _already_seen_source: 'leads'
-        });
+          instagram_username: normalizeIdentityInstagramV430(row.instagram || row.instagram_url || ''),
+          registry_status: 'active'
+        }, 'leads');
       });
     }
+
     if (phones.length) {
       await pushLeadRows(sbClient.from('leads').select('company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url').eq('user_id', userId).in('normalized_phone', phones));
     }
+
     if (sites.length) {
-      // Busca por site exato normalizado no cliente. Limitamos para evitar varrer tabela grande demais.
       const { data, error } = await sbClient.from('leads').select('company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url').eq('user_id', userId).not('website','is',null).limit(5000);
       if (error) qualificationLogV430('qualification-leads-site-preview-warning', { error:error.message || String(error) });
-      else (Array.isArray(data) ? data : []).filter(row => sites.includes(normalizeIdentitySiteV430(row.website))).forEach(row => cache.push({
-        nome: row.company_name || '', phone: row.normalized_phone || row.phone || '', normalized_phone: row.normalized_phone || row.phone || '', site: row.website || '', website: row.website || '', maps_url: row.maps_url || '', instagram: row.instagram || row.instagram_url || '', _already_seen_source: 'leads'
-      }));
+      else (Array.isArray(data) ? data : [])
+        .filter(row => sites.includes(normalizeIdentitySiteV430(row.website)))
+        .forEach(row => pushCache({
+          company_name: row.company_name || '',
+          normalized_phone: row.normalized_phone || row.phone || '',
+          website: row.website || '',
+          website_domain: normalizeIdentitySiteV430(row.website || ''),
+          maps_url: row.maps_url || '',
+          instagram_username: normalizeIdentityInstagramV430(row.instagram || row.instagram_url || ''),
+          registry_status: 'active'
+        }, 'leads'));
     }
   } catch (error) {
     qualificationLogV430('qualification-leads-preview-error', { error:error?.message || String(error) });
