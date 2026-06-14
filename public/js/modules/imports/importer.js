@@ -281,7 +281,7 @@ async function importPreview() {
 
 
 async function registerLeadIdentityAfterImportV31(lead = {}, savedId = '') {
-  // A partir do patch 21, a memória permanente é company_registry.
+  // A partir do patch 22, a memória permanente é company_registry e o RLS foi corrigido.
   // O banco também possui trigger para sincronizar leads -> company_registry.
   // Esta função é apenas reforço e NUNCA deve consultar/gravar a tabela antiga.
   try {
