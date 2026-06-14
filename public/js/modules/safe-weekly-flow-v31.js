@@ -1393,3 +1393,250 @@
     setTimeout(()=>restoreExpiredDailyItemsV317().then(()=>{ if(document.getElementById('panel-pre-envio')?.classList.contains('active')) renderPreEnvioPanelV317(); }),1200);
   });
 })();
+
+/* V31.8 FINAL — Atribuição Instagram DB-first + backlog Instagram DB-first + navegação blindada */
+(function(){
+  const USER_ID_FALLBACK='c02fe973-4eb5-4036-9f8d-8787937e8b11';
+  let atribTabFinal='zap';
+  let atribPageFinal=1;
+  let instaTabFinal='backlog';
+  const PER_PAGE=30;
+
+  function sb(){ try { return window.sbClient || (typeof sbClient !== 'undefined' ? sbClient : null); } catch(e){ return null; } }
+  function uid(){ try { return window.currentUser?.id || (typeof currentUser !== 'undefined' && currentUser?.id ? currentUser.id : null) || localStorage.getItem('vs_auth_local_user_v423') || USER_ID_FALLBACK; } catch(e){ return USER_ID_FALLBACK; } }
+  function esc(v){ return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+  function cleanUrl(url){ const u=String(url||'').trim(); if(!u) return ''; return /^https?:\/\//i.test(u) ? u : `https://${u}`; }
+  function phoneOf(l){ return String(l?.normalized_phone || l?.phone || '').replace(/\D/g,''); }
+  function mapsLink(l){ return cleanUrl(l?.maps_url || l?.googleUrl || l?.mapsUrl || l?.url || ''); }
+  function nameLink(l, cls=''){
+    const name=esc(l?.company_name || l?.nome || 'Sem nome');
+    const maps=mapsLink(l);
+    return maps ? `<a class="${cls}" href="${esc(maps)}" target="_blank" rel="noopener noreferrer">${name}</a>` : `<span class="${cls}">${name}</span>`;
+  }
+  function normalizeInstagramUrl(value){
+    let v=String(value||'').trim();
+    if(!v) return '';
+    v=v.replace(/^@/,'');
+    if(/^https?:\/\//i.test(v)) return v;
+    v=v.replace(/^instagram\.com\//i,'').replace(/^www\.instagram\.com\//i,'');
+    return `https://instagram.com/${v}`;
+  }
+  function todayIso(){ const d=new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10); }
+  function weekDatesFinal(){
+    const d=new Date(); d.setHours(0,0,0,0);
+    const day=d.getDay();
+    const sunday=new Date(d); sunday.setDate(d.getDate()-day);
+    return Array.from({length:7},(_,i)=>{ const x=new Date(sunday); x.setDate(sunday.getDate()+i); return x.toISOString().slice(0,10); });
+  }
+  function labelDate(d){
+    const [y,m,day]=String(d).split('-').map(Number);
+    const dt=new Date(y,m-1,day);
+    return dt.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'}).replace('.','');
+  }
+  function stageForTab(){ return atribTabFinal==='com-site' ? 'attribution_site' : atribTabFinal==='insta' ? 'attribution_instagram' : 'attribution_whatsapp'; }
+
+  function setOnlyPanelFinal(panelId,label){
+    document.querySelectorAll('.panel').forEach(p=>{
+      const on=p.id===panelId;
+      p.classList.toggle('active',on);
+      p.style.display=on?'flex':'none';
+      if(on){ p.style.flexDirection='column'; p.style.width='100%'; p.style.maxWidth='none'; p.style.padding='24px 28px'; p.style.overflow='auto'; }
+    });
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',(n.getAttribute('data-label')||'')===label));
+  }
+
+  async function countLeadStage(st){
+    const c=sb(); if(!c) return 0;
+    const { count, error } = await c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('current_stage',st);
+    if(error){ console.warn('[v31.8][count]',st,error.message); return 0; }
+    return count||0;
+  }
+  async function refreshAtribBadgesFinal(){
+    const [w,s,i,ib] = await Promise.all([
+      countLeadStage('attribution_whatsapp'), countLeadStage('attribution_site'), countLeadStage('attribution_instagram'), countLeadStage('instagram_backlog')
+    ]);
+    const map={atribTabZapCount:`(${w})`,atribTabComSiteCount:`(${s})`,atribTabInstaCount:`(${i})`,badge-atribuicao:String(w+s+i),badge-instagram:String(ib)};
+    Object.entries(map).forEach(([id,val])=>{ const el=document.getElementById(id); if(el) el.textContent=val; });
+  }
+
+  async function fetchAtribRowsFinal(){
+    const c=sb(); if(!c) return {rows:[],total:0};
+    const inputId=atribTabFinal==='insta'?'atribInstaBusca':'atribBusca';
+    const q=(document.getElementById(inputId)?.value||'').trim().replaceAll('%','');
+    let query=c.from('leads')
+      .select('id,company_name,phone,normalized_phone,website,maps_url,instagram_url,city,state,rating,reviews_count,current_stage,created_at',{count:'exact'})
+      .eq('user_id',uid()).eq('current_stage',stageForTab()).order('created_at',{ascending:true});
+    if(q) query=query.or(`company_name.ilike.%${q}%,phone.ilike.%${q}%,normalized_phone.ilike.%${q}%`);
+    const from=(atribPageFinal-1)*PER_PAGE;
+    const { data,count,error }=await query.range(from,from+PER_PAGE-1);
+    if(error){ console.warn('[v31.8][fetch-atrib]',error.message); return {rows:[],total:0,error}; }
+    return {rows:data||[],total:count||0};
+  }
+
+  function renderAtribNormalCard(l){
+    const isSite=atribTabFinal==='com-site';
+    const chipColor=isSite?'#5bb8f5':'var(--ok)';
+    return `<div class="empresa-card atrib-vfinal-card">
+      <div class="empresa-info">
+        <div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div>
+        <div class="empresa-meta atrib-vfinal-meta">
+          <span class="atrib-vfinal-badge" style="color:${chipColor}">${isSite?'🌐 COM SITE':'💬 WHATSAPP'}</span>
+          <span>📱 ${esc(l.phone||l.normalized_phone||'')}</span>
+          ${l.website?`<span>🌐 ${esc(String(l.website).replace(/^https?:\/\/(www\.)?/,'').split('/')[0])}</span>`:''}
+          ${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}
+          ${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}
+        </div>
+      </div>
+      <div class="empresa-actions"><button class="btn btn-primary" style="font-size:9px;padding:5px 10px" onclick="switchPanel('pre-envio')">Planejar no pré-envio</button></div>
+    </div>`;
+  }
+
+  function renderAtribInstagramCard(l){
+    return `<div class="empresa-card atrib-vfinal-card atrib-insta-approve-card" id="atrib-insta-card-${esc(l.id)}">
+      <div class="empresa-info">
+        <div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div>
+        <div class="empresa-meta atrib-vfinal-meta">
+          <span class="atrib-vfinal-badge insta">📸 INSTAGRAM</span>
+          ${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}
+          ${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}
+        </div>
+      </div>
+      <div class="empresa-actions atrib-insta-input-wrap">
+        <input id="atrib-insta-url-${esc(l.id)}" class="atrib-insta-url-input" type="text" placeholder="Cole o Instagram aqui" value="${esc(l.instagram_url||'')}"
+          onpaste="setTimeout(()=>approveInstagramAttributionV31('${esc(l.id)}'),60)"
+          onchange="approveInstagramAttributionV31('${esc(l.id)}')"
+          onkeydown="if(event.key==='Enter') approveInstagramAttributionV31('${esc(l.id)}')">
+      </div>
+    </div>`;
+  }
+
+  async function renderAtribuicaoPanelFinal(){
+    await refreshAtribBadgesFinal();
+    const isInsta=atribTabFinal==='insta';
+    const panelZap=document.getElementById('atribPanelZap');
+    const panelInsta=document.getElementById('atribPanelInsta');
+    if(panelZap) panelZap.style.display=isInsta?'none':'flex';
+    if(panelInsta) panelInsta.style.display=isInsta?'flex':'none';
+    [['atribTabZap','zap'],['atribTabComSite','com-site'],['atribTabInsta','insta']].forEach(([id,t])=>{ const el=document.getElementById(id); if(el) el.classList.toggle('active',atribTabFinal===t); });
+    const list=document.getElementById(isInsta?'atribInstaList':'atribList');
+    const pag=document.getElementById(isInsta?'atribInstaPagination':'atribPagination');
+    const totalBadge=document.getElementById(isInsta?'atribInstaFilaTotalBadge':'atribTotalBadge');
+    if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// carregando...</div>`;
+    const {rows,total,error}=await fetchAtribRowsFinal();
+    if(totalBadge) totalBadge.textContent=`${total} lead${total!==1?'s':''}`;
+    if(error){ if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--error);text-align:center;padding:32px">// erro: ${esc(error.message)}</div>`; return; }
+    if(!rows.length){ if(list) list.innerHTML=`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:32px">// nenhum lead em ${esc(stageForTab())}</div>`; if(pag) pag.innerHTML=''; return; }
+    if(list) list.innerHTML=`<div class="ext-list atrib-vfinal-list">${rows.map(isInsta?renderAtribInstagramCard:renderAtribNormalCard).join('')}</div>`;
+    const totalPages=Math.max(1,Math.ceil(total/PER_PAGE)); if(atribPageFinal>totalPages) atribPageFinal=totalPages;
+    if(pag) pag.innerHTML=`<div style="display:flex;justify-content:center;gap:6px;margin-top:12px;font-family:'DM Mono',monospace;font-size:10px"><button class="btn btn-ghost" onclick="atribGoPageV31(${Math.max(1,atribPageFinal-1)})">←</button><span style="padding:8px;color:var(--muted)">Página ${atribPageFinal} de ${totalPages} · ${total} leads</span><button class="btn btn-ghost" onclick="atribGoPageV31(${Math.min(totalPages,atribPageFinal+1)})">→</button></div>`;
+  }
+
+  async function approveInstagramAttributionFinal(id){
+    const input=document.getElementById(`atrib-insta-url-${id}`);
+    const url=normalizeInstagramUrl(input?.value||'');
+    if(!url) return;
+    const c=sb(); if(!c) return;
+    const card=document.getElementById(`atrib-insta-card-${id}`);
+    if(card) card.style.opacity='.55';
+    const { error }=await c.from('leads').update({ instagram_url:url, current_stage:'instagram_backlog', updated_at:new Date().toISOString() }).eq('user_id',uid()).eq('id',id);
+    if(error){ if(card) card.style.opacity='1'; if(window.notify) notify('// erro ao aprovar Instagram: '+error.message,'err'); return; }
+    if(card) card.remove();
+    if(window.notify) notify('✓ Instagram aprovado e enviado para backlog');
+    await refreshAtribBadgesFinal();
+    await renderAtribuicaoPanelFinal();
+    if(document.getElementById('panel-instagram')?.classList.contains('active')) renderInstagramFinal();
+  }
+
+  async function fetchInstagramBacklogFinal(){
+    const c=sb(); if(!c) return [];
+    const { data,error }=await c.from('leads').select('id,company_name,instagram_url,maps_url,city,state,rating,reviews_count,category,created_at').eq('user_id',uid()).eq('current_stage','instagram_backlog').order('created_at',{ascending:true});
+    if(error){ console.warn('[v31.8][insta-backlog]',error.message); return []; }
+    return data||[];
+  }
+  async function fetchInstagramDayFinal(date){
+    const c=sb(); if(!c) return [];
+    const { data,error }=await c.from('instagram_dispatch_items').select('id,lead_id,scheduled_date,status,position,leads(id,company_name,instagram_url,maps_url,city,state,rating,reviews_count)').eq('user_id',uid()).eq('scheduled_date',date).order('position',{ascending:true});
+    if(error){ console.warn('[v31.8][insta-day]',error.message); return []; }
+    return data||[];
+  }
+  async function countInstagramDayFinal(date){
+    const c=sb(); if(!c) return 0;
+    const { count }=await c.from('instagram_dispatch_items').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('scheduled_date',date);
+    return count||0;
+  }
+  async function renderInstagramFinal(){
+    setOnlyPanelFinal('panel-instagram','Instagram');
+    const panel=document.getElementById('panel-instagram'); if(!panel) return;
+    const dates=weekDatesFinal(); if(instaTabFinal!=='backlog' && !dates.includes(instaTabFinal)) instaTabFinal='backlog';
+    const backlog=await fetchInstagramBacklogFinal();
+    const dayCounts={}; for(const d of dates) dayCounts[d]=await countInstagramDayFinal(d);
+    const tabs=`<div class="insta-final-tabs"><button class="day-tab ${instaTabFinal==='backlog'?'active':''}" onclick="setInstagramTabFinalV31('backlog')">📦 Backlog (${backlog.length})</button>${dates.map(d=>`<button class="day-tab ${instaTabFinal===d?'active':''}" onclick="setInstagramTabFinalV31('${d}')">${labelDate(d)}${dayCounts[d]?` <span>${dayCounts[d]}</span>`:''}</button>`).join('')}</div>`;
+    if(instaTabFinal==='backlog'){
+      panel.innerHTML=`<div class="page-header"><div><div class="page-title">Instagram <span>Fila.</span></div><div class="page-sub">// backlog com Instagram confirmado · aloque para o dia selecionado</div></div></div>${tabs}<div class="card"><div class="card-title">Backlog <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">· ${backlog.length} empresas aguardando</span></div><div class="ext-list">${backlog.length?backlog.map(l=>`<div class="empresa-card atrib-vfinal-card"><div class="empresa-info"><div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div><div class="empresa-meta atrib-vfinal-meta"><span class="atrib-vfinal-badge insta">📸 INSTAGRAM</span>${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}</div></div><div class="empresa-actions"><button class="btn btn-primary insta-btn" onclick="allocateInstagramLeadFinalV31('${esc(l.id)}')">→ Alocar</button></div></div>`).join(''):`<div style="padding:36px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// backlog vazio</div>`}</div></div>`;
+    } else {
+      const rows=await fetchInstagramDayFinal(instaTabFinal);
+      panel.innerHTML=`<div class="page-header"><div><div class="page-title">Instagram <span>Fila.</span></div><div class="page-sub">// dia ${labelDate(instaTabFinal)} · clique no nome para abrir o perfil do Google</div></div></div>${tabs}<div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><div class="card-title" style="margin:0">${labelDate(instaTabFinal)} <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">· ${rows.length} leads</span></div><button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:7px 12px" onclick="clearInstagramDayFinalV31('${instaTabFinal}')">↩ Limpar dia e voltar ao backlog</button></div><div class="ext-list">${rows.length?rows.map(it=>{ const l=it.leads||{}; return `<div class="empresa-card atrib-vfinal-card"><div class="empresa-info"><div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div><div class="empresa-meta atrib-vfinal-meta"><span class="atrib-vfinal-badge insta">📸 INSTAGRAM</span>${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}</div></div></div>`; }).join(''):`<div style="padding:36px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// nenhum lead alocado neste dia</div>`}</div></div>`;
+    }
+    applyFinalStyles();
+    const b=document.getElementById('badge-instagram'); if(b) b.textContent=String(backlog.length);
+  }
+  async function allocateInstagramLeadFinal(id){
+    const c=sb(); if(!c) return;
+    const date=instaTabFinal==='backlog'?todayIso():instaTabFinal;
+    const { count }=await c.from('instagram_dispatch_items').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('scheduled_date',date);
+    const { error:e1 }=await c.from('instagram_dispatch_items').insert({ user_id:uid(), lead_id:id, scheduled_date:date, status:'scheduled', position:(count||0)+1 });
+    if(e1){ if(window.notify) notify('// erro ao alocar: '+e1.message,'err'); return; }
+    await c.from('leads').update({ current_stage:'instagram_scheduled', updated_at:new Date().toISOString() }).eq('user_id',uid()).eq('id',id);
+    if(window.notify) notify(`✓ Lead alocado para ${labelDate(date)}`);
+    await renderInstagramFinal();
+  }
+  async function clearInstagramDayFinal(date){
+    const c=sb(); if(!c) return;
+    if(!confirm(`Voltar todos os leads de ${labelDate(date)} para o backlog?`)) return;
+    const { data,error }=await c.from('instagram_dispatch_items').select('id,lead_id').eq('user_id',uid()).eq('scheduled_date',date);
+    if(error){ if(window.notify) notify('// erro: '+error.message,'err'); return; }
+    const ids=(data||[]).map(x=>x.lead_id).filter(Boolean);
+    if(ids.length) await c.from('leads').update({ current_stage:'instagram_backlog', updated_at:new Date().toISOString() }).eq('user_id',uid()).in('id',ids);
+    if(data?.length) await c.from('instagram_dispatch_items').delete().eq('user_id',uid()).in('id',data.map(x=>x.id));
+    if(window.notify) notify(`✓ ${ids.length} leads voltaram para backlog`);
+    await renderInstagramFinal();
+  }
+
+  function applyFinalStyles(){
+    if(document.getElementById('v31-8-final-style')) return;
+    const st=document.createElement('style'); st.id='v31-8-final-style'; st.textContent=`
+      .atrib-vfinal-card{min-height:60px!important;padding:12px 16px!important;align-items:center!important}
+      .atrib-vfinal-name,.atrib-vfinal-name-link{font-size:14px!important;line-height:1.25!important;font-weight:700!important;color:var(--text)!important;text-decoration:none!important}
+      .atrib-vfinal-name-link:hover{color:var(--accent)!important}
+      .atrib-vfinal-meta{font-size:10px!important;line-height:1.35!important;gap:10px!important;color:var(--text2)!important}
+      .atrib-vfinal-meta span{font-size:10px!important;line-height:1.35!important}
+      .atrib-vfinal-badge{display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px!important;background:rgba(255,255,255,0.04);border:1px solid var(--border2);border-radius:4px;padding:2px 7px}.atrib-vfinal-badge.insta{color:var(--insta)!important;border-color:rgba(225,48,108,.3)!important;background:rgba(225,48,108,.08)!important}
+      .atrib-insta-input-wrap{min-width:280px;max-width:420px;width:35%}.atrib-insta-url-input{width:100%;background:rgba(225,48,108,.06);border:1px solid rgba(225,48,108,.28);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:8px 10px;outline:none}.atrib-insta-url-input:focus{border-color:var(--insta);box-shadow:0 0 0 1px rgba(225,48,108,.14)}
+      .insta-final-tabs{display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border);padding-bottom:10px;margin:0 0 14px;flex-wrap:wrap}.insta-btn{font-size:9px!important;padding:6px 14px!important;background:var(--insta)!important;color:#fff!important}
+      #atribPanelInsta .empresa-card,#atribPanelZap .empresa-card,#panel-instagram .empresa-card{font-size:10px!important}
+    `; document.head.appendChild(st);
+  }
+
+  window.setAtribTab=function(tab){ atribTabFinal=(tab==='com-site'||tab==='insta')?tab:'zap'; atribPageFinal=1; renderAtribuicaoPanelFinal(); };
+  window.atribGoPageV31=function(p){ atribPageFinal=Math.max(1,p); renderAtribuicaoPanelFinal(); };
+  window.renderAtribuicao=renderAtribuicaoPanelFinal;
+  window.renderAtribuicaoPanelV31=renderAtribuicaoPanelFinal;
+  window.approveInstagramAttributionV31=approveInstagramAttributionFinal;
+  window.renderInstagram=renderInstagramFinal;
+  window.setInstagramTabFinalV31=function(tab){ instaTabFinal=tab; renderInstagramFinal(); };
+  window.allocateInstagramLeadFinalV31=allocateInstagramLeadFinal;
+  window.clearInstagramDayFinalV31=clearInstagramDayFinal;
+
+  const prevSwitch=window.switchPanel;
+  window.switchPanel=function(name){
+    const n=String(name||'').toLowerCase();
+    if(n==='atribuicao' || name==='Atribuição'){ setOnlyPanelFinal('panel-atribuicao','Atribuição'); renderAtribuicaoPanelFinal(); return; }
+    if(n==='instagram' || name==='Instagram'){ renderInstagramFinal(); return; }
+    return prevSwitch?prevSwitch(name):undefined;
+  };
+  document.addEventListener('click',function(e){
+    const atribBtn=e.target.closest?.('#atribTabZap,#atribTabComSite,#atribTabInsta');
+    if(atribBtn){ e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation) e.stopImmediatePropagation(); const id=atribBtn.id; setAtribTab(id==='atribTabComSite'?'com-site':id==='atribTabInsta'?'insta':'zap'); return; }
+  },true);
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{ applyFinalStyles(); refreshAtribBadgesFinal(); if(document.getElementById('panel-atribuicao')?.classList.contains('active')) renderAtribuicaoPanelFinal(); if(document.getElementById('panel-instagram')?.classList.contains('active')) renderInstagramFinal(); },1200));
+})();
