@@ -51,10 +51,10 @@ function parseApifyJson(raw) {
 
 
 function isWhatsappImportRouteV31(route = '') {
-  return route === 'attribution_whatsapp' || route === 'attribution_site' || route === 'whatsapp-validation';
+  return route === 'attribution_whatsapp' || route === 'attribution_site';
 }
 function isInstagramImportRouteV31(route = '') {
-  return route === 'attribution_instagram' || route === 'instagram-backlog';
+  return route === 'attribution_instagram';
 }
 function isApprovedImportRouteV31(route = '') {
   return isWhatsappImportRouteV31(route) || isInstagramImportRouteV31(route);
@@ -166,9 +166,9 @@ function buildImportedLeadV430(analysis, route) {
     numStatus: isInstagram ? 'nao-aplicavel' : 'pendente',
     tipo: isInstagram ? 'instagram' : (isCommercialSite ? 'com-site' : 'sem-site'),
     canal: isInstagram ? 'insta' : 'pendente',
-    // Fluxo V31: importação já separa direto para Atribuição.
-    // WhatsApp sem site => assignment_whatsapp; WhatsApp com site => assignment_website; sem telefone => assignment_instagram.
-    stage: isInstagram ? 'assignment_instagram' : (isCommercialSite ? 'assignment_website' : 'assignment_whatsapp'),
+    // Fluxo V31 definitivo: importação separa direto para Atribuição DB-first.
+    // WhatsApp sem site => attribution_whatsapp; WhatsApp com site => attribution_site; Instagram => attribution_instagram.
+    stage: isInstagram ? 'attribution_instagram' : (isCommercialSite ? 'attribution_site' : 'attribution_whatsapp'),
     website_type: analysis.website.websiteType,
     website_quality: analysis.website.websiteQuality,
     qualification_reason: analysis.reason,
@@ -281,36 +281,43 @@ async function importPreview() {
 
 
 async function registerLeadIdentityAfterImportV31(lead = {}, savedId = '') {
+  // A partir do patch 21, a memória permanente é company_registry.
+  // O banco também possui trigger para sincronizar leads -> company_registry.
+  // Esta função é apenas reforço e NUNCA deve consultar/gravar a tabela antiga.
   try {
     if (!(typeof sbClient !== 'undefined' && sbClient && typeof currentUser !== 'undefined' && currentUser?.id)) return;
-    const rows = [];
     const company = lead.nome || lead.company_name || lead.companyName || 'Lead sem nome';
-    const phone = typeof normalizeImportPhoneV430 === 'function' ? normalizeImportPhoneV430(lead.whatsapp || lead.phone || '') : (lead.whatsapp || lead.phone || '');
-    const site = typeof normalizeIdentitySiteV430 === 'function' ? normalizeIdentitySiteV430(lead.site || lead.website || '') : (lead.site || lead.website || '');
-    const maps = typeof normalizeIdentityUrlV430 === 'function' ? normalizeIdentityUrlV430(lead.googleUrl || lead.maps_url || '') : (lead.googleUrl || lead.maps_url || '');
-    const ig = typeof normalizeIdentityInstagramV430 === 'function' ? normalizeIdentityInstagramV430(lead.instagram || lead.instagram_url || '') : (lead.instagram || lead.instagram_url || '');
-    function push(type, value){
-      if (!value) return;
-      rows.push({
-        user_id: currentUser.id,
-        lead_id: savedId || lead.id || null,
-        identity_type: type,
-        identity_value: value,
-        company_name: company,
-        source_table: 'leads',
-        status: lead.current_status || lead.status || 'active',
-        raw_payload: { imported_at: new Date().toISOString() }
-      });
+    const phone = typeof normalizeImportPhoneV430 === 'function' ? normalizeImportPhoneV430(lead.whatsapp || lead.phone || '') : String(lead.whatsapp || lead.phone || '').replace(/\D/g,'');
+    const domain = typeof normalizeIdentitySiteV430 === 'function' ? normalizeIdentitySiteV430(lead.site || lead.website || '') : '';
+    const maps = typeof normalizeIdentityUrlV430 === 'function' ? normalizeIdentityUrlV430(lead.googleUrl || lead.maps_url || '') : '';
+    const ig = typeof normalizeIdentityInstagramV430 === 'function' ? normalizeIdentityInstagramV430(lead.instagram || lead.instagram_url || '') : '';
+
+    if (!phone && !domain && !maps && !ig) return;
+
+    const row = {
+      user_id: currentUser.id,
+      lead_id: savedId || lead.id || null,
+      company_name: company,
+      normalized_phone: phone || null,
+      website: lead.site || lead.website || null,
+      website_domain: domain || null,
+      instagram_url: lead.instagram || lead.instagram_url || null,
+      instagram_username: ig || null,
+      maps_url: maps || null,
+      registry_status: lead.current_status || lead.status || 'active',
+      source: 'leads_import',
+      last_seen_at: new Date().toISOString(),
+      raw_payload: { imported_at: new Date().toISOString() }
+    };
+
+    // Inserção conservadora: se qualquer índice único da company_registry acusar conflito,
+    // não quebra a importação. O lead já foi gravado; a trigger/índices cuidam da memória.
+    const { error } = await sbClient.from('company_registry').insert(row);
+    if (error && !String(error.message || '').toLowerCase().includes('duplicate')) {
+      console.warn('[company-registry][insert-warning]', error.message || error);
     }
-    push('phone', phone);
-    push('site', site);
-    push('maps', maps);
-    push('instagram', ig);
-    if (!rows.length) return;
-    const { error } = await sbClient.from('lead_registry').upsert(rows, { onConflict:'user_id,identity_type,identity_value' });
-    if (error && !String(error.message||'').includes('lead_registry')) console.warn('[lead-registry][upsert-warning]', error.message || error);
   } catch (err) {
-    console.warn('[lead-registry][upsert-error]', err?.message || err);
+    console.warn('[company-registry][insert-error]', err?.message || err);
   }
 }
 
@@ -340,7 +347,7 @@ async function persistImportedLeadDirectV430(lead = {}) {
     lead_score: Number(lead.lead_score || lead.leadScore || calculateLeadPriorityScoreV31(lead)) || 0,
     status: lead.status || 'Não enviada',
     current_status: lead.current_status || 'new',
-    current_stage: lead.stage || lead.current_stage || (lead.tipo === 'instagram' ? 'assignment_instagram' : (lead.tipo === 'com-site' || lead.has_own_site ? 'assignment_website' : 'assignment_whatsapp')),
+    current_stage: lead.stage || lead.current_stage || (lead.tipo === 'instagram' ? 'attribution_instagram' : (lead.tipo === 'com-site' || lead.has_own_site ? 'attribution_site' : 'attribution_whatsapp')),
     lead_channel: lead.tipo === 'instagram' ? 'instagram' : 'whatsapp',
     lead_type: lead.tipo || (lead.has_own_site ? 'com-site' : 'sem-site'),
     has_own_site: !!lead.has_own_site,
@@ -528,8 +535,8 @@ async function importarLeads() {
     persistErrors
   });
 
-  if (typeof renderValidacao === 'function') renderValidacao();
-  updateBadges();
+  // Não redirecionar após importar. Mantém o usuário na tela de Importação.
+  if (typeof updateBadges === 'function') updateBadges();
 
   const alertTotal = stats.total;
   const alertAprovados = persistedSupabase;

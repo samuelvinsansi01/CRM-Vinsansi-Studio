@@ -260,36 +260,66 @@ async function getDatabaseLeadCacheAsyncV430(rows = []) {
 
   const cache = [];
 
-  // 0) Proteção permanente: lead_registry guarda telefone/site/instagram/maps mesmo após arquivar/rejeitar/enviar.
+  // 0) Proteção permanente: company_registry guarda telefone/site/instagram/maps mesmo após arquivar/rejeitar/enviar.
   try {
-    const registryFilters = [];
-    if (phones.length) registryFilters.push(`and(identity_type.eq.phone,identity_value.in.(${phones.join(',')}))`);
-    if (sites.length) registryFilters.push(`and(identity_type.eq.site,identity_value.in.(${sites.join(',')}))`);
-    if (instagrams.length) registryFilters.push(`and(identity_type.eq.instagram,identity_value.in.(${instagrams.join(',')}))`);
-    if (mapsUrls.length) registryFilters.push(`and(identity_type.eq.maps,identity_value.in.(${mapsUrls.map(v=>`"${String(v).replace(/"/g,'')}"`).join(',')}))`);
-    if (registryFilters.length) {
+    const seen = new Set();
+    function pushRegistryRow(row, sourceLabel){
+      const key = `${row.normalized_phone||''}|${row.website_domain||''}|${row.instagram_username||''}|${row.maps_url||''}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      cache.push({
+        nome: row.company_name || '',
+        phone: row.normalized_phone || '',
+        normalized_phone: row.normalized_phone || '',
+        site: row.website_domain || row.website || '',
+        website: row.website_domain || row.website || '',
+        instagram: row.instagram_username || row.instagram_url || '',
+        maps_url: row.maps_url || '',
+        _already_seen_source: sourceLabel || `company_registry:${row.registry_status || row.source || 'seen'}`
+      });
+    }
+
+    if (phones.length) {
       const { data, error } = await sbClient
-        .from('lead_registry')
-        .select('identity_type,identity_value,company_name,status,source_table,lead_id')
+        .from('company_registry')
+        .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status,source')
         .eq('user_id', userId)
-        .or(registryFilters.join(','));
-      if (!error && Array.isArray(data)) {
-        data.forEach(row => cache.push({
-          nome: row.company_name || '',
-          phone: row.identity_type === 'phone' ? row.identity_value : '',
-          normalized_phone: row.identity_type === 'phone' ? row.identity_value : '',
-          site: row.identity_type === 'site' ? row.identity_value : '',
-          website: row.identity_type === 'site' ? row.identity_value : '',
-          instagram: row.identity_type === 'instagram' ? row.identity_value : '',
-          maps_url: row.identity_type === 'maps' ? row.identity_value : '',
-          _already_seen_source: `lead_registry:${row.identity_type}:${row.status || row.source_table || 'seen'}`
-        }));
-      } else if (error && !String(error.message||'').includes('lead_registry')) {
-        qualificationLogV430('qualification-registry-preview-warning', { error:error.message || String(error) });
-      }
+        .in('normalized_phone', phones);
+      if (!error && Array.isArray(data)) data.forEach(row => pushRegistryRow(row));
+      else if (error) qualificationLogV430('qualification-company-registry-phone-warning', { error:error.message || String(error) });
+    }
+
+    if (sites.length) {
+      const { data, error } = await sbClient
+        .from('company_registry')
+        .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status,source')
+        .eq('user_id', userId)
+        .in('website_domain', sites);
+      if (!error && Array.isArray(data)) data.forEach(row => pushRegistryRow(row));
+      else if (error) qualificationLogV430('qualification-company-registry-site-warning', { error:error.message || String(error) });
+    }
+
+    if (instagrams.length) {
+      const { data, error } = await sbClient
+        .from('company_registry')
+        .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status,source')
+        .eq('user_id', userId)
+        .in('instagram_username', instagrams);
+      if (!error && Array.isArray(data)) data.forEach(row => pushRegistryRow(row));
+      else if (error) qualificationLogV430('qualification-company-registry-instagram-warning', { error:error.message || String(error) });
+    }
+
+    if (mapsUrls.length) {
+      const { data, error } = await sbClient
+        .from('company_registry')
+        .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status,source')
+        .eq('user_id', userId)
+        .in('maps_url', mapsUrls);
+      if (!error && Array.isArray(data)) data.forEach(row => pushRegistryRow(row));
+      else if (error) qualificationLogV430('qualification-company-registry-maps-warning', { error:error.message || String(error) });
     }
   } catch (error) {
-    qualificationLogV430('qualification-registry-preview-error', { error:error?.message || String(error) });
+    qualificationLogV430('qualification-company-registry-preview-error', { error:error?.message || String(error) });
   }
 
   // 1) Proteção principal: telefones já enviados.
@@ -519,6 +549,7 @@ function onRamoChange() {
 
 function renderRamoSelect() {
   const sel = document.getElementById('ramoSelect');
+  if (!sel) return;
   const ramos = getRamos();
   sel.innerHTML = '<option value="">Selecionar ramo...</option>' +
     ramos.map(r => `<option value="${r.id}"${activeRamoId===r.id?' selected':''}>${escHtml(r.nome)}</option>`).join('');

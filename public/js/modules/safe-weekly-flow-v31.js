@@ -58,10 +58,21 @@
       try { site = lead.website ? new URL(/^https?:\/\//i.test(lead.website) ? lead.website : `https://${lead.website}`).hostname.replace(/^www\./,'').toLowerCase() : ''; } catch(_){ site = String(lead.website||'').replace(/^https?:\/\//i,'').replace(/^www\./i,'').split('/')[0].toLowerCase(); }
       const maps = String(lead.maps_url || '').trim().replace(/\/+$/,'').toLowerCase();
       const ig = String(lead.instagram || lead.instagram_url || '').trim().toLowerCase().replace(/^https?:\/\/(www\.)?instagram\.com\//,'').replace(/^@/,'').split(/[/?#]/)[0];
-      function push(type,value){ if(value) rows.push({ user_id:userId(), lead_id:lead.id, identity_type:type, identity_value:value, company_name:company, source_table:'leads', status:reason, raw_payload:{ archived_at:new Date().toISOString() } }); }
-      push('phone', phone); push('site', site); push('maps', maps); push('instagram', ig);
-      if (rows.length) await sb.from('lead_registry').upsert(rows, { onConflict:'user_id,identity_type,identity_value' });
-    } catch(e){ console.warn('[v31][registry-archive]', e?.message || e); }
+      const row = {
+        user_id:userId(), lead_id:lead.id, company_name:company,
+        normalized_phone: phone || null,
+        website: lead.website || null,
+        website_domain: site || null,
+        instagram_url: lead.instagram_url || lead.instagram || null,
+        instagram_username: ig || null,
+        maps_url: maps || null,
+        registry_status: reason || 'archived',
+        source:'archive_flow',
+        last_seen_at:new Date().toISOString(),
+        raw_payload:{ archived_at:new Date().toISOString() }
+      };
+      if (phone || site || maps || ig) await sb.from('company_registry').insert(row);
+    } catch(e){ console.warn('[v31][company-registry-archive]', e?.message || e); }
   }
   async function copyTextSafe(text){
     const value = String(text || '').trim();
