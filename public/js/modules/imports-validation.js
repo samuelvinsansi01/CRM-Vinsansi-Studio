@@ -139,21 +139,21 @@ function isWixsiteWebsiteV430(value = '') {
 function classifyWebsiteOpportunityV430(item = {}) {
   const site = extractSite(item);
   if (!site) {
-    return { type:'none', websiteType:'none', websiteQuality:'missing', route:'whatsapp-validation', site:'', reason:'sem site proprio' };
+    return { type:'none', websiteType:'none', websiteQuality:'missing', route:'attribution_whatsapp', site:'', reason:'sem site proprio' };
   }
   if (isInstagramWebsiteV430(site)) {
-    return { type:'instagram', websiteType:'instagram', websiteQuality:'social', route:'instagram-backlog', site, reason:'instagram sem site proprio' };
+    return { type:'instagram', websiteType:'instagram', websiteQuality:'social', route:'attribution_instagram', site, reason:'instagram sem site proprio' };
   }
   if (isWixsiteWebsiteV430(site)) {
-    return { type:'wixsite', websiteType:'wixsite', websiteQuality:'weak', route:'whatsapp-validation', site, reason:'wixsite sem dominio proprio' };
+    return { type:'wixsite', websiteType:'wixsite', websiteQuality:'weak', route:'attribution_whatsapp', site, reason:'wixsite sem dominio proprio' };
   }
   if (typeof isExcludedDomain === 'function' && isExcludedDomain(site)) {
     return { type:'excluded', websiteType:'excluded', websiteQuality:'blocked', route:'skip', site, reason:'dominio excluido manualmente' };
   }
   if (typeof isSiteBlocklisted === 'function' && isSiteBlocklisted(site)) {
-    return { type:'external', websiteType:'external', websiteQuality:'weak', route:'whatsapp-validation', site, reason:'link externo sem site proprio' };
+    return { type:'external', websiteType:'external', websiteQuality:'weak', route:'attribution_whatsapp', site, reason:'link externo sem site proprio' };
   }
-  return { type:'commercial', websiteType:'commercial', websiteQuality:'commercial', route:'whatsapp-validation', site, reason:'site comercial proprio' };
+  return { type:'commercial', websiteType:'commercial', websiteQuality:'commercial', route:'attribution_site', site, reason:'site comercial proprio' };
 }
 
 function getApifyQualificationV430(item = {}) {
@@ -260,71 +260,36 @@ async function getDatabaseLeadCacheAsyncV430(rows = []) {
 
   const cache = [];
 
-  // 0) Proteção permanente V31: company_registry é a memória definitiva.
-  // Ela guarda telefone, domínio do site, Instagram e Google/Maps mesmo após arquivar/rejeitar/enviar.
+  // 0) Proteção permanente: lead_registry guarda telefone/site/instagram/maps mesmo após arquivar/rejeitar/enviar.
   try {
-    async function pushCompanyRegistry(query, identityType) {
-      const { data, error } = await query;
-      if (error) {
-        const msg = String(error.message || error);
-        if (!msg.includes('company_registry')) qualificationLogV430('qualification-company-registry-preview-warning', { identityType, error: msg });
-        return;
-      }
-      (Array.isArray(data) ? data : []).forEach(row => cache.push({
-        nome: row.company_name || '',
-        phone: row.normalized_phone || '',
-        normalized_phone: row.normalized_phone || '',
-        site: row.website_domain || row.website || '',
-        website: row.website_domain || row.website || '',
-        instagram: row.instagram_username || row.instagram_url || '',
-        maps_url: row.maps_url || '',
-        _already_seen_source: `company_registry:${identityType}:${row.registry_status || 'seen'}`
-      }));
-    }
-
-    if (phones.length) {
-      await pushCompanyRegistry(
-        sbClient.from('company_registry')
-          .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status')
-          .eq('user_id', userId)
-          .in('normalized_phone', phones),
-        'phone'
-      );
-    }
-    if (sites.length) {
-      await pushCompanyRegistry(
-        sbClient.from('company_registry')
-          .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status')
-          .eq('user_id', userId)
-          .in('website_domain', sites),
-        'site'
-      );
-    }
-    if (instagrams.length) {
-      await pushCompanyRegistry(
-        sbClient.from('company_registry')
-          .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status')
-          .eq('user_id', userId)
-          .in('instagram_username', instagrams),
-        'instagram'
-      );
-    }
-    if (mapsUrls.length) {
-      // URLs longas com caracteres especiais podem quebrar .in() em alguns ambientes.
-      // Por isso consultamos uma a uma, sem travar preview/importação se falhar.
-      for (const maps of mapsUrls.slice(0, 200)) {
-        await pushCompanyRegistry(
-          sbClient.from('company_registry')
-            .select('company_name,normalized_phone,website,website_domain,instagram_url,instagram_username,maps_url,registry_status')
-            .eq('user_id', userId)
-            .eq('maps_url', maps)
-            .limit(1),
-          'maps'
-        );
+    const registryFilters = [];
+    if (phones.length) registryFilters.push(`and(identity_type.eq.phone,identity_value.in.(${phones.join(',')}))`);
+    if (sites.length) registryFilters.push(`and(identity_type.eq.site,identity_value.in.(${sites.join(',')}))`);
+    if (instagrams.length) registryFilters.push(`and(identity_type.eq.instagram,identity_value.in.(${instagrams.join(',')}))`);
+    if (mapsUrls.length) registryFilters.push(`and(identity_type.eq.maps,identity_value.in.(${mapsUrls.map(v=>`"${String(v).replace(/"/g,'')}"`).join(',')}))`);
+    if (registryFilters.length) {
+      const { data, error } = await sbClient
+        .from('lead_registry')
+        .select('identity_type,identity_value,company_name,status,source_table,lead_id')
+        .eq('user_id', userId)
+        .or(registryFilters.join(','));
+      if (!error && Array.isArray(data)) {
+        data.forEach(row => cache.push({
+          nome: row.company_name || '',
+          phone: row.identity_type === 'phone' ? row.identity_value : '',
+          normalized_phone: row.identity_type === 'phone' ? row.identity_value : '',
+          site: row.identity_type === 'site' ? row.identity_value : '',
+          website: row.identity_type === 'site' ? row.identity_value : '',
+          instagram: row.identity_type === 'instagram' ? row.identity_value : '',
+          maps_url: row.identity_type === 'maps' ? row.identity_value : '',
+          _already_seen_source: `lead_registry:${row.identity_type}:${row.status || row.source_table || 'seen'}`
+        }));
+      } else if (error && !String(error.message||'').includes('lead_registry')) {
+        qualificationLogV430('qualification-registry-preview-warning', { error:error.message || String(error) });
       }
     }
   } catch (error) {
-    qualificationLogV430('qualification-company-registry-preview-error', { error:error?.message || String(error) });
+    qualificationLogV430('qualification-registry-preview-error', { error:error?.message || String(error) });
   }
 
   // 1) Proteção principal: telefones já enviados.
@@ -459,11 +424,11 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     analysis.reason = analysis.website.reason;
   } else if (analysis.hasPhone) {
     // Regra operacional: com telefone entra na validação WhatsApp, tendo site ou não.
-    analysis.route = 'whatsapp-validation';
+    analysis.route = analysis.website.type === 'commercial' ? 'attribution_site' : 'attribution_whatsapp';
     analysis.reason = analysis.website.reason;
   } else if (analysis.instagram) {
     // Sem telefone validado, mas com Instagram: vai para Instagram.
-    analysis.route = 'instagram-backlog';
+    analysis.route = 'attribution_instagram';
     analysis.reason = 'sem telefone whatsapp validado';
   } else {
     analysis.route = 'skip';
@@ -554,8 +519,7 @@ function onRamoChange() {
 
 function renderRamoSelect() {
   const sel = document.getElementById('ramoSelect');
-  if (!sel) return;
-  const ramos = (typeof getRamos === 'function') ? getRamos() : [];
+  const ramos = getRamos();
   sel.innerHTML = '<option value="">Selecionar ramo...</option>' +
     ramos.map(r => `<option value="${r.id}"${activeRamoId===r.id?' selected':''}>${escHtml(r.nome)}</option>`).join('');
 }

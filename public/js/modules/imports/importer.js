@@ -2,9 +2,9 @@
    IMPORTAR
 ═══════════════════════════ */
 function renderImportarPanel() {
-  try { if (typeof renderRamoSelect === 'function') renderRamoSelect(); } catch (e) { console.warn('[import][render-ramo-select-warning]', e?.message || e); }
-  try { if (typeof importPreview === 'function') importPreview(); } catch (e) { console.warn('[import][preview-warning]', e?.message || e); }
-  try { if (typeof renderManualValChips === 'function') renderManualValChips(); } catch (e) { console.warn('[import][manual-val-chips-warning]', e?.message || e); }
+  renderRamoSelect();
+  importPreview();
+  renderManualValChips();
 }
 
 function parseApifyJson(raw) {
@@ -49,12 +49,23 @@ function parseApifyJson(raw) {
   }).filter(row => row && typeof row === 'object');
 }
 
+
+function isWhatsappImportRouteV31(route = '') {
+  return route === 'attribution_whatsapp' || route === 'attribution_site' || route === 'whatsapp-validation';
+}
+function isInstagramImportRouteV31(route = '') {
+  return route === 'attribution_instagram' || route === 'instagram-backlog';
+}
+function isApprovedImportRouteV31(route = '') {
+  return isWhatsappImportRouteV31(route) || isInstagramImportRouteV31(route);
+}
+
 function getImportStatsV430(analyses = []) {
   const list = Array.isArray(analyses) ? analyses : [];
-  const approvedWhatsapp = list.filter(item => item.route === 'whatsapp-validation');
-  const approvedInstagram = list.filter(item => item.route === 'instagram-backlog');
+  const approvedWhatsapp = list.filter(item => isWhatsappImportRouteV31(item.route));
+  const approvedInstagram = list.filter(item => isInstagramImportRouteV31(item.route));
   const approved = [...approvedWhatsapp, ...approvedInstagram];
-  const refused = list.filter(item => item.route !== 'whatsapp-validation' && item.route !== 'instagram-backlog');
+  const refused = list.filter(item => !isApprovedImportRouteV31(item.route));
   const approvedComSite = approvedWhatsapp.filter(item => item.website?.type === 'commercial');
   const approvedSemSite = approvedWhatsapp.filter(item => item.website?.type !== 'commercial');
 
@@ -133,7 +144,7 @@ function calculateLeadPriorityScoreV31(analysisOrLead = {}) {
 }
 
 function buildImportedLeadV430(analysis, route) {
-  const isInstagram = route === 'instagram-backlog';
+  const isInstagram = isInstagramImportRouteV31(route);
   const isCommercialSite = analysis.website.type === 'commercial';
   return {
     id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : genId()),
@@ -156,8 +167,8 @@ function buildImportedLeadV430(analysis, route) {
     tipo: isInstagram ? 'instagram' : (isCommercialSite ? 'com-site' : 'sem-site'),
     canal: isInstagram ? 'insta' : 'pendente',
     // Fluxo V31: importação já separa direto para Atribuição.
-    // Fluxo V31 definitivo: WhatsApp sem site => attribution_whatsapp; WhatsApp com site => attribution_site; Instagram => attribution_instagram.
-    stage: isInstagram ? 'attribution_instagram' : (isCommercialSite ? 'attribution_site' : 'attribution_whatsapp'),
+    // WhatsApp sem site => assignment_whatsapp; WhatsApp com site => assignment_website; sem telefone => assignment_instagram.
+    stage: isInstagram ? 'assignment_instagram' : (isCommercialSite ? 'assignment_website' : 'assignment_whatsapp'),
     website_type: analysis.website.websiteType,
     website_quality: analysis.website.websiteQuality,
     qualification_reason: analysis.reason,
@@ -195,7 +206,7 @@ async function importPreview() {
     : analyzeApifyRowsV430(arr, 'preview');
   if (seq !== importPreviewSeqV430) return;
   const stats = getImportStatsV430(analyses);
-  const opportunities = analyses.filter(item => item.route === 'whatsapp-validation' || item.route === 'instagram-backlog');
+  const opportunities = analyses.filter(item => isApprovedImportRouteV31(item.route));
 
   const aprovados = stats.approved;
   const recusados = stats.refused;
@@ -245,7 +256,7 @@ async function importPreview() {
     const reviews = analysis.qualification.reviews;
     const scoreStr = score ? `⭐ ${Number(score).toFixed(1)}` : '';
     const revStr = reviews ? `(${reviews})` : '';
-    const routeBadge = analysis.route === 'instagram-backlog'
+    const routeBadge = isInstagramImportRouteV31(analysis.route)
       ? '<span class="q-badge insta">Instagram backlog</span>'
       : analysis.website.type === 'commercial'
         ? '<span class="q-badge info">🌐 com site · validar WhatsApp</span>'
@@ -270,46 +281,36 @@ async function importPreview() {
 
 
 async function registerLeadIdentityAfterImportV31(lead = {}, savedId = '') {
-  // V31 definitivo: a memória permanente é public.company_registry.
-  // Esta função é best-effort: nunca deve derrubar a importação se o registry já tiver o item
-  // ou se o banco ainda estiver sem algum índice/coluna em manutenção.
   try {
     if (!(typeof sbClient !== 'undefined' && sbClient && typeof currentUser !== 'undefined' && currentUser?.id)) return;
-    const websiteDomain = typeof normalizeIdentitySiteV430 === 'function' ? normalizeIdentitySiteV430(lead.site || lead.website || '') : (lead.site || lead.website || '');
-    const instagramUsername = typeof normalizeIdentityInstagramV430 === 'function' ? normalizeIdentityInstagramV430(lead.instagram || lead.instagram_url || '') : (lead.instagram || lead.instagram_url || '');
-    const normalizedPhone = typeof normalizeImportPhoneV430 === 'function' ? normalizeImportPhoneV430(lead.whatsapp || lead.phone || '') : (lead.whatsapp || lead.phone || '');
-    const mapsUrl = typeof normalizeIdentityUrlV430 === 'function' ? normalizeIdentityUrlV430(lead.googleUrl || lead.maps_url || '') : (lead.googleUrl || lead.maps_url || '');
-
-    if (!normalizedPhone && !websiteDomain && !instagramUsername && !mapsUrl) return;
-
-    const row = {
-      user_id: currentUser.id,
-      lead_id: savedId || lead.id || null,
-      company_name: lead.nome || lead.company_name || '',
-      normalized_phone: normalizedPhone || null,
-      website: lead.site || lead.website || null,
-      website_domain: websiteDomain || null,
-      instagram_url: lead.instagram || lead.instagram_url || null,
-      instagram_username: instagramUsername || null,
-      maps_url: mapsUrl || null,
-      registry_status: 'active',
-      source: 'import',
-      last_seen_at: new Date().toISOString(),
-      raw_payload: { imported_at: new Date().toISOString(), lead_id: savedId || lead.id || null }
-    };
-
-    const { error } = await sbClient.from('company_registry').insert(row);
-    if (error) {
-      const msg = String(error.message || error);
-      const code = String(error.code || '');
-      if (code === '23505' || msg.includes('duplicate key') || msg.includes('company_registry')) {
-        console.warn('[company-registry][already-exists-or-warning]', msg);
-        return;
-      }
-      console.warn('[company-registry][insert-warning]', msg);
+    const rows = [];
+    const company = lead.nome || lead.company_name || lead.companyName || 'Lead sem nome';
+    const phone = typeof normalizeImportPhoneV430 === 'function' ? normalizeImportPhoneV430(lead.whatsapp || lead.phone || '') : (lead.whatsapp || lead.phone || '');
+    const site = typeof normalizeIdentitySiteV430 === 'function' ? normalizeIdentitySiteV430(lead.site || lead.website || '') : (lead.site || lead.website || '');
+    const maps = typeof normalizeIdentityUrlV430 === 'function' ? normalizeIdentityUrlV430(lead.googleUrl || lead.maps_url || '') : (lead.googleUrl || lead.maps_url || '');
+    const ig = typeof normalizeIdentityInstagramV430 === 'function' ? normalizeIdentityInstagramV430(lead.instagram || lead.instagram_url || '') : (lead.instagram || lead.instagram_url || '');
+    function push(type, value){
+      if (!value) return;
+      rows.push({
+        user_id: currentUser.id,
+        lead_id: savedId || lead.id || null,
+        identity_type: type,
+        identity_value: value,
+        company_name: company,
+        source_table: 'leads',
+        status: lead.current_status || lead.status || 'active',
+        raw_payload: { imported_at: new Date().toISOString() }
+      });
     }
+    push('phone', phone);
+    push('site', site);
+    push('maps', maps);
+    push('instagram', ig);
+    if (!rows.length) return;
+    const { error } = await sbClient.from('lead_registry').upsert(rows, { onConflict:'user_id,identity_type,identity_value' });
+    if (error && !String(error.message||'').includes('lead_registry')) console.warn('[lead-registry][upsert-warning]', error.message || error);
   } catch (err) {
-    console.warn('[company-registry][insert-error]', err?.message || err);
+    console.warn('[lead-registry][upsert-error]', err?.message || err);
   }
 }
 
@@ -339,7 +340,7 @@ async function persistImportedLeadDirectV430(lead = {}) {
     lead_score: Number(lead.lead_score || lead.leadScore || calculateLeadPriorityScoreV31(lead)) || 0,
     status: lead.status || 'Não enviada',
     current_status: lead.current_status || 'new',
-    current_stage: lead.stage || lead.current_stage || (lead.tipo === 'instagram' ? 'attribution_instagram' : (lead.tipo === 'com-site' || lead.has_own_site ? 'attribution_site' : 'attribution_whatsapp')),
+    current_stage: lead.stage || lead.current_stage || (lead.tipo === 'instagram' ? 'assignment_instagram' : (lead.tipo === 'com-site' || lead.has_own_site ? 'assignment_website' : 'assignment_whatsapp')),
     lead_channel: lead.tipo === 'instagram' ? 'instagram' : 'whatsapp',
     lead_type: lead.tipo || (lead.has_own_site ? 'com-site' : 'sem-site'),
     has_own_site: !!lead.has_own_site,
@@ -408,6 +409,7 @@ async function importarLeads() {
   let addedInstagram = 0;
   let skipped = 0;
   let blockedAlreadySent = 0;
+  const persistErrors = [];
   const importedLeadsForSupabase = [];
 
   const importSeenKeys = new Set();
@@ -415,7 +417,7 @@ async function importarLeads() {
   const existingInstagramKeys = new Set();
 
   for (const analysis of analyses) {
-    if (analysis.route === 'whatsapp-validation') {
+    if (isWhatsappImportRouteV31(analysis.route)) {
       const lead = buildImportedLeadV430(analysis, analysis.route);
       const key = lead.normalized_phone || (lead.googleUrl ? `maps:${lead.googleUrl}` : lead.id);
 
@@ -450,7 +452,7 @@ async function importarLeads() {
       else addedSemSite++;
       continue;
     }
-    if (analysis.route === 'instagram-backlog') {
+    if (isInstagramImportRouteV31(analysis.route)) {
       const lead = buildImportedLeadV430(analysis, analysis.route);
       const key = lead.normalized_phone || (lead.googleUrl ? `maps:${lead.googleUrl}` : lead.id);
       if ((key && importSeenKeys.has(key)) || (key && existingInstagramKeys.has(key))) {
@@ -480,10 +482,11 @@ async function importarLeads() {
           else persistedValFila.push(lead);
         } else {
           skipped++;
-          qualificationLogV430('qualification-persist-failed', { phase:'import', name:lead.nome, error:result?.error?.message || result?.error || result?.reason || 'falha ao salvar', result });
+          qualificationLogV430('qualification-persist-failed', { phase:'import', name:lead.nome, error:result?.error?.message || result?.error || 'falha ao salvar' });
         }
       } catch (error) {
         skipped++;
+        persistErrors.push({ name: lead.nome, error: String(error?.message || error) });
         console.warn('[import][direct-persist-exception]', error?.message || error);
       }
     }
@@ -521,19 +524,21 @@ async function importarLeads() {
     validationScreen: typeof getValData === 'function' ? getValData().length : null,
     instagramScreen: typeof getInstaFila === 'function' ? getInstaFila().length : null,
     skipped,
-    blockedAlreadySent
+    blockedAlreadySent,
+    persistErrors
   });
 
-  if (typeof renderAtribuicaoV31Final === 'function') renderAtribuicaoV31Final();
-  else if (typeof renderAtribuicao === 'function') renderAtribuicao();
-  else if (typeof renderValidacao === 'function') renderValidacao();
-  if (typeof renderInstagram === 'function') renderInstagram();
+  if (typeof renderValidacao === 'function') renderValidacao();
   updateBadges();
 
   const alertTotal = stats.total;
   const alertAprovados = persistedSupabase;
   const alertRecusados = Math.max(0, alertTotal - alertAprovados);
-  const msg = `Total: ${alertTotal} · Aprovados: ${alertAprovados} · Recusados: ${alertRecusados}`;
+  let msg = `Total: ${alertTotal} · Aprovados: ${alertAprovados} · Recusados: ${alertRecusados}`;
+  if (!alertAprovados && persistErrors.length) {
+    msg += ` · Erro: ${persistErrors[0].error}`;
+    console.error('[import][first-persist-error]', persistErrors[0]);
+  }
   notify(msg, alertAprovados ? '' : 'warn');
 
   document.getElementById('importJsonInput').value = '';
