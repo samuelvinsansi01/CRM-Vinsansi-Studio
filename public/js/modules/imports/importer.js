@@ -49,12 +49,23 @@ function parseApifyJson(raw) {
   }).filter(row => row && typeof row === 'object');
 }
 
+
+function isWhatsappImportRouteV31(route) {
+  return ['whatsapp-validation','attribution_whatsapp','attribution_site'].includes(String(route || ''));
+}
+function isInstagramImportRouteV31(route) {
+  return ['instagram-backlog','attribution_instagram','instagram_backlog'].includes(String(route || ''));
+}
+function isApprovedImportRouteV31(route) {
+  return isWhatsappImportRouteV31(route) || isInstagramImportRouteV31(route);
+}
+
 function getImportStatsV430(analyses = []) {
   const list = Array.isArray(analyses) ? analyses : [];
-  const approvedWhatsapp = list.filter(item => item.route === 'whatsapp-validation');
-  const approvedInstagram = list.filter(item => item.route === 'instagram-backlog');
+  const approvedWhatsapp = list.filter(item => isWhatsappImportRouteV31(item.route));
+  const approvedInstagram = list.filter(item => isInstagramImportRouteV31(item.route));
   const approved = [...approvedWhatsapp, ...approvedInstagram];
-  const refused = list.filter(item => item.route !== 'whatsapp-validation' && item.route !== 'instagram-backlog');
+  const refused = list.filter(item => !isApprovedImportRouteV31(item.route));
   const approvedComSite = approvedWhatsapp.filter(item => item.website?.type === 'commercial');
   const approvedSemSite = approvedWhatsapp.filter(item => item.website?.type !== 'commercial');
 
@@ -133,7 +144,7 @@ function calculateLeadPriorityScoreV31(analysisOrLead = {}) {
 }
 
 function buildImportedLeadV430(analysis, route) {
-  const isInstagram = route === 'instagram-backlog';
+  const isInstagram = isInstagramImportRouteV31(route);
   const isCommercialSite = analysis.website.type === 'commercial';
   return {
     id: (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : genId()),
@@ -195,7 +206,7 @@ async function importPreview() {
     : analyzeApifyRowsV430(arr, 'preview');
   if (seq !== importPreviewSeqV430) return;
   const stats = getImportStatsV430(analyses);
-  const opportunities = analyses.filter(item => item.route === 'whatsapp-validation' || item.route === 'instagram-backlog');
+  const opportunities = analyses.filter(item => isApprovedImportRouteV31(item.route));
 
   const aprovados = stats.approved;
   const recusados = stats.refused;
@@ -245,7 +256,7 @@ async function importPreview() {
     const reviews = analysis.qualification.reviews;
     const scoreStr = score ? `⭐ ${Number(score).toFixed(1)}` : '';
     const revStr = reviews ? `(${reviews})` : '';
-    const routeBadge = analysis.route === 'instagram-backlog'
+    const routeBadge = isInstagramImportRouteV31(analysis.route)
       ? '<span class="q-badge insta">Instagram backlog</span>'
       : analysis.website.type === 'commercial'
         ? '<span class="q-badge info">🌐 com site · validar WhatsApp</span>'
@@ -415,7 +426,7 @@ async function importarLeads() {
   const existingInstagramKeys = new Set();
 
   for (const analysis of analyses) {
-    if (analysis.route === 'whatsapp-validation') {
+    if (isWhatsappImportRouteV31(analysis.route)) {
       const lead = buildImportedLeadV430(analysis, analysis.route);
       const key = lead.normalized_phone || (lead.googleUrl ? `maps:${lead.googleUrl}` : lead.id);
 
@@ -450,7 +461,7 @@ async function importarLeads() {
       else addedSemSite++;
       continue;
     }
-    if (analysis.route === 'instagram-backlog') {
+    if (isInstagramImportRouteV31(analysis.route)) {
       const lead = buildImportedLeadV430(analysis, analysis.route);
       const key = lead.normalized_phone || (lead.googleUrl ? `maps:${lead.googleUrl}` : lead.id);
       if ((key && importSeenKeys.has(key)) || (key && existingInstagramKeys.has(key))) {

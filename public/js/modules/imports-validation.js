@@ -139,21 +139,21 @@ function isWixsiteWebsiteV430(value = '') {
 function classifyWebsiteOpportunityV430(item = {}) {
   const site = extractSite(item);
   if (!site) {
-    return { type:'none', websiteType:'none', websiteQuality:'missing', route:'whatsapp-validation', site:'', reason:'sem site proprio' };
+    return { type:'none', websiteType:'none', websiteQuality:'missing', route:'attribution_whatsapp', site:'', reason:'sem site proprio' };
   }
   if (isInstagramWebsiteV430(site)) {
-    return { type:'instagram', websiteType:'instagram', websiteQuality:'social', route:'instagram-backlog', site, reason:'instagram sem site proprio' };
+    return { type:'instagram', websiteType:'instagram', websiteQuality:'social', route:'attribution_instagram', site, reason:'instagram sem site proprio' };
   }
   if (isWixsiteWebsiteV430(site)) {
-    return { type:'wixsite', websiteType:'wixsite', websiteQuality:'weak', route:'whatsapp-validation', site, reason:'wixsite sem dominio proprio' };
+    return { type:'wixsite', websiteType:'wixsite', websiteQuality:'weak', route:'attribution_whatsapp', site, reason:'wixsite sem dominio proprio' };
   }
   if (typeof isExcludedDomain === 'function' && isExcludedDomain(site)) {
     return { type:'excluded', websiteType:'excluded', websiteQuality:'blocked', route:'skip', site, reason:'dominio excluido manualmente' };
   }
   if (typeof isSiteBlocklisted === 'function' && isSiteBlocklisted(site)) {
-    return { type:'external', websiteType:'external', websiteQuality:'weak', route:'whatsapp-validation', site, reason:'link externo sem site proprio' };
+    return { type:'external', websiteType:'external', websiteQuality:'weak', route:'attribution_whatsapp', site, reason:'link externo sem site proprio' };
   }
-  return { type:'commercial', websiteType:'commercial', websiteQuality:'commercial', route:'whatsapp-validation', site, reason:'site comercial proprio' };
+  return { type:'commercial', websiteType:'commercial', websiteQuality:'commercial', route:'attribution_whatsapp', site, reason:'site comercial proprio' };
 }
 
 function getApifyQualificationV430(item = {}) {
@@ -445,11 +445,11 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     analysis.reason = analysis.website.reason;
   } else if (analysis.hasPhone) {
     // Regra operacional: com telefone entra na validação WhatsApp, tendo site ou não.
-    analysis.route = 'whatsapp-validation';
+    analysis.route = analysis.website.type === 'commercial' ? 'attribution_site' : 'attribution_whatsapp';
     analysis.reason = analysis.website.reason;
   } else if (analysis.instagram) {
     // Sem telefone validado, mas com Instagram: vai para Instagram.
-    analysis.route = 'instagram-backlog';
+    analysis.route = 'attribution_instagram';
     analysis.reason = 'sem telefone whatsapp validado';
   } else {
     analysis.route = 'skip';
