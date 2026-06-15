@@ -1350,16 +1350,123 @@
   async function renderFilaZapV317(){
     const panel=document.getElementById('panel-fila-zap'); if(!panel) return;
     setOnlyPanel('panel-fila-zap','WhatsApp');
+    // A tela WhatsApp precisa manter a estrutura operacional por chip.
+    // Não transformar em card único/lista simples: com múltiplos chips isso perde controle do disparo.
+    panel.style.padding='0';
+    panel.style.overflow='hidden';
+    panel.style.flexDirection='row';
+    panel.style.height='100vh';
+    panel.style.width='100%';
+    panel.style.maxWidth='none';
+
     const c=db();
-    panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// fila final aprovada no pré-envio</div></div></div><div class="card"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:24px">// carregando fila...</div></div>`;
+    panel.innerHTML=`<div class="zapLeft"><div class="zapLeft-inner"><div class="page-header" style="flex-shrink:0;padding:20px 20px 0"><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// carregando fila por chip...</div></div></div></div><div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch"></div><div class="zapRight"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:24px">// carregando chips...</div></div>`;
     if(!c) return;
-    const { data: items, error } = await c.from('pre_dispatch_items').select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position,leads(company_name,phone,normalized_phone,website,maps_url)').eq('user_id',uid()).in('status',['ready_to_dispatch','queued','dispatch_queue']).order('scheduled_date',{ascending:true}).order('chip_label',{ascending:true}).order('position',{ascending:true});
+
+    const state = window.__filaZapStateV317 ||= { date:'', status:'all', chip:'all' };
+    const finalStatuses=['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','sent','enviado','responded','respondida','not_responded','nao_respondida','refused','recusada','closed','fechada','error','erro'];
+
+    const [{ data:items, error }, { data:chips, error:chipErr }] = await Promise.all([
+      c.from('pre_dispatch_items')
+        .select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position,updated_at,created_at,leads(company_name,phone,normalized_phone,website,maps_url,city,state)')
+        .eq('user_id',uid())
+        .in('status',finalStatuses)
+        .order('scheduled_date',{ascending:true})
+        .order('chip_label',{ascending:true})
+        .order('position',{ascending:true}),
+      c.from('whatsapp_instances')
+        .select('id,label,instance,phone,active,status,connection_state,daily_limit')
+        .eq('user_id',uid())
+        .eq('active',true)
+        .order('label',{ascending:true})
+    ]);
+
     if(error){ panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div></div></div><div class="card"><div style="color:var(--error);font-family:'DM Mono',monospace;font-size:10px;padding:24px">// erro: ${esc(error.message)}</div></div>`; return; }
-    const rows=items||[];
-    const badge=document.getElementById('badge-fila-zap'); if(badge) badge.textContent=String(rows.length);
-    if(!rows.length){ panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// fila final aprovada no pré-envio</div></div></div><div class="card"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:36px;text-align:center">// nenhum lead aprovado foi enviado para a fila WhatsApp ainda</div></div>`; return; }
-    const groups=rows.reduce((acc,r)=>{ const k=`${r.scheduled_date}||${r.chip_label||r.chip_instance||'chip'}`; (acc[k] ||= []).push(r); return acc; },{});
-    panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// ${rows.length} lead(s) prontos para disparo</div></div></div><div class="card"><div class="card-title">Fila final WhatsApp</div>${Object.entries(groups).map(([k,arr])=>{ const [date,chip]=k.split('||'); return `<div style="margin:12px 0 18px"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);margin-bottom:8px">${esc(dayLabel(date))} · ${esc(chip)} · ${arr.length}/120</div><div class="ext-list">${arr.map(r=>{ const l=r.leads||{}; return `<div class="empresa-card"><div class="empresa-info"><div class="empresa-nome pre-card-name">${leadNameHtml(l)}</div><div class="empresa-meta pre-card-actions-line">${l.website?`<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" class="pre-card-link pre-site">Site</a>`:`<span class="pre-card-link muted">Sem site</span>`}<span class="pre-sep">|</span><button class="pre-card-link pre-whatsapp" onclick="copyPreEnvioWhatsappV31('${esc(phoneOf(l))}')">WhatsApp</button></div></div><div class="empresa-actions"><span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--ok);border:1px solid rgba(78,203,113,.3);border-radius:6px;padding:5px 8px">FILA FINAL</span></div></div>`; }).join('')}</div></div>`; }).join('')}</div>`;
+    if(chipErr) console.warn('[v31.7][fila-zap-chips]', chipErr.message);
+
+    const rows=(items||[]).map(r=>({ ...r, lead:r.leads||{} }));
+    const chipRows=(chips||[]);
+    const badge=document.getElementById('badge-fila-zap'); if(badge) badge.textContent=String(rows.filter(r=>['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting'].includes(String(r.status||''))).length);
+
+    const dates=[...new Set([...weekDates(), ...rows.map(r=>r.scheduled_date).filter(Boolean)])].sort();
+    if(!state.date || !dates.includes(state.date)) state.date = dates.includes(todayIso()) ? todayIso() : (dates[0] || todayIso());
+
+    const statusLabel=(st)=>{
+      const v=String(st||'').toLowerCase();
+      if(['ready_to_dispatch','not_sent','waiting'].includes(v)) return 'Não enviada';
+      if(['queued','dispatch_queue'].includes(v)) return 'Em fila';
+      if(['sent','enviado'].includes(v)) return 'Enviada';
+      if(['responded','respondida'].includes(v)) return 'Respondida';
+      if(['not_responded','nao_respondida'].includes(v)) return 'Não respondida';
+      if(['refused','recusada'].includes(v)) return 'Recusada';
+      if(['closed','fechada'].includes(v)) return 'Fechada';
+      if(['error','erro'].includes(v)) return 'Erro';
+      return 'Não enviada';
+    };
+    const statusKey=(label)=>String(label||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'_');
+    const statuses=['all','Não enviada','Em fila','Enviada','Respondida','Não respondida','Recusada','Fechada','Erro'];
+    const byDate=rows.filter(r=>r.scheduled_date===state.date);
+    const countStatus=(label, list=byDate)=> label==='all' ? list.length : list.filter(r=>statusLabel(r.status)===label).length;
+    const chipName=(r)=>String(r.chip_label || r.chip_instance || 'chip').trim();
+    const chipInstance=(r)=>String(r.chip_instance || r.chip_label || '').trim();
+    const chipKey=(chip)=>String(chip.instance || chip.label || chip.id || 'chip').trim();
+    const chipTitle=(chip)=>String(chip.label || chip.instance || chip.phone || 'Chip').trim();
+    const chipSub=(chip)=>String(chip.instance || chip.phone || '').trim();
+    const knownChips=[...chipRows];
+    rows.forEach(r=>{
+      if(!knownChips.some(ch=>chipKey(ch)===chipInstance(r) || chipTitle(ch)===chipName(r))){
+        knownChips.push({ id:chipInstance(r)||chipName(r), instance:chipInstance(r), label:chipName(r), daily_limit:120, active:true });
+      }
+    });
+    if(state.chip!=='all' && !knownChips.some(ch=>chipKey(ch)===state.chip || chipTitle(ch)===state.chip)) state.chip='all';
+
+    const selectedRows=byDate
+      .filter(r=>state.status==='all' || statusLabel(r.status)===state.status)
+      .filter(r=>state.chip==='all' || chipInstance(r)===state.chip || chipName(r)===state.chip)
+      .sort((a,b)=>(a.position||0)-(b.position||0));
+
+    const leadRow=(r, compact=false)=>{ const l=r.lead||{}; return `<div class="empresa-card fila-zap-row ${compact?'compact':''}">
+      <div class="empresa-info">
+        <div class="empresa-nome pre-card-name">${leadNameHtml(l)}</div>
+        <div class="empresa-meta pre-card-actions-line">
+          ${l.website?`<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" class="pre-card-link pre-site">Site</a>`:`<span class="pre-card-link muted">Sem site</span>`}
+          <span class="pre-sep">|</span>
+          <button class="pre-card-link pre-whatsapp" onclick="copyPreEnvioWhatsappV31('${esc(phoneOf(l))}')">WhatsApp</button>
+          <span class="pre-chip-mini">${esc(chipName(r))}</span>
+        </div>
+      </div>
+      <div class="empresa-actions"><span class="fila-zap-status ${esc(statusKey(statusLabel(r.status)))}">${esc(statusLabel(r.status))}</span></div>
+    </div>`; };
+
+    const leftHtml=`<div class="zapLeft" id="zapLeft"><div class="zapLeft-inner">
+      <div class="page-header" style="flex-shrink:0;padding:20px 20px 0">
+        <div class="page-title">Fila <span>WhatsApp.</span></div>
+        <div class="page-sub" id="filaZapSub">// ${rows.length} lead(s) na fila final · visão por dia, chip e status</div>
+      </div>
+      <div style="padding:16px 20px;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <div class="card-title" style="flex-shrink:0">Selecionar empresas <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">— controle operacional da fila final</span></div>
+        <div class="day-tabs" id="disparoDayTabs" style="flex-shrink:0">${dates.map(d=>`<button type="button" class="day-tab ${state.date===d?'active':''}" onclick="setFilaZapDateV31('${esc(d)}')">${esc(dayLabel(d))}${d===todayIso()?' <span style="color:var(--accent);font-size:8px">●</span>':''}<span class="day-count">${rows.filter(r=>r.scheduled_date===d).length}</span></button>`).join('')}</div>
+        <div class="status-tabs" id="disparoStatusTabs" style="flex-shrink:0">${statuses.map(st=>`<button type="button" class="status-tab ${state.status===st?'active':''}" onclick="setFilaZapStatusV31('${esc(st)}')">${st==='all'?'Todos':esc(st)} <span>${countStatus(st)}</span></button>`).join('')}</div>
+        <div class="stats-row" id="disparoStats" style="flex-shrink:0"><span>${selectedRows.length} exibindo</span><span>${countStatus('Não enviada')} não enviada</span><span>${countStatus('Em fila')} em fila</span><span>${countStatus('Enviada')} enviada</span></div>
+        <div id="disparoEmpresasList" class="stretch-list zap-empresa-list">${selectedRows.length?selectedRows.map(r=>leadRow(r)).join(''):`<div class="fila-empty">// nenhuma empresa neste filtro</div>`}</div>
+      </div>
+    </div></div>`;
+
+    const rightHtml=`<div class="zapRight" id="zapRight">${knownChips.length?knownChips.map((chip,idx)=>{
+      const key=chipKey(chip), title=chipTitle(chip), sub=chipSub(chip);
+      const list=byDate.filter(r=>chipInstance(r)===key || chipName(r)===title || chipInstance(r)===title || chipName(r)===key);
+      const open=(state.chip==='all' && idx===0) || state.chip===key || state.chip===title;
+      const limit=Number(chip.daily_limit || 120) || 120;
+      return `<div class="chip-accordion ${open?'open':''}">
+        <div class="chip-accordion-header" onclick="setFilaZapChipV31('${esc(open?'all':key)}')" style="border-left-color:${idx%2===0?'var(--accent)':'#4ab3ff'}">
+          <span class="chip-accordion-chevron">›</span>
+          <div style="flex:1;min-width:0"><div style="font-family:'DM Mono',monospace;font-size:11px;color:${idx%2===0?'var(--accent)':'#4ab3ff'};font-weight:800">${esc(title)}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px">${esc(sub)}</div></div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);white-space:nowrap">(${list.length}/${limit} · ${list.filter(r=>statusLabel(r.status)==='Não enviada').length} aguardando · ${list.filter(r=>statusLabel(r.status)==='Erro').length} erro · ${list.filter(r=>statusLabel(r.status)==='Enviada').length} enviados)</div>
+        </div>
+        <div class="chip-accordion-body"><div class="chip-fila-scroll">${list.length?list.map(r=>leadRow(r,true)).join(''):`<div class="fila-empty">// nenhum lead neste chip para ${esc(dayLabel(state.date))}</div>`}</div></div>
+      </div>`; }).join(''):`<div class="fila-empty">// nenhum chip ativo encontrado</div>`}</div>`;
+
+    panel.innerHTML = `${leftHtml}<div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch"></div>${rightHtml}`;
   }
 
   function setOnlyPanel(panelId,label){
@@ -1401,8 +1508,32 @@
       #preEnvioList .pre-card-name,#panel-fila-zap .pre-card-name{font-size:14px!important;line-height:1.25!important;font-weight:600!important}
       #preEnvioList .pre-card-link,#preEnvioList .pre-sep,#preEnvioList .pre-chip-mini,#panel-fila-zap .pre-card-link,#panel-fila-zap .pre-sep{font-size:10px!important;line-height:1.25!important;text-decoration:none!important}
       .pre-card-link{background:none;border:0;padding:0;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700}.pre-site{color:var(--accent)!important}.pre-whatsapp{color:var(--ok)!important}.pre-card-link.muted{color:var(--muted)!important}.pre-sep{color:var(--muted);margin:0 3px}.pre-chip-mini{color:var(--muted);margin-left:8px;font-family:'DM Mono',monospace}
+      #panel-fila-zap{padding:0!important;overflow:hidden!important;flex-direction:row!important;height:100vh!important;}
+      #panel-fila-zap .fila-zap-row.compact{border-radius:0;border-left:0;border-right:0;border-top:0;margin:0;padding:12px 16px;}
+      #panel-fila-zap .fila-zap-status{font-family:'DM Mono',monospace;font-size:8px;border:1px solid var(--border2);border-radius:999px;padding:5px 8px;color:var(--text2);white-space:nowrap;}
+      #panel-fila-zap .fila-zap-status.nao_enviada{color:var(--accent);border-color:rgba(184,240,89,.35);background:rgba(184,240,89,.08);}
+      #panel-fila-zap .fila-zap-status.em_fila{color:#4ab3ff;border-color:rgba(74,179,255,.35);background:rgba(74,179,255,.08);}
+      #panel-fila-zap .fila-zap-status.enviada,#panel-fila-zap .fila-zap-status.respondida,#panel-fila-zap .fila-zap-status.fechada{color:var(--ok);border-color:rgba(78,203,113,.35);background:rgba(78,203,113,.08);}
+      #panel-fila-zap .fila-zap-status.erro,#panel-fila-zap .fila-zap-status.recusada{color:var(--error);border-color:rgba(255,80,80,.35);background:rgba(255,80,80,.08);}
+      @media(max-width:900px){#panel-fila-zap{flex-direction:column!important;height:auto!important}.zapRight{height:auto!important;min-height:420px}.zapLeft{height:auto!important;min-height:520px}}
       @media(max-width:1100px){.pre-week-cards{grid-template-columns:repeat(2,minmax(120px,1fr))}}
     `; document.head.appendChild(style);
+  }
+
+  function setFilaZapDate(d){
+    window.__filaZapStateV317 ||= { date:'', status:'all', chip:'all' };
+    window.__filaZapStateV317.date=d;
+    renderFilaZapV317();
+  }
+  function setFilaZapStatus(st){
+    window.__filaZapStateV317 ||= { date:'', status:'all', chip:'all' };
+    window.__filaZapStateV317.status=st;
+    renderFilaZapV317();
+  }
+  function setFilaZapChip(chip){
+    window.__filaZapStateV317 ||= { date:'', status:'all', chip:'all' };
+    window.__filaZapStateV317.chip=chip || 'all';
+    renderFilaZapV317();
   }
 
   // Exports finais
@@ -1413,6 +1544,9 @@
   window.returnPreEnvioDayToAttributionV31=returnPreEnvioDayToAttributionV317;
   window.sendApprovedToFinalQueueV31=sendApprovedToFinalQueueV317;
   window.renderFilaZap=renderFilaZapV317;
+  window.setFilaZapDateV31=setFilaZapDate;
+  window.setFilaZapStatusV31=setFilaZapStatus;
+  window.setFilaZapChipV31=setFilaZapChip;
   window.setPreEnvioDateV31=setPreDate;
   window.setPreEnvioChipV31=setPreChip;
   window.preEnvioGoPageV31=goPage;
