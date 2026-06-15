@@ -1375,7 +1375,7 @@
         .order('chip_label',{ascending:true})
         .order('position',{ascending:true}),
       c.from('whatsapp_instances')
-        .select('id,label,instance,phone,active,status,connection_state,daily_limit')
+        .select('id,chip_id,label,name,instance,active,status,connection_state,daily_limit,block_size,interval_seconds')
         .eq('user_id',uid())
         .eq('active',true)
         .order('label',{ascending:true})
@@ -1410,8 +1410,8 @@
     const chipName=(r)=>String(r.chip_label || r.chip_instance || 'chip').trim();
     const chipInstance=(r)=>String(r.chip_instance || r.chip_label || '').trim();
     const chipKey=(chip)=>String(chip.instance || chip.label || chip.id || 'chip').trim();
-    const chipTitle=(chip)=>String(chip.label || chip.instance || chip.phone || 'Chip').trim();
-    const chipSub=(chip)=>String(chip.instance || chip.phone || '').trim();
+    const chipTitle=(chip)=>String(chip.label || chip.name || chip.chip_id || chip.instance || 'Chip').trim();
+    const chipSub=(chip)=>String(chip.chip_id || chip.instance || chip.name || '').trim();
     const knownChips=[...chipRows];
     rows.forEach(r=>{
       if(!knownChips.some(ch=>chipKey(ch)===chipInstance(r) || chipTitle(ch)===chipName(r))){
