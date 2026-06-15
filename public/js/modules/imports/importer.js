@@ -178,6 +178,35 @@ function buildImportedLeadV430(analysis, route) {
 }
 
 let importPreviewSeqV430 = 0;
+let importPreviewTabV33 = 'approved';
+
+function setImportPreviewTabV33(tab = 'approved') {
+  importPreviewTabV33 = tab === 'refused' ? 'refused' : 'approved';
+  importPage = 1;
+  importPreview();
+}
+
+function getImportRejectionReasonLabelV33(item = {}) {
+  const reason = String(item.reason || '').toLowerCase();
+  if (item.alreadyImported && item.alreadySeenSource === 'sent_contacts') return 'Já enviado';
+  if (item.alreadyImported || reason.includes('lead ja existente') || reason.includes('lead já existente') || reason.includes('já no banco') || reason.includes('ja no banco')) return 'Já no banco';
+  if (item.payloadDuplicate || reason.includes('duplicado no json')) return 'Duplicado no JSON';
+  if (!item.hasPhone || reason.includes('sem telefone')) return 'Sem telefone';
+  if (!item.ramoMatch || reason.includes('fora do ramo')) return 'Fora do ramo';
+  if ((item.qualification && !item.qualification.approved) || reason.includes('abaixo da qualificacao') || reason.includes('abaixo da qualificação')) return 'Abaixo da qualificação';
+  if (item.website?.type === 'wixsite' || reason.includes('wix')) return 'Site Wix';
+  return item.reason ? String(item.reason) : 'Outros';
+}
+
+function getImportRejectionBadgeClassV33(label = '') {
+  const key = String(label).toLowerCase();
+  if (key.includes('fora')) return 'danger';
+  if (key.includes('qualifica')) return 'warn';
+  if (key.includes('telefone')) return 'danger';
+  if (key.includes('enviado') || key.includes('banco') || key.includes('duplicado')) return 'info';
+  if (key.includes('wix')) return 'warn';
+  return 'danger';
+}
 
 async function importPreview() {
   const raw = document.getElementById('importJsonInput').value.trim();
@@ -206,7 +235,9 @@ async function importPreview() {
     : analyzeApifyRowsV430(arr, 'preview');
   if (seq !== importPreviewSeqV430) return;
   const stats = getImportStatsV430(analyses);
-  const opportunities = analyses.filter(item => isApprovedImportRouteV31(item.route));
+  const approvedItems = analyses.filter(item => isApprovedImportRouteV31(item.route));
+  const refusedItems = analyses.filter(item => !isApprovedImportRouteV31(item.route));
+  const currentPreviewItemsAll = importPreviewTabV33 === 'refused' ? refusedItems : approvedItems;
 
   const aprovados = stats.approved;
   const recusados = stats.refused;
@@ -238,31 +269,40 @@ async function importPreview() {
       </div>
     </div>
   `;
-  countEl.textContent = `· ${opportunities.length} oportunidades`;
+  const tabsHtml = `
+    <div class="import-preview-tabs-v33" style="display:flex;gap:8px;margin-bottom:14px">
+      <button type="button" class="chip-tab ${importPreviewTabV33 === 'approved' ? 'active' : ''}" onclick="setImportPreviewTabV33('approved')">Aprovadas ${stats.approved}</button>
+      <button type="button" class="chip-tab ${importPreviewTabV33 === 'refused' ? 'active' : ''}" onclick="setImportPreviewTabV33('refused')">Recusadas ${stats.refused}</button>
+    </div>
+  `;
+  countEl.textContent = importPreviewTabV33 === 'refused' ? `· ${refusedItems.length} recusadas` : `· ${approvedItems.length} oportunidades`;
 
-  if (!opportunities.length) {
-    listEl.innerHTML = '<span style="color:var(--muted)">// nenhuma oportunidade qualificada encontrada</span>';
+  if (!currentPreviewItemsAll.length) {
+    listEl.innerHTML = tabsHtml + '<span style="color:var(--muted)">// nenhum item encontrado nesta aba</span>';
     document.getElementById('importPreviewPagination').innerHTML = '';
     return;
   }
 
-  const totalPrev = opportunities.length;
+  const totalPrev = currentPreviewItemsAll.length;
   const totalPrevPages = Math.max(1, Math.ceil(totalPrev / IMPORT_PG));
   if (importPage > totalPrevPages) importPage = totalPrevPages;
-  const previewItems = opportunities.slice((importPage - 1) * IMPORT_PG, importPage * IMPORT_PG);
+  const previewItems = currentPreviewItemsAll.slice((importPage - 1) * IMPORT_PG, importPage * IMPORT_PG);
 
-  listEl.innerHTML = '<div class="ext-list">' + previewItems.map(analysis => {
+  listEl.innerHTML = tabsHtml + '<div class="ext-list">' + previewItems.map(analysis => {
     const score = analysis.qualification.rating;
     const reviews = analysis.qualification.reviews;
     const scoreStr = score ? `⭐ ${Number(score).toFixed(1)}` : '';
     const revStr = reviews ? `(${reviews})` : '';
-    const routeBadge = isInstagramImportRouteV31(analysis.route)
-      ? '<span class="q-badge insta">Instagram backlog</span>'
-      : analysis.website.type === 'commercial'
-        ? '<span class="q-badge info">🌐 com site · validar WhatsApp</span>'
-        : analysis.website.type === 'wixsite'
-          ? '<span class="q-badge warn">Wix/sem site próprio · validar WhatsApp</span>'
-          : '<span class="q-badge ok">🚫 sem site · validar WhatsApp</span>';
+    const refusedReasonLabel = !isApprovedImportRouteV31(analysis.route) ? getImportRejectionReasonLabelV33(analysis) : '';
+    const routeBadge = refusedReasonLabel
+      ? `<span class="q-badge ${getImportRejectionBadgeClassV33(refusedReasonLabel)}">${escHtml(refusedReasonLabel)}</span>`
+      : isInstagramImportRouteV31(analysis.route)
+        ? '<span class="q-badge insta">Instagram backlog</span>'
+        : analysis.website.type === 'commercial'
+          ? '<span class="q-badge info">🌐 com site · validar WhatsApp</span>'
+          : analysis.website.type === 'wixsite'
+            ? '<span class="q-badge warn">Wix/sem site próprio · validar WhatsApp</span>'
+            : '<span class="q-badge ok">🚫 sem site · validar WhatsApp</span>';
     return `<div class="empresa-card">
       <div class="empresa-info">
         <div class="empresa-nome">${analysis.googleUrl ? `<a href="${escHtml(analysis.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(analysis.name)}</a>` : escHtml(analysis.name)}</div>
@@ -551,3 +591,5 @@ async function importarLeads() {
   document.getElementById('importJsonInput').value = '';
   importPreview();
 }
+
+window.setImportPreviewTabV33 = setImportPreviewTabV33;
