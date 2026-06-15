@@ -85,8 +85,8 @@
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
         <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('ja-enviados')" data-label="Já enviados">
-        <div class="nav-icon">✅</div><span class="nav-label">Já enviados</span><span class="nav-badge" id="badge-ja-enviados">0</span>
+      <button class="nav-item sub" onclick="switchPanel('ja-enviados')" data-label="Base Permanente">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Base Permanente</span><span class="nav-badge" id="badge-ja-enviados">0</span>
       </button>
     </details>
 
@@ -688,20 +688,21 @@
 </div>
 
 
-<!-- ── JÁ ENVIADOS ── -->
+<!-- ── BASE PERMANENTE ── -->
 <div class="panel" id="panel-ja-enviados">
   <div class="page-header" style="flex-shrink:0">
     <div>
-      <div class="page-title">Já <span>enviados.</span></div>
-      <div class="page-sub">// proteção ativa · números que não devem ser importados nem disparados novamente</div>
+      <div class="page-title">Base <span>permanente.</span></div>
+      <div class="page-sub">// proteção ativa · telefone, site, Instagram e Google Maps com CRUD</div>
     </div>
   </div>
   <div class="card stretch-card" style="width:100%">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-      <input id="sentContactsSearch" type="text" placeholder="🔍 Buscar por empresa ou telefone..." oninput="renderSentContactsPanel()" style="flex:1;min-width:240px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:9px 12px;outline:none">
+      <input id="sentContactsSearch" type="text" placeholder="🔍 Buscar por empresa, telefone, site, Instagram ou Maps..." oninput="renderSentContactsPanel()" style="flex:1;min-width:240px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:9px 12px;outline:none">
+      <button class="btn btn-primary" onclick="openBasePermanenteFormV34()">+ Novo</button>
       <button class="btn btn-ghost" onclick="loadSentContactsPanel(true)">Atualizar</button>
     </div>
-    <div id="sentContactsList" class="stretch-list" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// carregando já enviados...</div>
+    <div id="sentContactsList" class="stretch-list" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">// carregando base permanente...</div>
   </div>
 </div>
 
@@ -1517,8 +1518,8 @@
       <button class="nav-item sub" onclick="switchPanel('instagram')" data-label="Instagram">
         <div class="nav-icon">📸</div><span class="nav-label">Instagram</span><span class="nav-badge" id="badge-instagram">0</span>
       </button>
-      <button class="nav-item sub" onclick="switchPanel('ja-enviados')" data-label="Já enviados">
-        <div class="nav-icon">✅</div><span class="nav-label">Já enviados</span><span class="nav-badge" id="badge-ja-enviados">0</span>
+      <button class="nav-item sub" onclick="switchPanel('ja-enviados')" data-label="Base Permanente">
+        <div class="nav-icon">🛡️</div><span class="nav-label">Base Permanente</span><span class="nav-badge" id="badge-ja-enviados">0</span>
       </button>
     </details>
 
@@ -1663,5 +1664,6 @@
 
   <script src="js/modules/zz-final-navigation-dispatch-v32.js?v=20260615-V32-FINAL-3"></script>
   <script src="js/modules/zz-final-whatsapp-operational-v33.js?v=20260615-V33-WHATSAPP-OPERACIONAL-1"></script>
+  <script src="js/modules/base-permanente-crud.js?v=20260615-V34-BASE-PERMANENTE-1"></script>
 </body>
 </html>

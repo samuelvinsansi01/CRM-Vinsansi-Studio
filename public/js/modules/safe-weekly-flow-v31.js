@@ -1367,7 +1367,7 @@
 
     const [{ data:items, error }, { data:chips, error:chipErr }] = await Promise.all([
       c.from('pre_dispatch_items')
-        .select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position,updated_at,created_at,lead_type,raw_payload,leads(company_name,phone,normalized_phone,website,maps_url,city,state,rating,reviews_count,category,parent_category,lead_type)')
+        .select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position,updated_at,created_at,lead_type,raw_payload,leads(company_name,phone,normalized_phone,website,maps_url,instagram_url,city,state,rating,reviews_count,category,parent_category,lead_type)')
         .eq('user_id',uid())
         .in('status',finalStatuses)
         .order('scheduled_date',{ascending:true})
@@ -1532,10 +1532,23 @@
             user_id:uid(), lead_id:item.lead_id || null, company_name:l.company_name || null,
             phone:l.phone || normalized, normalized_phone:normalized,
             block_type:'already_sent', source:'dispatch_queue', reason:'', active:true,
-            dispatched_at:now, created_at:now, raw_payload:{ pre_dispatch_item_id:id }
+            dispatched_at:now, created_at:now, raw_payload:{ pre_dispatch_item_id:id, website:l.website||'', maps_url:l.maps_url||'', instagram_url:l.instagram_url||'' }
           });
         }
       }
+      try {
+        await c.from('base_permanente').upsert({
+          user_id:uid(),
+          company_name:l.company_name || null,
+          normalized_phone:normalized || null,
+          website:(typeof normalizeIdentitySiteV430==='function'?normalizeIdentitySiteV430(l.website||''):(l.website||'')) || null,
+          instagram_url:(typeof normalizeIdentityInstagramV430==='function'?normalizeIdentityInstagramV430(l.instagram_url||''):(l.instagram_url||'')) || null,
+          maps_url:(typeof normalizeIdentityUrlV430==='function'?normalizeIdentityUrlV430(l.maps_url||''):(l.maps_url||'')) || null,
+          status:'ja_enviado',
+          notes:'salvo automaticamente pela fila WhatsApp',
+          updated_at:now
+        }, { onConflict:'user_id,normalized_phone' });
+      } catch(baseErr) { console.warn('[base_permanente][fila-sent-warning]', baseErr?.message || baseErr); }
     }
 
     notify(status==='sent'?'✓ marcado como enviado':status==='queued'?'✓ marcado em fila':'✓ status atualizado');

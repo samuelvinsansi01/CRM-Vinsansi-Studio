@@ -1,7 +1,7 @@
 /* ════════════════════════════
    EXTRACT HELPERS
 ════════════════════════════ */
-const APIFY_QUALIFICATION_RULES = Object.freeze({ minRating: 4.0, minReviews: 15 });
+const APIFY_QUALIFICATION_RULES = Object.freeze({ minRating: 4.0, minReviews: 10 });
 
 function qualificationLogV430(tag, payload = {}) {
   try { console.log(`[${tag}]`, payload); } catch (_) {}
@@ -260,7 +260,50 @@ async function getDatabaseLeadCacheAsyncV430(rows = []) {
 
   const cache = [];
 
-  // 0) Proteção permanente: company_registry guarda telefone/site/instagram/maps mesmo após arquivar/rejeitar/enviar.
+  // 0) Base Permanente: proteção editável por telefone/site/instagram/maps.
+  try {
+    const seenBase = new Set();
+    function pushBaseRow(row){
+      const key = `${row.normalized_phone||''}|${row.website||''}|${row.instagram_url||''}|${row.maps_url||''}`;
+      if (seenBase.has(key)) return;
+      seenBase.add(key);
+      cache.push({
+        nome: row.company_name || '',
+        phone: row.normalized_phone || '',
+        normalized_phone: row.normalized_phone || '',
+        site: row.website || '',
+        website: row.website || '',
+        instagram: row.instagram_url || '',
+        maps_url: row.maps_url || '',
+        _already_seen_source: `base_permanente:${row.status || 'protegido'}`
+      });
+    }
+    const baseSelect = 'company_name,normalized_phone,website,instagram_url,maps_url,status';
+    if (phones.length) {
+      const { data, error } = await sbClient.from('base_permanente').select(baseSelect).eq('user_id', userId).in('normalized_phone', phones);
+      if (!error && Array.isArray(data)) data.forEach(pushBaseRow);
+      else if (error && !String(error.message || '').includes('base_permanente')) qualificationLogV430('qualification-base-permanente-phone-warning', { error:error.message || String(error) });
+    }
+    if (sites.length) {
+      const { data, error } = await sbClient.from('base_permanente').select(baseSelect).eq('user_id', userId).in('website', sites);
+      if (!error && Array.isArray(data)) data.forEach(pushBaseRow);
+      else if (error && !String(error.message || '').includes('base_permanente')) qualificationLogV430('qualification-base-permanente-site-warning', { error:error.message || String(error) });
+    }
+    if (instagrams.length) {
+      const { data, error } = await sbClient.from('base_permanente').select(baseSelect).eq('user_id', userId).in('instagram_url', instagrams);
+      if (!error && Array.isArray(data)) data.forEach(pushBaseRow);
+      else if (error && !String(error.message || '').includes('base_permanente')) qualificationLogV430('qualification-base-permanente-instagram-warning', { error:error.message || String(error) });
+    }
+    if (mapsUrls.length) {
+      const { data, error } = await sbClient.from('base_permanente').select(baseSelect).eq('user_id', userId).in('maps_url', mapsUrls);
+      if (!error && Array.isArray(data)) data.forEach(pushBaseRow);
+      else if (error && !String(error.message || '').includes('base_permanente')) qualificationLogV430('qualification-base-permanente-maps-warning', { error:error.message || String(error) });
+    }
+  } catch (error) {
+    qualificationLogV430('qualification-base-permanente-preview-error', { error:error?.message || String(error) });
+  }
+
+  // 1) Proteção permanente: company_registry guarda telefone/site/instagram/maps mesmo após arquivar/rejeitar/enviar.
   try {
     const seen = new Set();
     function pushRegistryRow(row, sourceLabel){
@@ -437,9 +480,11 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     analysis.reason = 'sem nome';
   } else if (analysis.alreadyImported) {
     analysis.route = 'skip';
-    analysis.reason = analysis.alreadySeenSource === 'sent_contacts'
-      ? 'ja enviado em sent_contacts'
-      : 'lead ja existente no banco do usuario';
+    analysis.reason = String(analysis.alreadySeenSource || '').startsWith('base_permanente')
+      ? 'base permanente'
+      : analysis.alreadySeenSource === 'sent_contacts'
+        ? 'ja enviado em sent_contacts'
+        : 'lead ja existente no banco do usuario';
   } else if (analysis.payloadDuplicate) {
     analysis.route = 'skip';
     analysis.reason = 'duplicado no JSON atual';

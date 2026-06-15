@@ -74,6 +74,7 @@ function getImportStatsV430(analyses = []) {
     outsideBranch: 0,
     belowQualification: 0,
     noPhone: 0,
+    basePermanent: 0,
     alreadySent: 0,
     alreadyInDb: 0,
     payloadDuplicate: 0,
@@ -83,7 +84,9 @@ function getImportStatsV430(analyses = []) {
 
   refused.forEach(item => {
     const reason = String(item.reason || '').toLowerCase();
-    if (item.alreadyImported && item.alreadySeenSource === 'sent_contacts') {
+    if (item.alreadyImported && String(item.alreadySeenSource || '').startsWith('base_permanente')) {
+      refusedBuckets.basePermanent++;
+    } else if (item.alreadyImported && item.alreadySeenSource === 'sent_contacts') {
       refusedBuckets.alreadySent++;
     } else if (item.alreadyImported) {
       refusedBuckets.alreadyInDb++;
@@ -95,8 +98,6 @@ function getImportStatsV430(analyses = []) {
       refusedBuckets.outsideBranch++;
     } else if ((item.qualification && !item.qualification.approved) || reason.includes('abaixo da qualificacao') || reason.includes('abaixo da qualificação')) {
       refusedBuckets.belowQualification++;
-    } else if (item.website?.type === 'wixsite') {
-      refusedBuckets.wixSites++;
     } else {
       refusedBuckets.outros++;
     }
@@ -111,8 +112,9 @@ function getImportStatsV430(analyses = []) {
     comSite: approvedComSite.length,
     semSite: approvedSemSite.length,
     instagramBacklog: approvedInstagram.length,
-    wixSites: refusedBuckets.wixSites,
-    alreadySeen: refusedBuckets.alreadySent + refusedBuckets.alreadyInDb,
+    wixSites: 0,
+    basePermanent: refusedBuckets.basePermanent,
+    alreadySeen: refusedBuckets.basePermanent + refusedBuckets.alreadySent + refusedBuckets.alreadyInDb,
     alreadySent: refusedBuckets.alreadySent,
     alreadyInDb: refusedBuckets.alreadyInDb,
     payloadDuplicate: refusedBuckets.payloadDuplicate,
@@ -188,13 +190,14 @@ function setImportPreviewTabV33(tab = 'approved') {
 
 function getImportRejectionReasonLabelV33(item = {}) {
   const reason = String(item.reason || '').toLowerCase();
+  if (item.alreadyImported && String(item.alreadySeenSource || '').startsWith('base_permanente')) return 'Base Permanente';
   if (item.alreadyImported && item.alreadySeenSource === 'sent_contacts') return 'Já enviado';
+  if (reason.includes('base permanente')) return 'Base Permanente';
   if (item.alreadyImported || reason.includes('lead ja existente') || reason.includes('lead já existente') || reason.includes('já no banco') || reason.includes('ja no banco')) return 'Já no banco';
   if (item.payloadDuplicate || reason.includes('duplicado no json')) return 'Duplicado no JSON';
   if (!item.hasPhone || reason.includes('sem telefone')) return 'Sem telefone';
   if (!item.ramoMatch || reason.includes('fora do ramo')) return 'Fora do ramo';
   if ((item.qualification && !item.qualification.approved) || reason.includes('abaixo da qualificacao') || reason.includes('abaixo da qualificação')) return 'Abaixo da qualificação';
-  if (item.website?.type === 'wixsite' || reason.includes('wix')) return 'Site Wix';
   return item.reason ? String(item.reason) : 'Outros';
 }
 
@@ -204,7 +207,6 @@ function getImportRejectionBadgeClassV33(label = '') {
   if (key.includes('qualifica')) return 'warn';
   if (key.includes('telefone')) return 'danger';
   if (key.includes('enviado') || key.includes('banco') || key.includes('duplicado')) return 'info';
-  if (key.includes('wix')) return 'warn';
   return 'danger';
 }
 
@@ -261,10 +263,10 @@ async function importPreview() {
         <div class="summary-card-line-v30"><span>Fora do ramo</span><strong>${stats.outsideBranch}</strong></div>
         <div class="summary-card-line-v30"><span>Abaixo da qualificação</span><strong>${stats.belowQualification}</strong></div>
         <div class="summary-card-line-v30"><span>Sem telefone</span><strong>${stats.noPhone}</strong></div>
+        <div class="summary-card-line-v30"><span>Base Permanente</span><strong>${stats.basePermanent}</strong></div>
         <div class="summary-card-line-v30"><span>Já enviados</span><strong>${stats.alreadySent}</strong></div>
         <div class="summary-card-line-v30"><span>Já no banco</span><strong>${stats.alreadyInDb}</strong></div>
         <div class="summary-card-line-v30"><span>Duplicados no JSON</span><strong>${stats.payloadDuplicate}</strong></div>
-        <div class="summary-card-line-v30"><span>Sites Wix</span><strong>${stats.wixSites}</strong></div>
         <div class="summary-card-line-v30"><span>Outros</span><strong>${stats.outros}</strong></div>
       </div>
     </div>
@@ -300,9 +302,7 @@ async function importPreview() {
         ? '<span class="q-badge insta">Instagram backlog</span>'
         : analysis.website.type === 'commercial'
           ? '<span class="q-badge info">🌐 com site · validar WhatsApp</span>'
-          : analysis.website.type === 'wixsite'
-            ? '<span class="q-badge warn">Wix/sem site próprio · validar WhatsApp</span>'
-            : '<span class="q-badge ok">🚫 sem site · validar WhatsApp</span>';
+          : '<span class="q-badge ok">🚫 sem site · validar WhatsApp</span>';
     return `<div class="empresa-card">
       <div class="empresa-info">
         <div class="empresa-nome">${analysis.googleUrl ? `<a href="${escHtml(analysis.googleUrl)}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(analysis.name)}</a>` : escHtml(analysis.name)}</div>

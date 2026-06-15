@@ -88,6 +88,34 @@
     }
 
     try {
+      const normalizeUrl = (v) => String(v || '').trim().replace(/\/+$/, '').toLowerCase();
+      let website = normalizeUrl(payload.website || payload.site || payload.website_url || payload.rawPayload?.website || payload.raw_payload?.website || '');
+      try {
+        if (website) {
+          const u = website.startsWith('http') ? new URL(website) : new URL('https://' + website);
+          website = u.hostname.replace(/^www\./,'').toLowerCase();
+        }
+      } catch(_) {}
+      let instagram = normalizeUrl(payload.instagram_url || payload.instagram || payload.rawPayload?.instagram_url || payload.raw_payload?.instagram_url || '');
+      if (instagram.includes('instagram.com')) {
+        try { instagram = (new URL(instagram.startsWith('http') ? instagram : 'https://' + instagram)).pathname.split('/').filter(Boolean)[0] || instagram; } catch(_) {}
+      }
+      let maps = normalizeUrl(payload.maps_url || payload.googleUrl || payload.google_url || payload.rawPayload?.maps_url || payload.raw_payload?.maps_url || '');
+      const baseRow = {
+        user_id: userId,
+        company_name: row.company_name,
+        normalized_phone: normalizedPhone,
+        website: website || null,
+        instagram_url: instagram || null,
+        maps_url: maps || null,
+        status: 'ja_enviado',
+        notes: payload.notes || payload.reason || 'salvo automaticamente ao marcar/enviar',
+        updated_at: new Date().toISOString()
+      };
+      await sbClient.from('base_permanente').upsert(baseRow, { onConflict:'user_id,normalized_phone' });
+    } catch(e) { console.warn('[base_permanente][mark-sent-warning]', e?.message || e); }
+
+    try {
       const leadId = row.lead_id;
       if (leadId) {
         await sbClient
