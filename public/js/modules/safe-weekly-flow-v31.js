@@ -1350,8 +1350,7 @@
   async function renderFilaZapV317(){
     const panel=document.getElementById('panel-fila-zap'); if(!panel) return;
     setOnlyPanel('panel-fila-zap','WhatsApp');
-    // A tela WhatsApp precisa manter a estrutura operacional por chip.
-    // Não transformar em card único/lista simples: com múltiplos chips isso perde controle do disparo.
+
     panel.style.padding='0';
     panel.style.overflow='hidden';
     panel.style.flexDirection='row';
@@ -1360,7 +1359,7 @@
     panel.style.maxWidth='none';
 
     const c=db();
-    panel.innerHTML=`<div class="zapLeft"><div class="zapLeft-inner"><div class="page-header" style="flex-shrink:0;padding:20px 20px 0"><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// carregando fila por chip...</div></div></div></div><div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch"></div><div class="zapRight"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:24px">// carregando chips...</div></div>`;
+    panel.innerHTML=`<div class="zapLeft"><div class="zapLeft-inner"><div class="page-header" style="flex-shrink:0;padding:20px 20px 0"><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// carregando fila operacional por chip...</div></div></div></div><div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch"></div><div class="zapRight"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:24px">// carregando chips...</div></div>`;
     if(!c) return;
 
     const state = window.__filaZapStateV317 ||= { date:'', status:'all', chip:'all' };
@@ -1368,7 +1367,7 @@
 
     const [{ data:items, error }, { data:chips, error:chipErr }] = await Promise.all([
       c.from('pre_dispatch_items')
-        .select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position,updated_at,created_at,leads(company_name,phone,normalized_phone,website,maps_url,city,state)')
+        .select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position,updated_at,created_at,lead_type,raw_payload,leads(company_name,phone,normalized_phone,website,maps_url,city,state,rating,reviews_count,category,parent_category,lead_type)')
         .eq('user_id',uid())
         .in('status',finalStatuses)
         .order('scheduled_date',{ascending:true})
@@ -1382,11 +1381,12 @@
     ]);
 
     if(error){ panel.innerHTML=`<div class="page-header"><div><div class="page-title">Fila <span>WhatsApp.</span></div></div></div><div class="card"><div style="color:var(--error);font-family:'DM Mono',monospace;font-size:10px;padding:24px">// erro: ${esc(error.message)}</div></div>`; return; }
-    if(chipErr) console.warn('[v31.7][fila-zap-chips]', chipErr.message);
+    if(chipErr) console.warn('[v32][fila-zap-chips]', chipErr.message);
 
     const rows=(items||[]).map(r=>({ ...r, lead:r.leads||{} }));
     const chipRows=(chips||[]);
-    const badge=document.getElementById('badge-fila-zap'); if(badge) badge.textContent=String(rows.filter(r=>['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting'].includes(String(r.status||''))).length);
+    const badge=document.getElementById('badge-fila-zap');
+    if(badge) badge.textContent=String(rows.filter(r=>['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting'].includes(String(r.status||''))).length);
 
     const dates=[...new Set([...weekDates(), ...rows.map(r=>r.scheduled_date).filter(Boolean)])].sort();
     if(!state.date || !dates.includes(state.date)) state.date = dates.includes(todayIso()) ? todayIso() : (dates[0] || todayIso());
@@ -1412,6 +1412,7 @@
     const chipKey=(chip)=>String(chip.instance || chip.label || chip.id || 'chip').trim();
     const chipTitle=(chip)=>String(chip.label || chip.name || chip.chip_id || chip.instance || 'Chip').trim();
     const chipSub=(chip)=>String(chip.chip_id || chip.instance || chip.name || '').trim();
+
     const knownChips=[...chipRows];
     rows.forEach(r=>{
       if(!knownChips.some(ch=>chipKey(ch)===chipInstance(r) || chipTitle(ch)===chipName(r))){
@@ -1425,26 +1426,66 @@
       .filter(r=>state.chip==='all' || chipInstance(r)===state.chip || chipName(r)===state.chip)
       .sort((a,b)=>(a.position||0)-(b.position||0));
 
-    const leadRow=(r, compact=false)=>{ const l=r.lead||{}; return `<div class="empresa-card fila-zap-row ${compact?'compact':''}">
-      <div class="empresa-info">
+    const safePhone=(l)=>String(l.normalized_phone || l.phone || '').replace(/\D/g,'');
+    const waUrl=(l)=> safePhone(l) ? `https://wa.me/${safePhone(l)}` : '#';
+    const metaLine=(r)=>{
+      const l=r.lead||{};
+      const city=[l.city,l.state].filter(Boolean).join('/');
+      const rating=l.rating?`⭐ ${esc(l.rating)}${l.reviews_count?` · ${esc(l.reviews_count)} avaliações`:''}`:'';
+      return [city,rating].filter(Boolean).join(' &nbsp; ');
+    };
+    const ramoOf=(r)=> esc(r.raw_payload?.parent_category || r.raw_payload?.category || r.lead?.parent_category || r.lead?.category || r.lead_type || 'sem ramo');
+    const tipoOf=(r)=> esc(r.lead_type || r.lead?.lead_type || (r.lead?.website ? 'com site' : 'sem site'));
+
+    const leadRow=(r)=>{ const l=r.lead||{}; const st=statusLabel(r.status); return `<div class="empresa-card fila-zap-row" data-fila-id="${esc(r.id)}">
+      <div class="empresa-info" style="min-width:0;flex:1">
         <div class="empresa-nome pre-card-name">${leadNameHtml(l)}</div>
-        <div class="empresa-meta pre-card-actions-line">
+        <div class="empresa-meta pre-card-actions-line" style="gap:8px;flex-wrap:wrap">
           ${l.website?`<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" class="pre-card-link pre-site">Site</a>`:`<span class="pre-card-link muted">Sem site</span>`}
           <span class="pre-sep">|</span>
-          <button class="pre-card-link pre-whatsapp" onclick="copyPreEnvioWhatsappV31('${esc(phoneOf(l))}')">WhatsApp</button>
+          <button class="pre-card-link pre-whatsapp" onclick="copyPreEnvioWhatsappV31('${esc(safePhone(l))}')">WhatsApp</button>
           <span class="pre-chip-mini">${esc(chipName(r))}</span>
+          ${metaLine(r)?`<span class="pre-chip-mini">${metaLine(r)}</span>`:''}
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;border-top:1px dashed var(--border2);padding-top:6px">
+          Fluxo: Msg 1 → Msg 2 → Imagem &nbsp; Tipo: <b style="color:var(--text2)">${tipoOf(r)}</b> &nbsp; Ramo: <b style="color:var(--text2)">${ramoOf(r)}</b>
         </div>
       </div>
-      <div class="empresa-actions"><span class="fila-zap-status ${esc(statusKey(statusLabel(r.status)))}">${esc(statusLabel(r.status))}</span></div>
+      <div class="empresa-actions fila-actions" style="gap:6px;flex-wrap:wrap;justify-content:flex-end;min-width:330px">
+        <span class="fila-zap-status ${esc(statusKey(st))}">${esc(st)}</span>
+        <button class="btn btn-ghost" style="font-size:9px;padding:6px 9px" onclick="copyPreEnvioWhatsappV31('${esc(safePhone(l))}')">Copiar nº</button>
+        <a class="btn btn-ghost" style="font-size:9px;padding:6px 9px;text-decoration:none" href="${esc(waUrl(l))}" target="_blank" rel="noopener noreferrer">Abrir WA</a>
+        <button class="btn btn-ghost" style="font-size:9px;padding:6px 9px;border-color:rgba(74,179,255,.35);color:#4ab3ff" onclick="setFilaZapItemStatusV32('${esc(r.id)}','queued')">Em fila</button>
+        <button class="btn btn-primary" style="font-size:9px;padding:6px 9px" onclick="setFilaZapItemStatusV32('${esc(r.id)}','sent')">Enviada</button>
+        <button class="btn btn-ghost" style="font-size:9px;padding:6px 9px" onclick="setFilaZapItemStatusV32('${esc(r.id)}','error')">Erro</button>
+      </div>
     </div>`; };
+
+    const chipSummary=(chip,idx)=>{
+      const key=chipKey(chip), title=chipTitle(chip), sub=chipSub(chip);
+      const list=byDate.filter(r=>chipInstance(r)===key || chipName(r)===title || chipInstance(r)===title || chipName(r)===key);
+      const active=(state.chip===key || state.chip===title) || (state.chip==='all' && idx===0);
+      const limit=Number(chip.daily_limit || 120) || 120;
+      const waiting=list.filter(r=>statusLabel(r.status)==='Não enviada').length;
+      const queued=list.filter(r=>statusLabel(r.status)==='Em fila').length;
+      const sent=list.filter(r=>statusLabel(r.status)==='Enviada').length;
+      const err=list.filter(r=>statusLabel(r.status)==='Erro').length;
+      return `<button type="button" class="chip-accordion ${active?'open':''}" onclick="setFilaZapChipV31('${esc(state.chip===key?'all':key)}')" style="width:100%;text-align:left;background:transparent;border:0;padding:0;color:inherit;cursor:pointer">
+        <div class="chip-accordion-header" style="border-left-color:${idx%2===0?'var(--accent)':'#4ab3ff'}">
+          <span class="chip-accordion-chevron">›</span>
+          <div style="flex:1;min-width:0"><div style="font-family:'DM Mono',monospace;font-size:11px;color:${idx%2===0?'var(--accent)':'#4ab3ff'};font-weight:800">${esc(title)}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px">${esc(sub || 'chip')}</div></div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);white-space:nowrap">(${list.length}/${limit} · ${waiting} aguardando · ${queued} fila · ${sent} enviados · ${err} erro)</div>
+        </div>
+      </button>`;
+    };
 
     const leftHtml=`<div class="zapLeft" id="zapLeft"><div class="zapLeft-inner">
       <div class="page-header" style="flex-shrink:0;padding:20px 20px 0">
         <div class="page-title">Fila <span>WhatsApp.</span></div>
-        <div class="page-sub" id="filaZapSub">// ${rows.length} lead(s) na fila final · visão por dia, chip e status</div>
+        <div class="page-sub" id="filaZapSub">// ${rows.length} lead(s) na fila final · selecione dia, chip e status</div>
       </div>
       <div style="padding:16px 20px;flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden">
-        <div class="card-title" style="flex-shrink:0">Selecionar empresas <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">— controle operacional da fila final</span></div>
+        <div class="card-title" style="flex-shrink:0">Conteúdo pronto para disparo <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400;margin-left:4px">— ações operacionais do envio</span></div>
         <div class="day-tabs" id="disparoDayTabs" style="flex-shrink:0">${dates.map(d=>`<button type="button" class="day-tab ${state.date===d?'active':''}" onclick="setFilaZapDateV31('${esc(d)}')">${esc(dayLabel(d))}${d===todayIso()?' <span style="color:var(--accent);font-size:8px">●</span>':''}<span class="day-count">${rows.filter(r=>r.scheduled_date===d).length}</span></button>`).join('')}</div>
         <div class="status-tabs" id="disparoStatusTabs" style="flex-shrink:0">${statuses.map(st=>`<button type="button" class="status-tab ${state.status===st?'active':''}" onclick="setFilaZapStatusV31('${esc(st)}')">${st==='all'?'Todos':esc(st)} <span>${countStatus(st)}</span></button>`).join('')}</div>
         <div class="stats-row" id="disparoStats" style="flex-shrink:0"><span>${selectedRows.length} exibindo</span><span>${countStatus('Não enviada')} não enviada</span><span>${countStatus('Em fila')} em fila</span><span>${countStatus('Enviada')} enviada</span></div>
@@ -1452,21 +1493,54 @@
       </div>
     </div></div>`;
 
-    const rightHtml=`<div class="zapRight" id="zapRight">${knownChips.length?knownChips.map((chip,idx)=>{
-      const key=chipKey(chip), title=chipTitle(chip), sub=chipSub(chip);
-      const list=byDate.filter(r=>chipInstance(r)===key || chipName(r)===title || chipInstance(r)===title || chipName(r)===key);
-      const open=(state.chip==='all' && idx===0) || state.chip===key || state.chip===title;
-      const limit=Number(chip.daily_limit || 120) || 120;
-      return `<div class="chip-accordion ${open?'open':''}">
-        <div class="chip-accordion-header" onclick="setFilaZapChipV31('${esc(open?'all':key)}')" style="border-left-color:${idx%2===0?'var(--accent)':'#4ab3ff'}">
-          <span class="chip-accordion-chevron">›</span>
-          <div style="flex:1;min-width:0"><div style="font-family:'DM Mono',monospace;font-size:11px;color:${idx%2===0?'var(--accent)':'#4ab3ff'};font-weight:800">${esc(title)}</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px">${esc(sub)}</div></div>
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);white-space:nowrap">(${list.length}/${limit} · ${list.filter(r=>statusLabel(r.status)==='Não enviada').length} aguardando · ${list.filter(r=>statusLabel(r.status)==='Erro').length} erro · ${list.filter(r=>statusLabel(r.status)==='Enviada').length} enviados)</div>
-        </div>
-        <div class="chip-accordion-body"><div class="chip-fila-scroll">${list.length?list.map(r=>leadRow(r,true)).join(''):`<div class="fila-empty">// nenhum lead neste chip para ${esc(dayLabel(state.date))}</div>`}</div></div>
-      </div>`; }).join(''):`<div class="fila-empty">// nenhum chip ativo encontrado</div>`}</div>`;
+    const rightHtml=`<div class="zapRight" id="zapRight"><div style="padding:14px 0 8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);border-bottom:1px solid var(--border)">&nbsp;&nbsp;Chips ativos · clique para filtrar</div>${knownChips.length?knownChips.map(chipSummary).join(''):`<div class="fila-empty">// nenhum chip ativo encontrado</div>`}</div>`;
 
     panel.innerHTML = `${leftHtml}<div style="width:1px;background:var(--border);flex-shrink:0;align-self:stretch"></div>${rightHtml}`;
+  }
+
+  async function setFilaZapItemStatusV32(id,status){
+    const c=db(); if(!c) return notify('// Supabase indisponível','err');
+    const now=new Date().toISOString();
+    const { data:item, error:readErr } = await c.from('pre_dispatch_items')
+      .select('id,lead_id,status,leads(company_name,phone,normalized_phone)')
+      .eq('user_id',uid()).eq('id',id).maybeSingle();
+    if(readErr) return notify('// erro ao ler item: '+readErr.message,'err');
+    if(!item?.id) return notify('// item não encontrado','warn');
+
+    const patch={ status, updated_at:now };
+    const { error } = await c.from('pre_dispatch_items').update(patch).eq('user_id',uid()).eq('id',id);
+    if(error) return notify('// erro ao atualizar status: '+error.message,'err');
+
+    if(item.lead_id){
+      const leadPatch = status==='sent'
+        ? { current_stage:'sent', current_status:'sent', updated_at:now }
+        : status==='queued'
+          ? { current_stage:'dispatch_queue', current_status:'queued', updated_at:now }
+          : status==='error'
+            ? { current_status:'error', updated_at:now }
+            : { updated_at:now };
+      await c.from('leads').update(leadPatch).eq('user_id',uid()).eq('id',item.lead_id);
+    }
+
+    if(status==='sent'){
+      const l=item.leads||{};
+      const normalized=String(l.normalized_phone || l.phone || '').replace(/\D/g,'');
+      if(normalized){
+        const { data:exists } = await c.from('sent_contacts').select('id').eq('user_id',uid()).eq('normalized_phone',normalized).limit(1);
+        if(!exists?.length){
+          await c.from('sent_contacts').insert({
+            user_id:uid(), lead_id:item.lead_id || null, company_name:l.company_name || null,
+            phone:l.phone || normalized, normalized_phone:normalized,
+            block_type:'already_sent', source:'dispatch_queue', reason:'', active:true,
+            dispatched_at:now, created_at:now, raw_payload:{ pre_dispatch_item_id:id }
+          });
+        }
+      }
+    }
+
+    notify(status==='sent'?'✓ marcado como enviado':status==='queued'?'✓ marcado em fila':'✓ status atualizado');
+    await renderFilaZapV317();
+    if(typeof window.updateSafeBadgesV31==='function') window.updateSafeBadgesV31();
   }
 
   function setOnlyPanel(panelId,label){
@@ -1509,6 +1583,12 @@
       #preEnvioList .pre-card-link,#preEnvioList .pre-sep,#preEnvioList .pre-chip-mini,#panel-fila-zap .pre-card-link,#panel-fila-zap .pre-sep{font-size:10px!important;line-height:1.25!important;text-decoration:none!important}
       .pre-card-link{background:none;border:0;padding:0;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700}.pre-site{color:var(--accent)!important}.pre-whatsapp{color:var(--ok)!important}.pre-card-link.muted{color:var(--muted)!important}.pre-sep{color:var(--muted);margin:0 3px}.pre-chip-mini{color:var(--muted);margin-left:8px;font-family:'DM Mono',monospace}
       #panel-fila-zap{padding:0!important;overflow:hidden!important;flex-direction:row!important;height:100vh!important;}
+      #panel-fila-zap .zapLeft{width:64%!important;min-width:0!important;height:100vh!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;}
+      #panel-fila-zap .zapLeft-inner{height:100%!important;display:flex!important;flex-direction:column!important;min-height:0!important;}
+      #panel-fila-zap .zapRight{width:36%!important;min-width:360px!important;height:100vh!important;overflow:auto!important;background:rgba(255,255,255,.015)!important;}
+      #panel-fila-zap .zap-empresa-list{overflow:auto!important;min-height:0!important;padding-bottom:80px!important;}
+      #panel-fila-zap .fila-actions .btn{white-space:nowrap!important;}
+      #panel-fila-zap .chip-accordion{display:block!important;border-bottom:1px solid var(--border)!important;}
       #panel-fila-zap .fila-zap-row.compact{border-radius:0;border-left:0;border-right:0;border-top:0;margin:0;padding:12px 16px;}
       #panel-fila-zap .fila-zap-status{font-family:'DM Mono',monospace;font-size:8px;border:1px solid var(--border2);border-radius:999px;padding:5px 8px;color:var(--text2);white-space:nowrap;}
       #panel-fila-zap .fila-zap-status.nao_enviada{color:var(--accent);border-color:rgba(184,240,89,.35);background:rgba(184,240,89,.08);}
@@ -1547,6 +1627,7 @@
   window.setFilaZapDateV31=setFilaZapDate;
   window.setFilaZapStatusV31=setFilaZapStatus;
   window.setFilaZapChipV31=setFilaZapChip;
+  window.setFilaZapItemStatusV32=setFilaZapItemStatusV32;
   window.setPreEnvioDateV31=setPreDate;
   window.setPreEnvioChipV31=setPreChip;
   window.preEnvioGoPageV31=goPage;
