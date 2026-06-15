@@ -111,7 +111,7 @@
     const sb = client(); if (!sb) return [];
     const { data, error } = await sb
       .from('whatsapp_instances')
-      .select('id,label,instance,active,status,connection_state,daily_limit,block_size,interval_seconds')
+      .select('id,chip_id,label,name,instance,active,status,connection_state,daily_limit,block_size,interval_seconds,block_size,interval_seconds')
       .eq('user_id', userId())
       .order('label', { ascending:true });
     if (error) { console.warn('[v31][chips]', error.message); return []; }
@@ -1078,7 +1078,7 @@
   async function fetchChips(){
     const c=db(); if(!c) return [];
     const { data, error } = await c.from('whatsapp_instances')
-      .select('id,label,instance,active,status,connection_state,daily_limit')
+      .select('id,chip_id,label,name,instance,active,status,connection_state,daily_limit,block_size,interval_seconds')
       .eq('user_id', uid())
       .eq('active', true)
       .order('label',{ascending:true});
