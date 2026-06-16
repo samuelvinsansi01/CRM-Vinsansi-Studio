@@ -6,7 +6,7 @@
    - Evita duplicate_identity no fluxo de ficha ao não forçar salvamento desnecessário. */
 (function(){
   'use strict';
-  const VERSION='20260616-v41-proxy-evolution-sem-cors';
+  const VERSION='20260616-v44-completar-agora-incompleto';
   const USER_ID_FALLBACK='c02fe973-4eb5-4036-9f8d-8787937e8b11';
   const state={validating:false,log:[],fila:{date:null,chip:'all',status:'all',lastData:null}};
 
@@ -39,7 +39,7 @@
   function loteNum(r){return Math.floor((Number(r?.position||1)-1)/30)+1;}
 
   function addStyle(){ if(document.getElementById('v39-style')) return; const st=document.createElement('style'); st.id='v39-style'; st.textContent=`
-    .v39-pre-tools{border:1px solid var(--border2);background:rgba(255,255,255,.025);border-radius:12px;padding:12px;margin:0 0 14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap}.v39-pre-tools .field-group{width:120px}.v39-pre-log{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);width:100%;line-height:1.45;max-height:92px;overflow:auto;border-top:1px dashed var(--border2);padding-top:8px;margin-top:2px}.v39-badge{display:inline-flex;border:1px solid var(--border2);border-radius:999px;padding:4px 8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--text2);white-space:nowrap}.v39-badge.ok{color:var(--ok);border-color:rgba(78,203,113,.35)}.v39-badge.warn{color:var(--warning);border-color:rgba(255,190,90,.35)}.v39-badge.err{color:var(--error);border-color:rgba(255,80,80,.35)}
+    .v39-pre-tools{border:1px solid var(--border2);background:rgba(255,255,255,.025);border-radius:12px;padding:12px;margin:0 0 14px;display:flex;gap:10px;align-items:end;flex-wrap:wrap}.v39-pre-tools .field-group{width:120px}.v39-pre-log{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);width:100%;line-height:1.45;max-height:92px;overflow:auto;border-top:1px dashed var(--border2);padding-top:8px;margin-top:2px}.v39-complete-summary{width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-top:6px}.v39-complete-card{border:1px solid var(--border2);border-radius:10px;background:rgba(255,255,255,.018);padding:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}.v39-complete-title{font-family:'Syne',sans-serif;font-size:12px;font-weight:800;color:var(--text)}.v39-complete-sub{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:3px}.v39-complete-count{font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)}.v39-complete-count.ok{color:var(--ok)}.v39-complete-count.warn{color:var(--warning)}.v39-complete-card .v39-btn{padding:6px 8px}.v39-badge{display:inline-flex;border:1px solid var(--border2);border-radius:999px;padding:4px 8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--text2);white-space:nowrap}.v39-badge.ok{color:var(--ok);border-color:rgba(78,203,113,.35)}.v39-badge.warn{color:var(--warning);border-color:rgba(255,190,90,.35)}.v39-badge.err{color:var(--error);border-color:rgba(255,80,80,.35)}
     #panel-fila-zap.v39-panel{padding:0!important;overflow:hidden!important;flex-direction:row!important;height:100vh!important;width:100%!important;max-width:none!important}.v39-left{flex:1;min-width:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}.v39-right{width:40%;min-width:390px;max-width:700px;height:100vh;overflow:auto;background:rgba(255,255,255,.018);border-left:1px solid var(--border)}.v39-body{padding:16px 20px 24px;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}.v39-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}.v39-tab{background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:7px;color:var(--text2);font-family:'DM Mono',monospace;font-size:9px;padding:7px 12px;cursor:pointer}.v39-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(184,240,89,.08)}.v39-list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px}.v39-empty{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-align:center;padding:44px 16px}.v39-card{display:flex;gap:14px;align-items:flex-start;justify-content:space-between;background:rgba(255,255,255,.018);border:1px solid var(--border2);border-radius:12px;padding:13px 14px}.v39-card.compact{border-radius:0;border-left:0;border-right:0;border-top:0;margin:0;padding:13px 16px;background:transparent}.v39-main{min-width:0;flex:1}.v39-lead-name,.v39-lead-name-link{font-family:'Syne',sans-serif;font-size:14px;line-height:1.22;font-weight:800;color:var(--text)!important;text-decoration:none}.v39-lead-name-link:hover{color:var(--accent)!important}.v39-meta{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:5px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}.v39-meta a{color:var(--accent);text-decoration:none}.v39-meta .zap{color:var(--ok);font-family:'Syne',sans-serif;font-weight:800;font-size:10px;background:none;border:0;padding:0;cursor:pointer}.v39-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;min-width:260px}.v39-btn{border:1px solid var(--border2);background:rgba(255,255,255,.025);border-radius:8px;color:var(--text2);font-family:'DM Mono',monospace;font-size:8px;padding:7px 9px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.v39-btn:hover{border-color:var(--accent);color:var(--accent)}.v39-btn.primary{background:var(--accent);color:#111;border-color:var(--accent);font-weight:900}.v39-btn.blue{border-color:rgba(74,179,255,.45);color:#4ab3ff}.v39-btn.danger{border-color:rgba(255,80,80,.45);color:#ff6b6b}.v39-status{display:inline-flex;border:1px solid var(--border2);border-radius:999px;padding:5px 8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--text2);white-space:nowrap}.v39-status.ready{color:var(--accent);border-color:rgba(184,240,89,.38)}.v39-status.queued{color:#4ab3ff;border-color:rgba(74,179,255,.38)}.v39-status.sent,.v39-status.responded,.v39-status.closed{color:var(--ok);border-color:rgba(78,203,113,.38)}.v39-status.error,.v39-status.rejected{color:var(--error);border-color:rgba(255,80,80,.38)}.v39-chip-head{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:13px 15px;border-bottom:1px solid var(--border);cursor:pointer}.v39-chip-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:900;color:var(--text)}.v39-chip-sub,.v39-chip-count{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)}.v39-chip-body{display:none}.v39-chip.open .v39-chip-body{display:block}.v39-dispatch-info{margin-top:7px;border-top:1px dashed var(--border2);padding-top:6px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}.v39-dispatch-info strong{color:var(--text2)}
     @media(max-width:900px){#panel-fila-zap.v39-panel{flex-direction:column!important;height:auto!important}.v39-left,.v39-right{height:auto!important;width:100%!important;min-width:0!important}}
   `; document.head.appendChild(st); }
@@ -49,9 +49,10 @@
   function addPreValidationTools(){ addStyle(); const list=document.getElementById('preEnvioList'); if(!list || document.getElementById('v39PreValidationTools')) return; const box=document.createElement('div'); box.id='v39PreValidationTools'; box.className='v39-pre-tools'; box.innerHTML=`
     <div class="field-group"><label>Meta válida/chip</label><input id="v39ValidateTarget" type="number" min="1" max="200" value="120"></div>
     <div class="field-group"><label>Delay validação</label><input id="v39ValidateDelay" type="number" min="1" max="300" value="30"></div>
-    <button class="btn btn-primary" id="v39ValidateBtn" onclick="validatePreEnvioDayV39()">Validar e completar 120 válidos</button>
-    <button class="btn btn-ghost" onclick="renderPreEnvioListV31 && renderPreEnvioListV31()">Atualizar lista</button>
-    <div class="v39-pre-log" id="v39PreValidationLog">// validação parada. Inválidos irão para Atribuição Instagram, não para Backlog.</div>`; list.parentNode.insertBefore(box,list); }
+    <button class="btn btn-primary" id="v39ValidateBtn" onclick="validatePreEnvioDayV39()">Validar/completar seleção</button>
+    <button class="btn btn-ghost" onclick="renderPreEnvioListV31 && renderPreEnvioListV31(); renderPreCompletionStatusV44 && renderPreCompletionStatusV44();">Atualizar lista</button>
+    <div class="v39-complete-summary" id="v39CompleteSummary"><div class="v39-empty" style="padding:10px">// carregando status dos chips...</div></div>
+    <div class="v39-pre-log" id="v39PreValidationLog">// validação parada. Inválidos irão para Atribuição Instagram, não para Backlog. Se faltar base, o chip fica incompleto até você importar mais leads e clicar em Completar agora.</div>`; list.parentNode.insertBefore(box,list); setTimeout(renderPreCompletionStatusV44,50); }
   const preObs=new MutationObserver(()=>setTimeout(addPreValidationTools,80));
   document.addEventListener('DOMContentLoaded',()=>{ addStyle(); addPreValidationTools(); preObs.observe(document.body,{childList:true,subtree:true}); });
   setInterval(addPreValidationTools,1500);
@@ -59,18 +60,193 @@
   function logPre(msg){ state.log.unshift(`${new Date().toLocaleTimeString('pt-BR')} · ${msg}`); state.log=state.log.slice(0,20); const el=document.getElementById('v39PreValidationLog'); if(el) el.innerHTML=state.log.map(esc).join('<br>'); }
 
   async function getChips(){ const c=sb(); if(!c) return []; const {data,error}=await c.from('whatsapp_instances').select('id,chip_id,label,name,instance,base_url,evolution_url,url,api_key,status,connection_state,active,daily_limit,block_size,interval_seconds').eq('user_id',uid()).eq('active',true).order('label',{ascending:true}); if(error){notify('Erro ao carregar chips: '+error.message,'err'); return [];} return data||[]; }
+
+  async function attributionAvailableCount(){
+    const c=sb(); if(!c) return 0;
+    const [a,b]=await Promise.all([
+      c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('current_stage','attribution_whatsapp'),
+      c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('current_stage','attribution_site')
+    ]);
+    return Number(a.count||0)+Number(b.count||0);
+  }
+  function isValidPreStatus(v){ return ['approved','ready_to_dispatch','queued','sent'].includes(String(v||'')); }
+  async function preChipStats(date, chip){
+    const rows=await getPreItems(date, chip.instance);
+    const valid=rows.filter(r=>isValidPreStatus(r.status)).length;
+    const retry=rows.filter(r=>String(r.status||'')==='validation_retry').length;
+    const error=rows.filter(r=>String(r.status||'')==='validation_error').length;
+    const invalid=rows.filter(r=>String(r.status||'').includes('invalid')).length;
+    return {rows,valid,retry,error,invalid,total:rows.length};
+  }
+  async function renderPreCompletionStatusV44(){
+    const el=document.getElementById('v39CompleteSummary'); if(!el) return;
+    const target=Math.max(1,Math.min(200,Number(document.getElementById('v39ValidateTarget')?.value||120)));
+    const date=currentPreDate(); const selected=currentPreChip();
+    const chips=(await getChips()).filter(ch=>selected==='all'||ch.instance===selected||ch.label===selected);
+    const available=await attributionAvailableCount();
+    if(!chips.length){ el.innerHTML='<div class="v39-empty" style="padding:10px">// nenhum chip ativo selecionado</div>'; return; }
+    const cards=[];
+    for(const chip of chips){
+      const st=await preChipStats(date,chip); const missing=Math.max(0,target-st.valid); const ok=missing===0;
+      const chipId=esc(chip.instance||chip.label||chip.id||''); const title=esc(chipTitle(chip));
+      cards.push(`<div class="v39-complete-card"><div><div class="v39-complete-title">${title}</div><div class="v39-complete-sub">${esc(dayLabel(date))} · total ${st.total} · inválidos ${st.invalid} · retry ${st.retry} · base disponível ${available}</div></div><div style="display:flex;align-items:center;gap:8px"><div class="v39-complete-count ${ok?'ok':'warn'}">${st.valid}/${target}${ok?'':' · faltam '+missing}</div>${ok?'':`<button class="v39-btn primary" onclick="completePreChipNowV44('${chipId}')">Completar agora</button>`}</div></div>`);
+    }
+    el.innerHTML=cards.join('');
+  }
+  async function completePreChipNowV44(chipInstance){
+    if(state.validating) return notify('Validação já está rodando.','warn');
+    const c=sb(); if(!c) return notify('Supabase indisponível','err');
+    const date=currentPreDate(); const target=Math.max(1,Math.min(200,Number(document.getElementById('v39ValidateTarget')?.value||120))); const delay=Math.max(0,Math.min(300,Number(document.getElementById('v39ValidateDelay')?.value||30)));
+    const chips=(await getChips()).filter(ch=>String(ch.instance||ch.label||ch.id)===String(chipInstance)||String(ch.label)===String(chipInstance));
+    if(!chips.length) return notify('Chip não encontrado para completar.','warn');
+    const chip=chips[0]; const stats=await preChipStats(date,chip); const missing=Math.max(0,target-stats.valid);
+    if(missing<=0){ logPre(`${chipTitle(chip)}: já está completo (${stats.valid}/${target})`); await renderPreCompletionStatusV44(); return; }
+    state.validating=true; document.getElementById('v39ValidateBtn')?.setAttribute('disabled','disabled');
+    logPre(`${chipTitle(chip)}: completar agora acionado · faltam ${missing} para ${target}`);
+    try{
+      const finalValid=await completeChip(date,chip,target,delay);
+      if(finalValid<target) logPre(`${chipTitle(chip)}: incompleto (${finalValid}/${target}). Importe novos leads e clique em Completar agora novamente.`);
+      else logPre(`${chipTitle(chip)}: completo (${finalValid}/${target})`);
+    }catch(e){ console.error('[v44][complete-now]',e); notify('Erro ao completar chip: '+(e.message||e),'err'); }
+    finally{ state.validating=false; document.getElementById('v39ValidateBtn')?.removeAttribute('disabled'); if(typeof window.renderPreEnvioListV31==='function') await window.renderPreEnvioListV31(); await renderPreCompletionStatusV44(); }
+  }
   async function getPreItems(date, chip='all'){ const c=sb(); if(!c) return []; let q=c.from('pre_dispatch_items').select('id,lead_id,user_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,raw_payload,updated_at').eq('user_id',uid()).eq('scheduled_date',date).order('chip_label',{ascending:true}).order('position',{ascending:true}); if(chip && chip!=='all') q=q.eq('chip_instance',chip); const {data,error}=await q; if(error){notify('Erro ao buscar pré-envio: '+error.message,'err'); return [];} const rows=data||[]; const ids=[...new Set(rows.map(r=>r.lead_id).filter(Boolean))]; let leads={}; if(ids.length){ const {data:leadRows,error:le}=await c.from('leads').select('*').eq('user_id',uid()).in('id',ids); if(le) console.warn('[v39][pre-leads]',le.message); (leadRows||[]).forEach(l=>leads[l.id]=l); } return rows.map(r=>({...r,lead:leads[r.lead_id]||{}})); }
   async function fetchAttributionLeads(limit, excludeIds=[]){ const c=sb(); if(!c) return []; async function by(stage,lim){ let q=c.from('leads').select('*').eq('user_id',uid()).eq('current_stage',stage).order('lead_score',{ascending:false}).order('created_at',{ascending:true}).limit(lim); if(excludeIds.length) q=q.not('id','in',`(${excludeIds.map(x=>`"${String(x).replace(/"/g,'')}"`).join(',')})`); const {data,error}=await q; if(error){console.warn('[v39][fetch-attr]',stage,error.message);return [];} return data||[]; } const [sem,com]=await Promise.all([by('attribution_whatsapp',limit+50),by('attribution_site',limit+50)]); const out=[]; let a=0,b=0; while(out.length<limit&&(a<sem.length||b<com.length)){ if(a<sem.length) out.push(sem[a++]); if(out.length<limit&&b<com.length) out.push(com[b++]); } return out.slice(0,limit); }
   async function insertPreItemForLead(lead, chip, date, pos){ const c=sb(); const row={user_id:uid(),lead_id:lead.id,chip_instance:chip.instance,chip_label:String(chip.label||chip.instance),scheduled_date:date,lead_type:leadTypeFromLead(lead),status:'review',position:pos||1,raw_payload:{origin_stage:lead.current_stage,generated_by:'v39_validation_replacement'}}; const {data,error}=await c.from('pre_dispatch_items').insert(row).select('id,lead_id,user_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,raw_payload,updated_at').maybeSingle(); if(error){console.warn('[v39][insert-pre]',error.message); return null;} await c.from('leads').update({current_stage:'pre_send',updated_at:now()}).eq('user_id',uid()).eq('id',lead.id); return {...data,lead}; }
   function chipConfig(chip){ return {url:String(chip.evolution_url||chip.base_url||chip.url||'').replace(/\/$/,''), instance:chip.instance, apiKey:chip.api_key}; }
-  async function validateNumber(chip, phone){ const cfg=chipConfig(chip); const p=normPhone(phone); if(!p||p.length<10) return {ok:true,exists:false,error:'número inválido'}; if(!cfg.url||!cfg.instance||!cfg.apiKey) return {ok:false,exists:false,error:'chip incompleto'}; const res=await fetch('/api/prospeccao/validar-numero',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numbers:[p],chipUrl:cfg.url,instance:cfg.instance,apikey:cfg.apiKey})}); const data=await res.json().catch(()=>({})); if(!res.ok) return {ok:false,exists:false,error:(data?.error||`HTTP ${res.status}`),data}; const item=Array.isArray(data)?data[0]:(data?.data?.[0]||data?.result?.[0]||data); const exists=!!(item?.exists ?? item?.existsWhatsapp ?? item?.isWhatsapp ?? item?.jid ?? item?.numberExists); return {ok:true,exists,item,data}; }
+  function isTransientValidationError(result){ const code=Number(result?.status||result?.code||0); const msg=String(result?.error||'').toLowerCase(); return code===408||code===429||code===500||code===502||code===503||code===504||code===524||msg.includes('timeout')||msg.includes('tempor')||msg.includes('failed to fetch')||msg.includes('abort')||msg.includes('cloudflare'); }
+  async function validateNumber(chip, phone, attempt=1){
+    const cfg=chipConfig(chip); const p=normPhone(phone);
+    if(!p||p.length<10) return {ok:true,exists:false,error:'número inválido',status:400,transient:false};
+    if(!cfg.url||!cfg.instance||!cfg.apiKey) return {ok:false,exists:false,error:'chip incompleto',status:400,transient:false};
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),25000);
+    try{
+      const res=await fetch('/api/prospeccao/validar-numero',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numbers:[p],chipUrl:cfg.url,instance:cfg.instance,apikey:cfg.apiKey,timeoutMs:22000}),signal:controller.signal});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok){ const error=(data?.error||`HTTP ${res.status}`); const out={ok:false,exists:false,error,status:res.status,code:res.status,data}; out.transient=isTransientValidationError(out); return out; }
+      const item=Array.isArray(data)?data[0]:(data?.data?.[0]||data?.result?.[0]||data);
+      const exists=!!(item?.exists ?? item?.existsWhatsapp ?? item?.isWhatsapp ?? item?.jid ?? item?.numberExists);
+      return {ok:true,exists,item,data,status:200,transient:false};
+    }catch(err){
+      const out={ok:false,exists:false,error:err?.name==='AbortError'?'timeout local da validação':(err?.message||'falha ao validar'),status:0,code:0,transient:true};
+      return out;
+    }finally{ clearTimeout(timer); }
+  }
   async function moveInvalidToInstagramAttribution(item, reason='invalid_whatsapp'){ const c=sb(); if(!c||!item?.lead_id) return; await c.from('leads').update({current_stage:'attribution_instagram',current_status:'whatsapp_invalid',status:'whatsapp_invalid',updated_at:now(),crm_data:{...(item.lead?.crm_data||{}),whatsapp_validation:{status:'invalid',reason,moved_to:'attribution_instagram',at:now()}}}).eq('user_id',uid()).eq('id',item.lead_id); await c.from('pre_dispatch_items').update({status:'invalid_whatsapp',validation_status:'invalid',validation_error:reason,validated_at:now(),updated_at:now(),raw_payload:{...(item.raw_payload||{}),v39_validation:{exists:false,reason,moved_to:'attribution_instagram',at:now()}}}).eq('user_id',uid()).eq('id',item.id); }
   async function approveValid(item){ const c=sb(); await c.from('pre_dispatch_items').update({status:'approved',validation_status:'valid',validated_at:now(),updated_at:now(),raw_payload:{...(item.raw_payload||{}),v39_validation:{exists:true,at:now()}}}).eq('user_id',uid()).eq('id',item.id); if(item.lead_id) await c.from('leads').update({current_stage:'pre_send_approved',current_status:'whatsapp_valid',status:'whatsapp_valid',updated_at:now()}).eq('user_id',uid()).eq('id',item.lead_id); }
-  async function completeChip(date, chip, target, delaySec){ const c=sb(); const chipName=chip.label||chip.instance; let rounds=0; while(rounds<600){ rounds++; let items=await getPreItems(date,chip.instance); let valid=items.filter(r=>['approved','ready_to_dispatch','queued','sent'].includes(String(r.status||''))); if(valid.length>=target){ logPre(`${chipName}: ${valid.length}/${target} válidos fechados`); return valid.length; } let candidate=items.find(r=>!['approved','ready_to_dispatch','queued','sent','invalid_whatsapp','invalid_phone'].includes(String(r.status||''))); if(!candidate){ const exclude=(await getPreItems(date,'all')).map(r=>r.lead_id).filter(Boolean); const next=(await fetchAttributionLeads(1,exclude))[0]; if(!next){ logPre(`${chipName}: sem leads na atribuição para completar (${valid.length}/${target})`); return valid.length; } const maxPos=Math.max(0,...items.map(r=>Number(r.position||0))); candidate=await insertPreItemForLead(next,chip,date,maxPos+1); if(!candidate){ logPre(`${chipName}: falha ao inserir reposição`); return valid.length; } logPre(`${chipName}: reposição adicionada → ${leadName(candidate.lead)}`); }
-      const phone=leadPhone(candidate.lead); logPre(`${chipName}: validando ${leadName(candidate.lead)} (${phone||'sem telefone'})`); const result=await validateNumber(chip,phone); if(!result.ok){ logPre(`${chipName}: erro de validação ${result.error}. Pausando chip.`); return valid.length; } if(result.exists){ await approveValid(candidate); logPre(`${chipName}: válido ✓ (${valid.length+1}/${target})`); } else { await moveInvalidToInstagramAttribution(candidate,'whatsapp_not_found'); logPre(`${chipName}: inválido → Atribuição Instagram`); }
+  async function markPreStatus(id,status,error=''){
+    const c=sb(); if(!c||!id) return;
+    const patch={status,validation_status:status,updated_at:now(),raw_payload:{v42_validation:{status,error,at:now()}}};
+    try{
+      const {data:current}=await c.from('pre_dispatch_items').select('raw_payload').eq('user_id',uid()).eq('id',id).maybeSingle();
+      patch.raw_payload={...(current?.raw_payload||{}),v42_validation:{status,error,at:now()}};
+    }catch(_){ }
+    const {error:err}=await c.from('pre_dispatch_items').update(patch).eq('user_id',uid()).eq('id',id);
+    if(err) console.warn('[v42][mark-pre-status]',err.message);
+  }
+  async function handleValidationResult(candidate, chip, chipName, result, target){
+    const phone=leadPhone(candidate.lead);
+    if(!result.ok){
+      if(isTransientValidationError(result)){
+        await markPreStatus(candidate.id,'validation_retry');
+        logPre(`${chipName}: erro temporário ${result.status||''} em ${leadName(candidate.lead)}. Marcado para retry no final da lista.`);
+        return 'temporary';
+      }
+      await markPreStatus(candidate.id,'validation_error');
+      logPre(`${chipName}: erro não temporário em ${leadName(candidate.lead)} (${result.error||result.status||'erro'}). Lead mantido para revisão.`);
+      return 'error';
+    }
+    if(result.exists){
+      await approveValid(candidate);
+      const items=await getPreItems(candidate.scheduled_date||currentPreDate(), chip.instance);
+      const valid=items.filter(r=>isValidPreStatus(r.status)).length;
+      logPre(`${chipName}: válido ✓ (${valid}/${target})`);
+      return 'valid';
+    }
+    await moveInvalidToInstagramAttribution(candidate,'whatsapp_not_found');
+    logPre(`${chipName}: inválido → Atribuição Instagram`);
+    return 'invalid';
+  }
+
+  async function retryTemporaryItems(date, chip, chipName, target, delaySec){
+    const maxAttempts=3;
+    for(let attempt=2; attempt<=maxAttempts; attempt++){
+      let items=await getPreItems(date,chip.instance);
+      let valid=items.filter(r=>isValidPreStatus(r.status));
+      if(valid.length>=target) return valid.length;
+      const pending=items.filter(r=>String(r.status||'')==='validation_retry');
+      if(!pending.length) return valid.length;
+      logPre(`${chipName}: retry ${attempt}/${maxAttempts} em ${pending.length} erro(s) temporário(s) após finalizar a lista.`);
+      await sleep(60000);
+      for(const candidate of pending){
+        items=await getPreItems(date,chip.instance);
+        valid=items.filter(r=>isValidPreStatus(r.status));
+        if(valid.length>=target) return valid.length;
+        const phone=leadPhone(candidate.lead);
+        logPre(`${chipName}: retry ${attempt}/${maxAttempts} · ${leadName(candidate.lead)} (${phone||'sem telefone'})`);
+        const result=await validateNumber(chip,phone,attempt);
+        const outcome=await handleValidationResult(candidate,chip,chipName,result,target);
+        if(outcome==='temporary' && attempt===maxAttempts){
+          await markPreStatus(candidate.id,'validation_error');
+          logPre(`${chipName}: erro temporário persistente em ${leadName(candidate.lead)}. Marcado como erro; validação continua.`);
+        }
+        if(delaySec>0) await sleep(delaySec*1000);
+      }
+    }
+    const items=await getPreItems(date,chip.instance);
+    return items.filter(r=>isValidPreStatus(r.status)).length;
+  }
+
+  async function completeChip(date, chip, target, delaySec){
+    const c=sb();
+    const chipName=chip.label||chip.instance;
+    let rounds=0;
+    while(rounds<600){
+      rounds++;
+      let items=await getPreItems(date,chip.instance);
+      let valid=items.filter(r=>isValidPreStatus(r.status));
+      if(valid.length>=target){
+        logPre(`${chipName}: ${valid.length}/${target} válidos fechados`);
+        return valid.length;
+      }
+      let candidate=items.find(r=>!['approved','ready_to_dispatch','queued','sent','invalid_whatsapp','invalid_phone','validation_retry','validation_error'].includes(String(r.status||'')));
+      if(!candidate){
+        const retryCount=items.filter(r=>String(r.status||'')==='validation_retry').length;
+        if(retryCount){
+          const afterRetry=await retryTemporaryItems(date,chip,chipName,target,delaySec);
+          if(afterRetry>=target){
+            logPre(`${chipName}: ${afterRetry}/${target} válidos fechados após retry`);
+            return afterRetry;
+          }
+          items=await getPreItems(date,chip.instance);
+          valid=items.filter(r=>isValidPreStatus(r.status));
+        }
+        const exclude=(await getPreItems(date,'all')).map(r=>r.lead_id).filter(Boolean);
+        const next=(await fetchAttributionLeads(1,exclude))[0];
+        if(!next){
+          logPre(`${chipName}: sem leads na atribuição para completar (${valid.length}/${target}). Status: incompleto; importe novos leads e use Completar agora.`);
+          await renderPreCompletionStatusV44();
+          return valid.length;
+        }
+        const maxPos=Math.max(0,...items.map(r=>Number(r.position||0)));
+        candidate=await insertPreItemForLead(next,chip,date,maxPos+1);
+        if(!candidate){
+          logPre(`${chipName}: falha ao inserir reposição`);
+          return valid.length;
+        }
+        logPre(`${chipName}: reposição adicionada → ${leadName(candidate.lead)}`);
+      }
+      const phone=leadPhone(candidate.lead);
+      logPre(`${chipName}: validando ${leadName(candidate.lead)} (${phone||'sem telefone'})`);
+      const result=await validateNumber(chip,phone,1);
+      await handleValidationResult(candidate,chip,chipName,result,target);
       if(delaySec>0) await sleep(delaySec*1000);
-    } return 0; }
-  async function validatePreEnvioDayV39(){ if(state.validating) return notify('Validação já está rodando.','warn'); const c=sb(); if(!c) return notify('Supabase indisponível','err'); const date=currentPreDate(); const selected=currentPreChip(); const target=Math.max(1,Math.min(200,Number(document.getElementById('v39ValidateTarget')?.value||120))); const delay=Math.max(0,Math.min(300,Number(document.getElementById('v39ValidateDelay')?.value||30))); const chips=(await getChips()).filter(ch=>selected==='all'||ch.instance===selected||ch.label===selected); if(!chips.length) return notify('Nenhum chip ativo para validar.','warn'); state.validating=true; document.getElementById('v39ValidateBtn')?.setAttribute('disabled','disabled'); logPre(`Iniciando validação de ${dayLabel(date)} · ${chips.length} chip(s) · meta ${target}/chip`); try{ for(const chip of chips){ await completeChip(date,chip,target,delay); } notify('✓ validação concluída'); }catch(e){ console.error('[v39][validate-pre]',e); notify('Erro na validação: '+(e.message||e),'err'); } finally { state.validating=false; document.getElementById('v39ValidateBtn')?.removeAttribute('disabled'); if(typeof window.renderPreEnvioListV31==='function') window.renderPreEnvioListV31(); /* mantém o usuário no Pré-envio; não redireciona para a Fila WhatsApp em erro de validação */ } }
+    }
+    return 0;
+  }
+
+  async function validatePreEnvioDayV39(){ if(state.validating) return notify('Validação já está rodando.','warn'); const c=sb(); if(!c) return notify('Supabase indisponível','err'); const date=currentPreDate(); const selected=currentPreChip(); const target=Math.max(1,Math.min(200,Number(document.getElementById('v39ValidateTarget')?.value||120))); const delay=Math.max(0,Math.min(300,Number(document.getElementById('v39ValidateDelay')?.value||30))); const chips=(await getChips()).filter(ch=>selected==='all'||ch.instance===selected||ch.label===selected); if(!chips.length) return notify('Nenhum chip ativo para validar.','warn'); state.validating=true; document.getElementById('v39ValidateBtn')?.setAttribute('disabled','disabled'); logPre(`Iniciando validação de ${dayLabel(date)} · ${chips.length} chip(s) · meta ${target}/chip`); try{ for(const chip of chips){ const finalValid=await completeChip(date,chip,target,delay); if(finalValid<target) logPre(`${chipTitle(chip)}: incompleto (${finalValid}/${target}). Importe novos leads e clique em Completar agora.`); } await renderPreCompletionStatusV44(); notify('✓ validação concluída'); }catch(e){ console.error('[v39][validate-pre]',e); notify('Erro na validação: '+(e.message||e),'err'); } finally { state.validating=false; document.getElementById('v39ValidateBtn')?.removeAttribute('disabled'); if(typeof window.renderPreEnvioListV31==='function') window.renderPreEnvioListV31(); /* mantém o usuário no Pré-envio; não redireciona para a Fila WhatsApp em erro de validação */ } }
 
   async function safeFetchFilaData(){ const c=sb(); if(!c) return {items:[],chips:[],error:new Error('Supabase indisponível')}; const statusList=['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','sent','enviado','responded','respondida','not_responded','nao_respondida','refused','recusada','rejected','closed','fechada','error','erro','no_response']; const itemQ=c.from('pre_dispatch_items').select('id,lead_id,user_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,raw_payload,updated_at').eq('user_id',uid()).in('status',statusList).order('scheduled_date',{ascending:true}).order('chip_label',{ascending:true}).order('position',{ascending:true}); const chipQ=c.from('whatsapp_instances').select('id,chip_id,label,name,instance,base_url,evolution_url,url,api_key,status,connection_state,active,daily_limit,block_size,interval_seconds').eq('user_id',uid()).eq('active',true).order('label',{ascending:true}); const [it,ch]=await Promise.all([itemQ,chipQ]); if(it.error) return {items:[],chips:[],error:it.error}; const rows=it.data||[]; const ids=[...new Set(rows.map(r=>r.lead_id).filter(Boolean))]; const leads={}; if(ids.length){ const {data,error}=await c.from('leads').select('*').eq('user_id',uid()).in('id',ids); if(error) console.warn('[v39][fila-leads]',error.message); (data||[]).forEach(l=>leads[l.id]=l); } if(ch.error) console.warn('[v39][fila-chips]',ch.error.message); return {items:rows.map(r=>({...r,lead:leads[r.lead_id]||{}})),chips:ch.data||[],error:null}; }
   function selectedRows(){ const rows=state.fila.lastData?.items||[]; return rows.filter(r=>{ if(state.fila.date&&r.scheduled_date!==state.fila.date) return false; if(state.fila.chip!=='all'&&rowChipKey(r)!==state.fila.chip&&rowChipName(r)!==state.fila.chip) return false; if(state.fila.status!=='all'&&statusKey(r.status)!==state.fila.status) return false; return true; }); }
@@ -83,6 +259,8 @@
 
   // Exports / overrides finais
   window.validatePreEnvioDayV39=validatePreEnvioDayV39;
+  window.renderPreCompletionStatusV44=renderPreCompletionStatusV44;
+  window.completePreChipNowV44=completePreChipNowV44;
   window.renderFilaZap=renderFilaZapV39; window.renderFilaZapV39=renderFilaZapV39; window.renderFilaZapV33=renderFilaZapV39; window.renderFilaZapV32=renderFilaZapV39;
   window.setFilaZapDateV39=setDate; window.setFilaZapDateV33=setDate; window.setFilaZapDateV31=setDate;
   window.setFilaZapStatusV39=setStatus; window.setFilaZapStatusV33=setStatus; window.setFilaZapStatusV31=setStatus;

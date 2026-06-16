@@ -3,8 +3,8 @@
  * Body: { numbers: ["5511999999999"], chipUrl: "...", instance: "...", apikey: "..." }
  * Retorna: [{ number, exists, jid }]
  *
- * O frontend chama diretamente a Evolution API, mas essa rota existe como proxy
- * para evitar expor a apikey no client e contornar CORS caso necessário.
+ * Proxy serverless: o frontend chama a Vercel, e a Vercel chama a Evolution.
+ * Evita CORS, evita expor a apikey e controla timeout para não virar 524.
  */
 
 export default async function handler(req, res) {
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')   return res.status(405).json({ error: 'Method not allowed' });
 
-  const { numbers, chipUrl, instance, apikey } = req.body || {};
+  const { numbers, chipUrl, instance, apikey, timeoutMs } = req.body || {};
 
   if (!numbers || !Array.isArray(numbers) || !numbers.length)
     return res.status(400).json({ error: 'numbers é obrigatório e deve ser um array' });
@@ -23,11 +23,15 @@ export default async function handler(req, res) {
 
   try {
     const url = `${chipUrl.replace(/\/$/, '')}/chat/whatsappNumbers/${instance}`;
+    const controller = new AbortController();
+    const timeout = Math.max(5000, Math.min(25000, Number(timeoutMs || 22000)));
+    const timer = setTimeout(() => controller.abort(), timeout);
     const evoRes = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', apikey },
       body: JSON.stringify({ numbers }),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
 
     if (!evoRes.ok) {
       const errText = await evoRes.text();
@@ -38,6 +42,9 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
   } catch (err) {
     console.error('validar-numero error:', err);
-    return res.status(500).json({ error: 'Erro ao conectar com a Evolution API' });
+    if (err?.name === 'AbortError') {
+      return res.status(504).json({ error: 'Timeout temporário ao validar na Evolution. Tente novamente.', transient: true });
+    }
+    return res.status(500).json({ error: 'Erro ao conectar com a Evolution API', transient: true });
   }
 }
