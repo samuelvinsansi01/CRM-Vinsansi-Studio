@@ -52,6 +52,17 @@
     if (!v) return '—';
     try { return new Date(v).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }); } catch(_) { return v; }
   }
+  function channelLabel(ch){ return ({whatsapp:'WhatsApp',instagram:'Instagram',email:'Email',manual:'Manual'})[String(ch||'').toLowerCase()] || (ch || '—'); }
+  function channelIcon(ch){ return ({whatsapp:'💬',instagram:'📸',email:'✉️',manual:'✍️'})[String(ch||'').toLowerCase()] || '•'; }
+  function channelsFromRow(r){
+    const arr = Array.isArray(r.sent_channels) ? r.sent_channels : [];
+    const out = [...arr];
+    if (r.last_channel && !out.includes(r.last_channel)) out.unshift(r.last_channel);
+    if (r.whatsapp_sent_at && !out.includes('whatsapp')) out.push('whatsapp');
+    if (r.instagram_sent_at && !out.includes('instagram')) out.push('instagram');
+    if (r.email_sent_at && !out.includes('email')) out.push('email');
+    return out.filter(Boolean);
+  }
   function notifyMsg(msg,type){ if (typeof window.notify === 'function') window.notify(msg,type||''); else console.log(msg); }
 
   async function fetchRows(){
@@ -59,7 +70,7 @@
     if (!c || !user) return [];
     const q = (document.getElementById('sentContactsSearch')?.value || '').trim().toLowerCase();
     let query = c.from('base_permanente')
-      .select('id,user_id,company_name,normalized_phone,website,instagram_url,maps_url,street,city,state,country_code,category,category_name,categories,rating,reviews_count,status,notes,raw_payload,created_at,updated_at')
+      .select('id,user_id,company_name,normalized_phone,website,instagram_url,maps_url,street,city,state,country_code,category,category_name,categories,rating,reviews_count,status,notes,raw_payload,last_channel,source_account,source_instance,last_contact_at,whatsapp_sent_at,instagram_sent_at,email_sent_at,manual_sent_at,sent_channels,last_event_type,last_event_status,created_at,updated_at')
       .eq('user_id', user)
       .order('updated_at', { ascending:false });
     if (currentStatus !== 'all') query = query.eq('status', currentStatus);
@@ -74,7 +85,7 @@
       return (old.data || []).map(r => ({
         id:r.id, company_name:r.company_name, normalized_phone:r.normalized_phone || r.phone,
         website:'', instagram_url:'', maps_url:'', street:'', city:'', state:'', country_code:'', category:'', category_name:'', categories:[], rating:null, reviews_count:null, status:'ja_enviado', notes:r.reason || r.source || '', raw_payload:r.raw_payload || {},
-        created_at:r.created_at, updated_at:r.dispatched_at || r.created_at, _fallback:true
+        created_at:r.created_at, updated_at:r.dispatched_at || r.created_at, last_channel:'whatsapp', source_account:r.source||'sent_contacts', last_contact_at:r.dispatched_at||r.created_at, whatsapp_sent_at:r.dispatched_at||r.created_at, sent_channels:['whatsapp'], _fallback:true
       }));
     }
     let rows = data || [];
@@ -94,6 +105,8 @@
         <div class="field-group"><label>Instagram</label><input id="bpInstagram" value="${esc(row.instagram_url||'')}" placeholder="@perfil ou link"></div>
         <div class="field-group"><label>Google Maps</label><input id="bpMaps" value="${esc(row.maps_url||'')}" placeholder="link do Google Maps"></div>
         <div class="field-group"><label>Status</label><select id="bpStatus">${STATUS_OPTIONS.map(st=>`<option value="${st}" ${String(row.status||'ja_enviado')===st?'selected':''}>${STATUS_LABELS[st]}</option>`).join('')}</select></div>
+        <div class="field-group"><label>Canal do último envio</label><select id="bpLastChannel"><option value="">Não informado</option>${['whatsapp','instagram','email','manual'].map(ch=>`<option value="${ch}" ${String(row.last_channel||'')===ch?'selected':''}>${channelLabel(ch)}</option>`).join('')}</select></div>
+        <div class="field-group"><label>Conta/chip/perfil</label><input id="bpSourceAccount" value="${esc(row.source_account||row.source_instance||'')}" placeholder="Chip 8457, @perfil, etc."></div>
         <div class="field-group"><label>Endereço</label><input id="bpStreet" value="${esc(row.street||'')}" placeholder="Rua, avenida, número"></div>
         <div class="field-group"><label>Cidade</label><input id="bpCity" value="${esc(row.city||'')}" placeholder="Cidade"></div>
         <div class="field-group"><label>Estado</label><input id="bpState" value="${esc(row.state||'')}" placeholder="Estado"></div>
@@ -121,6 +134,8 @@
         <div class="empresa-nome">${esc(r.company_name || 'Sem nome')}</div>
         <div class="empresa-meta" style="gap:8px;flex-wrap:wrap">
           <span style="color:${statusColor};border:1px solid rgba(255,255,255,.12);border-radius:4px;padding:2px 7px">${esc(label)}</span>
+          ${channelsFromRow(r).map(ch=>`<span style="border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:2px 7px">${channelIcon(ch)} ${esc(channelLabel(ch))}</span>`).join('')}
+          ${r.last_contact_at?`<span>Último contato: ${fmtDate(r.last_contact_at)}</span>`:''}
           ${r.normalized_phone?`<span>📱 ${esc(r.normalized_phone)}</span>`:''}
           ${r.website?`<span>🌐 ${esc(r.website)}</span>`:''}
           ${r.instagram_url?`<span>📸 ${esc(r.instagram_url)}</span>`:''}
@@ -186,9 +201,22 @@
       rating:Number(document.getElementById('bpRating')?.value || '') || null,
       reviews_count:Number(String(document.getElementById('bpReviews')?.value || '').replace(/\D/g,'')) || null,
       status:document.getElementById('bpStatus')?.value || 'ja_enviado',
+      last_channel:document.getElementById('bpLastChannel')?.value || null,
+      source_account:document.getElementById('bpSourceAccount')?.value?.trim() || null,
+      source_instance:document.getElementById('bpSourceAccount')?.value?.trim() || null,
       notes:document.getElementById('bpNotes')?.value?.trim() || null,
       updated_at:todayIso()
     };
+    if(row.last_channel){
+      row.last_contact_at = row.last_contact_at || todayIso();
+      row.sent_channels = [row.last_channel];
+      if(row.last_channel === 'whatsapp') row.whatsapp_sent_at = row.last_contact_at;
+      if(row.last_channel === 'instagram') row.instagram_sent_at = row.last_contact_at;
+      if(row.last_channel === 'email') row.email_sent_at = row.last_contact_at;
+      if(row.last_channel === 'manual') row.manual_sent_at = row.last_contact_at;
+      row.last_event_type = 'sent';
+      row.last_event_status = 'sent';
+    }
     if(!row.company_name && !row.normalized_phone && !row.website && !row.instagram_url && !row.maps_url){
       return notifyMsg('// preencha pelo menos empresa, telefone, site, Instagram ou Maps','err');
     }

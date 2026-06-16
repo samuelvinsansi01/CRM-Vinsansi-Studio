@@ -1246,7 +1246,7 @@
     const isFinal=r.status==='ready_to_dispatch';
     const isApproved=r.status==='approved';
     const siteLabel=String(l.website||'').trim()?`<a href="${esc(normalizeUrl(l.website))}" target="_blank" rel="noopener noreferrer" class="pre-card-link pre-site">Site</a>`:`<span class="pre-card-link muted">Sem site</span>`;
-    return `<div class="empresa-card pre-card-item" data-pre-id="${esc(r.id)}">
+    return `<div class="empresa-card pre-card-item" data-pre-id="${esc(r.id)}" data-lead-id="${esc(r.lead_id||'')}">
       <div class="empresa-info">
         <div class="empresa-nome pre-card-name">${leadNameHtml(l)}</div>
         <div class="empresa-meta pre-card-actions-line">
@@ -1548,6 +1548,9 @@
           notes:'salvo automaticamente pela fila WhatsApp',
           updated_at:now
         }, { onConflict:'user_id,normalized_phone' });
+        if (typeof window.recordContactEventV38 === 'function') {
+          await window.recordContactEventV38({ lead:l, lead_id:item.lead_id, normalized_phone:normalized, channel:'whatsapp', source_account:item.chip_label||item.chip_instance||'fila_whatsapp', source_instance:item.chip_instance||'', event_type:'sent', status:'sent', sent_at:now, metadata:{pre_dispatch_item_id:id, origem:'safe-weekly-flow-v31'} });
+        }
       } catch(baseErr) { console.warn('[base_permanente][fila-sent-warning]', baseErr?.message || baseErr); }
     }
 
@@ -1735,7 +1738,7 @@
   function renderAtribNormalCard(l){
     const isSite=atribTabFinal==='com-site';
     const chipColor=isSite?'#5bb8f5':'var(--ok)';
-    return `<div class="empresa-card atrib-vfinal-card">
+    return `<div class="empresa-card atrib-vfinal-card" data-lead-id="${esc(l.id)}">
       <div class="empresa-info">
         <div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div>
         <div class="empresa-meta atrib-vfinal-meta">
@@ -1751,7 +1754,7 @@
   }
 
   function renderAtribInstagramCard(l){
-    return `<div class="empresa-card atrib-vfinal-card atrib-insta-approve-card" id="atrib-insta-card-${esc(l.id)}">
+    return `<div class="empresa-card atrib-vfinal-card atrib-insta-approve-card" id="atrib-insta-card-${esc(l.id)}" data-lead-id="${esc(l.id)}">
       <div class="empresa-info">
         <div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div>
         <div class="empresa-meta atrib-vfinal-meta">
@@ -1831,10 +1834,10 @@
     const dayCounts={}; for(const d of dates) dayCounts[d]=await countInstagramDayFinal(d);
     const tabs=`<div class="insta-final-tabs"><button class="day-tab ${instaTabFinal==='backlog'?'active':''}" onclick="setInstagramTabFinalV31('backlog')">📦 Backlog (${backlog.length})</button>${dates.map(d=>`<button class="day-tab ${instaTabFinal===d?'active':''}" onclick="setInstagramTabFinalV31('${d}')">${labelDate(d)}${dayCounts[d]?` <span>${dayCounts[d]}</span>`:''}</button>`).join('')}</div>`;
     if(instaTabFinal==='backlog'){
-      panel.innerHTML=`<div class="page-header"><div><div class="page-title">Instagram <span>Fila.</span></div><div class="page-sub">// backlog com Instagram confirmado · aloque para o dia selecionado</div></div></div>${tabs}<div class="card"><div class="card-title">Backlog <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">· ${backlog.length} empresas aguardando</span></div><div class="ext-list">${backlog.length?backlog.map(l=>`<div class="empresa-card atrib-vfinal-card"><div class="empresa-info"><div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div><div class="empresa-meta atrib-vfinal-meta"><span class="atrib-vfinal-badge insta">📸 INSTAGRAM</span>${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}</div></div><div class="empresa-actions"><button class="btn btn-primary insta-btn" onclick="allocateInstagramLeadFinalV31('${esc(l.id)}')">→ Alocar</button></div></div>`).join(''):`<div style="padding:36px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// backlog vazio</div>`}</div></div>`;
+      panel.innerHTML=`<div class="page-header"><div><div class="page-title">Instagram <span>Fila.</span></div><div class="page-sub">// backlog com Instagram confirmado · aloque para o dia selecionado</div></div></div>${tabs}<div class="card"><div class="card-title">Backlog <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">· ${backlog.length} empresas aguardando</span></div><div class="ext-list">${backlog.length?backlog.map(l=>`<div class="empresa-card atrib-vfinal-card" data-lead-id="${esc(l.id)}"><div class="empresa-info"><div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div><div class="empresa-meta atrib-vfinal-meta"><span class="atrib-vfinal-badge insta">📸 INSTAGRAM</span>${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}</div></div><div class="empresa-actions"><button class="btn btn-primary insta-btn" onclick="allocateInstagramLeadFinalV31('${esc(l.id)}')">→ Alocar</button></div></div>`).join(''):`<div style="padding:36px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// backlog vazio</div>`}</div></div>`;
     } else {
       const rows=await fetchInstagramDayFinal(instaTabFinal);
-      panel.innerHTML=`<div class="page-header"><div><div class="page-title">Instagram <span>Fila.</span></div><div class="page-sub">// dia ${labelDate(instaTabFinal)} · clique no nome para abrir o perfil do Google</div></div></div>${tabs}<div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><div class="card-title" style="margin:0">${labelDate(instaTabFinal)} <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">· ${rows.length} leads</span></div><button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:7px 12px" onclick="clearInstagramDayFinalV31('${instaTabFinal}')">↩ Limpar dia e voltar ao backlog</button></div><div class="ext-list">${rows.length?rows.map(it=>{ const l=it.leads||{}; return `<div class="empresa-card atrib-vfinal-card"><div class="empresa-info"><div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div><div class="empresa-meta atrib-vfinal-meta"><span class="atrib-vfinal-badge insta">📸 INSTAGRAM</span>${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}</div></div></div>`; }).join(''):`<div style="padding:36px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// nenhum lead alocado neste dia</div>`}</div></div>`;
+      panel.innerHTML=`<div class="page-header"><div><div class="page-title">Instagram <span>Fila.</span></div><div class="page-sub">// dia ${labelDate(instaTabFinal)} · clique no nome para abrir o perfil do Google</div></div></div>${tabs}<div class="card"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><div class="card-title" style="margin:0">${labelDate(instaTabFinal)} <span style="font-size:10px;color:var(--muted);font-weight:400;text-transform:none">· ${rows.length} leads</span></div><button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:7px 12px" onclick="clearInstagramDayFinalV31('${instaTabFinal}')">↩ Limpar dia e voltar ao backlog</button></div><div class="ext-list">${rows.length?rows.map(it=>{ const l=it.leads||{}; return `<div class="empresa-card atrib-vfinal-card" data-lead-id="${esc(l.id)}"><div class="empresa-info"><div class="empresa-nome atrib-vfinal-name">${nameLink(l,'atrib-vfinal-name-link')}</div><div class="empresa-meta atrib-vfinal-meta"><span class="atrib-vfinal-badge insta">📸 INSTAGRAM</span>${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}</div></div></div>`; }).join(''):`<div style="padding:36px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// nenhum lead alocado neste dia</div>`}</div></div>`;
     }
     applyFinalStyles();
     const b=document.getElementById('badge-instagram'); if(b) b.textContent=String(backlog.length);
@@ -1931,7 +1934,7 @@
   }
   function normalCard(l){
     const isSite=atribTab==='com-site';
-    return `<div class="empresa-card atrib-clean-card">
+    return `<div class="empresa-card atrib-clean-card" data-lead-id="${esc(l.id)}">
       <div class="empresa-info">
         <div class="empresa-nome atrib-clean-name">${nameLink(l)}</div>
         <div class="empresa-meta atrib-clean-meta">
@@ -1945,7 +1948,7 @@
     </div>`;
   }
   function instaCard(l){
-    return `<div class="empresa-card atrib-clean-card atrib-insta-card" id="atrib-insta-card-${esc(l.id)}">
+    return `<div class="empresa-card atrib-clean-card atrib-insta-card" id="atrib-insta-card-${esc(l.id)}" data-lead-id="${esc(l.id)}">
       <div class="empresa-info">
         <div class="empresa-nome atrib-clean-name">${nameLink(l)}</div>
         <div class="empresa-meta atrib-clean-meta">

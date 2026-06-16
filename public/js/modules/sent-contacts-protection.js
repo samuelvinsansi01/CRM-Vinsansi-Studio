@@ -101,6 +101,8 @@
         try { instagram = (new URL(instagram.startsWith('http') ? instagram : 'https://' + instagram)).pathname.split('/').filter(Boolean)[0] || instagram; } catch(_) {}
       }
       let maps = normalizeUrl(payload.maps_url || payload.googleUrl || payload.google_url || payload.rawPayload?.maps_url || payload.raw_payload?.maps_url || '');
+      const sentChannel = String(payload.channel || payload.sent_channel || payload.source_channel || 'whatsapp').toLowerCase();
+      const sentAt = row.dispatched_at || new Date().toISOString();
       const baseRow = {
         user_id: userId,
         company_name: row.company_name,
@@ -110,9 +112,21 @@
         maps_url: maps || null,
         status: 'ja_enviado',
         notes: payload.notes || payload.reason || 'salvo automaticamente ao marcar/enviar',
+        last_channel: sentChannel,
+        source_account: payload.source_account || payload.source || null,
+        source_instance: payload.source_instance || payload.instance || null,
+        last_contact_at: sentAt,
+        whatsapp_sent_at: sentChannel === 'whatsapp' ? sentAt : null,
+        instagram_sent_at: sentChannel === 'instagram' ? sentAt : null,
+        email_sent_at: sentChannel === 'email' ? sentAt : null,
+        manual_sent_at: sentChannel === 'manual' ? sentAt : null,
+        sent_channels: [sentChannel],
+        last_event_type: 'sent',
+        last_event_status: 'sent',
         updated_at: new Date().toISOString()
       };
       await sbClient.from('base_permanente').upsert(baseRow, { onConflict:'user_id,normalized_phone' });
+      if (typeof window.recordContactEventV38 === 'function') { await window.recordContactEventV38({ ...payload, lead_id: row.lead_id, company_name: row.company_name, normalized_phone: normalizedPhone, phone: row.phone, channel: sentChannel, source_account: baseRow.source_account, source_instance: baseRow.source_instance, event_type:'sent', status:'sent', sent_at: sentAt, metadata:{ origem:'sent-contacts-protection' } }); }
     } catch(e) { console.warn('[base_permanente][mark-sent-warning]', e?.message || e); }
 
     try {
