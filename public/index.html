@@ -869,6 +869,111 @@
     </div>
   </div>
 
+  <!-- INFRAESTRUTURA OPERACIONAL V46 -->
+  <div class="card infra-v46-card" style="margin-top:16px">
+    <div class="infra-v46-head">
+      <div>
+        <div class="card-title">Infraestrutura operacional</div>
+        <div class="infra-v46-sub">Sistema — produção · Vercel + Supabase + Evolution API + Cloudflare Tunnel</div>
+      </div>
+      <div class="infra-v46-pill">produção</div>
+    </div>
+
+    <div class="infra-v46-grid">
+      <div class="infra-v46-mini"><span>Painel</span><strong>painel.samuelvinsansi.com.br</strong></div>
+      <div class="infra-v46-mini"><span>Evolution</span><strong>evolution.samuelvinsansi.com.br</strong></div>
+      <div class="infra-v46-mini"><span>Evolution local</span><strong>localhost:8080</strong></div>
+      <div class="infra-v46-mini"><span>Versão Evolution</span><strong>1.8.2</strong></div>
+    </div>
+
+    <details class="infra-v46-details" open>
+      <summary>🌐 Domínios oficiais</summary>
+      <div class="infra-v46-body">
+        <div class="infra-v46-row"><span>Painel</span><a href="https://painel.samuelvinsansi.com.br" target="_blank" rel="noopener">https://painel.samuelvinsansi.com.br</a></div>
+        <div class="infra-v46-row"><span>Evolution</span><a href="https://evolution.samuelvinsansi.com.br" target="_blank" rel="noopener">https://evolution.samuelvinsansi.com.br</a></div>
+        <div class="infra-v46-row"><span>Manager</span><a href="https://evolution.samuelvinsansi.com.br/manager" target="_blank" rel="noopener">https://evolution.samuelvinsansi.com.br/manager</a></div>
+      </div>
+    </details>
+
+    <details class="infra-v46-details">
+      <summary>🗄 Supabase</summary>
+      <div class="infra-v46-body">
+        <p>Banco principal utilizado pelo sistema. Todas as operações devem utilizar Supabase como fonte única de verdade.</p>
+        <ul>
+          <li>Não utilizar localStorage como banco principal.</li>
+          <li>localStorage pode existir apenas como cache temporário de interface.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="infra-v46-details">
+      <summary>📱 Evolution API</summary>
+      <div class="infra-v46-body">
+        <div class="infra-v46-row"><span>Versão</span><strong>1.8.2</strong></div>
+        <div class="infra-v46-row"><span>URL pública</span><a href="https://evolution.samuelvinsansi.com.br" target="_blank" rel="noopener">https://evolution.samuelvinsansi.com.br</a></div>
+        <div class="infra-v46-row"><span>URL local</span><code>http://localhost:8080</code></div>
+        <div class="infra-v46-flow">WhatsApp → Evolution API (Docker) → Cloudflare Tunnel → Vercel → Supabase → CRM</div>
+      </div>
+    </details>
+
+    <details class="infra-v46-details" open>
+      <summary>🚀 Processo de inicialização da operação</summary>
+      <div class="infra-v46-body infra-v46-steps">
+        <div><b>PASSO 1</b><p>Abrir Docker Desktop.</p></div>
+        <div><b>PASSO 2</b><p>Localizar o container <code>evolution-api</code>.</p></div>
+        <div><b>PASSO 3</b><p>Clicar em <b>PLAY</b>. Não utilizamos docker compose via CMD no fluxo operacional.</p></div>
+        <div><b>PASSO 4</b><p>Validar localmente:</p><code>http://localhost:8080</code><p>Resposta esperada:</p><pre>{
+  "status": 200,
+  "message": "Welcome to the Evolution API, it is working!"
+}</pre></div>
+        <div><b>PASSO 5</b><p>Abrir CMD e executar:</p><div class="infra-v46-code"><code>cd C:\cloudflared
+cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><button class="btn btn-ghost" onclick="copyInfraCommandV46('cloudflared')">Copiar comando</button></div><p>A janela deve permanecer aberta durante toda a operação. Não fechar.</p></div>
+        <div><b>PASSO 6</b><p>Validar Tunnel:</p><a href="https://evolution.samuelvinsansi.com.br" target="_blank" rel="noopener">https://evolution.samuelvinsansi.com.br</a></div>
+        <div><b>PASSO 7</b><p>Abrir o CRM:</p><a href="https://painel.samuelvinsansi.com.br" target="_blank" rel="noopener">https://painel.samuelvinsansi.com.br</a></div>
+        <div><b>PASSO 8</b><p>Acessar <b>Configurações → Chips WhatsApp</b> e validar se os chips estão conectados.</p></div>
+      </div>
+    </details>
+
+    <details class="infra-v46-details" open>
+      <summary>✅ Checklist operacional</summary>
+      <div class="infra-v46-checklist">
+        <label><input type="checkbox"> Docker aberto</label>
+        <label><input type="checkbox"> Container evolution-api rodando</label>
+        <label><input type="checkbox"> localhost:8080 respondendo</label>
+        <label><input type="checkbox"> Cloudflare Tunnel rodando</label>
+        <label><input type="checkbox"> evolution.samuelvinsansi.com.br respondendo</label>
+        <label><input type="checkbox"> painel.samuelvinsansi.com.br respondendo</label>
+        <label><input type="checkbox"> Chip conectado</label>
+        <label><input type="checkbox"> Webhook configurado</label>
+      </div>
+    </details>
+
+    <details class="infra-v46-details">
+      <summary>⚠ Regras importantes</summary>
+      <div class="infra-v46-body">
+        <ol>
+          <li>Não alterar a estrutura atual de Cloudflare Tunnel sem necessidade.</li>
+          <li>Não alterar nomes de instância da Evolution sem atualizar o CRM.</li>
+          <li>O CRM deve sempre utilizar a URL pública <code>https://evolution.samuelvinsansi.com.br</code> e nunca localhost.</li>
+          <li>Antes de qualquer alteração estrutural, validar envio, recebimento, persistência no banco, conversas e caixa de entrada.</li>
+          <li>Toda nova implementação deve preservar Evolution, Supabase, Webhook, Conversas e Caixa de Entrada.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details class="infra-v46-details">
+      <summary>🛑 Processo de encerramento</summary>
+      <div class="infra-v46-body">
+        <ol>
+          <li>Fechar a janela CMD do Cloudflare Tunnel.</li>
+          <li>Parar o container <code>evolution-api</code> no Docker Desktop.</li>
+          <li>Encerrar Docker Desktop se necessário.</li>
+        </ol>
+        <p>Essa é a arquitetura oficial atual do projeto e deve ser considerada como ambiente padrão de produção.</p>
+      </div>
+    </details>
+  </div>
+
   <div class="persistence-v36-card">
     <div class="persistence-v36-title">Persistência Supabase</div>
     <div class="persistence-v36-text">
@@ -1673,5 +1778,22 @@
   <script src="js/modules/lead-drawer-contact-events-v38.js?v=20260616-V39"></script>
   <script src="js/modules/zz-v39-preenvio-validacao-instagram-fixes.js?v=20260616-V45-INVALIDACAO-PRE-INSTA"></script>
   <script src="js/modules/zz-v45-invalidacao-pre-instagram.js?v=20260616-V45-INVALIDACAO-PRE-INSTA"></script>
+
+<script>
+function copyInfraCommandV46(type) {
+  const cmd = 'cd C:\\cloudflared\ncloudflared.exe tunnel --config C:\\cloudflared\\config.yml run evolution';
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd).then(function(){ if (typeof notify === 'function') notify('✓ Comando do tunnel copiado'); });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = cmd;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    if (typeof notify === 'function') notify('✓ Comando do tunnel copiado');
+  }
+}
+</script>
 </body>
 </html>
