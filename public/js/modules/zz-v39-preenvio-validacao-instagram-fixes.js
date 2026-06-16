@@ -6,7 +6,7 @@
    - Evita duplicate_identity no fluxo de ficha ao não forçar salvamento desnecessário. */
 (function(){
   'use strict';
-  const VERSION='20260616-v44-completar-agora-incompleto';
+  const VERSION='20260616-v45-invalidacao-pre-instagram';
   const USER_ID_FALLBACK='c02fe973-4eb5-4036-9f8d-8787937e8b11';
   const state={validating:false,log:[],fila:{date:null,chip:'all',status:'all',lastData:null}};
 
@@ -133,7 +133,21 @@
       return out;
     }finally{ clearTimeout(timer); }
   }
-  async function moveInvalidToInstagramAttribution(item, reason='invalid_whatsapp'){ const c=sb(); if(!c||!item?.lead_id) return; await c.from('leads').update({current_stage:'attribution_instagram',current_status:'whatsapp_invalid',status:'whatsapp_invalid',updated_at:now(),crm_data:{...(item.lead?.crm_data||{}),whatsapp_validation:{status:'invalid',reason,moved_to:'attribution_instagram',at:now()}}}).eq('user_id',uid()).eq('id',item.lead_id); await c.from('pre_dispatch_items').update({status:'invalid_whatsapp',validation_status:'invalid',validation_error:reason,validated_at:now(),updated_at:now(),raw_payload:{...(item.raw_payload||{}),v39_validation:{exists:false,reason,moved_to:'attribution_instagram',at:now()}}}).eq('user_id',uid()).eq('id',item.id); }
+  async function moveInvalidToInstagramAttribution(item, reason='invalid_whatsapp'){
+    const c=sb(); if(!c||!item?.lead_id) return;
+    await c.from('leads').update({
+      current_stage:'attribution_instagram',
+      current_status:'whatsapp_invalid',
+      status:'whatsapp_invalid',
+      updated_at:now(),
+      crm_data:{...(item.lead?.crm_data||{}),whatsapp_validation:{status:'invalid',reason,moved_to:'attribution_instagram',removed_from_pre_envio:true,at:now()}}
+    }).eq('user_id',uid()).eq('id',item.lead_id);
+    // V45: inválido real no WhatsApp não deve permanecer no pré-envio.
+    // O lead vai para Atribuição Instagram e o item do pré-envio é removido imediatamente.
+    await c.from('pre_dispatch_items').delete().eq('user_id',uid()).eq('id',item.id);
+    try{ if(typeof window.renderPreEnvioListV31==='function') await window.renderPreEnvioListV31(); }catch(_){ }
+    try{ if(typeof window.renderPreCompletionStatusV44==='function') await window.renderPreCompletionStatusV44(); }catch(_){ }
+  }
   async function approveValid(item){ const c=sb(); await c.from('pre_dispatch_items').update({status:'approved',validation_status:'valid',validated_at:now(),updated_at:now(),raw_payload:{...(item.raw_payload||{}),v39_validation:{exists:true,at:now()}}}).eq('user_id',uid()).eq('id',item.id); if(item.lead_id) await c.from('leads').update({current_stage:'pre_send_approved',current_status:'whatsapp_valid',status:'whatsapp_valid',updated_at:now()}).eq('user_id',uid()).eq('id',item.lead_id); }
   async function markPreStatus(id,status,error=''){
     const c=sb(); if(!c||!id) return;
