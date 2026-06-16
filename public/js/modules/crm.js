@@ -812,22 +812,80 @@ function findLeadEverywhere(id) {
     : null;
   if (permanent) return permanent;
 
+  const basePerm = Array.isArray(window.__basePermanenteRowsV34)
+    ? window.__basePermanenteRowsV34.find(e => e.id === id)
+    : null;
+  if (basePerm) return basePerm;
+
   return null;
 }
 
+function parseDrawerRawPayloadV37(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch (_) { return {}; }
+}
+
+function firstFilledV37(...values) {
+  for (const value of values) {
+    if (Array.isArray(value) && value.length) return value;
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return '';
+}
+
+function normalizeLeadCategoriesV37(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean).map(String);
+    } catch (_) {}
+    return value.split(',').map(item => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 function normalizeLeadForDrawer(lead = {}) {
+  const raw = parseDrawerRawPayloadV37(lead.raw_payload || lead.rawPayload);
+  const categories = normalizeLeadCategoriesV37(firstFilledV37(
+    lead.categories,
+    lead.subcategories,
+    lead.categorias,
+    raw.categories
+  ));
+  const rating = firstFilledV37(lead.rating, lead.totalScore, lead.total_score, raw.totalScore, raw.rating);
+  const reviews = firstFilledV37(lead.reviews_count, lead.reviewsCount, lead.reviews, raw.reviewsCount, raw.reviews_count);
+  const website = firstFilledV37(lead.website, lead.site, raw.website);
+  const instagram = firstFilledV37(lead.instagram_url, lead.instagramUrl, lead.instagram, raw.instagram_url);
+  const mapsUrl = firstFilledV37(lead.maps_url, lead.mapsUrl, lead.googleUrl, lead.url, raw.url, raw.maps_url);
   return {
     id: lead.id,
-    nome: lead.nome || lead.companyName || lead.title || 'Lead sem nome',
-    categoria: lead.categoria || lead.categoryName || lead.ramo || lead.segmento || '',
-    cidade: lead.cidade || lead.city || lead.address?.city || '',
-    estado: lead.estado || lead.state || lead.address?.state || '',
-    whatsapp: lead.whatsapp || lead.phone || lead.telefone || '',
-    instagram: lead.instagram || lead.instagramUrl || '',
-    site: lead.site || lead.website || '',
-    googleUrl: lead.googleUrl || lead.mapsUrl || lead.url || '',
-    status: lead.status || 'Não enviada',
-    criadoEm: lead.criadoEm || lead.importadoEm || '',
+    nome: firstFilledV37(lead.nome, lead.company_name, lead.companyName, lead.title, raw.title, 'Lead sem nome'),
+    categoria: firstFilledV37(lead.category_name, lead.categoryName, lead.category, lead.categoria, lead.ramo, lead.segmento, raw.categoryName, raw.category),
+    categories,
+    cidade: firstFilledV37(lead.city, lead.cidade, lead.address?.city, raw.city),
+    estado: firstFilledV37(lead.state, lead.estado, lead.address?.state, raw.state),
+    rua: firstFilledV37(lead.street, lead.rua, lead.address?.street, raw.street),
+    pais: firstFilledV37(lead.country_code, lead.countryCode, lead.pais, raw.countryCode),
+    whatsapp: firstFilledV37(lead.normalized_phone, lead.whatsapp, lead.phone, lead.telefone, raw.phone),
+    telefoneOriginal: firstFilledV37(lead.phone, lead.telefone, raw.phone),
+    instagram,
+    site: website,
+    websiteType: firstFilledV37(lead.website_type, lead.websiteType),
+    websiteQuality: firstFilledV37(lead.website_quality, lead.websiteQuality),
+    googleUrl: mapsUrl,
+    status: firstFilledV37(lead.current_status, lead.status, 'Não enviada'),
+    etapa: firstFilledV37(lead.current_stage, lead.stage, lead.etapa),
+    canal: firstFilledV37(lead.lead_channel, lead.channel, lead.canal),
+    tipo: firstFilledV37(lead.lead_type, lead.type),
+    rating,
+    reviewsCount: reviews,
+    criadoEm: firstFilledV37(lead.created_at, lead.criadoEm, lead.importadoEm),
+    atualizadoEm: firstFilledV37(lead.updated_at, lead.atualizadoEm),
+    rawPayload: raw && Object.keys(raw).length ? raw : (lead.raw_payload || lead.rawPayload || null),
+    rawOriginal: lead
   };
 }
 
@@ -838,6 +896,85 @@ function leadDrawerLink(label, value, href, missingText = 'não informado', kind
   }
   const url = href || normalizeChannelUrlV427(kind, value) || value;
   return `<div class="lead-channel"><strong>${label}</strong><span>${escHtml(value)}</span><div class="lead-channel-actions"><a href="${escHtml(url)}" target="_blank" rel="noopener">Abrir</a><button type="button" onclick="event.preventDefault();event.stopPropagation();editLeadChannelV427('${safeKind}')">Editar</button></div></div>`;
+}
+
+
+function formatDrawerValueV37(value, empty = 'não informado') {
+  if (Array.isArray(value)) return value.length ? value.join(', ') : empty;
+  if (value === undefined || value === null || String(value).trim() === '') return empty;
+  return String(value);
+}
+
+function leadInfoRowV37(label, value) {
+  const filled = !(value === undefined || value === null || String(value).trim() === '');
+  return `<div class="lead-info-item ${filled ? '' : 'missing'}"><strong>${escHtml(label)}</strong><span>${escHtml(formatDrawerValueV37(value))}</span></div>`;
+}
+
+function leadBadgeListV37(items = []) {
+  const values = Array.isArray(items) ? items : normalizeLeadCategoriesV37(items);
+  if (!values.length) return '<div class="lead-empty-v37">nenhuma subcategoria informada</div>';
+  return `<div class="lead-badge-list-v37">${values.map(item => `<span>${escHtml(item)}</span>`).join('')}</div>`;
+}
+
+function leadJsonPreviewV37(payload) {
+  if (!payload) return '<div class="lead-empty-v37">JSON original não disponível</div>';
+  let obj = payload;
+  if (typeof payload === 'string') {
+    try { obj = JSON.parse(payload); } catch (_) { obj = payload; }
+  }
+  const text = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  return `<details class="lead-json-v37"><summary>Ver JSON original</summary><pre>${escHtml(text)}</pre></details>`;
+}
+
+async function refreshLeadDrawerFromSupabaseV37(id) {
+  if (!id || !window.sbClient) return;
+  try {
+    const userRes = await window.sbClient.auth.getUser();
+    const userId = userRes?.data?.user?.id;
+    if (!userId) return;
+    const { data, error } = await window.sbClient
+      .from('leads')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('id', String(id))
+      .maybeSingle();
+    if (error || !data) return;
+    if (activeLeadDrawerId !== id) return;
+    activeLeadDrawerData = normalizeLeadForDrawer({ ...(activeLeadDrawerData?.rawOriginal || {}), ...data });
+    renderLeadDrawer();
+  } catch (error) {
+    console.warn('[lead-drawer][supabase-refresh]', error?.message || error);
+  }
+}
+
+function renderLeadDataSheetV37(lead) {
+  const el = document.getElementById('leadDrawerDataSheet');
+  if (!el || !lead) return;
+  el.innerHTML = `
+    <div class="lead-info-grid-v37">
+      ${leadInfoRowV37('Empresa', lead.nome)}
+      ${leadInfoRowV37('Telefone original', lead.telefoneOriginal)}
+      ${leadInfoRowV37('Telefone normalizado', String(lead.whatsapp || '').replace(/\D/g, ''))}
+      ${leadInfoRowV37('Categoria principal', lead.categoria)}
+      ${leadInfoRowV37('Nota', lead.rating)}
+      ${leadInfoRowV37('Avaliações', lead.reviewsCount)}
+      ${leadInfoRowV37('Rua', lead.rua)}
+      ${leadInfoRowV37('Cidade', lead.cidade)}
+      ${leadInfoRowV37('Estado', lead.estado)}
+      ${leadInfoRowV37('País', lead.pais)}
+      ${leadInfoRowV37('Website type', lead.websiteType)}
+      ${leadInfoRowV37('Website quality', lead.websiteQuality)}
+      ${leadInfoRowV37('Canal', lead.canal)}
+      ${leadInfoRowV37('Tipo', lead.tipo)}
+      ${leadInfoRowV37('Etapa atual', lead.etapa)}
+      ${leadInfoRowV37('Status', lead.status)}
+      ${leadInfoRowV37('Criado em', lead.criadoEm ? new Date(lead.criadoEm).toLocaleString('pt-BR') : '')}
+      ${leadInfoRowV37('Atualizado em', lead.atualizadoEm ? new Date(lead.atualizadoEm).toLocaleString('pt-BR') : '')}
+    </div>
+    <div class="lead-info-subtitle-v37">Subcategorias</div>
+    ${leadBadgeListV37(lead.categories)}
+    ${leadJsonPreviewV37(lead.rawPayload)}
+  `;
 }
 
 function renderLeadDrawer() {
@@ -867,6 +1004,8 @@ function renderLeadDrawer() {
     leadDrawerLink('Site', lead.site, lead.site, 'não informado', 'site'),
     leadDrawerLink('Maps', lead.googleUrl, lead.googleUrl, 'não informado', 'maps'),
   ].join('');
+
+  renderLeadDataSheetV37(lead);
 
   pipelineEl.innerHTML = PIPELINE_STEPS.map(step => `
     <button class="lead-pipeline-step ${crm.pipelineStatus === step.id ? 'active' : ''}" onclick="updateLeadPipeline('${step.id}')">
@@ -917,6 +1056,7 @@ function openLeadDrawer(id) {
   renderLeadDrawer();
   renderLeadWhatsappValidation();
   renderLeadMessageBox();
+  refreshLeadDrawerFromSupabaseV37(id);
   const overlay = document.getElementById('leadDrawerOverlay');
   const drawer = document.getElementById('leadDrawer');
   if (overlay) overlay.classList.add('open');

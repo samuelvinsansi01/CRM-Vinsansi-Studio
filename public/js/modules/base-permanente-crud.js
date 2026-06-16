@@ -134,6 +134,7 @@
         ${r.notes?`<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:6px">${esc(r.notes)}</div>`:''}
       </div>
       <div class="empresa-actions" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="openLeadDrawer('${esc(r.id)}')">Ficha</button>
         <button class="btn btn-ghost" onclick="editBasePermanenteV34('${esc(r.id)}')">Editar</button>
         ${status === 'arquivado'
           ? `<button class="btn btn-primary" onclick="setBasePermanenteStatusV34('${esc(r.id)}','ja_enviado')">Reativar</button>`
@@ -151,6 +152,7 @@
     if (!list) return;
     list.innerHTML = `<div style="padding:24px;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// carregando base permanente...</div>`;
     const rows = await fetchRows();
+    try { window.__basePermanenteRowsV34 = rows; } catch (_) {}
     if (badge) badge.textContent = String(rows.length);
     if (countEl) countEl.textContent = `${rows.length} registro${rows.length!==1?'s':''}`;
     const filters = `<div class="base-perm-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
