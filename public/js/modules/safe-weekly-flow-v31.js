@@ -1028,6 +1028,24 @@
   let selectedDate = new Date().toISOString().slice(0,10);
   let selectedChip = 'all';
   let page = 1;
+  let hasExplicitPreDateSelection = false;
+
+  function getActivePreEnvioDateV317(){
+    const active = document.querySelector('#preWeekCards .pre-day-card.active');
+    const domDate = active?.getAttribute('data-date');
+    const globalDate = window.__selectedPreEnvioDateV317;
+    return String(domDate || globalDate || selectedDate || '').slice(0,10);
+  }
+  function setSelectedPreEnvioDateV317(dateIso, explicit=true){
+    const value = String(dateIso || '').slice(0,10);
+    if(!value) return selectedDate;
+    selectedDate = value;
+    window.__selectedPreEnvioDateV317 = value;
+    if(explicit) hasExplicitPreDateSelection = true;
+    const root = document.getElementById('preEnvioRoot');
+    if(root) root.setAttribute('data-selected-date', value);
+    return selectedDate;
+  }
 
   function uid(){
     try {
@@ -1161,7 +1179,7 @@
     await restoreExpiredDailyItemsV317();
     const [chips, counts] = await Promise.all([fetchChips(), fetchAssignmentCounts()]);
     const dates=weekDates();
-    if(!dates.includes(selectedDate)) selectedDate=dates[0];
+    if(!dates.includes(selectedDate)) setSelectedPreEnvioDateV317(dates.includes(todayIso()) ? todayIso() : dates[0], false);
     const dailyCapacity = chips.reduce((sum,ch)=>sum + Number(ch.daily_limit || 120),0) || (chips.length*120) || 0;
     const countsByDay = await dayCounts(dates);
     root.innerHTML = `
@@ -1172,7 +1190,7 @@
         </div>
       </div>
       <div id="preWeekCards" class="pre-week-cards">
-        ${dates.map(d=>`<button class="pre-day-card ${d===selectedDate?'active':''}" onclick="setPreEnvioDateV31('${d}')">
+        ${dates.map(d=>`<button class="pre-day-card ${d===selectedDate?'active':''}" data-date="${d}" onclick="setPreEnvioDateV31('${d}')">
           <span>${dayLabel(d)}</span>
           <strong>${countsByDay[d]||0}/${dailyCapacity}</strong>
         </button>`).join('')}
@@ -1265,13 +1283,20 @@
 
   async function createPreSendBatchV317(){
     const c=db(); if(!c) return notify('// Supabase indisponível','err');
-    const chips=await fetchChips();
-    if(!chips.length) return notify('// nenhum chip ativo encontrado','warn');
+    const targetDate = getActivePreEnvioDateV317();
+    if(!targetDate) return notify('// selecione um dia para gerar o pré-envio','warn');
+    setSelectedPreEnvioDateV317(targetDate, true);
+    const allChips=await fetchChips();
+    if(!allChips.length) return notify('// nenhum chip ativo encontrado','warn');
+    const chips = selectedChip && selectedChip !== 'all'
+      ? allChips.filter(ch => String(ch.instance) === String(selectedChip) || String(ch.label) === String(selectedChip) || String(ch.chip_id) === String(selectedChip))
+      : allChips;
+    if(!chips.length) return notify('// chip selecionado não encontrado ou inativo','warn');
     const qty=Math.max(1,Math.min(120,Number(document.getElementById('preCreateQty')?.value||120)));
     let totalCreated=0;
     const alreadyAll=[];
     for(const chip of chips){
-      const { data: existing } = await c.from('pre_dispatch_items').select('lead_id').eq('user_id',uid()).eq('scheduled_date',selectedDate).eq('chip_instance',chip.instance);
+      const { data: existing } = await c.from('pre_dispatch_items').select('lead_id').eq('user_id',uid()).eq('scheduled_date',targetDate).eq('chip_instance',chip.instance);
       const existingIds=(existing||[]).map(x=>x.lead_id).filter(Boolean);
       alreadyAll.push(...existingIds);
       const need=Math.max(0,qty-existingIds.length);
@@ -1281,7 +1306,7 @@
       alreadyAll.push(...leads.map(l=>l.id));
       const rows=leads.map((lead,i)=>({
         user_id:uid(), lead_id:lead.id, chip_instance:chip.instance, chip_label:String(chip.label||chip.instance),
-        scheduled_date:selectedDate, lead_type:leadTypeFromLead(lead), status:'review', position:(existingIds.length+i+1),
+        scheduled_date:targetDate, lead_type:leadTypeFromLead(lead), status:'review', position:(existingIds.length+i+1),
         raw_payload:{ origin_stage:lead.current_stage }
       }));
       const { error: insErr } = await c.from('pre_dispatch_items').insert(rows);
@@ -1290,8 +1315,8 @@
       totalCreated += leads.length;
     }
     if(!totalCreated) return notify('// nenhum lead novo gerado. Verifique se o dia/chips já estão preenchidos ou se há leads na atribuição.','warn');
-    notify(`✓ ${totalCreated} lead(s) gerados no pré-envio de ${dayLabel(selectedDate)}`);
-    page=1; selectedChip='all';
+    notify(`✓ ${totalCreated} lead(s) gerados no pré-envio de ${dayLabel(targetDate)}${selectedChip !== 'all' ? ' · chip '+selectedChip : ''}`);
+    page=1;
     await renderPreEnvioPanelV317();
     if(typeof window.updateSafeBadgesV31==='function') window.updateSafeBadgesV31();
   }
@@ -1585,7 +1610,7 @@
     if(map[label]){ e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation) e.stopImmediatePropagation(); window.switchPanel(map[label]); }
   },true);
 
-  function setPreDate(d){ selectedDate=d; selectedChip='all'; page=1; renderPreEnvioPanelV317(); }
+  function setPreDate(d){ setSelectedPreEnvioDateV317(d, true); selectedChip='all'; page=1; renderPreEnvioPanelV317(); }
   function setPreChip(chip){ selectedChip=chip; page=1; renderPreEnvioPanelV317(); }
   function goPage(p){ page=Math.max(1,p); renderPreEnvioListV317(); }
   function applyPreEnvioStylesV317(){
