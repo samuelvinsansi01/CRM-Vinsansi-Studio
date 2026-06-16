@@ -67,17 +67,65 @@ class SupabaseAdapter {
       console.warn('[supabase-adapter] saveLead preserve-existing skipped:', mergeError?.message || mergeError);
     }
 
-    let { data, error } = await this.client
-      .from('leads')
-      .upsert(payload, { onConflict: 'id' })
-      .select()
-      .single();
+    let data = null;
+    let error = null;
+
+    // V39: quando o lead já existe, fazer UPDATE por id em vez de UPSERT.
+    // O upsert estava disparando triggers de identidade e gerando
+    // duplicate_identity:phone ao salvar ficha/drawer de lead já existente.
+    try {
+      const { data: byId, error: byIdError } = await this.client
+        .from('leads')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('id', payload.id)
+        .maybeSingle();
+
+      if (!byIdError && byId?.id) {
+        const result = await this.client
+          .from('leads')
+          .update(payload)
+          .eq('user_id', user.id)
+          .eq('id', payload.id)
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        const result = await this.client
+          .from('leads')
+          .insert(payload)
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      }
+    } catch (saveError) {
+      error = saveError;
+    }
+
+    // V39: se mesmo assim bater duplicate_identity, não quebrar a tela.
+    // Isso costuma acontecer quando um snapshot antigo tenta salvar um lead com
+    // telefone já existente em outro id. Mantemos o registro original como fonte.
+    if (error && /duplicate_identity|duplicate key|23505/i.test(String(error.message || error))) {
+      try {
+        const normalized = String(payload.normalized_phone || payload.phone || '').replace(/\D/g, '');
+        let q = this.client.from('leads').select('*').eq('user_id', user.id).limit(1);
+        if (normalized) q = q.or(`normalized_phone.eq.${normalized},phone.eq.${payload.phone || normalized}`);
+        else q = q.eq('id', payload.id);
+        const { data: existingDup } = await q;
+        if (existingDup?.[0]) {
+          console.warn('[supabase-adapter] saveLead duplicate ignored, using existing lead:', existingDup[0].id);
+          return { data: existingDup[0], error: null };
+        }
+      } catch (_) {}
+    }
 
     if (error && /crm_data|user_email/i.test(String(error.message || ''))) {
       console.error('[supabase-adapter] saveLead schema missing: execute sql/lead_crm_data_persistence_v28.sql', error.message);
     }
 
-    if (error) console.warn('[supabase-adapter] saveLead:', error.message, payload);
+    if (error) console.warn('[supabase-adapter] saveLead:', error.message || error, payload);
     else console.log('[supabase-adapter][saveLead-success]', { id: payload.id, hasCrmData: !!payload.crm_data, channels: { phone: payload.phone, instagram: payload.instagram, website: payload.website, maps_url: payload.maps_url } });
     return { data, error };
   }
