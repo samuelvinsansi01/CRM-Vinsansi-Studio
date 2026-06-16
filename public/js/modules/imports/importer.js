@@ -158,10 +158,14 @@ function buildImportedLeadV430(analysis, route) {
     site: isInstagram ? '' : (isCommercialSite ? (analysis.website.site || '') : ''),
     has_own_site: !!isCommercialSite,
     googleUrl: analysis.googleUrl,
-    city: analysis.item?.city || analysis.item?.cidade || '',
-    state: analysis.item?.state || analysis.item?.estado || analysis.item?.region || '',
+    street: analysis.street || analysis.item?.street || analysis.item?.address || analysis.item?.endereco || '',
+    city: analysis.city || analysis.item?.city || analysis.item?.cidade || '',
+    state: analysis.state || analysis.item?.state || analysis.item?.estado || analysis.item?.region || '',
+    country_code: analysis.countryCode || analysis.item?.countryCode || analysis.item?.country_code || analysis.item?.country || '',
+    categories: Array.isArray(analysis.categories) ? analysis.categories : [],
     raw_payload: analysis.item || {},
     categoria: analysis.category,
+    category_name: analysis.categoryName || analysis.category,
     ramoId: activeRamoId || null,
     reviewsCount: analysis.qualification.reviews,
     totalScore: analysis.qualification.rating,
@@ -320,6 +324,149 @@ async function importPreview() {
 
 
 
+
+function getLeadCategoriesV35(lead = {}) {
+  if (Array.isArray(lead.categories)) return lead.categories.filter(Boolean).map(String);
+  if (Array.isArray(lead.raw_payload?.categories)) return lead.raw_payload.categories.filter(Boolean).map(v => typeof v === 'string' ? v : (v?.name || v?.title || '')).filter(Boolean);
+  return [];
+}
+function buildLeadRawPayloadV35(lead = {}) {
+  const raw = lead.raw_payload || lead.rawPayload || {};
+  return raw && typeof raw === 'object' ? raw : {};
+}
+async function enrichBasePermanenteMissingFieldsV35(lead = {}, source = '') {
+  // Enriquecimento seguro da Base Permanente.
+  // Regra: se um lead for barrado por já existir, aproveitamos os dados novos
+  // para preencher APENAS campos vazios da Base Permanente. Nunca sobrescreve.
+  try {
+    if (!(typeof sbClient !== 'undefined' && sbClient && typeof currentUser !== 'undefined' && currentUser?.id)) return;
+    const userId = currentUser.id;
+
+    const phone = typeof normalizeImportPhoneV430 === 'function'
+      ? normalizeImportPhoneV430(lead.whatsapp || lead.phone || lead.normalized_phone || '')
+      : String(lead.whatsapp || lead.phone || lead.normalized_phone || '').replace(/\D/g,'');
+
+    const website = typeof normalizeIdentitySiteV430 === 'function'
+      ? normalizeIdentitySiteV430(lead.site || lead.website || '')
+      : String(lead.site || lead.website || '').trim();
+
+    const instagram = typeof normalizeIdentityInstagramV430 === 'function'
+      ? normalizeIdentityInstagramV430(lead.instagram || lead.instagram_url || '')
+      : String(lead.instagram || lead.instagram_url || '').trim();
+
+    const maps = typeof normalizeIdentityUrlV430 === 'function'
+      ? normalizeIdentityUrlV430(lead.googleUrl || lead.maps_url || lead.url || '')
+      : String(lead.googleUrl || lead.maps_url || lead.url || '').trim();
+
+    const incoming = {
+      company_name: lead.nome || lead.company_name || lead.title || null,
+      normalized_phone: phone || null,
+      website: website || null,
+      instagram_url: instagram || null,
+      maps_url: maps || null,
+      street: lead.street || null,
+      city: lead.city || null,
+      state: lead.state || null,
+      country_code: lead.country_code || lead.countryCode || null,
+      category: lead.categoria || lead.category || lead.categoryName || null,
+      category_name: lead.category_name || lead.categoryName || lead.categoria || lead.category || null,
+      categories: getLeadCategoriesV35(lead),
+      rating: Number(lead.totalScore ?? lead.rating ?? 0) || null,
+      reviews_count: Number(lead.reviewsCount ?? lead.reviews_count ?? 0) || null,
+      raw_payload: buildLeadRawPayloadV35(lead)
+    };
+
+    const selectCols = 'id,company_name,normalized_phone,website,instagram_url,maps_url,street,city,state,country_code,category,category_name,categories,rating,reviews_count,raw_payload,updated_at';
+    const found = new Map();
+
+    async function findBy(field, value) {
+      if (!value) return;
+      const { data, error } = await sbClient
+        .from('base_permanente')
+        .select(selectCols)
+        .eq('user_id', userId)
+        .eq(field, value)
+        .limit(10);
+      if (error) {
+        console.warn('[base_permanente][enrich-find-warning]', field, error.message || error);
+        return;
+      }
+      (data || []).forEach(row => { if (row?.id) found.set(row.id, row); });
+    }
+
+    await findBy('normalized_phone', phone);
+    await findBy('website', website);
+    await findBy('instagram_url', instagram);
+    await findBy('maps_url', maps);
+
+    // Se foi bloqueado por sent_contacts/company_registry, mas ainda não existe na Base Permanente,
+    // cria uma linha mínima já enriquecida. Isso corrige casos antigos migrados incompletos.
+    if (!found.size && phone) {
+      const normalizedSource = String(source || '').toLowerCase();
+      const status = normalizedSource.includes('sent') || normalizedSource.includes('ja_enviado')
+        ? 'ja_enviado'
+        : 'duplicado';
+      const insertRow = {
+        user_id: userId,
+        company_name: incoming.company_name,
+        normalized_phone: phone,
+        website: incoming.website,
+        instagram_url: incoming.instagram_url,
+        maps_url: incoming.maps_url,
+        street: incoming.street,
+        city: incoming.city,
+        state: incoming.state,
+        country_code: incoming.country_code,
+        category: incoming.category,
+        category_name: incoming.category_name,
+        categories: Array.isArray(incoming.categories) ? incoming.categories : [],
+        rating: incoming.rating,
+        reviews_count: incoming.reviews_count,
+        raw_payload: incoming.raw_payload || {},
+        status,
+        notes: `criado automaticamente ao barrar importação (${source || 'origem desconhecida'})`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      const { data, error } = await sbClient
+        .from('base_permanente')
+        .insert(insertRow)
+        .select(selectCols)
+        .maybeSingle();
+      if (!error && data?.id) found.set(data.id, data);
+      else if (error && !String(error.message || '').includes('duplicate')) {
+        console.warn('[base_permanente][enrich-insert-warning]', error.message || error);
+      }
+    }
+
+    for (const row of found.values()) {
+      const patch = {};
+      for (const [k, v] of Object.entries(incoming)) {
+        if (v == null || v === '') continue;
+        if (Array.isArray(v) && !v.length) continue;
+        if (k === 'raw_payload' && (!v || !Object.keys(v).length)) continue;
+        const current = row[k];
+        const empty = current == null
+          || current === ''
+          || (Array.isArray(current) && !current.length)
+          || (typeof current === 'object' && !Array.isArray(current) && !Object.keys(current || {}).length);
+        if (empty) patch[k] = v;
+      }
+      if (Object.keys(patch).length) {
+        patch.updated_at = new Date().toISOString();
+        const { error } = await sbClient
+          .from('base_permanente')
+          .update(patch)
+          .eq('user_id', userId)
+          .eq('id', row.id);
+        if (error) console.warn('[base_permanente][enrich-update-warning]', error.message || error);
+      }
+    }
+  } catch (err) {
+    console.warn('[base_permanente][enrich-missing-error]', err?.message || err);
+  }
+}
+
 async function registerLeadIdentityAfterImportV31(lead = {}, savedId = '') {
   // A partir do patch 22, a memória permanente é company_registry e o RLS foi corrigido.
   // O banco também possui trigger para sincronizar leads -> company_registry.
@@ -347,7 +494,7 @@ async function registerLeadIdentityAfterImportV31(lead = {}, savedId = '') {
       registry_status: lead.current_status || lead.status || 'active',
       source: 'leads_import',
       last_seen_at: new Date().toISOString(),
-      raw_payload: { imported_at: new Date().toISOString() }
+      raw_payload: { imported_at: new Date().toISOString(), ...buildLeadRawPayloadV35(lead) }
     };
 
     // Inserção conservadora: se qualquer índice único da company_registry acusar conflito,
@@ -375,13 +522,19 @@ async function persistImportedLeadDirectV430(lead = {}) {
     phone: lead.whatsapp || lead.phone || '',
     // IMPORTANTE: public.leads.normalized_phone é GENERATED ALWAYS no Supabase
     // (normalize_br_phone(phone)). Não enviar essa coluna no insert/upsert.
+    street: lead.street || lead.endereco || '',
     city: lead.city || lead.cidade || '',
     state: lead.state || lead.estado || '',
+    country_code: lead.country_code || lead.countryCode || '',
     instagram: lead.instagram || '',
     instagram_url: lead.instagram || '',
     website: lead.site || lead.website || '',
+    website_type: lead.website_type || '',
+    website_quality: lead.website_quality || '',
     maps_url: lead.googleUrl || lead.maps_url || '',
     category: lead.categoria || lead.category || '',
+    category_name: lead.category_name || lead.categoria || lead.category || '',
+    categories: getLeadCategoriesV35(lead),
     rating: Number(lead.totalScore || lead.rating || 0) || null,
     reviews_count: Number(lead.reviewsCount || lead.reviews_count || 0) || 0,
     lead_score: Number(lead.lead_score || lead.leadScore || calculateLeadPriorityScoreV31(lead)) || 0,
@@ -392,7 +545,7 @@ async function persistImportedLeadDirectV430(lead = {}) {
     lead_type: lead.tipo || (lead.has_own_site ? 'com-site' : 'sem-site'),
     has_own_site: !!lead.has_own_site,
     pipeline_status: lead.pipeline_status || lead.pipelineStatus || 'imported',
-    raw_payload: lead.raw_payload || lead.rawPayload || {},
+    raw_payload: buildLeadRawPayloadV35(lead),
     updated_at: new Date().toISOString()
   };
 
@@ -464,6 +617,12 @@ async function importarLeads() {
   const existingInstagramKeys = new Set();
 
   for (const analysis of analyses) {
+    if (analysis?.alreadyImported) {
+      await enrichBasePermanenteMissingFieldsV35(
+        buildImportedLeadV430(analysis, analysis.route || 'attribution_whatsapp'),
+        analysis.alreadySeenSource || ''
+      );
+    }
     if (isWhatsappImportRouteV31(analysis.route)) {
       const lead = buildImportedLeadV430(analysis, analysis.route);
       const key = lead.normalized_phone || (lead.googleUrl ? `maps:${lead.googleUrl}` : lead.id);

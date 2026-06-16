@@ -59,7 +59,7 @@
     if (!c || !user) return [];
     const q = (document.getElementById('sentContactsSearch')?.value || '').trim().toLowerCase();
     let query = c.from('base_permanente')
-      .select('id,user_id,company_name,normalized_phone,website,instagram_url,maps_url,status,notes,created_at,updated_at')
+      .select('id,user_id,company_name,normalized_phone,website,instagram_url,maps_url,street,city,state,country_code,category,category_name,categories,rating,reviews_count,status,notes,raw_payload,created_at,updated_at')
       .eq('user_id', user)
       .order('updated_at', { ascending:false });
     if (currentStatus !== 'all') query = query.eq('status', currentStatus);
@@ -73,13 +73,13 @@
       if (old.error) return [];
       return (old.data || []).map(r => ({
         id:r.id, company_name:r.company_name, normalized_phone:r.normalized_phone || r.phone,
-        website:'', instagram_url:'', maps_url:'', status:'ja_enviado', notes:r.reason || r.source || '',
+        website:'', instagram_url:'', maps_url:'', street:'', city:'', state:'', country_code:'', category:'', category_name:'', categories:[], rating:null, reviews_count:null, status:'ja_enviado', notes:r.reason || r.source || '', raw_payload:r.raw_payload || {},
         created_at:r.created_at, updated_at:r.dispatched_at || r.created_at, _fallback:true
       }));
     }
     let rows = data || [];
     if (q) {
-      rows = rows.filter(r => `${r.company_name||''} ${r.normalized_phone||''} ${r.website||''} ${r.instagram_url||''} ${r.maps_url||''} ${r.status||''} ${r.notes||''}`.toLowerCase().includes(q));
+      rows = rows.filter(r => `${r.company_name||''} ${r.normalized_phone||''} ${r.website||''} ${r.instagram_url||''} ${r.maps_url||''} ${r.status||''} ${r.notes||''} ${r.city||''} ${r.state||''} ${r.category||''} ${r.category_name||''} ${(Array.isArray(r.categories)?r.categories.join(' '):'')}`.toLowerCase().includes(q));
     }
     return rows;
   }
@@ -94,6 +94,14 @@
         <div class="field-group"><label>Instagram</label><input id="bpInstagram" value="${esc(row.instagram_url||'')}" placeholder="@perfil ou link"></div>
         <div class="field-group"><label>Google Maps</label><input id="bpMaps" value="${esc(row.maps_url||'')}" placeholder="link do Google Maps"></div>
         <div class="field-group"><label>Status</label><select id="bpStatus">${STATUS_OPTIONS.map(st=>`<option value="${st}" ${String(row.status||'ja_enviado')===st?'selected':''}>${STATUS_LABELS[st]}</option>`).join('')}</select></div>
+        <div class="field-group"><label>Endereço</label><input id="bpStreet" value="${esc(row.street||'')}" placeholder="Rua, avenida, número"></div>
+        <div class="field-group"><label>Cidade</label><input id="bpCity" value="${esc(row.city||'')}" placeholder="Cidade"></div>
+        <div class="field-group"><label>Estado</label><input id="bpState" value="${esc(row.state||'')}" placeholder="Estado"></div>
+        <div class="field-group"><label>País</label><input id="bpCountry" value="${esc(row.country_code||'')}" placeholder="BR"></div>
+        <div class="field-group"><label>Categoria principal</label><input id="bpCategory" value="${esc(row.category_name||row.category||'')}" placeholder="Categoria"></div>
+        <div class="field-group"><label>Avaliação</label><input id="bpRating" value="${esc(row.rating ?? '')}" placeholder="4.8"></div>
+        <div class="field-group"><label>Reviews</label><input id="bpReviews" value="${esc(row.reviews_count ?? '')}" placeholder="16"></div>
+        <div class="field-group"><label>Subcategorias</label><input id="bpCategories" value="${esc(Array.isArray(row.categories)?row.categories.join(', '):'')}" placeholder="Marceneiro, Moveleiro"></div>
       </div>
       <div class="field-group" style="margin-top:10px"><label>Observação</label><textarea id="bpNotes" rows="2" placeholder="Observações internas">${esc(row.notes||'')}</textarea></div>
       <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
@@ -117,6 +125,9 @@
           ${r.website?`<span>🌐 ${esc(r.website)}</span>`:''}
           ${r.instagram_url?`<span>📸 ${esc(r.instagram_url)}</span>`:''}
           ${r.maps_url?`<span>🗺️ Maps</span>`:''}
+          ${r.city||r.state?`<span>📍 ${esc([r.city,r.state].filter(Boolean).join(' · '))}</span>`:''}
+          ${r.category_name||r.category?`<span>🏷️ ${esc(r.category_name||r.category)}</span>`:''}
+          ${r.rating||r.reviews_count?`<span>⭐ ${esc(r.rating ?? '—')} (${esc(r.reviews_count ?? 0)})</span>`:''}
           <span>${fmtDate(r.updated_at || r.created_at)}</span>
           ${r._fallback?`<span style="color:#f2b84b">fallback sent_contacts</span>`:''}
         </div>
@@ -163,6 +174,15 @@
       website:normSite(document.getElementById('bpWebsite')?.value || '') || null,
       instagram_url:normInsta(document.getElementById('bpInstagram')?.value || '') || null,
       maps_url:normUrl(document.getElementById('bpMaps')?.value || '') || null,
+      street:document.getElementById('bpStreet')?.value?.trim() || null,
+      city:document.getElementById('bpCity')?.value?.trim() || null,
+      state:document.getElementById('bpState')?.value?.trim() || null,
+      country_code:document.getElementById('bpCountry')?.value?.trim() || null,
+      category:document.getElementById('bpCategory')?.value?.trim() || null,
+      category_name:document.getElementById('bpCategory')?.value?.trim() || null,
+      categories:(document.getElementById('bpCategories')?.value || '').split(',').map(v=>v.trim()).filter(Boolean),
+      rating:Number(document.getElementById('bpRating')?.value || '') || null,
+      reviews_count:Number(String(document.getElementById('bpReviews')?.value || '').replace(/\D/g,'')) || null,
       status:document.getElementById('bpStatus')?.value || 'ja_enviado',
       notes:document.getElementById('bpNotes')?.value?.trim() || null,
       updated_at:todayIso()

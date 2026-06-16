@@ -96,6 +96,38 @@ function extractCategory(item) {
 function extractGoogleUrl(item) {
   return pickFirstTextV30(item.googleUrl, item.google_url, item.maps_url, item.mapsUrl, item.placeUrl, item.url, item.link);
 }
+
+function extractStreetV35(item = {}) {
+  return pickFirstTextV30(item.street, item.address, item.endereco, item.fullAddress, item.formattedAddress, item.location?.address);
+}
+function extractCityV35(item = {}) {
+  return pickFirstTextV30(item.city, item.cidade, item.location?.city, item.address?.city);
+}
+function extractStateV35(item = {}) {
+  return pickFirstTextV30(item.state, item.estado, item.region, item.uf, item.location?.state, item.address?.state);
+}
+function extractCountryCodeV35(item = {}) {
+  return pickFirstTextV30(item.countryCode, item.country_code, item.country, item.pais, item.location?.countryCode, item.address?.countryCode);
+}
+function extractCategoriesArrayV35(item = {}) {
+  const values = [];
+  const push = (v) => {
+    if (v == null) return;
+    if (typeof v === 'string' || typeof v === 'number') {
+      const s = String(v).trim();
+      if (s && !values.includes(s)) values.push(s);
+      return;
+    }
+    if (Array.isArray(v)) return v.forEach(push);
+    if (typeof v === 'object') return push(v.name || v.title || v.label || v.categoryName || v.category);
+  };
+  push(item.categoryName);
+  push(item.category);
+  push(item.categories);
+  push(item.subcategories);
+  push(item.types);
+  return values;
+}
 function hasValidSiteRaw(item) {
   const site = extractSite(item);
   return /^https?:\/\//i.test(site) && site.length > 8;
@@ -463,6 +495,12 @@ function analyzeApifyLeadV430(item = {}, databaseIndex = null, payloadIndex = nu
     instagram: extractInstagram(item),
     googleUrl: extractGoogleUrl(item),
     category: extractCategory(item),
+    categoryName: pickFirstTextV30(item.categoryName, item.category),
+    categories: extractCategoriesArrayV35(item),
+    street: extractStreetV35(item),
+    city: extractCityV35(item),
+    state: extractStateV35(item),
+    countryCode: extractCountryCodeV35(item),
     qualification,
     website,
     hasPhone: hasValidPhone(item),
