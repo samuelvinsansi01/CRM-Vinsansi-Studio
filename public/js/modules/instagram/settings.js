@@ -49,7 +49,7 @@ function renderChipsConfig() {
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-ghost" style="font-size:10px;padding:6px 12px" onclick="verQRChip('${c.id}')">📱 QR Code</button>
       <button class="btn btn-ghost" style="font-size:10px;padding:6px 12px" onclick="iniciarRenomeioChip('${c.id}')">✏ Renomear</button>
-      <button class="btn btn-danger chip-del" style="font-size:10px;padding:6px 12px" onclick="deletarChip('${c.id}')">✕ Remover</button>
+      <button type="button" class="btn btn-danger chip-del" style="font-size:10px;padding:6px 12px" onclick="event.preventDefault();event.stopPropagation();deletarChip('${c.id}');return false;">✕ Remover</button>
     </div>
     <div id="renamePanel_${c.id}" style="display:none;margin-top:10px;display:none">
       <div style="display:flex;gap:6px;align-items:center">

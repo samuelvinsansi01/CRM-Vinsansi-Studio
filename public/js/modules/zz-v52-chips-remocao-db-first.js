@@ -1,11 +1,14 @@
-/* V52 — Chips DB-first: remoção definitiva + leitura exata em Pré-envio/Fila
+/* V53 — Chips DB-first: remoção definitiva + sem redirecionamento pós-clique
+   Base: V52. Patch adicional: trava submit/reload em botões de remoção de chip.
+
+   V52 — Chips DB-first: remoção definitiva + leitura exata em Pré-envio/Fila
    - Supabase continua sendo a fonte única de verdade.
    - Remover chip marca whatsapp_instances.active=false no banco, sem depender de user_email.
    - Limpa caches locais para impedir o chip removido de reaparecer.
    - Configurações, Pré-envio e Fila passam a consumir somente chips ativos do banco. */
 (function(){
   'use strict';
-  const VERSION='v52-chips-remocao-db-first';
+  const VERSION='v53-chips-remocao-sem-redirect';
   const LEGACY_KEY='vs_chips_v2';
   const V29_KEY='vs_whatsapp_chips_v29';
   let loaded=false;
@@ -141,6 +144,20 @@
       return originalRenderConfig.apply(this,arguments);
     };
   }
+
+  // V53: alguns botões de remoção ficam dentro de áreas/formulários legados.
+  // O clique removia corretamente no Supabase, mas o submit padrão do <button> podia recarregar/redirecionar a página.
+  // Este guard só cancela o comportamento padrão; não bloqueia o onclick existente.
+  document.addEventListener('click', function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+    if(!btn) return;
+    const on = String(btn.getAttribute('onclick') || '');
+    const isChipRemove = on.includes('removeWhatsappChip') || on.includes('deletarChip') || btn.classList.contains('chip-del');
+    if(isChipRemove){
+      try { ev.preventDefault(); } catch(e){}
+      try { btn.setAttribute('type','button'); } catch(e){}
+    }
+  }, true);
 
   document.addEventListener('DOMContentLoaded',()=>{ setTimeout(loadActiveChips,250); setTimeout(()=>window.refreshWhatsappChipsDbFirstV52(),1000); setTimeout(()=>window.refreshWhatsappChipsDbFirstV52(),2500); });
   window.addEventListener('focus',()=>{ setTimeout(loadActiveChips,80); });

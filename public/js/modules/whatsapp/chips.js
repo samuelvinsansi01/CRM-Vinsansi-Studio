@@ -520,7 +520,7 @@ function renderChipsList(){
         <div class="chip-card-actions">
           <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="toggleChipPause('${escHtml(chip.id)}')">${paused ? 'Retomar' : 'Pausar'}</button>
           <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="toggleChipEnabled('${escHtml(chip.id)}')">${disabled ? 'Ativar' : 'Desativar'}</button>
-          <button class="btn btn-danger" style="font-size:10px;padding:7px 12px" onclick="removeWhatsappChip('${escHtml(chip.id)}')">Remover</button>
+          <button type="button" class="btn btn-danger" style="font-size:10px;padding:7px 12px" onclick="event.preventDefault();event.stopPropagation();removeWhatsappChip('${escHtml(chip.id)}');return false;">Remover</button>
         </div>
       </div>
     `;
