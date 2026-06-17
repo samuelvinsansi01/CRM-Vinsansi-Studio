@@ -1235,6 +1235,14 @@
 
   async function renderPreEnvioListV317(){
     const el=document.getElementById('preEnvioList'); if(!el) return;
+    // V54: mantém a lista sincronizada com o dia ativo do painel V50.
+    // Antes, a lista podia usar o selectedDate interno antigo e mostrar/operar no dia errado.
+    try {
+      const activeDate = document.querySelector('#preWeekCards .pre-day-card.active')?.getAttribute('data-date')
+        || document.getElementById('preEnvioRoot')?.getAttribute('data-selected-date')
+        || window.__selectedPreEnvioDateV317;
+      if (activeDate) setSelectedPreEnvioDateV317(String(activeDate).slice(0,10), false);
+    } catch(e) {}
     let rows=await fetchPreItemsV317(selectedDate, selectedChip);
     rows.sort((a,b)=>{
       const ar = (a.lead_type==='sem-site' || !String(a.leads?.website||'').trim()) ? 0 : 1;

@@ -47,6 +47,20 @@
   window.getDailyLimitPerChipV50 = dailyLimit;
   window.getPreEnvioDailyTargetV50 = dailyLimit;
 
+  function getSelectedDate(){
+    const active = document.querySelector('#preWeekCards .pre-day-card.active')?.getAttribute('data-date');
+    const rootDate = document.getElementById('preEnvioRoot')?.getAttribute('data-selected-date');
+    const globalDate = window.__selectedPreEnvioDateV317;
+    return String(state.selectedDate || active || rootDate || globalDate || todayIso()).slice(0,10);
+  }
+  function setSelectedDate(date){
+    const value = String(date || '').slice(0,10) || todayIso();
+    state.selectedDate = value;
+    window.__selectedPreEnvioDateV317 = value;
+    try { document.getElementById('preEnvioRoot')?.setAttribute('data-selected-date', value); } catch(e) {}
+    return value;
+  }
+
   async function getChips(){
     const c=sb(); if(!c) return [];
     const {data,error}=await c.from('whatsapp_instances')
@@ -86,7 +100,8 @@
       if(excludeIds.length) q=q.not('id','in',`(${excludeIds.map(x=>`"${String(x).replace(/"/g,'')}"`).join(',')})`);
       const {data,error}=await q;
       if(error){ console.warn('[v50][fetch-attr]',stage,error.message); return []; }
-      return (data||[]).filter(ch=>ch.active!==false && ch.instance);
+      // V54: aqui são LEADS, não chips. Não exigir active/instance.
+    return (data||[]);
     }
     const [sem,com]=await Promise.all([by('attribution_whatsapp',limit+80),by('attribution_site',limit+80)]);
     const out=[]; let a=0,b=0;
@@ -132,9 +147,10 @@
       const chips=await getChips();
       const dates=weekDates();
       if(!state.selectedDate || !dates.includes(state.selectedDate)){
-        const active=document.querySelector('#preWeekCards .pre-day-card.active')?.dataset?.date;
+        const active=document.querySelector('#preWeekCards .pre-day-card.active')?.dataset?.date || window.__selectedPreEnvioDateV317;
         state.selectedDate = active && dates.includes(active) ? active : (dates.includes(todayIso())?todayIso():dates[0]);
       }
+      setSelectedDate(state.selectedDate);
       const limit=dailyLimit();
       const dailyCapacity=(chips.length||0)*limit;
       const counts=await dayCounts(dates);
@@ -189,7 +205,7 @@
 
   async function createPreSendBatchV50(){
     const c=sb(); if(!c) return notify('// Supabase indisponível','err');
-    const date=state.selectedDate || document.querySelector('#preWeekCards .pre-day-card.active')?.dataset?.date || todayIso();
+    const date=setSelectedDate(getSelectedDate());
     const allChips=await getChips();
     const selected=state.selectedChip || 'all';
     const chips=selected==='all' ? allChips : allChips.filter(ch=>chipKey(ch)===selected || chipTitle(ch)===selected);
@@ -270,6 +286,7 @@
     try{ if(typeof window.renderFilaZap==='function') window.renderFilaZap(); }catch(_){ }
   }
   window.remanejarExcessoPreEnvioV50 = remanejarExcesso;
+  window.renderPreEnvioPanelV50 = renderPreEnvioPanelV50;
 
   async function renderPreCompletionStatusV50(){
     syncValidationTarget();
@@ -315,7 +332,14 @@
     window.renderPreEnvioPanelV31=renderPreEnvioPanelV50;
     window.createPreSendBatchV31=createPreSendBatchV50;
     window.renderPreCompletionStatusV44=renderPreCompletionStatusV50;
-    window.setPreEnvioDateV31=function(d){ state.selectedDate=d; state.selectedChip='all'; renderPreEnvioPanelV50(); };
+    window.setPreEnvioDateV31=function(d){
+      setSelectedDate(d);
+      state.selectedChip='all';
+      try {
+        document.querySelectorAll('#preWeekCards .pre-day-card').forEach(btn=>btn.classList.toggle('active', btn.getAttribute('data-date')===state.selectedDate));
+      } catch(e) {}
+      renderPreEnvioPanelV50();
+    };
     window.setPreEnvioChipV31=function(ch){ state.selectedChip=ch||'all'; renderPreEnvioPanelV50(); };
     window.__V50_PREENVIO_LIMIT__=VERSION;
     const prevSave=window.saveDispatchEditableConfigV49;
