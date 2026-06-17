@@ -40,12 +40,13 @@ function checkHorarioDisparo(now) {
 ════════════════════════════ */
 function loadEvoConfig(){
   const defaults = {
-    horarioInicio: '08:00',
+    horarioInicio: '13:00',
     delayMin: 120,
     delayMax: 120,
-    loteTamanho: 30,
+    loteTamanho: 60,
     loteEsperaMin: 60,
-    loteAtivo: 1
+    loteAtivo: 1,
+    blocoQuantidade: 2
   };
 
   try {
@@ -73,6 +74,7 @@ function saveEvoConfig() {
     delayMax: document.getElementById('delayMax')?.value,
     loteTamanho: document.getElementById('loteTamanho')?.value,
     loteEsperaMin: document.getElementById('loteEsperaMin')?.value,
+    blocoQuantidade: document.getElementById('dispatchBlockCount')?.value || '2',
     horarioInicio: document.getElementById('horarioInicio')?.value,
   };
   localStorage.setItem(EVO_KEY, JSON.stringify(cfg));

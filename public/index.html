@@ -991,45 +991,64 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
   <!-- CONFIGURAÇÃO DE DISPARO -->
   <div class="card" style="margin-top:16px">
     <div class="card-title">Configuração de disparo</div>
-    <div style="margin-bottom:16px">
-      <label>Horário de início automático</label>
-      <div class="horario-row">
-        <input type="time" id="horarioInicio" value="12:00" style="width:auto" oninput="saveEvoConfig()"/>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:14px">
+      Configure os blocos de disparo. A configuração padrão atual é <b>2 blocos de 60</b>, totalizando <b>120 disparos por chip/dia</b>.
+      Ao salvar, a fila, os lotes, as imagens por lote e os disparos passam a respeitar estes valores.
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+      <div>
+        <label>Horário de início automático</label>
+        <input type="time" id="horarioInicio" value="13:00" oninput="saveDispatchEditableConfigV49()"/>
+      </div>
+      <div>
+        <label>Intervalo entre leads (segundos)</label>
+        <input type="number" id="dispatchIntervalSec" min="30" step="5" value="120" oninput="saveDispatchEditableConfigV49()"/>
+      </div>
+      <div>
+        <label>Disparos por bloco</label>
+        <input type="number" id="dispatchBlockSize" min="1" step="1" value="60" oninput="saveDispatchEditableConfigV49()"/>
+      </div>
+      <div>
+        <label>Quantidade de blocos</label>
+        <input type="number" id="dispatchBlockCount" min="1" step="1" value="2" oninput="saveDispatchEditableConfigV49()"/>
+      </div>
+      <div>
+        <label>Delay entre blocos (minutos)</label>
+        <input type="number" id="dispatchBlockDelayMin" min="0" step="5" value="60" oninput="saveDispatchEditableConfigV49()"/>
+      </div>
+      <div>
+        <label>Status</label>
         <div class="horario-status" id="horarioStatus">aguardando</div>
       </div>
     </div>
 
-    <!-- Parâmetros fixos — visível e claro -->
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">
-
-      <!-- bloco 1: delay -->
-      <div style="background:var(--bg);border:1px solid var(--accent-border);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
+      <div style="background:var(--bg);border:1px solid var(--accent-border);border-radius:10px;padding:14px 18px;flex:1;min-width:160px;display:flex;flex-direction:column;gap:4px">
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">INTERVALO ENTRE LEADS</div>
         <div id="statIntervalVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--accent);line-height:1">2 min</div>
-        <div id="statIntervalSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">120 seg fixo entre cada lead</div>
+        <div id="statIntervalSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">120 seg entre cada lead</div>
       </div>
 
-      <!-- bloco 2: por hora -->
-      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">MENSAGENS POR LOTE</div>
-        <div id="statLoteVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">30 msg</div>
-        <div id="statLoteSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip · 6 lotes por dia</div>
+      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:160px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">DISPAROS POR BLOCO</div>
+        <div id="statLoteVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">60 msg</div>
+        <div id="statLoteSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">por chip · 2 blocos por dia</div>
       </div>
 
-      <!-- bloco 3: por dia -->
-      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:140px;display:flex;flex-direction:column;gap:4px">
+      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:14px 18px;flex:1;min-width:160px;display:flex;flex-direction:column;gap:4px">
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:0.12em">LIMITE DIÁRIO POR CHIP <span class="tag">ANTI-BAN</span></div>
-        <div id="statDiaVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">180 msg</div>
-        <div id="statDiaSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">6 lotes × 30 · espera 1h</div>
+        <div id="statDiaVal" style="font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:var(--text);line-height:1">120 msg</div>
+        <div id="statDiaSub" style="font-family:'DM Mono',monospace;font-size:8px;color:var(--ok)">2 blocos × 60 · espera 60min</div>
       </div>
-
     </div>
-    <!-- campos ocultos mantidos para compatibilidade com o código de disparo -->
-    <input type="hidden" id="delayMin"      value="120"/>
-    <input type="hidden" id="delayMax"      value="120"/>
-    <input type="hidden" id="loteTamanho"   value="30"/>
+
+    <!-- campos de compatibilidade consumidos pelo motor de disparo atual -->
+    <input type="hidden" id="delayMin" value="120"/>
+    <input type="hidden" id="delayMax" value="120"/>
+    <input type="hidden" id="loteTamanho" value="60"/>
     <input type="hidden" id="loteEsperaMin" value="60"/>
-    <input type="hidden" id="loteAtivo"     value="1"/>
+    <input type="checkbox" id="loteAtivo" checked style="display:none" aria-hidden="true"/>
   </div>
 
   <!-- RAMOS -->
@@ -1779,6 +1798,7 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
   <script src="js/modules/zz-v39-preenvio-validacao-instagram-fixes.js?v=20260616-V45-INVALIDACAO-PRE-INSTA"></script>
   <script src="js/modules/zz-v45-invalidacao-pre-instagram.js?v=20260616-V45-INVALIDACAO-PRE-INSTA"></script>
   <script src="js/modules/zz-v47-invalidar-instagram-base.js?v=20260616-V47-INVALIDAR-INSTAGRAM-BASE"></script>
+  <script src="js/modules/zz-v49-config-disparo-editavel.js?v=20260617-V49-CONFIG-DISPARO-EDITAVEL"></script>
 
 <script>
 function copyInfraCommandV46(type) {

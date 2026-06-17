@@ -12,11 +12,11 @@ function debugDispatchPersistV413(step, data = {}) {
    DISPARO — LOTES
 ════════════════════════════ */
 function getLoteSize() {
-  return Math.max(30, parseInt(document.getElementById('loteTamanho')?.value) || 30);
+  return Math.max(1, parseInt(document.getElementById('loteTamanho')?.value) || 60);
 }
 function getLoteConfig() {
-  const tam = Math.max(30, parseInt(document.getElementById('loteTamanho')?.value)||30);
-  const esp = Math.max(60, parseInt(document.getElementById('loteEsperaMin')?.value)||60);
+  const tam = Math.max(1, parseInt(document.getElementById('loteTamanho')?.value)||60);
+  const esp = Math.max(0, parseInt(document.getElementById('loteEsperaMin')?.value)||60);
   return { ativo: document.getElementById('loteAtivo')?.checked||false, tamanho: tam, esperaMin: esp };
 }
 

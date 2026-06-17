@@ -337,7 +337,7 @@ async function dispararLoteChip(slot) {
   if (!chip) return;
   st.loteAtual++;
   const lote = st.filaLotes.shift();
-  const esperaMin = Math.max(60, parseInt(document.getElementById('loteEsperaMin')?.value)||60);
+  const esperaMin = Math.max(0, parseInt(document.getElementById('loteEsperaMin')?.value)||60);
   const delayMin  = parseInt(document.getElementById('delayMin')?.value)||120;
   const delayMax  = parseInt(document.getElementById('delayMax')?.value)||180;
   const MSG_DELAY_1_TO_2 = 10000;

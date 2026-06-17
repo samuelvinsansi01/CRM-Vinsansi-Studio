@@ -13,9 +13,9 @@
   const cfg = loadEvoConfig() || {};
   if (cfg.delayMin)      (document.getElementById('delayMin')||{}).value      = cfg.delayMin; else (document.getElementById('delayMin')||{}).value = 120;
   if (cfg.delayMax)      (document.getElementById('delayMax')||{}).value      = cfg.delayMax; else (document.getElementById('delayMax')||{}).value = 120;
-  // Parâmetros fixos da operação: 4 lotes de 30, com espera de 1h entre lotes.
-  (document.getElementById('loteTamanho')||{}).value   = 30;
-  (document.getElementById('loteEsperaMin')||{}).value = 60;
+  // Parâmetros editáveis da operação: padrão 2 blocos de 60, com espera de 1h entre blocos.
+  (document.getElementById('loteTamanho')||{}).value   = cfg.loteTamanho || 60;
+  (document.getElementById('loteEsperaMin')||{}).value = cfg.loteEsperaMin || 60;
   if (cfg.horarioInicio) (document.getElementById('horarioInicio')||{}).value = cfg.horarioInicio;
 
   if (typeof atualizarStatsDisparo === 'function') atualizarStatsDisparo();
@@ -248,12 +248,12 @@ function getDispatchConfigTextV33() {
   return {
     dailyLimitTitle: 'LIMITE DIÁRIO POR CHIP',
     dailyLimitValue: '120 msg',
-    dailyLimitHint: '4 lotes × 30 · espera 1h',
-    batchValue: '30 msg',
-    batchHint: 'por chip · 4 lotes por dia',
+    dailyLimitHint: '2 blocos × 60 · espera 1h',
+    batchValue: '60 msg',
+    batchHint: 'por chip · 2 blocos por dia',
     intervalValue: '2 min',
     intervalHint: '120 seg fixo entre cada lead',
-    blocks: ['08:00', '10:00', '12:00', '14:00']
+    blocks: ['13:00', '16:00']
   };
 }
 
