@@ -41,7 +41,8 @@ function isChipAllowedForCurrentUserV24(row = {}){
   const currentUserEmail = getCurrentUserEmailV24();
   const chipUserId = String(row.user_id || '');
   const chipUserEmail = String(row.user_email || '').trim().toLowerCase();
-  const allowed = !!(currentUserId && currentUserEmail && chipUserId === currentUserId && chipUserEmail === currentUserEmail);
+  // DB-first: o vínculo principal é user_id. user_email é compatibilidade antiga, não trava.
+  const allowed = !!(currentUserId && chipUserId === currentUserId);
   debugWhatsappChipsV30('[user-isolation][chip-filter]', { currentUserId, currentUserEmail, chipUserId, chipUserEmail, allowed });
   return allowed;
 }
@@ -134,8 +135,7 @@ async function loadWhatsappChipsFromSupabaseV22(){
       .from('whatsapp_instances')
       .select('*')
       .eq('user_id', userId)
-      .eq('user_email', userEmail)
-      .order('created_at', { ascending:false });
+      .order('label', { ascending:true });
 
     if (error) throw error;
 
@@ -177,8 +177,7 @@ async function persistWhatsappChipsToSupabaseV22(list = []){
     const { data:existingRows, error:selectError } = await sbClient
       .from('whatsapp_instances')
       .select('id,chip_id,user_id,user_email,instance,api_key')
-      .eq('user_id', userId)
-      .eq('user_email', userEmail);
+      .eq('user_id', userId);
     if (selectError) throw selectError;
 
     const allowedRows = (existingRows || []).filter(isChipAllowedForCurrentUserV24);
@@ -529,6 +528,14 @@ function renderChipsList(){
 }
 
 function renderChipsPanel(){
+  const cached = getWhatsappChipsV29();
+  if (!cached.length && typeof loadWhatsappChipsFromSupabaseV22 === 'function' && isSupabaseChipStoreReadyV22()) {
+    loadWhatsappChipsFromSupabaseV22().then(() => {
+      renderChipsOperationSummary();
+      renderChipsList();
+      updateChipsBadge();
+    }).catch(()=>{});
+  }
   renderChipsOperationSummary();
   renderChipsList();
   updateChipsBadge();

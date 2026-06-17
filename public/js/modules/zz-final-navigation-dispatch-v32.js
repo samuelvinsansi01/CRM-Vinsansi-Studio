@@ -120,7 +120,7 @@
       .order('scheduled_date',{ascending:true}).order('chip_label',{ascending:true}).order('position',{ascending:true});
     const chipQuery=c.from('whatsapp_instances')
       .select('id,chip_id,label,name,instance,active,status,connection_state,daily_limit,block_size,interval_seconds')
-      .eq('user_id',uid()).eq('active',true).order('label',{ascending:true});
+      .eq('user_id',uid()).order('label',{ascending:true});
     const [it,ch]=await Promise.all([itemQuery,chipQuery]);
     if(it.error) return {items:[],chips:[],error:it.error};
     if(ch.error) console.warn('[v32][whatsapp_instances]',ch.error.message);
@@ -171,7 +171,7 @@
     const dates=[...new Set([...weekDates(),...rows.map(r=>r.scheduled_date).filter(Boolean)])].sort();
     if(!state.date || !dates.includes(state.date)) state.date=dates.includes(todayIso())?todayIso():(dates[0]||todayIso());
     const byDate=rows.filter(r=>r.scheduled_date===state.date);
-    const known=[...chips];
+    const known=[...(chips||[]).filter(ch=>ch.active!==false && ch.instance)];
     rows.forEach(r=>{ const inst=rowChipInstance(r), label=rowChipName(r); if(!known.some(ch=>chipKey(ch)===inst || chipTitle(ch)===label || chipKey(ch)===label || chipTitle(ch)===inst)) known.push({id:inst||label,instance:inst,label:label,daily_limit:120,active:true}); });
     if(state.chip!=='all' && !known.some(ch=>chipKey(ch)===state.chip || chipTitle(ch)===state.chip)) state.chip='all';
     const countStatus=(st,list=byDate)=> st==='all'?list.length:list.filter(r=>statusLabel(r.status)===st).length;

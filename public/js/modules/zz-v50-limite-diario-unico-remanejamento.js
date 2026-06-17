@@ -51,9 +51,9 @@
     const c=sb(); if(!c) return [];
     const {data,error}=await c.from('whatsapp_instances')
       .select('id,chip_id,label,name,instance,base_url,evolution_url,url,api_key,status,connection_state,active,daily_limit,block_size,interval_seconds')
-      .eq('user_id',uid()).eq('active',true).order('label',{ascending:true});
+      .eq('user_id',uid()).order('label',{ascending:true});
     if(error){ console.warn('[v50][chips]',error.message); return []; }
-    return data||[];
+    return (data||[]).filter(ch=>ch.active!==false && ch.instance);
   }
   async function countDayItems(date, chip='all'){
     const c=sb(); if(!c) return 0;
@@ -86,7 +86,7 @@
       if(excludeIds.length) q=q.not('id','in',`(${excludeIds.map(x=>`"${String(x).replace(/"/g,'')}"`).join(',')})`);
       const {data,error}=await q;
       if(error){ console.warn('[v50][fetch-attr]',stage,error.message); return []; }
-      return data||[];
+      return (data||[]).filter(ch=>ch.active!==false && ch.instance);
     }
     const [sem,com]=await Promise.all([by('attribution_whatsapp',limit+80),by('attribution_site',limit+80)]);
     const out=[]; let a=0,b=0;

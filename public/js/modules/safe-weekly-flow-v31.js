@@ -1102,7 +1102,7 @@
       .order('label',{ascending:true});
     if(error){ console.warn('[v31.7][chips]',error.message); return []; }
     const seen=new Set();
-    return (data||[]).filter(ch=>{ if(seen.has(ch.instance)) return false; seen.add(ch.instance); return true; });
+    return (data||[]).filter(ch=>ch.active!==false && ch.instance).filter(ch=>{ if(seen.has(ch.instance)) return false; seen.add(ch.instance); return true; });
   }
   async function countStage(stage){
     const c=db(); if(!c) return 0;
@@ -1409,7 +1409,7 @@
     if(chipErr) console.warn('[v32][fila-zap-chips]', chipErr.message);
 
     const rows=(items||[]).map(r=>({ ...r, lead:r.leads||{} }));
-    const chipRows=(chips||[]);
+    const chipRows=(chips||[]).filter(ch=>ch.active!==false && ch.instance);
     const badge=document.getElementById('badge-fila-zap');
     if(badge) badge.textContent=String(rows.filter(r=>['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting'].includes(String(r.status||''))).length);
 
