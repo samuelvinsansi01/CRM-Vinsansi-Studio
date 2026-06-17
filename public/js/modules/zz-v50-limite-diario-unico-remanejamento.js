@@ -5,7 +5,7 @@
    - Excesso não validado volta para atribuição; aprovado/fila vai para próximo dia disponível do mesmo chip. */
 (function(){
   'use strict';
-  const VERSION = '20260617-v50-limite-diario-unico-remanejamento';
+  const VERSION = '20260617-v57-preenvio-limite-chip-delay-fixo';
   const USER_ID_FALLBACK = 'c02fe973-4eb5-4036-9f8d-8787937e8b11';
   const state = { selectedDate:null, selectedChip:'all', rendering:false };
   function publishSelection(){
@@ -41,15 +41,23 @@
     }catch(_){ }
     try{ return JSON.parse(localStorage.getItem('vs_evo_config')||'{}')||{}; }catch(_){ return {}; }
   }
-  function dailyLimit(){
+  function configDailyLimit(){
     const cfg=getDispatchConfig();
+    const direct=Number(cfg.dailyLimit ?? cfg.daily_limit ?? cfg.limiteDiarioPorChip ?? cfg.limite_diario_por_chip ?? 0);
+    if(Number.isFinite(direct) && direct>0) return Math.max(1,Math.round(direct));
     const blockSize=Number(cfg.loteTamanho ?? cfg.disparosPorBloco ?? cfg.block_size ?? 60) || 60;
-    const blockCount=Number(cfg.blocoQuantidade ?? cfg.quantidadeBlocos ?? cfg.blocks_count ?? 2) || 2;
-    const total=Math.max(1, Math.round(blockSize*blockCount));
-    return total;
+    const blockCount=Number(cfg.blocoQuantidade ?? cfg.quantidadeBlocos ?? cfg.blocks_count ?? 1) || 1;
+    return Math.max(1, Math.round(blockSize*blockCount));
   }
+  function chipLimit(chip){
+    const raw=Number(chip?.daily_limit ?? chip?.dailyLimit ?? chip?.raw_payload?.daily_limit ?? 0);
+    if(Number.isFinite(raw) && raw>0) return Math.max(1,Math.round(raw));
+    return configDailyLimit();
+  }
+  function dailyLimit(){ return configDailyLimit(); }
   window.getDailyLimitPerChipV50 = dailyLimit;
   window.getPreEnvioDailyTargetV50 = dailyLimit;
+  window.getPreEnvioChipLimitV57 = chipLimit;
 
   function getSelectedDate(){
     const active = document.querySelector('#preWeekCards .pre-day-card.active')?.getAttribute('data-date');
@@ -124,11 +132,11 @@
     return Number(a.count||0)+Number(b.count||0);
   }
   async function fetchExcess(date, chip='all'){
-    const limit=dailyLimit();
     const chips=chip==='all' ? await getChips() : (await getChips()).filter(ch=>chipKey(ch)===chip || chipTitle(ch)===chip);
     const out=[];
     for(const ch of chips){
       const key=chipKey(ch); if(!key) continue;
+      const limit=chipLimit(ch);
       const rows=(await getPreItems(date,key)).filter(r=>!isTerminalStatus(r.status));
       rows.sort((a,b)=>(Number(a.position||0)-Number(b.position||0))||String(a.id).localeCompare(String(b.id)));
       if(rows.length>limit) out.push({chip:ch,rows,excess:rows.slice(limit),count:rows.length,limit});
@@ -157,7 +165,7 @@
       setSelectedDate(state.selectedDate);
       publishSelection();
       const limit=dailyLimit();
-      const dailyCapacity=(chips.length||0)*limit;
+      const dailyCapacity=chips.reduce((sum,ch)=>sum+chipLimit(ch),0);
       const counts=await dayCounts(dates);
       root.innerHTML=`
         <div class="page-header" style="flex-shrink:0">
@@ -170,7 +178,7 @@
           <div class="card-title">Criar pré-envio</div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
             <div class="v50-limit-pill"><span>Limite diário por chip</span><strong>${limit}</strong><small>${esc(describeDispatchConfig())}</small></div>
-            <button class="btn btn-primary" onclick="createPreSendBatchV31()">Gerar pré-envio</button>
+            <button class="btn btn-primary" onclick="createPreSendBatchV31()">Preencher chip</button>
           </div>
           <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:10px">Dia selecionado: <b>${esc(dayLabel(state.selectedDate))}</b>. O sistema só preenche a capacidade restante de cada chip. Ex.: limite ${limit}; se o chip já tem 40, busca ${Math.max(0,limit-40)}.</div>
         </div>
@@ -199,8 +207,14 @@
     for(const ch of chips){ per.push({chip:ch,count:await countDayItems(date,chipKey(ch))}); }
     return `<button class="day-tab ${state.selectedChip==='all'?'active':''}" onclick="setPreEnvioChipV31('all')">Todos (${all})</button>` + per.map(({chip,count})=>`<button class="day-tab ${state.selectedChip===chipKey(chip)?'active':''}" onclick="setPreEnvioChipV31('${esc(chipKey(chip))}')">${esc(chipTitle(chip))} (${count})</button>`).join('');
   }
-  function syncValidationTarget(){
-    const limit=dailyLimit();
+  async function syncValidationTarget(){
+    let limit=dailyLimit();
+    try{
+      const selected=state.selectedChip||'all';
+      const chips=await getChips();
+      if(selected!=='all'){ const ch=chips.find(x=>chipKey(x)===selected||chipTitle(x)===selected); if(ch) limit=chipLimit(ch); }
+      else if(chips.length){ limit=chipLimit(chips[0]); }
+    }catch(_){ }
     let input=document.getElementById('v39ValidateTarget');
     if(!input){ input=document.createElement('input'); input.type='hidden'; input.id='v39ValidateTarget'; document.body.appendChild(input); }
     input.value=String(limit); input.setAttribute('max','500'); input.setAttribute('type','hidden');
@@ -216,13 +230,13 @@
     const selected=state.selectedChip || 'all';
     const chips=selected==='all' ? allChips : allChips.filter(ch=>chipKey(ch)===selected || chipTitle(ch)===selected);
     if(!chips.length) return notify('// nenhum chip ativo encontrado','warn');
-    const limit=dailyLimit();
     let totalCreated=0;
     const exclude=[];
     const existingAll=await getPreItems(date,'all');
     existingAll.forEach(r=>{ if(r.lead_id) exclude.push(r.lead_id); });
     for(const chip of chips){
       const key=chipKey(chip);
+      const limit=chipLimit(chip);
       const existing=await getPreItems(date,key);
       const remaining=Math.max(0,limit-existing.length);
       if(remaining<=0) continue;
@@ -241,7 +255,7 @@
       totalCreated += leads.length;
     }
     if(!totalCreated) return notify('// nenhum lead novo gerado. O dia/chip pode estar completo ou não há leads na atribuição.','warn');
-    notify(`✓ ${totalCreated} lead(s) gerados respeitando limite ${limit}/chip`);
+    notify(`✓ ${totalCreated} lead(s) gerados respeitando o limite do(s) chip(s)`);
     await renderPreEnvioPanelV50();
     try{ if(typeof window.updateSafeBadgesV31==='function') window.updateSafeBadgesV31(); }catch(_){ }
   }
@@ -260,7 +274,6 @@
     const total=groups.reduce((s,g)=>s+g.excess.length,0);
     if(!total) return notify('Nenhum excesso encontrado.','warn');
     if(!confirm(`Remanejar ${total} lead(s) em excesso de ${dayLabel(date)}?\n\nNão validados voltam para atribuição. Aprovados/fila vão para o próximo dia disponível do mesmo chip.`)) return;
-    const limit=dailyLimit();
     let returned=0,moved=0,skipped=0;
     for(const group of groups){
       const key=chipKey(group.chip);
@@ -275,7 +288,7 @@
           continue;
         }
         if(isValidatedMovableStatus(st)){
-          const slot=await findNextAvailableDate(key,date,limit);
+          const slot=await findNextAvailableDate(key,date,chipLimit(group.chip));
           if(!slot){ skipped++; continue; }
           const payload={...(item.raw_payload||{}),v50_remanejamento:{from:date,to:slot.date,reason:'daily_limit_reduced',at:new Date().toISOString(),kept_status:item.status}};
           const {error}=await c.from('pre_dispatch_items').update({scheduled_date:slot.date,position:slot.position,raw_payload:payload,updated_at:new Date().toISOString()}).eq('user_id',uid()).eq('id',item.id);
@@ -300,11 +313,11 @@
     const date=state.selectedDate || document.querySelector('#preWeekCards .pre-day-card.active')?.dataset?.date || todayIso();
     const selected=state.selectedChip || 'all';
     const chips=(await getChips()).filter(ch=>selected==='all'||chipKey(ch)===selected||chipTitle(ch)===selected);
-    const limit=dailyLimit();
     const available=await attributionAvailableCount();
     if(!chips.length){ el.innerHTML='<div class="v39-empty" style="padding:10px">// nenhum chip ativo selecionado</div>'; return; }
     const cards=[];
     for(const chip of chips){
+      const limit=chipLimit(chip);
       const rows=await getPreItems(date,chipKey(chip));
       const valid=rows.filter(r=>validStatus(r.status)).length;
       const invalid=rows.filter(r=>String(r.status||'').includes('invalid')).length;
