@@ -180,13 +180,18 @@ function renderTemplatesConfig() {
   }
 
   const tipoAtual = tplTipo === 'com-site' ? 'com-site' : 'sem-site';
-  const tpls = getTemplatesForRamoTipo(tplRamoId, tipoAtual);
+  const tpls = (typeof normalizeTemplateListV48 === 'function')
+    ? normalizeTemplateListV48(getTemplatesForRamoTipo(tplRamoId, tipoAtual))
+    : getTemplatesForRamoTipo(tplRamoId, tipoAtual).map(t => typeof t === 'object' ? t : ({ msg1: String(t || ''), msg2: '' }));
   const maxTpl = 10;
-  const limitLabel = `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${tpls.length}/${maxTpl} templates · ${tipoAtual === 'com-site' ? 'Com site' : 'Sem site'}</span>`;
+  const limitLabel = `<span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${tpls.length}/${maxTpl} templates · cada template tem 2 mensagens · ${tipoAtual === 'com-site' ? 'Com site' : 'Sem site'}</span>`;
 
-  const tplsHtml = tpls.map((t, i) => `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:8px;position:relative">
-    <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">TEMPLATE ${i+1} · ${tipoAtual === 'com-site' ? 'COM SITE' : 'SEM SITE'}</div>
-    <textarea style="min-height:80px;font-size:10px;line-height:1.6" oninput="saveRamoTemplate('${tplRamoId}','${tipoAtual}',${i},this.value)">${escHtml(t)}</textarea>
+  const tplsHtml = tpls.map((t, i) => `<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;position:relative">
+    <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">TEMPLATE ${i+1} · ${tipoAtual === 'com-site' ? 'COM SITE' : 'SEM SITE'} · MSG 1 + MSG 2 + IMAGEM</div>
+    <label style="display:block;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin:0 0 5px">MENSAGEM 1</label>
+    <textarea style="min-height:72px;font-size:10px;line-height:1.6;margin-bottom:10px" oninput="saveRamoTemplateMessage('${tplRamoId}','${tipoAtual}',${i},'msg1',this.value)">${escHtml(t.msg1 || '')}</textarea>
+    <label style="display:block;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin:0 0 5px">MENSAGEM 2</label>
+    <textarea style="min-height:72px;font-size:10px;line-height:1.6" oninput="saveRamoTemplateMessage('${tplRamoId}','${tipoAtual}',${i},'msg2',this.value)">${escHtml(t.msg2 || '')}</textarea>
     ${tpls.length>1?`<button class="del-btn" style="position:absolute;top:8px;right:8px" onclick="removerRamoTemplate('${tplRamoId}','${tipoAtual}',${i})">✕</button>`:''}
   </div>`).join('');
 

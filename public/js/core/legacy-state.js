@@ -62,28 +62,52 @@ function saveRamoTemplates(obj) {
   scheduleLegacyOperationalSyncV36({ delay:400, reason:'branch-template-update' });
 }
 
+function normalizeTemplatePairV48(tpl) {
+  if (tpl && typeof tpl === 'object' && !Array.isArray(tpl)) {
+    return {
+      msg1: String(tpl.msg1 ?? tpl.message1 ?? tpl.text ?? '').trim(),
+      msg2: String(tpl.msg2 ?? tpl.message2 ?? '').trim(),
+    };
+  }
+  return { msg1: String(tpl || '').trim(), msg2: '' };
+}
+
+function normalizeTemplateListV48(list) {
+  return (Array.isArray(list) ? list : []).map(normalizeTemplatePairV48).filter(t => t.msg1 || t.msg2);
+}
+
 function getTemplatesForRamoTipo(ramoId, tipo) {
   const all = getRamoTemplates();
   const key = `${ramoId}__${tipo}`;
-  if (all[key] && all[key].length > 0) return all[key];
-  return getRamoTemplatesDefault(ramoId, tipo);
+  if (all[key] && all[key].length > 0) return normalizeTemplateListV48(all[key]);
+  return normalizeTemplateListV48(getRamoTemplatesDefault(ramoId, tipo));
+}
+
+function saveRamoTemplateMessage(ramoId, tipo, idx, field, val) {
+  const all = getRamoTemplates();
+  const key = `${ramoId}__${tipo}`;
+  if (!all[key]) all[key] = normalizeTemplateListV48(getRamoTemplatesDefault(ramoId, tipo));
+  all[key] = normalizeTemplateListV48(all[key]);
+  if (!all[key][idx]) all[key][idx] = { msg1: '', msg2: '' };
+  all[key][idx][field === 'msg2' ? 'msg2' : 'msg1'] = val;
+  saveRamoTemplates(all);
 }
 
 function saveRamoTemplate(ramoId, tipo, idx, val) {
-  const all = getRamoTemplates();
-  const key = `${ramoId}__${tipo}`;
-  if (!all[key]) all[key] = [...getRamoTemplatesDefault(ramoId, tipo)];
-  all[key][idx] = val;
-  saveRamoTemplates(all);
+  saveRamoTemplateMessage(ramoId, tipo, idx, 'msg1', val);
 }
 
 function adicionarRamoTemplate(ramoId, tipo) {
   const all = getRamoTemplates();
   const key = `${ramoId}__${tipo}`;
-  if (!all[key]) all[key] = [...getRamoTemplatesDefault(ramoId, tipo)];
-  const maxTpl = tipo === 'sem-site' ? 3 : 10;
+  if (!all[key]) all[key] = normalizeTemplateListV48(getRamoTemplatesDefault(ramoId, tipo));
+  all[key] = normalizeTemplateListV48(all[key]);
+  const maxTpl = 10;
   if (all[key].length >= maxTpl) { notify(`// máximo de ${maxTpl} templates para ${tipo}`,'warn'); return; }
-  all[key].push(`Olá, me chamo Samuel. Tudo bem?\n\nVi ${tipo==='com-site'?'o site d':''}a {EMPRESA}...\n\nFaz sentido conversarmos?`);
+  all[key].push({
+    msg1: `Olá, tudo bem? Me chamo Samuel.\n\nEncontrei a {EMPRESA} e notei uma oportunidade de melhorar a apresentação digital da empresa.`,
+    msg2: `Trabalho criando sites que ajudam empresas a mostrar melhor seus diferenciais e gerar mais contatos. Faz sentido eu te enviar uma amostra rápida?`,
+  });
   saveRamoTemplates(all);
   renderTemplatesConfig();
 }
@@ -91,12 +115,14 @@ function adicionarRamoTemplate(ramoId, tipo) {
 function removerRamoTemplate(ramoId, tipo, idx) {
   const all = getRamoTemplates();
   const key = `${ramoId}__${tipo}`;
-  if (!all[key]) all[key] = [...getRamoTemplatesDefault(ramoId, tipo)];
+  if (!all[key]) all[key] = normalizeTemplateListV48(getRamoTemplatesDefault(ramoId, tipo));
+  all[key] = normalizeTemplateListV48(all[key]);
   if (all[key].length <= 1) { notify('// precisa ter ao menos 1 template','warn'); return; }
   all[key].splice(idx, 1);
   saveRamoTemplates(all);
   renderTemplatesConfig();
 }
+
 
 const LINK_BICHOP = 'https://samuelvinsansi.com.br';
 
@@ -227,18 +253,41 @@ function normalizeLeadTemplateTipoV45(tipoOrLead) {
   if (typeof tipoOrLead === 'object' && tipoOrLead) return tipoOrLead.tipo || (tipoOrLead.site ? 'com-site' : 'sem-site');
   return tipoOrLead === 'com-site' ? 'com-site' : 'sem-site';
 }
+function renderTemplateTextV48(text, nome) {
+  return String(text || '').replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome);
+}
 function pickTemplate(nome, ramoId, tipo = 'sem-site') {
   const templateTipo = normalizeLeadTemplateTipoV45(tipo);
-  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, templateTipo) : getTemplates();
-  if (!tpl || !tpl.length) return { text: '', idx: 0 };
+  const rawTpl = ramoId ? getTemplatesForRamoTipo(ramoId, templateTipo) : getTemplates();
+  const tpl = normalizeTemplateListV48(rawTpl);
+  if (!tpl || !tpl.length) return { text: '', msg1: '', msg2: '', idx: 0 };
   const idx = Math.floor(Math.random() * tpl.length);
-  return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
+  const pair = tpl[idx] || { msg1: '', msg2: '' };
+  return {
+    text: renderTemplateTextV48(pair.msg1, nome),
+    msg1: renderTemplateTextV48(pair.msg1, nome),
+    msg2: renderTemplateTextV48(pair.msg2, nome),
+    idx
+  };
 }
 function pickOtherTemplate(nome, cur, ramoId, tipo = 'sem-site') {
   const templateTipo = normalizeLeadTemplateTipoV45(tipo);
-  const tpl = ramoId ? getTemplatesForRamoTipo(ramoId, templateTipo) : getTemplates();
-  if (!tpl || !tpl.length) return { text: '', idx: 0 };
+  const rawTpl = ramoId ? getTemplatesForRamoTipo(ramoId, templateTipo) : getTemplates();
+  const tpl = normalizeTemplateListV48(rawTpl);
+  if (!tpl || !tpl.length) return { text: '', msg1: '', msg2: '', idx: 0 };
+
+  // V48: a segunda mensagem deve vir do mesmo template sorteado.
+  // Isso preserva a estrutura: 1 template = mensagem 1 + mensagem 2 + imagem do lote.
+  if (Number.isInteger(cur) && tpl[cur]) {
+    const pair = tpl[cur];
+    const second = renderTemplateTextV48(pair.msg2, nome);
+    if (second.trim()) return { text: second, msg1: renderTemplateTextV48(pair.msg1, nome), msg2: second, idx: cur };
+  }
+
+  // Fallback legado: se o template antigo não tiver msg2, usa outro template como segunda mensagem.
   let idx; do { idx = Math.floor(Math.random() * tpl.length); } while (idx === cur && tpl.length > 1);
-  return { text: tpl[idx].replace(/\{EMPRESA\}/g, nome).replace(/\[EMPRESA\]/g, nome), idx };
+  const pair = tpl[idx] || { msg1: '', msg2: '' };
+  const text = renderTemplateTextV48(pair.msg2 || pair.msg1, nome);
+  return { text, msg1: renderTemplateTextV48(pair.msg1, nome), msg2: renderTemplateTextV48(pair.msg2, nome), idx };
 }
 
