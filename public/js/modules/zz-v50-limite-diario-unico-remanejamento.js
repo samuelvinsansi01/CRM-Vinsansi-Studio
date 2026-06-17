@@ -8,6 +8,10 @@
   const VERSION = '20260617-v50-limite-diario-unico-remanejamento';
   const USER_ID_FALLBACK = 'c02fe973-4eb5-4036-9f8d-8787937e8b11';
   const state = { selectedDate:null, selectedChip:'all', rendering:false };
+  function publishSelection(){
+    window.__selectedPreEnvioChipV50 = state.selectedChip || 'all';
+    window.__selectedPreEnvioDateV50 = state.selectedDate || null;
+  }
 
   function sb(){ try{return window.sbClient || (typeof sbClient!=='undefined'?sbClient:null);}catch(_){return null;} }
   function uid(){ try{return window.currentUser?.id || (typeof currentUser!=='undefined'&&currentUser?.id) || localStorage.getItem('vs_auth_local_user_v423') || USER_ID_FALLBACK;}catch(_){return USER_ID_FALLBACK;} }
@@ -151,6 +155,7 @@
         state.selectedDate = active && dates.includes(active) ? active : (dates.includes(todayIso())?todayIso():dates[0]);
       }
       setSelectedDate(state.selectedDate);
+      publishSelection();
       const limit=dailyLimit();
       const dailyCapacity=(chips.length||0)*limit;
       const counts=await dayCounts(dates);
@@ -206,6 +211,7 @@
   async function createPreSendBatchV50(){
     const c=sb(); if(!c) return notify('// Supabase indisponível','err');
     const date=setSelectedDate(getSelectedDate());
+    publishSelection();
     const allChips=await getChips();
     const selected=state.selectedChip || 'all';
     const chips=selected==='all' ? allChips : allChips.filter(ch=>chipKey(ch)===selected || chipTitle(ch)===selected);
@@ -335,12 +341,13 @@
     window.setPreEnvioDateV31=function(d){
       setSelectedDate(d);
       state.selectedChip='all';
+      publishSelection();
       try {
         document.querySelectorAll('#preWeekCards .pre-day-card').forEach(btn=>btn.classList.toggle('active', btn.getAttribute('data-date')===state.selectedDate));
       } catch(e) {}
       renderPreEnvioPanelV50();
     };
-    window.setPreEnvioChipV31=function(ch){ state.selectedChip=ch||'all'; renderPreEnvioPanelV50(); };
+    window.setPreEnvioChipV31=function(ch){ state.selectedChip=ch||'all'; publishSelection(); renderPreEnvioPanelV50(); };
     window.__V50_PREENVIO_LIMIT__=VERSION;
     const prevSave=window.saveDispatchEditableConfigV49;
     if(typeof prevSave==='function' && !prevSave.__v50wrapped){

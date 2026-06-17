@@ -1243,6 +1243,10 @@
         || window.__selectedPreEnvioDateV317;
       if (activeDate) setSelectedPreEnvioDateV317(String(activeDate).slice(0,10), false);
     } catch(e) {}
+    try {
+      const externalChip = window.__selectedPreEnvioChipV50 || window.__selectedPreEnvioChipV317;
+      if (externalChip) selectedChip = String(externalChip || 'all');
+    } catch(e) {}
     let rows=await fetchPreItemsV317(selectedDate, selectedChip);
     rows.sort((a,b)=>{
       const ar = (a.lead_type==='sem-site' || !String(a.leads?.website||'').trim()) ? 0 : 1;
@@ -1369,13 +1373,16 @@
 
   async function sendApprovedToFinalQueueV317(dateIso){
     const c=db(); if(!c) return;
-    const { data, error } = await c.from('pre_dispatch_items').select('id,lead_id').eq('user_id',uid()).eq('scheduled_date',dateIso).eq('status','approved');
+    const chipFilter = String(window.__selectedPreEnvioChipV50 || selectedChip || 'all');
+    let q = c.from('pre_dispatch_items').select('id,lead_id,chip_instance').eq('user_id',uid()).eq('scheduled_date',dateIso).eq('status','approved');
+    if(chipFilter && chipFilter !== 'all') q = q.eq('chip_instance', chipFilter);
+    const { data, error } = await q;
     if(error) return notify('// erro ao liberar fila: '+error.message,'err');
     if(!data?.length) return notify('// nenhum lead aprovado para liberar','warn');
     const now=new Date().toISOString();
     await c.from('pre_dispatch_items').update({ status:'ready_to_dispatch', updated_at:now }).eq('user_id',uid()).in('id',data.map(x=>x.id));
     await c.from('leads').update({ current_stage:'dispatch_queue', updated_at:now }).eq('user_id',uid()).in('id',data.map(x=>x.lead_id));
-    notify(`✓ ${data.length} lead(s) liberados para Fila WhatsApp`);
+    notify(`✓ ${data.length} lead(s) liberados para Fila WhatsApp${chipFilter !== 'all' ? ' · chip '+chipFilter : ''}`);
     await renderPreEnvioListV317();
     if(typeof window.renderFilaZap==='function') window.renderFilaZap();
   }
