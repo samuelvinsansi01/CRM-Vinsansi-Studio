@@ -92,13 +92,82 @@ const LEADS_BASE_KEY = 'vs_leads_base_v1'; // inventário permanente, independen
 const SUPABASE_URL = 'https://txyknazfufashgzlxkqh.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_ClGVAmaiS4tNWe8W_4EPew_aPvAzK0E';
 const SUPABASE_AUTH_STORAGE_KEY_V435 = 'vs_supabase_auth_persistent_v435';
+
+// V62 — Auth resistente a F5.
+// O projeto usa limpezas agressivas de cache local para manter o Supabase como fonte única.
+// Esta camada protege SOMENTE o token de autenticação, espelhando a sessão em chaves seguras.
+const SUPABASE_PROJECT_REF_V62 = 'txyknazfufashgzlxkqh';
+const SUPABASE_DEFAULT_AUTH_STORAGE_KEY_V62 = `sb-${SUPABASE_PROJECT_REF_V62}-auth-token`;
+const SUPABASE_AUTH_BACKUP_KEY_V62 = 'vs_supabase_auth_backup_v62';
+
+function getSupabaseAuthCandidateV62() {
+  try {
+    return localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY_V435)
+      || localStorage.getItem(SUPABASE_DEFAULT_AUTH_STORAGE_KEY_V62)
+      || localStorage.getItem(SUPABASE_AUTH_BACKUP_KEY_V62)
+      || '';
+  } catch(e) { return ''; }
+}
+
+function mirrorSupabaseAuthSessionV62(value) {
+  if (!value) return;
+  try { localStorage.setItem(SUPABASE_AUTH_STORAGE_KEY_V435, value); } catch(e){}
+  try { localStorage.setItem(SUPABASE_DEFAULT_AUTH_STORAGE_KEY_V62, value); } catch(e){}
+  try { localStorage.setItem(SUPABASE_AUTH_BACKUP_KEY_V62, value); } catch(e){}
+}
+
+function restoreSupabaseAuthSessionV62() {
+  const value = getSupabaseAuthCandidateV62();
+  if (value) mirrorSupabaseAuthSessionV62(value);
+  return value;
+}
+
+function clearSupabaseAuthSessionV62() {
+  try { localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY_V435); } catch(e){}
+  try { localStorage.removeItem(SUPABASE_DEFAULT_AUTH_STORAGE_KEY_V62); } catch(e){}
+  try { localStorage.removeItem(SUPABASE_AUTH_BACKUP_KEY_V62); } catch(e){}
+}
+
+restoreSupabaseAuthSessionV62();
+
+const supabasePersistentStorageV62 = {
+  getItem(key) {
+    try {
+      if (key === SUPABASE_AUTH_STORAGE_KEY_V435 || key === SUPABASE_DEFAULT_AUTH_STORAGE_KEY_V62) {
+        const value = getSupabaseAuthCandidateV62();
+        if (value) mirrorSupabaseAuthSessionV62(value);
+        return value || null;
+      }
+      return localStorage.getItem(key);
+    } catch(e) { return null; }
+  },
+  setItem(key, value) {
+    try {
+      if (key === SUPABASE_AUTH_STORAGE_KEY_V435 || key === SUPABASE_DEFAULT_AUTH_STORAGE_KEY_V62) {
+        mirrorSupabaseAuthSessionV62(value);
+        return;
+      }
+      localStorage.setItem(key, value);
+    } catch(e) {}
+  },
+  removeItem(key) {
+    try {
+      if (key === SUPABASE_AUTH_STORAGE_KEY_V435 || key === SUPABASE_DEFAULT_AUTH_STORAGE_KEY_V62) {
+        clearSupabaseAuthSessionV62();
+        return;
+      }
+      localStorage.removeItem(key);
+    } catch(e) {}
+  }
+};
+
 const sbClient = window.supabase
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        storage: window.localStorage,
+        storage: supabasePersistentStorageV62,
         storageKey: SUPABASE_AUTH_STORAGE_KEY_V435,
         flowType: 'pkce'
       }
@@ -178,7 +247,10 @@ function updateAuthGate() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  showAuthGate();
+  // V62: não abrir o gate imediatamente no F5; primeiro deixamos o Supabase restaurar a sessão.
+  setTimeout(() => {
+    if (!currentUser && !window.__authInitDoneV62) showAuthGate();
+  }, 900);
 });
 
 /* ════════════════════════════
@@ -356,9 +428,19 @@ async function initAuth() {
     return;
   }
 
-  const { data, error } = await sbClient.auth.getSession();
+  restoreSupabaseAuthSessionV62();
+  let { data, error } = await sbClient.auth.getSession();
   if (error) console.warn('[auth] getSession:', error.message);
   currentUser = data?.session?.user || null;
+
+  // V62: fallback extra para casos em que o SDK ainda não hidratou a sessão no primeiro tick do F5.
+  if (!currentUser && getSupabaseAuthCandidateV62()) {
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const retry = await sbClient.auth.getSession();
+    if (retry?.error) console.warn('[auth] getSession retry:', retry.error.message);
+    data = retry?.data || data;
+    currentUser = data?.session?.user || null;
+  }
   try { window.currentUser = currentUser; } catch(e){}
   const lastLocalUserId = localStorage.getItem(AUTH_LOCAL_USER_KEY_V423) || '';
   const lastLocalUserEmail = localStorage.getItem(AUTH_LOCAL_EMAIL_KEY_V425) || '';
@@ -372,7 +454,9 @@ async function initAuth() {
   }
   
   if (!currentUser) {
-    clearLocalSessionData({ clearAuthMarkers: true });
+    // V62: limpar caches de operação, mas não apagar marcadores/token de auth durante o boot.
+    // Isso evita que um F5 em hidratação lenta force novo login.
+    clearLocalSessionData({ clearAuthMarkers: false });
   }
 renderAuthUser(currentUser);
   updateAuthGate();
@@ -427,6 +511,7 @@ renderAuthUser(currentUser);
       if (typeof renderChipsPanel === 'function') renderChipsPanel();
     }
   }
+  window.__authInitDoneV62 = true;
 }
 
 async function loginGoogle() {
@@ -474,11 +559,11 @@ async function logoutSupabase() {
       notify('Sessão local encerrada. Recarregue se necessário.', 'warn');
       return;
     }
-    try { localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY_V435); } catch(e){}
+    try { clearSupabaseAuthSessionV62(); } catch(e){}
     notify('Conta desconectada');
   } catch (error) {
     console.warn('[auth] logout remoto:', error?.message || error);
-    try { localStorage.removeItem(SUPABASE_AUTH_STORAGE_KEY_V435); } catch(e){}
+    try { clearSupabaseAuthSessionV62(); } catch(e){}
     notify('Sessão local encerrada. Recarregue se necessário.', 'warn');
   }
 }
