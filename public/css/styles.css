@@ -3109,3 +3109,12 @@ body.auth-locked .app{
 .infra-v46-checklist input{accent-color:var(--accent)}
 @media(max-width:900px){.infra-v46-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.infra-v46-checklist{grid-template-columns:1fr}.infra-v46-row{display:block}.infra-v46-row span{display:block;margin-bottom:4px}}
 @media(max-width:560px){.infra-v46-grid{grid-template-columns:1fr}.infra-v46-head{display:block}.infra-v46-pill{display:inline-block;margin-top:10px}.infra-v46-code code{min-width:100%}}
+
+/* V50 — limite diário único e remanejamento de excesso */
+.v50-limit-pill{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(184,240,89,.06);border:1px solid rgba(184,240,89,.28);border-radius:12px;padding:10px 14px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
+.v50-limit-pill strong{font-size:18px;color:var(--accent);line-height:1}
+.v50-limit-pill small{color:var(--text2);opacity:.85}
+.v50-excess-card{display:flex;align-items:center;justify-content:space-between;gap:14px;background:rgba(255,193,7,.08);border:1px solid rgba(255,193,7,.35);border-radius:12px;padding:12px 14px;margin:0 0 12px;color:var(--text)}
+.v50-excess-card strong{display:block;font-family:'Syne',sans-serif;font-size:13px;font-weight:900;color:#ffd36a;margin-bottom:3px}
+.v50-excess-card span{display:block;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.45}
+@media(max-width:760px){.v50-excess-card{align-items:flex-start;flex-direction:column}.v50-limit-pill{width:100%;justify-content:space-between}}
