@@ -190,6 +190,7 @@
   function stopAllV80(){Object.values(runtime.chips).forEach(r=>{r.stopped=true;r.paused=false;r.running=false;r.state='Parado';}); saveRuntime(); renderV80Controls(); addLog('Disparo parado.');}
   function pauseChipV80(key){const r=runtime.chips[key]; if(r){r.paused=true;saveRuntime();renderV80Controls();}}
   function resumeChipV80(key){const r=runtime.chips[key]; if(r){r.paused=false;r.stopped=false;saveRuntime();renderV80Controls();}}
+  function stopChipV80(key){const r=runtime.chips[key]; if(r){r.stopped=true;r.paused=false;r.running=false;r.state='Parado';saveRuntime();renderV80Controls();addLog(`Chip ${key} parado.`);}}
 
 
   function ramosOptionsV83(){
@@ -323,6 +324,6 @@
   window.switchPanel=function(name){const r=typeof prevSwitch==='function'?prevSwitch.apply(this,arguments):undefined; const n=String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); if(['whatsapp','fila-zap','fila_whatsapp','zap'].includes(n)||name==='WhatsApp')scheduleInject(); return r;};
   document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-label="WhatsApp"],.day-tab,.status-tab,.v73-chip-head'))scheduleInject();},true);
   document.addEventListener('DOMContentLoaded',()=>{hydrateRuntime(); scheduleInject();});
-  window.startDispatchV80=startDispatchV80; window.pauseDispatchV80=pauseAllV80; window.resumeDispatchV80=resumeAllV80; window.stopDispatchV80=stopAllV80; window.previewDispatchV80=previewV80; window.sendTestDispatchV80=sendManualLeadTestV83; window.sendManualLeadTestV83=sendManualLeadTestV83; window.previewManualLeadTestV83=previewManualV83; window.onManualLeadTestImageV83=onManualImageV83; window.pauseChipV80=pauseChipV80; window.resumeChipV80=resumeChipV80;
+  window.startDispatchV80=startDispatchV80; window.pauseDispatchV80=pauseAllV80; window.resumeDispatchV80=resumeAllV80; window.stopDispatchV80=stopAllV80; window.previewDispatchV80=previewV80; window.sendTestDispatchV80=sendManualLeadTestV83; window.sendManualLeadTestV83=sendManualLeadTestV83; window.previewManualLeadTestV83=previewManualV83; window.onManualLeadTestImageV83=onManualImageV83; window.pauseChipV80=pauseChipV80; window.resumeChipV80=resumeChipV80; window.stopChipV80=stopChipV80;
   window.__V83_LEAD_TESTE_MANUAL_ATRIBUTOS__=VERSION;
 })();
