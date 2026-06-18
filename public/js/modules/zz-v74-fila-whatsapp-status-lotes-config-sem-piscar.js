@@ -1,4 +1,4 @@
-/* V77 — Fila WhatsApp: status enxutos + somente fila final + navegação corrigida
+/* V78 — Fila WhatsApp: fila final real + navegação sem travar
    Base: V74 — status enxutos + lotes pela configuração + accordions sem piscar
    - Visual baseado na V72 aprovada.
    - Não altera Supabase, Evolution, pré-envio, QR, conversas ou base permanente.
@@ -138,7 +138,8 @@
   async function removeImage(k){state.imgCache[k]=null; await idbDelLocal(k); refreshImageNode(k,null); notify('✓ Imagem removida');}
 
   function addStyle(){if(document.getElementById('v73-fila-style'))return; const st=document.createElement('style'); st.id='v73-fila-style'; st.textContent=`
-    #panel-fila-zap.v73-panel{display:flex!important;flex-direction:row!important;padding:0!important;overflow:hidden!important;height:100vh!important;background:var(--bg)!important;}
+    #panel-fila-zap.v73-panel.active{display:flex!important;flex-direction:row!important;padding:0!important;overflow:hidden!important;height:100vh!important;background:var(--bg)!important;}
+    #panel-fila-zap.v73-panel:not(.active){display:none!important;}
     #panel-fila-zap .zapLeft{width:50%!important;flex-shrink:0!important;height:100vh!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;background:var(--bg)!important;}
     #panel-fila-zap .zapLeft-inner{display:flex!important;flex-direction:column!important;height:100%!important;overflow:hidden!important;}
     #panel-fila-zap .zapLeft-body{padding:16px 20px!important;flex:1!important;display:flex!important;flex-direction:column!important;min-height:0!important;overflow:hidden!important;}
@@ -211,7 +212,7 @@
     #panel-fila-zap .v73-info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
     #panel-fila-zap .v73-info{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);}
     #panel-fila-zap .v73-info b{display:block;color:var(--muted);font-size:7px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;}
-    @media(max-width:900px){#panel-fila-zap.v73-panel{flex-direction:column!important;height:auto!important}.zapLeft,.zapRight{width:100%!important;min-width:0!important;height:auto!important}.zapDivider{display:none!important}.v73-lead-head{grid-template-columns:auto minmax(0,1fr)!important}.v73-lead-badges{grid-column:2;justify-content:flex-start!important;flex-wrap:wrap}.v73-info-grid{grid-template-columns:1fr!important}}
+    @media(max-width:900px){#panel-fila-zap.v73-panel.active{flex-direction:column!important;height:auto!important}.zapLeft,.zapRight{width:100%!important;min-width:0!important;height:auto!important}.zapDivider{display:none!important}.v73-lead-head{grid-template-columns:auto minmax(0,1fr)!important}.v73-lead-badges{grid-column:2;justify-content:flex-start!important;flex-wrap:wrap}.v73-info-grid{grid-template-columns:1fr!important}}
   `; document.head.appendChild(st);}
 
   async function fetchData(){
@@ -226,8 +227,17 @@
     const leads={};
     if(ids.length){const {data,error}=await c.from('leads').select('id,company_name,phone,normalized_phone,website,website_type,current_stage,lead_type,city,state,rating,reviews_count,category,category_name,categories,maps_url,raw_payload').eq('user_id',uid()).in('id',ids); if(error)console.warn('[v73][fila-leads]',error.message); (data||[]).forEach(l=>leads[l.id]=l);}
     const chips=(ch.data||[]).filter(x=>x.active!==false && x.instance);
-    rows.forEach(r=>{if(!chips.some(ch=>chipKey(ch)===rowChipKey(r)||chipTitle(ch)===rowChipTitle(r))) chips.push({id:rowChipKey(r)||rowChipTitle(r),instance:rowChipKey(r),label:rowChipTitle(r),daily_limit:120,block_size:60,active:true});});
-    const items=rows.map(r=>({...r,lead:leads[r.lead_id]||{}}));
+    const finalRows=rows.filter(r=>{
+      const st=String(r.status||'').toLowerCase();
+      const l=leads[r.lead_id]||{};
+      const stage=String(l.current_stage||'').toLowerCase();
+      // A Fila WhatsApp só mostra o que foi enviado para a fila final.
+      // No fluxo atual, o botão "Enviar aprovados para fila final" marca o lead como dispatch_queue.
+      if(st==='ready_to_dispatch') return stage==='dispatch_queue';
+      return ['queued','dispatch_queue','not_sent','waiting','scheduled','sending','sent','enviado','paused','error','erro','failed'].includes(st) && stage==='dispatch_queue';
+    });
+    finalRows.forEach(r=>{if(!chips.some(ch=>chipKey(ch)===rowChipKey(r)||chipTitle(ch)===rowChipTitle(r))) chips.push({id:rowChipKey(r)||rowChipTitle(r),instance:rowChipKey(r),label:rowChipTitle(r),daily_limit:120,block_size:60,active:true});});
+    const items=finalRows.map(r=>({...r,lead:leads[r.lead_id]||{}}));
     return {items,chips,error:ch.error||null};
   }
 
@@ -306,4 +316,5 @@
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{try{if(document.getElementById('panel-fila-zap')?.classList.contains('active'))renderFilaZapV73();}catch(_){}},700));
   window.__V74_FILA_WHATSAPP_STATUS_LOTES_CONFIG_SEM_PISCAR__=VERSION;
   window.__V77_FILA_FINAL_NAV_CONFIG__=VERSION;
+  window.__V78_FILA_FINAL_REAL_NAV_OK__=VERSION;
 })();
