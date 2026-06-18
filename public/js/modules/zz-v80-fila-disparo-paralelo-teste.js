@@ -170,8 +170,8 @@
     try{if(typeof window.renderFilaZapV74==='function')window.renderFilaZapV74(); else if(typeof window.renderFilaZap==='function')window.renderFilaZap();}catch(_){ }
   }
 
-  async function startDispatchV80(){
-    const date=currentDate(); const chipFilter=currentOpenChip()||'all'; const data=await fetchData(date); runtime.lastData=data;
+  async function startDispatchV80(chipFilterArg){
+    const date=currentDate(); const chipFilter=chipFilterArg || currentOpenChip() || 'all'; const data=await fetchData(date); runtime.lastData=data;
     if(data.error)return notify(data.error.message,'err');
     const rows=runnableRows(data,chipFilter); if(!rows.length)return notify('Nenhum lead em fila para disparar neste dia/filtro.','warn');
     const invalidRows=rows.filter(r=>{const ramo=resolveRamo(r.lead||{}); return ramo.unknown||ramo.id==='__fora_do_ramo__';});

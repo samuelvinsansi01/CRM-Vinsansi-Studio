@@ -77,7 +77,7 @@
     btn.classList.toggle('active',activeMode==='test');
   }
 
-  function dispatchAll(){ if(typeof window.startDispatchV80==='function') window.startDispatchV80(); else notify('Função de disparo não encontrada.','err'); }
+  function dispatchAll(){ if(typeof window.startDispatchV80==='function') window.startDispatchV80('all'); else notify('Função de disparo não encontrada.','err'); }
   function pauseAll(){ if(typeof window.pauseDispatchV80==='function') window.pauseDispatchV80(); }
   function resumeAll(){ if(typeof window.resumeDispatchV80==='function') window.resumeDispatchV80(); }
   function stopAll(){ if(typeof window.stopDispatchV80==='function') window.stopDispatchV80(); }
@@ -87,7 +87,7 @@
   }
   function dispatchChip(key){
     if(key)openChip(key);
-    setTimeout(()=>{ if(typeof window.startDispatchV80==='function') window.startDispatchV80(); else notify('Função de disparo não encontrada.','err'); },160);
+    setTimeout(()=>{ if(typeof window.startDispatchV80==='function') window.startDispatchV80(key||'all'); else notify('Função de disparo não encontrada.','err'); },160);
   }
   function pauseChip(key){ if(typeof window.pauseChipV80==='function') window.pauseChipV80(key); else pauseAll(); }
   function resumeChip(key){ if(typeof window.resumeChipV80==='function') window.resumeChipV80(key); else resumeAll(); }
@@ -165,6 +165,8 @@
   window.switchPanel=function(name){ const r=typeof prevSwitch==='function'?prevSwitch.apply(this,arguments):undefined; const n=norm(name); if(['whatsapp','fila-zap','fila_whatsapp','zap'].includes(n)||name==='WhatsApp')schedule(); return r; };
 
   document.addEventListener('click',function(e){
+    const st=e.target.closest?.('#panel-fila-zap .status-tab');
+    if(st && !st.dataset.v85Test){ activeMode='queue'; const panel=document.getElementById('panel-fila-zap'); if(panel) panel.classList.remove('v85-test-mode'); }
     if(e.target.closest?.('#panel-fila-zap .day-tab,#panel-fila-zap .status-tab,#panel-fila-zap .v73-chip-head,.nav-item[data-label="WhatsApp"]')) schedule();
   },true);
   document.addEventListener('DOMContentLoaded',schedule);

@@ -162,7 +162,7 @@
     #panel-fila-zap .v73-company-meta a{color:var(--muted);text-decoration:none;}
     #panel-fila-zap .v73-company-actions{display:flex;gap:4px;flex-shrink:0;align-items:center;}
     #panel-fila-zap .v73-btn{background:none;border:1px solid var(--border2);color:var(--muted);border-radius:6px;font-family:'DM Mono',monospace;font-size:8px;padding:5px 8px;cursor:pointer;text-decoration:none;white-space:nowrap;}
-    #panel-fila-zap .v73-btn:hover{border-color:var(--accent);color:var(--accent);}
+    #panel-fila-zap .v73-btn:hover{border-color:var(--accent);color:var(--accent);} #panel-fila-zap .v73-btn.danger{border-color:rgba(255,80,80,.55);color:#ff6b6b;} #panel-fila-zap .v73-lead-remove-row{display:flex;justify-content:flex-end;border-top:1px dashed var(--border2);padding-top:10px;margin-top:2px;}
     #panel-fila-zap .v73-chip-acc{display:flex;flex-direction:column;min-height:0;transition:flex .3s cubic-bezier(.4,0,.2,1);flex-shrink:0;border-bottom:1px solid var(--border);}
     #panel-fila-zap .v73-chip-acc.open{flex:1;flex-shrink:1;min-height:0;}
     #panel-fila-zap .v73-chip-head{display:flex;align-items:center;gap:12px;padding:16px 20px;cursor:pointer;user-select:none;border-left:3px solid transparent;background:var(--surface);transition:background .18s,border-color .18s;flex-shrink:0;}
@@ -266,7 +266,7 @@
   function renderLead(r,idx,ch,loteNum){
     const l=r.lead||{}; const phone=leadPhone(l); const st=statusKey(r.status); const exp=!!state.expanded[r.id]; const ramo=resolveRamo(l); const tipo=typeLabel(l,r); const msg1=getMsg(r,1); const msg2=getMsg(r,2); const web=String(l.website||'').trim(); const cls=st==='sent'?'sent':st==='error'?'error':ramo.unknown?'error':'';
     const ramoBadge=`<span class="v73-badge ramo ${ramo.unknown?'unknown':''}">${esc(ramo.nome)}</span>`;
-    return `<div class="v73-lead ${cls} ${exp?'open':''}" id="fila-item-v73-${esc(r.id)}" data-v73-lead-id="${esc(r.id)}"><div class="v73-lead-head" onclick="toggleFilaItemV74('${esc(r.id)}')"><div class="v73-lead-index">${idx}</div><div class="v73-lead-main"><div class="v73-lead-name">${leadLinkHtml(l)}</div><div class="v73-lead-phone">${phone?`+${esc(phone)}`:'sem WhatsApp'}</div></div><div class="v73-lead-badges">${ramoBadge}<span class="v73-badge tipo">${esc(tipo)}</span><span class="v73-badge ${st}">${esc(statusLabel(r.status))}</span><span class="v73-chev" style="transform:rotate(${exp?'90':'0'}deg)">▶</span></div></div><div class="v73-lead-body"><div><div class="v73-tool-title">① MENSAGEM 1</div><div class="v73-msg-box">${esc(ramo.unknown?'Lead fora dos ramos cadastrados. Não disparar até corrigir a subcategoria/ramo.':(msg1||'Mensagem 1 será aplicada pelo template do ramo e tipo do lead.'))}</div></div><div><div class="v73-tool-title">② MENSAGEM 2</div><div class="v73-msg-box">${esc(ramo.unknown?'Lead bloqueado para segurança operacional.':(msg2||'Mensagem 2 será aplicada pelo template do ramo e tipo do lead.'))}</div></div><div class="v73-info-grid"><div class="v73-info"><b>Imagem usada</b>${esc(ramo.unknown?'Bloqueado — fora do ramo':ramo.nome)}</div><div class="v73-info"><b>Tipo</b>${esc(tipo)}</div>${web?`<div class="v73-info"><b>Site</b>${esc(host(web))}</div>`:''}<div class="v73-info"><b>Status</b>${esc(statusLabel(r.status))}</div></div></div></div>`;
+    return `<div class="v73-lead ${cls} ${exp?'open':''}" id="fila-item-v73-${esc(r.id)}" data-v73-lead-id="${esc(r.id)}"><div class="v73-lead-head" onclick="toggleFilaItemV74('${esc(r.id)}')"><div class="v73-lead-index">${idx}</div><div class="v73-lead-main"><div class="v73-lead-name">${leadLinkHtml(l)}</div><div class="v73-lead-phone">${phone?`+${esc(phone)}`:'sem WhatsApp'}</div></div><div class="v73-lead-badges">${ramoBadge}<span class="v73-badge tipo">${esc(tipo)}</span><span class="v73-badge ${st}">${esc(statusLabel(r.status))}</span><span class="v73-chev" style="transform:rotate(${exp?'90':'0'}deg)">▶</span></div></div><div class="v73-lead-body"><div><div class="v73-tool-title">① MENSAGEM 1</div><div class="v73-msg-box">${esc(ramo.unknown?'Lead fora dos ramos cadastrados. Não disparar até corrigir a subcategoria/ramo.':(msg1||'Mensagem 1 será aplicada pelo template do ramo e tipo do lead.'))}</div></div><div><div class="v73-tool-title">② MENSAGEM 2</div><div class="v73-msg-box">${esc(ramo.unknown?'Lead bloqueado para segurança operacional.':(msg2||'Mensagem 2 será aplicada pelo template do ramo e tipo do lead.'))}</div></div><div class="v73-info-grid"><div class="v73-info"><b>Imagem usada</b>${esc(ramo.unknown?'Bloqueado — fora do ramo':ramo.nome)}</div><div class="v73-info"><b>Tipo</b>${esc(tipo)}</div>${web?`<div class="v73-info"><b>Site</b>${esc(host(web))}</div>`:''}<div class="v73-info"><b>Status</b>${esc(statusLabel(r.status))}</div></div><div class="v73-lead-remove-row"><button class="v73-btn danger" onclick="event.stopPropagation();removerLeadFilaFinalV87('${esc(r.id)}','${esc(r.lead_id||l.id||'')}','${esc(typeKey(l,r))}')">Remover da fila</button></div></div></div>`;
   }
 
   function renderLotes(list,ch){
@@ -284,6 +284,24 @@
   function renderChips(data,byDate){
     const chips=data.chips||[]; if(!chips.length)return '<div class="fila-empty">// nenhum chip ativo</div>'; if(!state.chipOpen)state.chipOpen=chipKey(chips[0]);
     return chips.map((ch,idx)=>{const key=chipKey(ch); const title=chipTitle(ch); const list=byDate.filter(r=>chipMatches(ch,r)); const open=state.chipOpen===key||state.chipOpen===title||(!state.chipOpen&&idx===0); const limit=dailyLimit(ch); const sent=list.filter(r=>statusKey(r.status)==='sent').length; const err=list.filter(r=>statusKey(r.status)==='error').length; const lotes=Math.ceil(list.length/blockSize(ch)); return `<div class="v73-chip-acc ${open?'open':''}" id="chipAccordionV73-${idx}"><div class="v73-chip-head" onclick="setFilaZapChipOpenV73('${esc(open?'':key)}')"><span class="v73-chev">▶</span><div style="flex:1;min-width:0"><div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:900;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div><div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:2px">${esc(ch.instance||ch.chip_id||ch.name||'')} · ${lotes} lote${lotes!==1?'s':''} · ${sent} enviados · ${err} erros</div></div><div style="font-family:'DM Mono',monospace;font-size:9px;color:${list.length>=limit?'var(--error)':'var(--muted)'}">${list.length}/${limit}</div></div><div class="v73-chip-body"><div class="v73-chip-scroll">${renderLotes(list,ch)}</div></div></div>`;}).join('');
+  }
+
+
+  async function removerLeadFilaFinalV87(itemId,leadId,tipo){
+    if(!itemId)return;
+    const ok=confirm('Remover este lead da fila final? Ele sairá do lote e voltará para Atribuição para revisão.');
+    if(!ok)return;
+    const c=sb(); if(!c)return notify('Supabase indisponível.','err');
+    const now=new Date().toISOString();
+    const {error}=await c.from('pre_dispatch_items').update({status:'removed_from_queue',updated_at:now}).eq('user_id',uid()).eq('id',itemId);
+    if(error)return notify('Erro ao remover da fila: '+error.message,'err');
+    if(leadId){
+      const t=String(tipo||'').toLowerCase();
+      const stage=t.includes('agreg')?'attribution_aggregator':(t.includes('com')?'attribution_site':'attribution_whatsapp');
+      try{await c.from('leads').update({current_stage:stage,status:'attribution',updated_at:now}).eq('user_id',uid()).eq('id',leadId);}catch(e){console.warn('[v87][remove lead stage]',e?.message||e);}
+    }
+    notify('Lead removido da fila e devolvido para Atribuição.');
+    await renderFilaZapV73();
   }
 
   async function setStatus(id,st){const c=sb(); if(!c)return; const db=statusDb(st); const {error}=await c.from('pre_dispatch_items').update({status:db,updated_at:new Date().toISOString()}).eq('user_id',uid()).eq('id',id); if(error)return notify('Erro ao atualizar: '+error.message,'err'); await renderFilaZapV73();}
@@ -312,7 +330,7 @@
   window.renderFilaZap=renderFilaZapV73; window.renderFilaZapV73=renderFilaZapV73; window.renderFilaZapV74=renderFilaZapV73;
   window.setFilaZapDateV73=setDate; window.setFilaZapStatusV73=setSt; window.setFilaZapChipOpenV73=setOpen; window.toggleFilaItemV73=toggleItem; window.toggleLoteV73=toggleLote;
   window.setFilaZapDateV74=setDate; window.setFilaZapStatusV74=setSt; window.setFilaZapChipOpenV74=setOpen; window.toggleFilaItemV74=toggleItem; window.toggleLoteV74=toggleLote;
-  window.openWaV73=openWa; window.setZapStatusV73=setStatus; window.onLoteRamoImgChangeV73=onImageChange; window.removeLoteRamoImgV73=removeImage;
+  window.openWaV73=openWa; window.setZapStatusV73=setStatus; window.removerLeadFilaFinalV87=removerLeadFilaFinalV87; window.onLoteRamoImgChangeV73=onImageChange; window.removeLoteRamoImgV73=removeImage;
   window.getLoteImagemPorRamoV73=function(chipId,loteNum,ramoId){return getImage(chipId,loteNum,ramoId);};
   window.loadLoteImagemPorRamoV73=function(chipId,loteNum,ramoId){return loadImage(chipId,loteNum,ramoId);};
   window.resolveLeadParentRamoV73=resolveRamo;
