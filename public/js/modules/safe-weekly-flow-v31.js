@@ -1260,6 +1260,33 @@
     });
   }
 
+
+  async function fetchPreItemsStatsV93(date, chip='all'){
+    const c=db(); if(!c) return { total:0, hidden:0, visible:0, final:0, sent:0, error:0 };
+    let q=c.from('pre_dispatch_items')
+      .select('id,status,leads(current_stage,current_status,status)')
+      .eq('user_id',uid())
+      .eq('scheduled_date',date);
+    if(chip && chip !== 'all') q=q.eq('chip_instance',chip);
+    const { data, error } = await q;
+    if(error){ console.warn('[v93][pre-stats]',error.message); return { total:0, hidden:0, visible:0, final:0, sent:0, error:0 }; }
+    const dispatchStatuses = new Set(['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','scheduled','sending','paused','sent','enviado','enviada','error','erro','failed']);
+    const leadFinalStatuses = new Set(['sent','enviado','enviada','whatsapp_sent','dispatch_queue','ready_to_dispatch','queued','not_sent','waiting','scheduled','sending','paused','error','erro','failed']);
+    let final=0, sent=0, err=0, hidden=0, visible=0;
+    for(const r of (data||[])){
+      const st=String(r.status||'').toLowerCase();
+      const leadStage=String(r.leads?.current_stage||'').toLowerCase();
+      const leadStatus=String(r.leads?.status||'').toLowerCase();
+      const leadCurrentStatus=String(r.leads?.current_status||'').toLowerCase();
+      const isHidden = dispatchStatuses.has(st) || leadFinalStatuses.has(leadStage) || leadFinalStatuses.has(leadStatus) || leadFinalStatuses.has(leadCurrentStatus);
+      if(isHidden) hidden++; else visible++;
+      if(['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','scheduled','sending','paused'].includes(st)) final++;
+      if(['sent','enviado','enviada'].includes(st) || ['sent','enviado','enviada','whatsapp_sent'].includes(leadStage) || ['sent','enviado','enviada','whatsapp_sent'].includes(leadStatus)) sent++;
+      if(['error','erro','failed'].includes(st) || ['error','erro','failed'].includes(leadStage) || ['error','erro','failed'].includes(leadStatus)) err++;
+    }
+    return { total:(data||[]).length, hidden, visible, final, sent, error:err };
+  }
+
   async function renderPreEnvioListV317(){
     const el=document.getElementById('preEnvioList'); if(!el) return;
     // V54: mantém a lista sincronizada com o dia ativo do painel V50.
@@ -1281,7 +1308,14 @@
       return (ar-br) || String(a.chip_label||a.chip_instance||'').localeCompare(String(b.chip_label||b.chip_instance||'')) || ((a.position||0)-(b.position||0));
     });
     const badge=document.getElementById('badge-pre-envio'); if(badge) badge.textContent=String(rows.length);
-    if(!rows.length){ el.innerHTML=`<div style="padding:24px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// nenhum lead planejado para ${dayLabel(selectedDate)}${selectedChip!=='all'?' neste chip':''}</div>`; return; }
+    if(!rows.length){
+      const stats=await fetchPreItemsStatsV93(selectedDate, selectedChip);
+      if(stats.total>0 && stats.hidden>0){
+        el.innerHTML=`<div style="padding:24px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;line-height:1.8">// nenhum lead pendente de revisão para ${dayLabel(selectedDate)}${selectedChip!=='all'?' neste chip':''}<br><span style="color:var(--accent)">${stats.hidden}</span> lead(s) deste filtro já estão na Fila WhatsApp, enviados ou em erro.</div>`;
+        return;
+      }
+      el.innerHTML=`<div style="padding:24px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// nenhum lead planejado para ${dayLabel(selectedDate)}${selectedChip!=='all'?' neste chip':''}</div>`; return;
+    }
     const totalPages=Math.max(1,Math.ceil(rows.length/PER_PAGE)); if(page>totalPages) page=totalPages;
     const pageRows=rows.slice((page-1)*PER_PAGE,page*PER_PAGE);
     el.innerHTML=`

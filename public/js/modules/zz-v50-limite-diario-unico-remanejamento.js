@@ -319,13 +319,27 @@
     for(const chip of chips){
       const limit=chipLimit(chip);
       const rows=await getPreItems(date,chipKey(chip));
-      const valid=rows.filter(r=>validStatus(r.status)).length;
-      const invalid=rows.filter(r=>String(r.status||'').includes('invalid')).length;
-      const retry=rows.filter(r=>String(r.status||'')==='validation_retry').length;
-      const missing=Math.max(0,limit-valid);
-      const excess=Math.max(0,rows.filter(r=>!isTerminalStatus(r.status)).length-limit);
+      // V93: separa capacidade ocupada da lista operacional do Pré-envio.
+      // Itens em fila final/enviados/erro não aparecem mais na lista, mas continuam ocupando
+      // a capacidade do chip naquele dia. Assim não aparece "faltam X" quando o chip já
+      // está cheio na Fila WhatsApp.
+      const invalidStatuses = new Set(['invalid','invalid_whatsapp','invalid_phone','rejected','cancelled','canceled','archived','removed']);
+      const retryStatuses = new Set(['validation_retry','validation_error']);
+      const finalStatuses = new Set(['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','scheduled','sending','paused','sent','enviado','enviada','error','erro','failed']);
+      const invalid=rows.filter(r=>invalidStatuses.has(String(r.status||'').toLowerCase()) || String(r.status||'').toLowerCase().startsWith('invalid')).length;
+      const retry=rows.filter(r=>retryStatuses.has(String(r.status||'').toLowerCase())).length;
+      const finalCount=rows.filter(r=>finalStatuses.has(String(r.status||'').toLowerCase())).length;
+      const operationalCount=rows.length-finalCount-invalid;
+      const occupied=rows.filter(r=>{
+        const st=String(r.status||'').toLowerCase();
+        return !invalidStatuses.has(st) && !st.startsWith('invalid') && st!=='removed' && st!=='cancelled' && st!=='canceled';
+      }).length;
+      const missing=Math.max(0,limit-occupied);
+      const excess=Math.max(0,occupied-limit);
       const ok=missing===0 && excess===0;
-      cards.push(`<div class="v39-complete-card"><div><div class="v39-complete-title">${esc(chipTitle(chip))}</div><div class="v39-complete-sub">${esc(dayLabel(date))} · total ${rows.length} · inválidos ${invalid} · retry ${retry} · base disponível ${available}${excess?` · excesso ${excess}`:''}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div class="v39-complete-count ${ok?'ok':'warn'}">${valid}/${limit}${missing?' · faltam '+missing:''}${excess?' · excesso '+excess:''}</div>${missing?`<button class="v39-btn primary" onclick="completePreChipNowV44('${esc(chipKey(chip))}')">Completar agora</button>`:''}${excess?`<button class="v39-btn danger" onclick="remanejarExcessoPreEnvioV50('${esc(date)}','${esc(chipKey(chip))}')">Remanejar</button>`:''}</div></div>`);
+      const fullFinal = occupied>=limit && finalCount>0 && operationalCount<=0;
+      const subExtra = fullFinal ? ` · ${finalCount} na fila/enviados` : (finalCount?` · ${finalCount} na fila/enviados`:``);
+      cards.push(`<div class="v39-complete-card"><div><div class="v39-complete-title">${esc(chipTitle(chip))}</div><div class="v39-complete-sub">${esc(dayLabel(date))} · total ${rows.length} · em revisão ${Math.max(0,operationalCount)} · inválidos ${invalid} · retry ${retry}${subExtra} · base disponível ${available}${excess?` · excesso ${excess}`:''}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div class="v39-complete-count ${ok?'ok':'warn'}">${occupied}/${limit}${missing?' · faltam '+missing:''}${excess?' · excesso '+excess:''}</div>${missing?`<button class="v39-btn primary" onclick="completePreChipNowV44('${esc(chipKey(chip))}')">Completar agora</button>`:''}${excess?`<button class="v39-btn danger" onclick="remanejarExcessoPreEnvioV50('${esc(date)}','${esc(chipKey(chip))}')">Remanejar</button>`:''}</div></div>`);
     }
     el.innerHTML=cards.join('');
     await renderExcessBanner(date);
