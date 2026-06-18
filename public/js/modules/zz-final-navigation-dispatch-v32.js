@@ -98,6 +98,13 @@
       if(r==='conversations' && typeof window.renderConversations==='function') return window.renderConversations();
       if(r==='followups' && typeof window.renderFollowupsPanel==='function') return window.renderFollowupsPanel();
       if(r==='kanban' && typeof window.renderKanbanPanel==='function') return window.renderKanbanPanel();
+      if(r==='configuracoes') {
+        if (typeof window.renderConfiguracoes === 'function') window.renderConfiguracoes();
+        if (typeof window.renderWebhookUrlV34 === 'function') window.renderWebhookUrlV34();
+        if (typeof window.renderRamosConfigV76 === 'function') window.renderRamosConfigV76();
+        return;
+      }
+      if(r==='conta' && typeof window.renderMinhaContaV426==='function') return window.renderMinhaContaV426();
     }catch(e){ console.error('[v32][route-render]',r,e); }
   }
 

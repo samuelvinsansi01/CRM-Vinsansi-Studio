@@ -1,11 +1,12 @@
-/* V74 — Fila WhatsApp: status enxutos + lotes pela configuração + accordions sem piscar
+/* V77 — Fila WhatsApp: status enxutos + somente fila final + navegação corrigida
+   Base: V74 — status enxutos + lotes pela configuração + accordions sem piscar
    - Visual baseado na V72 aprovada.
    - Não altera Supabase, Evolution, pré-envio, QR, conversas ou base permanente.
    - Lê pre_dispatch_items + leads + whatsapp_instances.
    - Imagens por ramo ficam no IndexedDB, não como banco principal. */
 (function(){
   'use strict';
-  const VERSION='20260618-V74-FILA-STATUS-LOTES-CONFIG-SEM-PISCAR';
+  const VERSION='20260618-V77-FILA-FINAL-NAV-CONFIG';
   const USER_ID_FALLBACK='c02fe973-4eb5-4036-9f8d-8787937e8b11';
   const state={date:null,status:'queue',chipOpen:null,lotes:{},expanded:{},last:null,imgCache:{}};
   const IDB_NAME='vs_lote_imgs';
@@ -215,7 +216,7 @@
 
   async function fetchData(){
     const c=sb(); if(!c) return {items:[],chips:[],error:new Error('Supabase indisponível')};
-    const statuses=['approved','ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','pending','scheduled','sending','sent','enviado','paused','error','erro','failed'];
+    const statuses=['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','scheduled','sending','sent','enviado','paused','error','erro','failed'];
     const itemQ=c.from('pre_dispatch_items').select('id,lead_id,user_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,raw_payload,updated_at').eq('user_id',uid()).in('status',statuses).order('scheduled_date',{ascending:true}).order('chip_label',{ascending:true}).order('position',{ascending:true});
     const chipQ=c.from('whatsapp_instances').select('id,chip_id,label,name,instance,status,connection_state,active,daily_limit,block_size,interval_seconds').eq('user_id',uid()).order('label',{ascending:true});
     const [it,ch]=await Promise.all([itemQ,chipQ]);
@@ -304,4 +305,5 @@
   document.addEventListener('click',function(e){const nav=e.target.closest?.('.nav-item[data-label]'); if(!nav)return; if((nav.getAttribute('data-label')||'')!=='WhatsApp')return; e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation)e.stopImmediatePropagation(); renderFilaZapV73();},true);
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{try{if(document.getElementById('panel-fila-zap')?.classList.contains('active'))renderFilaZapV73();}catch(_){}},700));
   window.__V74_FILA_WHATSAPP_STATUS_LOTES_CONFIG_SEM_PISCAR__=VERSION;
+  window.__V77_FILA_FINAL_NAV_CONFIG__=VERSION;
 })();
