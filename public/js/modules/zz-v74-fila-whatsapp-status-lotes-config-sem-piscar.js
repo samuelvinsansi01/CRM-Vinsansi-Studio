@@ -82,14 +82,26 @@
     ['category','category_name','categoria','categories'].forEach(k=>{const v=raw[k]; if(Array.isArray(v))v.forEach(x=>out.push(String(x))); else if(v)out.push(String(v));});
     return [...new Set(out.map(x=>x.trim()).filter(Boolean))];
   }
-  function getRamosSafe(){try{return (typeof window.getRamos==='function'?window.getRamos():getRamos())||[];}catch(_){return [];}}
+  const MOVEIS_PLANEJADOS_KEYS_V75 = ['marcenaria','marceneiro','moveleiro','moveis planejados','móveis planejados','movelaria','moveis sob medida','móveis sob medida','carpintaria','armarios planejados','armários planejados','cozinhas planejadas','dormitorios planejados','dormitórios planejados','moveis','móveis'];
+  function isMoveisRamoV75(r){
+    const hay=normalize([r?.id,r?.nome,...(Array.isArray(r?.keywords)?r.keywords:[])].join(' '));
+    return hay.includes('marcenaria')||hay.includes('marceneiro')||hay.includes('moveleiro')||hay.includes('movelaria')||hay.includes('moveis planejados')||hay.includes('moveis sob medida');
+  }
+  function normalizeRamoDisplayV75(r){
+    if(isMoveisRamoV75(r)) return {id:r?.id||'marcenaria', nome:'Móveis Planejados', keywords:[...(Array.isArray(r?.keywords)?r.keywords:[]), ...MOVEIS_PLANEJADOS_KEYS_V75]};
+    return r;
+  }
+  function getRamosSafe(){try{return ((typeof window.getRamos==='function'?window.getRamos():getRamos())||[]).map(normalizeRamoDisplayV75);}catch(_){return [];}}
   function resolveRamo(l){
     const ramos=getRamosSafe();
     const cats=categoriesOf(l);
+    const catsNorm=cats.map(normalize);
     const hay=normalize(cats.join(' '));
+    if(MOVEIS_PLANEJADOS_KEYS_V75.map(normalize).some(k=>hay.includes(k)||catsNorm.includes(k))) return {id:'marcenaria', nome:'Móveis Planejados'};
     for(const r of ramos){
-      const keys=[r.nome, ...(Array.isArray(r.keywords)?r.keywords:[])].map(normalize).filter(Boolean);
-      if(keys.some(k=>hay.includes(k)||cats.some(c=>normalize(c)===k))) return {id:r.id||slug(r.nome), nome:r.nome||cats[0]||'Geral'};
+      const rr=normalizeRamoDisplayV75(r);
+      const keys=[rr.nome, ...(Array.isArray(rr.keywords)?rr.keywords:[])].map(normalize).filter(Boolean);
+      if(keys.some(k=>hay.includes(k)||catsNorm.includes(k))) return {id:rr.id||slug(rr.nome), nome:rr.nome||cats[0]||'Geral'};
     }
     const name=cats[0]||String(l?.lead_type||'Geral');
     return {id:slug(name), nome:name||'Geral'};

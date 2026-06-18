@@ -613,15 +613,30 @@ function getChipById(id) { return getChips().find(c => c.id === id); }
 /* ════════════════════════════
    STORAGE — RAMOS
 ════════════════════════════ */
+function normalizeRamoMoveisPlanejadosV75(ramos) {
+  const baseKeywords = ['marcenaria','marceneiro','moveleiro','moveis planejados','móveis planejados',
+    'movelaria','móveis sob medida','moveis sob medida','carpintaria',
+    'armarios planejados','armários planejados','cozinhas planejadas',
+    'dormitórios planejados','dormitorios planejados','móveis','moveis'];
+  return (Array.isArray(ramos) ? ramos : RAMOS_DEFAULT).map(r => {
+    const nome = String(r?.nome || '').trim();
+    const id = String(r?.id || '').trim();
+    const hay = normalizeStr([id, nome, ...(Array.isArray(r?.keywords) ? r.keywords : [])].join(' '));
+    const isMoveis = id === 'marcenaria' || hay.includes('marcenaria') || hay.includes('marceneiro') || hay.includes('moveis planejados') || hay.includes('moveleiro') || hay.includes('movelaria');
+    if (!isMoveis) return r;
+    const merged = Array.from(new Set([...(Array.isArray(r?.keywords) ? r.keywords : []), ...baseKeywords].map(x => String(x || '').trim()).filter(Boolean)));
+    return { ...r, id: id || 'marcenaria', nome: 'Móveis Planejados', keywords: merged };
+  });
+}
 function getRamos()  {
   try {
     const data = JSON.parse(localStorage.getItem(RAMOS_KEY) || 'null');
-    return Array.isArray(data) ? data : RAMOS_DEFAULT;
+    return normalizeRamoMoveisPlanejadosV75(Array.isArray(data) ? data : RAMOS_DEFAULT);
   } catch {
-    return RAMOS_DEFAULT;
+    return normalizeRamoMoveisPlanejadosV75(RAMOS_DEFAULT);
   }
 }
-function saveRamos(r){ localStorage.setItem(RAMOS_KEY, JSON.stringify(r)); if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 !== true) scheduleLegacyOperationalSyncV36(); }
+function saveRamos(r){ localStorage.setItem(RAMOS_KEY, JSON.stringify(normalizeRamoMoveisPlanejadosV75(r))); if (window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30 !== true) scheduleLegacyOperationalSyncV36(); }
 
 /* ════════════════════════════
    EXCLUDED DOMAINS

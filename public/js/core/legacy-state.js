@@ -4,8 +4,8 @@
 const RAMOS_DEFAULT = [
   {
     id: 'marcenaria',
-    nome: 'Marcenaria / Móveis',
-    keywords: ['marcenaria','marceneiro','moveis planejados','móveis planejados',
+    nome: 'Móveis Planejados',
+    keywords: ['marcenaria','marceneiro','moveleiro','moveis planejados','móveis planejados',
       'movelaria','móveis sob medida','moveis sob medida','carpintaria',
       'armarios planejados','armários planejados','cozinhas planejadas',
       'dormitórios planejados','dormitorios planejados','móveis','moveis']
