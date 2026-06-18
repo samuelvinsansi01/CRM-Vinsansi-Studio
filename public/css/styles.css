@@ -2596,7 +2596,7 @@ body.auth-locked .app{
   margin-bottom:10px!important;
 }
 .sidebar-final-title{
-  font-size:18px!important;
+  font-size:10px!important;
   line-height:1.15!important;
   font-weight:900!important;
   color:var(--text)!important;
@@ -2625,9 +2625,6 @@ body.auth-locked .app{
 }
 .sidebar-final-v414 .nav-item.sub{
   padding-left:24px!important;
-}
-.menu-group-final{
-  margin:4px 0!important;
 }
 .menu-group-final summary{
   list-style:none!important;
