@@ -302,19 +302,38 @@ async function iniciarDisparoChip(slot) {
     lotesComPendentes.push(loteNum);
   }
 
-  // Garante que o cache está populado para cada lote antes de validar
-  await Promise.all(lotesComPendentes.map(async loteNum => {
-    const k = getLoteImgKey(chip.id, loteNum);
-    if (_imgCache[k] === undefined) {
-      try { _imgCache[k] = (await idbGet(k)) || null; } catch { _imgCache[k] = null; }
+  // V73: valida imagem por ramo quando disponível; fallback mantém imagem única por lote.
+  if (typeof window.loadLoteImagemPorRamoV73 === 'function' && typeof window.resolveLeadParentRamoV73 === 'function') {
+    const faltando = [];
+    for (let i = 0; i < pendentes.length; i++) {
+      const loteNum = Math.floor(i / LOTE_SIZE) + 1;
+      const ramo = window.resolveLeadParentRamoV73(pendentes[i] || {}) || { id:'geral', nome:'Geral' };
+      const img = await window.loadLoteImagemPorRamoV73(chip.id, loteNum, ramo.id || 'geral');
+      if (!img) {
+        const label = `Lote ${loteNum} / ${ramo.nome || 'Geral'}`;
+        if (!faltando.includes(label)) faltando.push(label);
+      }
     }
-  }));
+    if (faltando.length) {
+      notify(`// Imagem por ramo ausente: ${faltando.join(', ')}`, 'err');
+      st.iniciandoDisparo = false;
+      return;
+    }
+  } else {
+    // Garante que o cache está populado para cada lote antes de validar
+    await Promise.all(lotesComPendentes.map(async loteNum => {
+      const k = getLoteImgKey(chip.id, loteNum);
+      if (_imgCache[k] === undefined) {
+        try { _imgCache[k] = (await idbGet(k)) || null; } catch { _imgCache[k] = null; }
+      }
+    }));
 
-  const lotesSemImagem = lotesComPendentes.filter(n => !getLoteImagem(chip.id, n));
-  if (lotesSemImagem.length) {
-    notify(`// Lote${lotesSemImagem.length>1?'s':''} ${lotesSemImagem.join(', ')} sem imagem — insira a imagem antes de disparar`, 'err');
-    st.iniciandoDisparo = false;
-    return;
+    const lotesSemImagem = lotesComPendentes.filter(n => !getLoteImagem(chip.id, n));
+    if (lotesSemImagem.length) {
+      notify(`// Lote${lotesSemImagem.length>1?'s':''} ${lotesSemImagem.join(', ')} sem imagem — insira a imagem antes de disparar`, 'err');
+      st.iniciandoDisparo = false;
+      return;
+    }
   }
 
   st.filaLotes = [];
@@ -486,8 +505,14 @@ async function dispararLoteChip(slot) {
 
       // MSG 3 — Imagem do lote
       const loteNum = item.mediaLoteNum || st.loteAtual;
-      const imgRedesign = getLoteImagem(chip.id, loteNum);
-      if (!imgRedesign && !item.mediaSent) throw new Error(`Imagem do lote ${loteNum} indisponível`);
+      const ramoV73 = (typeof window.resolveLeadParentRamoV73 === 'function')
+        ? (window.resolveLeadParentRamoV73(item || {}) || { id:null, nome:'Geral' })
+        : { id:item.ramoId || null, nome:'Geral' };
+      const imgRamoV73 = (typeof window.getLoteImagemPorRamoV73 === 'function')
+        ? window.getLoteImagemPorRamoV73(chip.id, loteNum, ramoV73.id || item.ramoId || 'geral')
+        : null;
+      const imgRedesign = imgRamoV73 || getLoteImagem(chip.id, loteNum);
+      if (!imgRedesign && !item.mediaSent) throw new Error(`Imagem do lote ${loteNum}${ramoV73?.nome ? ' / ' + ramoV73.nome : ''} indisponível`);
       if (imgRedesign && !item.mediaSent) {
         const b2 = imgRedesign.split(',')[1], m2 = imgRedesign.split(';')[0].split(':')[1] || 'image/jpeg';
         if (!b2) throw new Error('Imagem do lote inválida');
