@@ -1,13 +1,13 @@
-/* V80 — Fila WhatsApp: disparo real por chip, pausar/retomar sem reiniciar e lead teste.
+/* V83 — Fila WhatsApp: disparo real + Lead Teste manual com atributos.
    - Não cria tabela nova.
    - Usa Supabase como fonte de verdade para status dos leads.
    - Cada chip roda sua própria fila em paralelo, respeitando o intervalo do chip.
    - Pausar/retomar não reenviam leads já marcados como sent. */
 (function(){
   'use strict';
-  const VERSION='20260618-V82-TESTE-LEAD-REAL-FILA';
+  const VERSION='20260618-V83-LEAD-TESTE-MANUAL-ATRIBUTOS';
   const USER_ID_FALLBACK='c02fe973-4eb5-4036-9f8d-8787937e8b11';
-  const runtime={chips:{},log:[],lastData:null,startedAt:null};
+  const runtime={chips:{},log:[],lastData:null,startedAt:null,manualImage:null};
   const LS_KEY='vs_dispatch_runtime_v80';
 
   function sb(){try{return window.sbClient||(typeof sbClient!=='undefined'?sbClient:null);}catch(_){return null;}}
@@ -191,6 +191,74 @@
   function pauseChipV80(key){const r=runtime.chips[key]; if(r){r.paused=true;saveRuntime();renderV80Controls();}}
   function resumeChipV80(key){const r=runtime.chips[key]; if(r){r.paused=false;r.stopped=false;saveRuntime();renderV80Controls();}}
 
+
+  function ramosOptionsV83(){
+    let ramos=[];
+    try{ if(typeof window.getRamos==='function') ramos=window.getRamos()||[]; }catch(_){ }
+    if(!Array.isArray(ramos)||!ramos.length) ramos=[{id:'moveis-planejados',nome:'Móveis Planejados'}];
+    return ramos.map(r=>({id:r.id||normalize(r.nome).replace(/[^a-z0-9]+/g,'-')||'geral',nome:r.nome||r.name||'Geral'}));
+  }
+  function selectedRamoV83(){
+    const id=document.getElementById('v83TestRamo')?.value||'';
+    return ramosOptionsV83().find(r=>String(r.id)===String(id)) || ramosOptionsV83()[0] || {id:'geral',nome:'Geral'};
+  }
+  function selectedTipoV83(){ return document.getElementById('v83TestTipo')?.value || 'sem-site'; }
+  function selectedTipoLabelV83(){ return ({'sem-site':'Sem site','com-site':'Com site','agregador':'Agregador'})[selectedTipoV83()]||'Sem site'; }
+  function manualRowV83(){
+    const ramo=selectedRamoV83();
+    const tipo=selectedTipoV83();
+    const nome=(document.getElementById('v83TestCompany')?.value||'Lead Teste').trim()||'Lead Teste';
+    const tel=phone(document.getElementById('v83TestPhone')?.value||'');
+    const site=(document.getElementById('v83TestSite')?.value||'').trim();
+    const lead={company_name:nome,phone:tel,normalized_phone:tel,category_name:ramo.nome,category:ramo.nome,categories:[ramo.nome],lead_type:tipo,website:tipo==='com-site'?(site||'https://empresa-teste.com.br'):'',website_type:tipo==='agregador'?'aggregator':(tipo==='com-site'?'own_site':'none'),raw_payload:{test:true,ramo_pai:ramo.nome}};
+    return {id:`teste-manual-${Date.now()}`,lead_id:null,chip_instance:'',chip_label:'',scheduled_date:todayIso(),lead_type:tipo,status:'test',position:1,raw_payload:{test:true},lead};
+  }
+  function previewManualV83(){
+    const row=manualRowV83();
+    const ramo=selectedRamoV83();
+    const {m1,m2}=templatePair(row);
+    const preview=document.getElementById('v83ManualPreview');
+    if(preview){
+      preview.innerHTML=`<div class="v83-preview-title">Preview do teste</div><div class="v83-preview-meta">${esc(ramo.nome)} · ${esc(selectedTipoLabelV83())} · ${esc(leadName(row.lead))}</div><div class="v83-preview-msg"><b>Mensagem 1</b>${esc(m1)}</div><div class="v83-preview-msg"><b>Mensagem 2</b>${esc(m2)}</div><div class="v83-preview-msg"><b>Imagem</b>${runtime.manualImage?'Imagem de teste carregada':'Nenhuma imagem carregada'}</div>`;
+    }
+  }
+  function onManualImageV83(input){
+    const file=input.files&&input.files[0];
+    if(!file){runtime.manualImage=null;previewManualV83();return;}
+    const reader=new FileReader();
+    reader.onload=e=>{runtime.manualImage=e.target.result; const img=document.getElementById('v83ManualImagePreview'); if(img){img.src=runtime.manualImage; img.style.display='block';} previewManualV83(); notify('✓ Imagem de teste carregada');};
+    reader.onerror=()=>notify('Erro ao carregar imagem de teste','err');
+    reader.readAsDataURL(file);
+  }
+  async function sendManualLeadTestV83(){
+    const p=phone(document.getElementById('v83TestPhone')?.value||'');
+    if(!p)return notify('Informe o telefone do lead teste.','warn');
+    const date=currentDate();
+    const data=await fetchData(date); runtime.lastData=data;
+    const chips=(data.chips||[]).filter(ch=>hasConfig(ch)&&isConnected(ch));
+    if(!chips.length)return notify('Nenhum chip conectado para teste.','warn');
+    const selected=document.getElementById('v83TestChip')?.value||'';
+    const ch=chips.find(c=>chipKey(c)===selected)||chips[0];
+    const row=manualRowV83();
+    const ramo=selectedRamoV83();
+    const {m1,m2}=templatePair(row);
+    if(!runtime.manualImage)return notify(`Carregue uma imagem de teste para o ramo ${ramo.nome}.`, 'warn');
+    try{
+      const c=cfg(ch);
+      addLog(`Lead teste manual: ${leadName(row.lead)} · ${ramo.nome} · ${selectedTipoLabelV83()} · via ${chipTitle(ch)} · destino +${p}`);
+      const r1=await sendText(c,p,m1);
+      await sleep(10000);
+      const r2=await sendText(c,p,m2);
+      await sleep(5000);
+      const r3=await sendMedia(c,p,runtime.manualImage);
+      addLog('Lead teste manual enviado sem criar lead, sem alterar fila, sem limite e sem Base Permanente.');
+      notify('Lead teste manual enviado. Nenhum lead real foi gasto.');
+      return {r1,r2,r3};
+    }catch(e){
+      addLog(`Erro no lead teste manual: ${e.message}`);
+      notify(e.message,'err');
+    }
+  }
   async function sendTestV80(){
     const p=phone(document.getElementById('v80TestPhone')?.value||''); if(!p)return notify('Informe um número para teste.','warn');
     const date=currentDate(); const data=await fetchData(date); runtime.lastData=data;
@@ -230,7 +298,7 @@
 
   function applyStyle(){if(document.getElementById('v80-dispatch-style'))return; const st=document.createElement('style'); st.id='v80-dispatch-style'; st.textContent=`
     .v80-dispatch-box{border:1px solid var(--border2);background:rgba(255,255,255,.024);border-radius:12px;padding:12px;margin:0 0 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;flex-shrink:0}
-    .v80-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:900;color:var(--text);margin-bottom:4px}.v80-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.55}.v80-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.v80-btn{border:1px solid var(--border2);background:rgba(255,255,255,.025);border-radius:8px;color:var(--text2);font-family:'DM Mono',monospace;font-size:8px;padding:7px 9px;cursor:pointer;white-space:nowrap}.v80-btn:hover{border-color:var(--accent);color:var(--accent)}.v80-btn.primary{background:var(--accent);color:#111;border-color:var(--accent);font-weight:900}.v80-btn.blue{border-color:rgba(74,179,255,.45);color:#4ab3ff}.v80-btn.danger{border-color:rgba(255,80,80,.45);color:#ff6b6b}.v80-chip-run{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)}.v80-pill{display:inline-flex;border:1px solid var(--border2);border-radius:999px;padding:3px 7px;gap:5px;align-items:center}.v80-pill.run{color:var(--accent);border-color:rgba(184,240,89,.35)}.v80-pill.pause{color:#ffd166;border-color:rgba(255,209,102,.35)}.v80-pill.done{color:var(--ok);border-color:rgba(78,203,113,.35)}.v80-pill.err{color:var(--error);border-color:rgba(255,80,80,.35)}.v80-test{grid-column:1/-1;border-top:1px dashed var(--border2);padding-top:9px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}.v80-test input,.v80-test select{background:var(--bg);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:7px 9px;font-family:'DM Mono',monospace;font-size:9px;min-width:160px}.v80-test.real{align-items:flex-end}.v80-test.real select{min-width:280px;max-width:520px}.v80-field{display:flex;flex-direction:column;gap:4px}.v80-field label{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.v80-log{grid-column:1/-1;max-height:74px;overflow:auto;border-top:1px dashed var(--border2);padding-top:8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.55}@media(max-width:900px){.v80-dispatch-box{grid-template-columns:1fr}.v80-actions{justify-content:flex-start}}
+    .v80-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:900;color:var(--text);margin-bottom:4px}.v80-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.55}.v80-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.v80-btn{border:1px solid var(--border2);background:rgba(255,255,255,.025);border-radius:8px;color:var(--text2);font-family:'DM Mono',monospace;font-size:8px;padding:7px 9px;cursor:pointer;white-space:nowrap}.v80-btn:hover{border-color:var(--accent);color:var(--accent)}.v80-btn.primary{background:var(--accent);color:#111;border-color:var(--accent);font-weight:900}.v80-btn.blue{border-color:rgba(74,179,255,.45);color:#4ab3ff}.v80-btn.danger{border-color:rgba(255,80,80,.45);color:#ff6b6b}.v80-chip-run{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)}.v80-pill{display:inline-flex;border:1px solid var(--border2);border-radius:999px;padding:3px 7px;gap:5px;align-items:center}.v80-pill.run{color:var(--accent);border-color:rgba(184,240,89,.35)}.v80-pill.pause{color:#ffd166;border-color:rgba(255,209,102,.35)}.v80-pill.done{color:var(--ok);border-color:rgba(78,203,113,.35)}.v80-pill.err{color:var(--error);border-color:rgba(255,80,80,.35)}.v80-test{grid-column:1/-1;border-top:1px dashed var(--border2);padding-top:9px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}.v80-test input,.v80-test select{background:var(--bg);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:7px 9px;font-family:'DM Mono',monospace;font-size:9px;min-width:160px}.v80-test.real{align-items:flex-end}.v80-test.real select{min-width:280px;max-width:520px}.v80-field{display:flex;flex-direction:column;gap:4px}.v80-field label{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.v80-log{grid-column:1/-1;max-height:74px;overflow:auto;border-top:1px dashed var(--border2);padding-top:8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.55}.v83-manual{align-items:flex-end}.v83-manual .v80-field{min-width:150px}.v83-test-head{width:100%;display:flex;justify-content:space-between;align-items:flex-start}.v83-preview{width:100%;border:1px solid var(--border2);border-radius:10px;background:rgba(0,0,0,.18);padding:9px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.5}.v83-preview-title{font-family:'Syne',sans-serif;font-weight:900;color:var(--text);font-size:12px;margin-bottom:4px}.v83-preview-meta{color:var(--accent);margin-bottom:7px}.v83-preview-msg{border-top:1px dashed var(--border2);padding-top:7px;margin-top:7px;white-space:pre-wrap}.v83-preview-msg b{display:block;color:var(--text2);font-size:8px;margin-bottom:3px}.v83-img-mini img{width:64px;height:64px;border-radius:9px;object-fit:cover;border:1px solid var(--border2)}@media(max-width:900px){.v80-dispatch-box{grid-template-columns:1fr}.v80-actions{justify-content:flex-start}}
   `; document.head.appendChild(st);}
   function renderV80Log(){const el=document.getElementById('v80DispatchLog'); if(el)el.innerHTML=runtime.log.length?runtime.log.slice(0,8).map(esc).join('<br>'):'// nenhum evento ainda';}
   async function renderV80Controls(){
@@ -241,7 +309,7 @@
     const leadOptions=rows.slice(0,300).map(r=>{const ramo=resolveRamo(r.lead||{}); const tipo=String(r.lead_type||r.lead?.lead_type||'sem-site').replace(/_/g,' '); return `<option value="${esc(r.id)}">${esc(rowChipTitle(r))} · ${esc(leadName(r.lead))} · ${esc(ramo.nome||ramo.id)} · ${esc(tipo)}</option>`;}).join('');
     const running=Object.values(runtime.chips).some(r=>r.running&&!r.stopped);
     const chipLines=Object.entries(runtime.chips).map(([key,r])=>{const cls=r.paused?'pause':r.running?'run':r.errors?'err':'done'; return `<span class="v80-pill ${cls}">${esc(r.label||key)} · ${esc(r.state||'parado')} · ${Number(r.current||0)+1}/${r.total||0} · ok ${r.sent||0} · erro ${r.errors||0} ${r.running?`<button class="v80-btn" style="padding:2px 5px" onclick="pauseChipV80('${esc(key)}')">Pausar</button><button class="v80-btn" style="padding:2px 5px" onclick="resumeChipV80('${esc(key)}')">Retomar</button>`:''}</span>`;}).join('');
-    holder.innerHTML=`<div><div class="v80-title">Disparo operacional</div><div class="v80-sub">Dia: <b>${esc(date)}</b> · Prontos: <b>${rows.length}</b> · Regra: cada chip envia 1 lead por ciclo e aguarda o intervalo configurado. Sequência: Msg1 → 10s → Msg2 → 5s → imagem do ramo.</div><div class="v80-chip-run">${chipLines||'<span class="v80-pill">Nenhum disparo em execução</span>'}</div></div><div class="v80-actions"><button class="v80-btn" onclick="previewDispatchV80()">Prévia</button><button class="v80-btn primary" onclick="startDispatchV80()" ${running?'disabled style="opacity:.5"':''}>Disparar</button><button class="v80-btn blue" onclick="pauseDispatchV80()">Pausar</button><button class="v80-btn blue" onclick="resumeDispatchV80()">Retomar</button><button class="v80-btn danger" onclick="stopDispatchV80()">Parar</button></div><div class="v80-test"><span class="v80-sub">Lead teste manual:</span><input id="v80TestPhone" placeholder="+55 DDD número" inputmode="tel"><select id="v80TestChip">${chips.map(ch=>`<option value="${esc(chipKey(ch))}">${esc(chipTitle(ch))} ${isConnected(ch)?'✓':'(desconectado)'}</option>`).join('')}</select><button class="v80-btn" onclick="sendTestDispatchV80()">Enviar teste</button><span class="v80-sub">Teste simples, fora da fila.</span></div><div class="v80-test real"><span class="v80-sub">Teste com lead da fila:</span><div class="v80-field"><label>Lead real simulado</label><select id="v80FilaTestLead">${leadOptions||'<option value="">Nenhum lead em fila nesta visão</option>'}</select></div><div class="v80-field"><label>Destino opcional</label><input id="v80FilaTestTarget" placeholder="se vazio, usa o telefone do lead" inputmode="tel"></div><button class="v80-btn primary" onclick="sendFilaLeadTestDispatchV80()">Enviar como teste</button><span class="v80-sub">Usa template + ramo + imagem do lote. Não muda status, limite ou base.</span></div><div class="v80-log" id="v80DispatchLog">${runtime.log.length?runtime.log.slice(0,8).map(esc).join('<br>'):'// nenhum evento ainda'}</div>`;
+    holder.innerHTML=`<div><div class="v80-title">Disparo operacional</div><div class="v80-sub">Dia: <b>${esc(date)}</b> · Prontos: <b>${rows.length}</b> · Regra: cada chip envia 1 lead por ciclo e aguarda o intervalo configurado. Sequência: Msg1 → 10s → Msg2 → 5s → imagem do ramo.</div><div class="v80-chip-run">${chipLines||'<span class="v80-pill">Nenhum disparo em execução</span>'}</div></div><div class="v80-actions"><button class="v80-btn" onclick="previewDispatchV80()">Prévia</button><button class="v80-btn primary" onclick="startDispatchV80()" ${running?'disabled style="opacity:.5"':''}>Disparar</button><button class="v80-btn blue" onclick="pauseDispatchV80()">Pausar</button><button class="v80-btn blue" onclick="resumeDispatchV80()">Retomar</button><button class="v80-btn danger" onclick="stopDispatchV80()">Parar</button></div><div class="v80-test v83-manual"><div class="v83-test-head"><div><div class="v80-title" style="margin:0">Lead teste com atributos</div><div class="v80-sub">Simula um lead verdadeiro usando telefone seu. Não cria lead, não altera fila, não conta limite e não salva Base Permanente.</div></div></div><div class="v80-field"><label>Telefone de teste</label><input id="v83TestPhone" placeholder="+55 DDD número" inputmode="tel" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Nome simulado</label><input id="v83TestCompany" placeholder="Empresa Teste" value="Empresa Teste" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Chip</label><select id="v83TestChip">${chips.map(ch=>`<option value="${esc(chipKey(ch))}">${esc(chipTitle(ch))} ${isConnected(ch)?'✓':'(desconectado)'}</option>`).join('')}</select></div><div class="v80-field"><label>Ramo</label><select id="v83TestRamo" onchange="previewManualLeadTestV83()">${ramosOptionsV83().map(r=>`<option value="${esc(r.id)}">${esc(r.nome)}</option>`).join('')}</select></div><div class="v80-field"><label>Tipo do lead</label><select id="v83TestTipo" onchange="previewManualLeadTestV83()"><option value="sem-site">Sem site</option><option value="com-site">Com site</option><option value="agregador">Agregador</option></select></div><div class="v80-field"><label>Site opcional</label><input id="v83TestSite" placeholder="https://empresa.com.br" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Imagem do teste</label><input id="v83ManualImageInput" type="file" accept="image/*" onchange="onManualLeadTestImageV83(this)"></div><button class="v80-btn primary" onclick="sendManualLeadTestV83()">Enviar lead teste</button><div class="v83-img-mini"><img id="v83ManualImagePreview" src="" style="display:none"></div><div id="v83ManualPreview" class="v83-preview"></div></div><div class="v80-log" id="v80DispatchLog">${runtime.log.length?runtime.log.slice(0,8).map(esc).join('<br>'):'// nenhum evento ainda'}</div>`;
   }
   function injectControls(){
     applyStyle(); const body=document.querySelector('#panel-fila-zap .zapLeft-body'); if(!body)return; let box=document.getElementById('v80DispatchBox'); if(!box){box=document.createElement('div'); box.id='v80DispatchBox'; box.className='v80-dispatch-box'; const stats=body.querySelector('.stats-row'); if(stats&&stats.parentNode)stats.parentNode.insertBefore(box,stats.nextSibling); else body.insertBefore(box,body.firstChild);} renderV80Controls();
@@ -255,6 +323,6 @@
   window.switchPanel=function(name){const r=typeof prevSwitch==='function'?prevSwitch.apply(this,arguments):undefined; const n=String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); if(['whatsapp','fila-zap','fila_whatsapp','zap'].includes(n)||name==='WhatsApp')scheduleInject(); return r;};
   document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-label="WhatsApp"],.day-tab,.status-tab,.v73-chip-head'))scheduleInject();},true);
   document.addEventListener('DOMContentLoaded',()=>{hydrateRuntime(); scheduleInject();});
-  window.startDispatchV80=startDispatchV80; window.pauseDispatchV80=pauseAllV80; window.resumeDispatchV80=resumeAllV80; window.stopDispatchV80=stopAllV80; window.previewDispatchV80=previewV80; window.sendTestDispatchV80=sendTestV80; window.sendFilaLeadTestDispatchV80=sendFilaLeadTestV80; window.pauseChipV80=pauseChipV80; window.resumeChipV80=resumeChipV80;
-  window.__V82_TESTE_LEAD_REAL_FILA__=VERSION;
+  window.startDispatchV80=startDispatchV80; window.pauseDispatchV80=pauseAllV80; window.resumeDispatchV80=resumeAllV80; window.stopDispatchV80=stopAllV80; window.previewDispatchV80=previewV80; window.sendTestDispatchV80=sendManualLeadTestV83; window.sendManualLeadTestV83=sendManualLeadTestV83; window.previewManualLeadTestV83=previewManualV83; window.onManualLeadTestImageV83=onManualImageV83; window.pauseChipV80=pauseChipV80; window.resumeChipV80=resumeChipV80;
+  window.__V83_LEAD_TESTE_MANUAL_ATRIBUTOS__=VERSION;
 })();
