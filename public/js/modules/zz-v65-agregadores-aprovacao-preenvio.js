@@ -2,8 +2,9 @@
    - Nova aba Atribuição: Agregadores.
    - Importação separa site próprio, agregador, Instagram, WhatsApp e Facebook.
    - Com Site e Agregadores só entram no Pré-envio depois de aprovados.
+   - Aprovar para fila NÃO tira o lead da aba; mantém current_stage original e marca pipeline_status.
    - Pré-envio preenche por prioridade: Com Site aprovados → Agregadores aprovados → WhatsApp puro.
-   - Não cria tabela nova e não usa coluna nova; usa current_stage/lead_type já existentes. */
+   - Não cria tabela nova; usa pipeline_status para aprovação manual. */
 (function(){
   'use strict';
   const VERSION='20260618-v65-agregadores-aprovacao-preenvio';
@@ -164,6 +165,14 @@
     if(currentTab==='insta') return 'attribution_instagram';
     return 'attribution_whatsapp';
   }
+  function tabStages(){
+    // Compatibilidade: versões antigas moviam o lead aprovado para *_approved.
+    // A regra nova mantém o lead na aba original e usa pipeline_status=approved_for_queue.
+    if(currentTab==='com-site') return ['attribution_site','attribution_site_approved'];
+    if(currentTab==='agregadores') return ['attribution_aggregator','attribution_aggregator_approved'];
+    if(currentTab==='insta') return ['attribution_instagram'];
+    return ['attribution_whatsapp'];
+  }
   function tabBadge(){
     if(currentTab==='com-site') return '<span class="atrib-v64-badge site">🌐 COM SITE</span>';
     if(currentTab==='agregadores') return '<span class="atrib-v64-badge aggregator">🔗 AGREGADOR</span>';
@@ -176,8 +185,15 @@
   function mapsUrl(l){ return cleanUrl(l.maps_url || l.googleUrl || l.mapsUrl || ''); }
   function nameHtml(l){ const name=esc(l.company_name || l.nome || l.name || 'Lead sem nome'); const maps=mapsUrl(l); return maps?`<a href="${esc(maps)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${name}</a>`:`<span>${name}</span>`; }
   async function countStage(stage){ const c=sb(); if(!c) return 0; const {count,error}=await c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('current_stage',stage); if(error){console.warn('[v65][count]',stage,error.message); return 0;} return count||0; }
+  async function countStages(stages){
+    const c=sb(); if(!c) return 0;
+    const arr=Array.isArray(stages)?stages:[stages];
+    const {count,error}=await c.from('leads').select('id',{count:'exact',head:true}).eq('user_id',uid()).in('current_stage',arr);
+    if(error){console.warn('[v65][count-stages]',arr,error.message); return 0;}
+    return count||0;
+  }
   async function refreshCounts(){
-    const [w,s,a,i,ib]=await Promise.all([countStage('attribution_whatsapp'),countStage('attribution_site'),countStage('attribution_aggregator'),countStage('attribution_instagram'),countStage('instagram_backlog')]);
+    const [w,s,a,i,ib]=await Promise.all([countStage('attribution_whatsapp'),countStages(['attribution_site','attribution_site_approved']),countStages(['attribution_aggregator','attribution_aggregator_approved']),countStage('attribution_instagram'),countStage('instagram_backlog')]);
     const setTxt=(id,v)=>document.querySelectorAll('#'+CSS.escape(id)).forEach(el=>{el.textContent=v;});
     setTxt('atribTabZapCount',`(${w})`); setTxt('atribTabComSiteCount',`(${s})`); setTxt('atribTabAgregadoresCount',`(${a})`); setTxt('atribTabInstaCount',`(${i})`); setTxt('badge-atribuicao',String(w+s+a+i)); setTxt('badge-instagram',String(ib));
   }
@@ -197,8 +213,8 @@
     const inputId=currentTab==='insta'?'atribInstaBusca':'atribBusca';
     const qv=(document.getElementById(inputId)?.value||'').trim().replaceAll('%','');
     let q=c.from('leads')
-      .select('id,company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url,city,state,rating,reviews_count,lead_score,current_stage,created_at,lead_type,website_type',{count:'exact'})
-      .eq('user_id',uid()).eq('current_stage',tabStage())
+      .select('id,company_name,phone,normalized_phone,website,maps_url,instagram,instagram_url,city,state,rating,reviews_count,lead_score,current_stage,created_at,lead_type,website_type,pipeline_status',{count:'exact'})
+      .eq('user_id',uid()).in('current_stage',tabStages())
       .order('lead_score',{ascending:false}).order('created_at',{ascending:true});
     if(qv) q=q.or(`company_name.ilike.%${qv}%,phone.ilike.%${qv}%,normalized_phone.ilike.%${qv}%,website.ilike.%${qv}%,instagram_url.ilike.%${qv}%`);
     const from=(page-1)*PER_PAGE;
@@ -210,7 +226,12 @@
     const canApprove=currentTab==='com-site' || currentTab==='agregadores';
     const links=[linkSite(l),linkZap(l),linkInsta(l)].filter(Boolean).join('');
     const instaInput=isInsta ? `<div class="atrib-v64-insta-input-wrap"><input id="atrib-insta-url-${esc(l.id)}" class="atrib-insta-url-input" type="text" placeholder="Cole o Instagram aqui" value="${esc(l.instagram_url||'')}" onpaste="setTimeout(()=>approveInstagramAttributionV31('${esc(l.id)}'),80)" onchange="approveInstagramAttributionV31('${esc(l.id)}')" onkeydown="if(event.key==='Enter') approveInstagramAttributionV31('${esc(l.id)}')"></div>` : '';
-    const approveBtn=canApprove ? `<button class="btn btn-primary v65-approve-queue" style="font-size:9px;padding:6px 10px;white-space:nowrap" onclick="event.preventDefault();event.stopPropagation();aprovarLeadAtribuicaoParaFilaV65('${esc(l.id)}','${esc(currentTab)}');return false;">✓ Aprovar para fila</button>` : '';
+    const approved = String(l.pipeline_status||'')==='approved_for_queue' || String(l.current_stage||'').endsWith('_approved');
+    const approveBtn=canApprove
+      ? (approved
+        ? `<button class="btn btn-ghost v65-approve-queue is-approved" style="font-size:9px;padding:6px 10px;white-space:nowrap;border-color:rgba(174,255,70,.45);color:var(--accent);" disabled>✓ Aprovado para fila</button>`
+        : `<button class="btn btn-primary v65-approve-queue" style="font-size:9px;padding:6px 10px;white-space:nowrap" onclick="event.preventDefault();event.stopPropagation();aprovarLeadAtribuicaoParaFilaV65('${esc(l.id)}','${esc(currentTab)}');return false;">✓ Aprovar para fila</button>`)
+      : '';
     const invalidBtn=(currentTab==='com-site'||currentTab==='agregadores') && typeof window.invalidarLeadAtribuicaoV58==='function'
       ? `<button class="btn btn-ghost v58-invalid-atrib" style="font-size:9px;padding:6px 10px;border-color:rgba(255,80,80,.45);color:var(--error);white-space:nowrap" onclick="event.preventDefault();event.stopPropagation();invalidarLeadAtribuicaoV58('${esc(l.id)}');return false;">Invalidar lead</button>` : '';
     return `<div class="empresa-card atrib-v64-card" data-lead-id="${esc(l.id)}"><div class="empresa-info atrib-v64-info"><div class="empresa-nome atrib-v64-name">${nameHtml(l)}</div><div class="empresa-meta atrib-v64-meta">${tabBadge()}${links || '<span class="atrib-v64-muted">Sem link salvo</span>'}</div></div>${instaInput}<div class="empresa-actions atrib-v64-actions"><button class="btn btn-ghost" style="font-size:9px;padding:6px 10px" onclick="event.stopPropagation();openLeadDrawer('${esc(l.id)}')">Ficha</button>${approveBtn}${invalidBtn}</div></div>`;
@@ -243,11 +264,13 @@
   }
   window.aprovarLeadAtribuicaoParaFilaV65=async function(id,tab){
     const c=sb(); if(!c) return notify('// Supabase indisponível','err');
-    const stage = tab==='agregadores' ? 'attribution_aggregator_approved' : 'attribution_site_approved';
+    const baseStage = tab==='agregadores' ? 'attribution_aggregator' : 'attribution_site';
     const type = tab==='agregadores' ? 'agregador' : 'com-site';
-    const {error}=await c.from('leads').update({ current_stage:stage, lead_type:type, pipeline_status:'approved_for_queue', updated_at:new Date().toISOString() }).eq('user_id',uid()).eq('id',id);
+    // Regra nova: aprovar para fila apenas sinaliza o lead. Ele continua visível na aba de Atribuição.
+    // Compatibilidade: se uma versão anterior já moveu para *_approved, traz de volta para a aba base.
+    const {error}=await c.from('leads').update({ current_stage:baseStage, lead_type:type, pipeline_status:'approved_for_queue', updated_at:new Date().toISOString() }).eq('user_id',uid()).eq('id',id);
     if(error) return notify('// erro ao aprovar lead: '+error.message,'err');
-    notify('✓ Lead aprovado para entrar no Pré-envio');
+    notify('✓ Lead sinalizado para o Pré-envio e mantido na Atribuição');
     await renderAtribuicaoV65();
     if(typeof window.updateMenuBadgesTotalsV65==='function') window.updateMenuBadgesTotalsV65(true);
   };
@@ -265,17 +288,31 @@
   }
   async function fetchStageLeads(stage, limit, excludeIds=[]){
     const c=sb(); if(!c || limit<=0) return [];
-    let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,current_stage,created_at,lead_score,rating,reviews_count,lead_type,website_type').eq('user_id',uid()).eq('current_stage',stage).order('lead_score',{ascending:false}).order('created_at',{ascending:true}).limit(limit + 50);
+    let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,current_stage,created_at,lead_score,rating,reviews_count,lead_type,website_type,pipeline_status').eq('user_id',uid()).eq('current_stage',stage).order('lead_score',{ascending:false}).order('created_at',{ascending:true}).limit(limit + 50);
     if(excludeIds.length) q=q.not('id','in',`(${excludeIds.map(x=>`"${String(x).replace(/"/g,'')}"`).join(',')})`);
     const {data,error}=await q;
     if(error){ console.warn('[v65][fetch-stage]',stage,error.message); return []; }
     return (data||[]).slice(0,limit);
   }
+  async function fetchApprovedAttributionLeads(baseStage, legacyApprovedStage, limit, excludeIds=[]){
+    const c=sb(); if(!c || limit<=0) return [];
+    const stages=[baseStage,legacyApprovedStage].filter(Boolean);
+    let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,maps_url,current_stage,created_at,lead_score,rating,reviews_count,lead_type,website_type,pipeline_status').eq('user_id',uid()).in('current_stage',stages).or(`pipeline_status.eq.approved_for_queue,current_stage.eq.${legacyApprovedStage}`).order('lead_score',{ascending:false}).order('created_at',{ascending:true}).limit(limit + 50);
+    if(excludeIds.length) q=q.not('id','in',`(${excludeIds.map(x=>`"${String(x).replace(/"/g,'')}"`).join(',')})`);
+    const {data,error}=await q;
+    if(error){ console.warn('[v65][fetch-approved-stage]',baseStage,error.message); return []; }
+    return (data||[]).slice(0,limit);
+  }
   async function fetchPriorityLeads(limit, excludeIds=[]){
     let remain=Number(limit)||0; const out=[]; const excluded=[...excludeIds];
-    for(const st of ['attribution_site_approved','attribution_aggregator_approved','attribution_whatsapp']){
+    const groups=[
+      ()=>fetchApprovedAttributionLeads('attribution_site','attribution_site_approved',remain,excluded),
+      ()=>fetchApprovedAttributionLeads('attribution_aggregator','attribution_aggregator_approved',remain,excluded),
+      ()=>fetchStageLeads('attribution_whatsapp',remain,excluded)
+    ];
+    for(const getRows of groups){
       if(remain<=0) break;
-      const rows=await fetchStageLeads(st, remain, excluded);
+      const rows=await getRows();
       out.push(...rows); rows.forEach(r=>excluded.push(r.id)); remain=limit-out.length;
     }
     return out.slice(0,limit);
@@ -325,7 +362,7 @@
   // 6) Badges de menu incluindo agregadores.
   async function refreshMenuBadgesV65(force=false){
     const [w,s,a,i,ib,base,pre,queue]=await Promise.all([
-      countStage('attribution_whatsapp'),countStage('attribution_site'),countStage('attribution_aggregator'),countStage('attribution_instagram'),countStage('instagram_backlog'),
+      countStage('attribution_whatsapp'),countStages(['attribution_site','attribution_site_approved']),countStages(['attribution_aggregator','attribution_aggregator_approved']),countStage('attribution_instagram'),countStage('instagram_backlog'),
       (async()=>{ const c=sb(); if(!c)return 0; const {count}=await c.from('base_permanente').select('id',{count:'exact',head:true}).eq('user_id',uid()); return count||0; })(),
       (async()=>{ const c=sb(); if(!c)return 0; const {count}=await c.from('pre_dispatch_items').select('id',{count:'exact',head:true}).eq('user_id',uid()).in('status',['review','pending_review','validation_retry','validation_error']); return count||0; })(),
       (async()=>{ const c=sb(); if(!c)return 0; const {count}=await c.from('pre_dispatch_items').select('id',{count:'exact',head:true}).eq('user_id',uid()).in('status',['approved','ready_to_dispatch','queued','dispatch_queue','waiting','not_sent','ready','pending','scheduled']); return count||0; })()
