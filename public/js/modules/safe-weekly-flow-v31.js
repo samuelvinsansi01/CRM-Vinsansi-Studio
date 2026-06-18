@@ -1116,7 +1116,14 @@
   }
   async function countDayItems(date, chip){
     const c=db(); if(!c) return 0;
-    let q=c.from('pre_dispatch_items').select('id',{count:'exact',head:true}).eq('user_id',uid()).eq('scheduled_date',date);
+    // V92: o Pré-envio só deve contar itens ainda operacionais no Pré-envio.
+    // Itens já enviados para a Fila WhatsApp final ou já enviados/erro não entram aqui.
+    const preStatuses = ['review','pending_review','approved','validation_retry','validation_error'];
+    let q=c.from('pre_dispatch_items')
+      .select('id',{count:'exact',head:true})
+      .eq('user_id',uid())
+      .eq('scheduled_date',date)
+      .in('status',preStatuses);
     if(chip && chip !== 'all') q=q.eq('chip_instance',chip);
     const { count, error } = await q;
     if(error){ console.warn('[v31.7][day-count]', error.message); return 0; }
@@ -1124,7 +1131,12 @@
   }
   async function dayCounts(dates){
     const c=db(); if(!c) return {};
-    const { data, error } = await c.from('pre_dispatch_items').select('scheduled_date').eq('user_id',uid()).in('scheduled_date',dates);
+    const preStatuses = ['review','pending_review','approved','validation_retry','validation_error'];
+    const { data, error } = await c.from('pre_dispatch_items')
+      .select('scheduled_date')
+      .eq('user_id',uid())
+      .in('scheduled_date',dates)
+      .in('status',preStatuses);
     if(error){ console.warn('[v31.7][day-counts]', error.message); return {}; }
     return (data||[]).reduce((acc,r)=>{ acc[r.scheduled_date]=(acc[r.scheduled_date]||0)+1; return acc; },{});
   }
@@ -1234,10 +1246,17 @@
     // Quando o item vira ready_to_dispatch/queued/sent/error ou o lead entra em dispatch_queue,
     // ele deve aparecer somente na Fila WhatsApp, evitando duplicidade operacional.
     const dispatchStatuses = new Set(['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','scheduled','sending','paused','sent','enviado','enviada','error','erro','failed']);
+    const leadFinalStatuses = new Set(['sent','enviado','enviada','whatsapp_sent','dispatch_queue','ready_to_dispatch','queued','not_sent','waiting','scheduled','sending','paused','error','erro','failed']);
     return (data||[]).filter(r=>{
       const st = String(r.status||'').toLowerCase();
       const leadStage = String(r.leads?.current_stage||'').toLowerCase();
-      return !dispatchStatuses.has(st) && leadStage !== 'dispatch_queue';
+      const leadStatus = String(r.leads?.status||'').toLowerCase();
+      const leadCurrentStatus = String(r.leads?.current_status||'').toLowerCase();
+      // Se o item ou o próprio lead já foi para fila final/enviado/erro, ele não pertence mais ao Pré-envio.
+      return !dispatchStatuses.has(st)
+        && !leadFinalStatuses.has(leadStage)
+        && !leadFinalStatuses.has(leadStatus)
+        && !leadFinalStatuses.has(leadCurrentStatus);
     });
   }
 
@@ -1261,7 +1280,7 @@
       const br = (b.lead_type==='sem-site' || !String(b.leads?.website||'').trim()) ? 0 : 1;
       return (ar-br) || String(a.chip_label||a.chip_instance||'').localeCompare(String(b.chip_label||b.chip_instance||'')) || ((a.position||0)-(b.position||0));
     });
-    const badge=document.getElementById('badge-pre-envio'); if(badge) badge.textContent=String(rows.filter(r=>!['ready_to_dispatch','sent'].includes(r.status)).length);
+    const badge=document.getElementById('badge-pre-envio'); if(badge) badge.textContent=String(rows.length);
     if(!rows.length){ el.innerHTML=`<div style="padding:24px;text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px">// nenhum lead planejado para ${dayLabel(selectedDate)}${selectedChip!=='all'?' neste chip':''}</div>`; return; }
     const totalPages=Math.max(1,Math.ceil(rows.length/PER_PAGE)); if(page>totalPages) page=totalPages;
     const pageRows=rows.slice((page-1)*PER_PAGE,page*PER_PAGE);
