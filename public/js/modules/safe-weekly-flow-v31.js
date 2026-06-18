@@ -250,7 +250,7 @@
     const pageRows = rows.slice((prePage-1)*PER_PAGE, prePage*PER_PAGE);
     el.innerHTML = `
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">
-        <strong style="color:var(--text)">${rows.length}</strong> planejados · <strong style="color:var(--ok)">${rows.filter(r=>r.status==='approved').length}</strong> aprovados · <strong style="color:var(--accent)">${rows.filter(r=>r.status==='ready_to_dispatch').length}</strong> fila final
+        <strong style="color:var(--text)">${rows.length}</strong> planejados · <strong style="color:var(--ok)">${rows.filter(r=>r.status==='approved').length}</strong> aprovados · <strong style="color:var(--accent)">${rows.filter(r=>r.status==='validation_retry'||r.status==='validation_error').length}</strong> pendências
         <button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:7px 12px" onclick="returnPreEnvioDayToAttributionV31('${preCurrentDate}')">↩ Voltar dia para atribuição</button>
         <button class="btn btn-primary" style="font-size:10px;padding:7px 12px" onclick="sendApprovedToFinalQueueV31('${preCurrentDate}')">Enviar aprovados para fila final</button>
       </div>
@@ -1222,7 +1222,7 @@
   async function fetchPreItemsV317(date, chip='all'){
     const c=db(); if(!c) return [];
     let q=c.from('pre_dispatch_items')
-      .select('id,lead_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,created_at,raw_payload,leads(company_name,phone,normalized_phone,website,maps_url,city,state,rating,reviews_count)')
+      .select('id,lead_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,created_at,raw_payload,leads(company_name,phone,normalized_phone,website,maps_url,city,state,rating,reviews_count,current_stage,current_status,status)')
       .eq('user_id',uid())
       .eq('scheduled_date',date)
       .order('chip_label',{ascending:true})
@@ -1230,7 +1230,15 @@
     if(chip && chip !== 'all') q=q.eq('chip_instance',chip);
     const { data, error } = await q;
     if(error){ console.warn('[v31.7][fetch-pre]',error.message); return []; }
-    return data||[];
+    // V91: Pré-envio não pode exibir itens que já foram enviados para a Fila WhatsApp final.
+    // Quando o item vira ready_to_dispatch/queued/sent/error ou o lead entra em dispatch_queue,
+    // ele deve aparecer somente na Fila WhatsApp, evitando duplicidade operacional.
+    const dispatchStatuses = new Set(['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','scheduled','sending','paused','sent','enviado','enviada','error','erro','failed']);
+    return (data||[]).filter(r=>{
+      const st = String(r.status||'').toLowerCase();
+      const leadStage = String(r.leads?.current_stage||'').toLowerCase();
+      return !dispatchStatuses.has(st) && leadStage !== 'dispatch_queue';
+    });
   }
 
   async function renderPreEnvioListV317(){
@@ -1259,7 +1267,7 @@
     const pageRows=rows.slice((page-1)*PER_PAGE,page*PER_PAGE);
     el.innerHTML=`
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)">
-        <strong style="color:var(--text)">${rows.length}</strong> planejados · <strong style="color:var(--ok)">${rows.filter(r=>r.status==='approved').length}</strong> aprovados · <strong style="color:var(--accent)">${rows.filter(r=>r.status==='ready_to_dispatch').length}</strong> fila final
+        <strong style="color:var(--text)">${rows.length}</strong> planejados · <strong style="color:var(--ok)">${rows.filter(r=>r.status==='approved').length}</strong> aprovados · <strong style="color:var(--accent)">${rows.filter(r=>r.status==='validation_retry'||r.status==='validation_error').length}</strong> pendências
         <button class="btn btn-ghost" style="margin-left:auto;font-size:10px;padding:7px 12px" onclick="returnPreEnvioDayToAttributionV31('${selectedDate}')">↩ Voltar dia para atribuição</button>
         <button class="btn btn-primary" style="font-size:10px;padding:7px 12px" onclick="sendApprovedToFinalQueueV31('${selectedDate}')">Enviar aprovados para fila final</button>
       </div>
