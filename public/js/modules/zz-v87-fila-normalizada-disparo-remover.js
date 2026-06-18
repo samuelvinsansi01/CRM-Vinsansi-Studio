@@ -15,10 +15,8 @@
   function addStyle(){
     if(qs('#v87-fila-style'))return;
     const st=document.createElement('style'); st.id='v87-fila-style'; st.textContent=`
-      #panel-fila-zap.v87-test-mode .zapRight,
       #panel-fila-zap.v87-test-mode .zap-empresa-list,
-      #panel-fila-zap.v87-test-mode .stats-row,
-      #panel-fila-zap.v87-test-mode #v85DispatchGlobal{display:none!important;}
+      #panel-fila-zap.v87-test-mode .stats-row{display:none!important;}
       #panel-fila-zap.v87-test-mode #v80DispatchBox{display:grid!important;}
       #panel-fila-zap:not(.v87-test-mode) #v80DispatchBox{display:none!important;}
       #panel-fila-zap .status-tab[data-v87-test="1"]{border-color:rgba(184,240,89,.35)!important;}
