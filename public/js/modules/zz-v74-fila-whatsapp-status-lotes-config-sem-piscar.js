@@ -98,14 +98,16 @@
     const cats=categoriesOf(l);
     const catsNorm=cats.map(normalize);
     const hay=normalize(cats.join(' '));
-    if(MOVEIS_PLANEJADOS_KEYS_V75.map(normalize).some(k=>hay.includes(k)||catsNorm.includes(k))) return {id:'marcenaria', nome:'Móveis Planejados'};
+    if(MOVEIS_PLANEJADOS_KEYS_V75.map(normalize).some(k=>hay.includes(k)||catsNorm.includes(k))) return {id:'marcenaria', nome:'Móveis Planejados', unknown:false};
     for(const r of ramos){
       const rr=normalizeRamoDisplayV75(r);
       const keys=[rr.nome, ...(Array.isArray(rr.keywords)?rr.keywords:[])].map(normalize).filter(Boolean);
-      if(keys.some(k=>hay.includes(k)||catsNorm.includes(k))) return {id:rr.id||slug(rr.nome), nome:rr.nome||cats[0]||'Geral'};
+      if(keys.some(k=>hay.includes(k)||catsNorm.includes(k))) return {id:rr.id||slug(rr.nome), nome:rr.nome||cats[0]||'Geral', unknown:false};
     }
-    const name=cats[0]||String(l?.lead_type||'Geral');
-    return {id:slug(name), nome:name||'Geral'};
+    // Segurança operacional: NUNCA criar ramo automaticamente a partir do lead_type
+    // ou da categoria crua importada. Se a categoria não bate com um ramo cadastrado,
+    // o lead fica marcado como fora do ramo e não pode gerar slot de imagem/disparo.
+    return {id:'__fora_do_ramo__', nome:'Fora do ramo', unknown:true, raw:cats[0]||''};
   }
   function typeKey(l,r){
     const lt=normalize(r?.lead_type||l?.lead_type||l?.current_stage||'');
@@ -205,7 +207,7 @@
     #panel-fila-zap .v73-badge.tipo{color:#5bb8f5;border-color:rgba(91,184,245,.35);}
     #panel-fila-zap .v73-badge.queue{color:var(--accent);border-color:rgba(184,240,89,.38);}
     #panel-fila-zap .v73-badge.sent{color:var(--ok);border-color:rgba(78,203,113,.38);}
-    #panel-fila-zap .v73-badge.error{color:var(--error);border-color:rgba(255,80,80,.38);}
+    #panel-fila-zap .v73-badge.error{color:var(--error);border-color:rgba(255,80,80,.38);} #panel-fila-zap .v73-badge.ramo.unknown{color:var(--error);border-color:rgba(255,80,80,.55);background:rgba(255,80,80,.06);} #panel-fila-zap .v73-lote-warn{border:1px solid rgba(255,80,80,.35);background:rgba(255,80,80,.055);color:var(--error);border-radius:10px;padding:9px 11px;margin-bottom:10px;font-family:'DM Mono',monospace;font-size:9px;line-height:1.5}
     #panel-fila-zap .v73-lead-body{padding:0 14px 14px;display:none;flex-direction:column;gap:10px;}
     #panel-fila-zap .v73-lead.open .v73-lead-body{display:flex;}
     #panel-fila-zap .v73-msg-box{background:var(--surface2);border-radius:8px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);white-space:pre-wrap;line-height:1.7;max-height:130px;overflow-y:auto;border:1px solid var(--border2);}
@@ -250,17 +252,21 @@
   function ramoSlotsHtml(ch,loteNum,lote){
     const chipId=chipRef(ch);
     const map=new Map();
-    lote.forEach(r=>{const ramo=resolveRamo(r.lead||{}); if(!map.has(ramo.id))map.set(ramo.id,ramo);});
-    return `<div class="v73-ramo-images">${[...map.values()].map(ramo=>{
+    let unknownCount=0;
+    lote.forEach(r=>{const ramo=resolveRamo(r.lead||{}); if(ramo.unknown){unknownCount++; return;} if(!map.has(ramo.id))map.set(ramo.id,ramo);});
+    const warn=unknownCount?`<div class="v73-lote-warn">⚠ ${unknownCount} lead(s) fora dos ramos cadastrados neste lote. Eles não geram imagem e o disparo será bloqueado até corrigir/remover.</div>`:'';
+    const slots=`<div class="v73-ramo-images">${[...map.values()].map(ramo=>{
       const k=imgKey(chipId,loteNum,ramo.id); const img=state.imgCache[k]||null; if(state.imgCache[k]===undefined) setTimeout(()=>loadImage(chipId,loteNum,ramo.id),0);
       const inp=`v73-img-${slug(k)}`;
       return `<div class="v73-img-card"><div class="v73-img-title">${esc(ramo.nome)}</div><div class="v73-img-box ${img?'has-img':''}" onclick="document.getElementById('${esc(inp)}').click()"><img data-v73-img-key="${esc(k)}" src="${img?esc(img):''}" style="${img?'display:block':'display:none'}"/><span class="v73-img-placeholder">📎 selecionar imagem</span><button class="v73-img-remove" onclick="event.stopPropagation();removeLoteRamoImgV73('${esc(k)}')">×</button></div><input id="${esc(inp)}" type="file" accept="image/*" style="display:none" onchange="onLoteRamoImgChangeV73('${esc(k)}',this)"></div>`;
     }).join('')}</div>`;
+    return warn+slots;
   }
 
   function renderLead(r,idx,ch,loteNum){
-    const l=r.lead||{}; const phone=leadPhone(l); const st=statusKey(r.status); const exp=!!state.expanded[r.id]; const ramo=resolveRamo(l); const tipo=typeLabel(l,r); const msg1=getMsg(r,1); const msg2=getMsg(r,2); const web=String(l.website||'').trim(); const cls=st==='sent'?'sent':st==='error'?'error':'';
-    return `<div class="v73-lead ${cls} ${exp?'open':''}" id="fila-item-v73-${esc(r.id)}" data-v73-lead-id="${esc(r.id)}"><div class="v73-lead-head" onclick="toggleFilaItemV74('${esc(r.id)}')"><div class="v73-lead-index">${idx}</div><div class="v73-lead-main"><div class="v73-lead-name">${leadLinkHtml(l)}</div><div class="v73-lead-phone">${phone?`+${esc(phone)}`:'sem WhatsApp'}</div></div><div class="v73-lead-badges"><span class="v73-badge ramo">${esc(ramo.nome)}</span><span class="v73-badge tipo">${esc(tipo)}</span><span class="v73-badge ${st}">${esc(statusLabel(r.status))}</span><span class="v73-chev" style="transform:rotate(${exp?'90':'0'}deg)">▶</span></div></div><div class="v73-lead-body"><div><div class="v73-tool-title">① MENSAGEM 1</div><div class="v73-msg-box">${esc(msg1||'Mensagem 1 será aplicada pelo template do ramo e tipo do lead.')}</div></div><div><div class="v73-tool-title">② MENSAGEM 2</div><div class="v73-msg-box">${esc(msg2||'Mensagem 2 será aplicada pelo template do ramo e tipo do lead.')}</div></div><div class="v73-info-grid"><div class="v73-info"><b>Imagem usada</b>${esc(ramo.nome)}</div><div class="v73-info"><b>Tipo</b>${esc(tipo)}</div>${web?`<div class="v73-info"><b>Site</b>${esc(host(web))}</div>`:''}<div class="v73-info"><b>Status</b>${esc(statusLabel(r.status))}</div></div></div></div>`;
+    const l=r.lead||{}; const phone=leadPhone(l); const st=statusKey(r.status); const exp=!!state.expanded[r.id]; const ramo=resolveRamo(l); const tipo=typeLabel(l,r); const msg1=getMsg(r,1); const msg2=getMsg(r,2); const web=String(l.website||'').trim(); const cls=st==='sent'?'sent':st==='error'?'error':ramo.unknown?'error':'';
+    const ramoBadge=`<span class="v73-badge ramo ${ramo.unknown?'unknown':''}">${esc(ramo.nome)}</span>`;
+    return `<div class="v73-lead ${cls} ${exp?'open':''}" id="fila-item-v73-${esc(r.id)}" data-v73-lead-id="${esc(r.id)}"><div class="v73-lead-head" onclick="toggleFilaItemV74('${esc(r.id)}')"><div class="v73-lead-index">${idx}</div><div class="v73-lead-main"><div class="v73-lead-name">${leadLinkHtml(l)}</div><div class="v73-lead-phone">${phone?`+${esc(phone)}`:'sem WhatsApp'}</div></div><div class="v73-lead-badges">${ramoBadge}<span class="v73-badge tipo">${esc(tipo)}</span><span class="v73-badge ${st}">${esc(statusLabel(r.status))}</span><span class="v73-chev" style="transform:rotate(${exp?'90':'0'}deg)">▶</span></div></div><div class="v73-lead-body"><div><div class="v73-tool-title">① MENSAGEM 1</div><div class="v73-msg-box">${esc(ramo.unknown?'Lead fora dos ramos cadastrados. Não disparar até corrigir a subcategoria/ramo.':(msg1||'Mensagem 1 será aplicada pelo template do ramo e tipo do lead.'))}</div></div><div><div class="v73-tool-title">② MENSAGEM 2</div><div class="v73-msg-box">${esc(ramo.unknown?'Lead bloqueado para segurança operacional.':(msg2||'Mensagem 2 será aplicada pelo template do ramo e tipo do lead.'))}</div></div><div class="v73-info-grid"><div class="v73-info"><b>Imagem usada</b>${esc(ramo.unknown?'Bloqueado — fora do ramo':ramo.nome)}</div><div class="v73-info"><b>Tipo</b>${esc(tipo)}</div>${web?`<div class="v73-info"><b>Site</b>${esc(host(web))}</div>`:''}<div class="v73-info"><b>Status</b>${esc(statusLabel(r.status))}</div></div></div></div>`;
   }
 
   function renderLotes(list,ch){
@@ -268,8 +274,8 @@
     const size=blockSize(ch); let html='';
     for(let i=0;i<list.length;i+=size){
       const lote=list.slice(i,i+size); const n=Math.floor(i/size)+1; const loteId=`${chipRef(ch)}-${state.date}-${n}`; if(state.lotes[loteId]===undefined)state.lotes[loteId]=n===1; const open=!!state.lotes[loteId];
-      const sent=lote.filter(r=>statusKey(r.status)==='sent').length; const err=lote.filter(r=>statusKey(r.status)==='error').length; const pending=lote.length-sent-err; const ramos=[...new Set(lote.map(r=>resolveRamo(r.lead||{}).nome))]; const complete=lote.length>=size;
-      html+=`<div class="v73-lote ${open?'open':''}" data-v73-lote-id="${esc(loteId)}"><div class="v73-lote-head" onclick="toggleLoteV74('${esc(loteId)}')"><span class="v73-chev">▶</span><span class="v73-lote-title">LOTE ${n} — #${i+1}–${i+lote.length}</span><span class="v73-lote-line"></span><span class="v73-lote-meta">${lote.length} leads · ${sent} enviados · ${pending} pendentes · ${err} erros · ${ramos.length} ramo${ramos.length!==1?'s':''} · ${complete?'✓ completo':`${size-lote.length} restantes`}</span></div><div class="v73-lote-body">${ramoSlotsHtml(ch,n,lote)}${lote.map((r,j)=>renderLead(r,i+j+1,ch,n)).join('')}</div></div>`;
+      const sent=lote.filter(r=>statusKey(r.status)==='sent').length; const err=lote.filter(r=>statusKey(r.status)==='error').length; const pending=lote.length-sent-err; const resolved=lote.map(r=>resolveRamo(r.lead||{})); const ramos=[...new Set(resolved.filter(x=>!x.unknown).map(x=>x.nome))]; const fora=resolved.filter(x=>x.unknown).length; const complete=lote.length>=size;
+      html+=`<div class="v73-lote ${open?'open':''}" data-v73-lote-id="${esc(loteId)}"><div class="v73-lote-head" onclick="toggleLoteV74('${esc(loteId)}')"><span class="v73-chev">▶</span><span class="v73-lote-title">LOTE ${n} — #${i+1}–${i+lote.length}</span><span class="v73-lote-line"></span><span class="v73-lote-meta">${lote.length} leads · ${sent} enviados · ${pending} pendentes · ${err} erros · ${ramos.length} ramo${ramos.length!==1?'s':''}${fora?` · ⚠ ${fora} fora do ramo`:''} · ${complete?'✓ completo':`${size-lote.length} restantes`}</span></div><div class="v73-lote-body">${ramoSlotsHtml(ch,n,lote)}${lote.map((r,j)=>renderLead(r,i+j+1,ch,n)).join('')}</div></div>`;
     }
     return html;
   }

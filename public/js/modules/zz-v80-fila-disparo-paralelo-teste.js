@@ -48,8 +48,8 @@
     return [...new Set(out.map(x=>x.trim()).filter(Boolean))];
   }
   function resolveRamo(l){
-    try{if(typeof window.resolveLeadParentRamoV73==='function')return window.resolveLeadParentRamoV73(l)||{id:'geral',nome:'Geral'};}catch(_){ }
-    const cats=categoriesOf(l); return {id:normalize(cats[0]||'geral').replace(/[^a-z0-9]+/g,'-')||'geral',nome:cats[0]||'Geral'};
+    try{if(typeof window.resolveLeadParentRamoV73==='function')return window.resolveLeadParentRamoV73(l)||{id:'__fora_do_ramo__',nome:'Fora do ramo',unknown:true};}catch(_){ }
+    return {id:'__fora_do_ramo__',nome:'Fora do ramo',unknown:true};
   }
   function blockSize(ch){const n=Number(ch?.block_size||ch?.blockSize||0); if(n>0)return n; try{if(typeof window.getLoteSize==='function')return Math.max(1,Number(window.getLoteSize())||60);}catch(_){} return 60;}
   function loteNum(row,ch){return Math.floor((Number(row?.position||1)-1)/blockSize(ch))+1;}
@@ -174,6 +174,22 @@
     const date=currentDate(); const chipFilter=currentOpenChip()||'all'; const data=await fetchData(date); runtime.lastData=data;
     if(data.error)return notify(data.error.message,'err');
     const rows=runnableRows(data,chipFilter); if(!rows.length)return notify('Nenhum lead em fila para disparar neste dia/filtro.','warn');
+    const invalidRows=rows.filter(r=>{const ramo=resolveRamo(r.lead||{}); return ramo.unknown||ramo.id==='__fora_do_ramo__';});
+    if(invalidRows.length){
+      addLog(`Disparo bloqueado: ${invalidRows.length} lead(s) fora dos ramos cadastrados.`);
+      return notify(`Disparo bloqueado: existem ${invalidRows.length} lead(s) fora dos ramos cadastrados. Corrija/remova antes de disparar.`, 'err');
+    }
+    const missingImgs=[];
+    for(const r of rows){
+      const ch=chipForRow(r,data.chips); if(!ch) continue;
+      const ramo=resolveRamo(r.lead||{});
+      const img=await loteImage(ch,r);
+      if(!img) missingImgs.push(`${chipTitle(ch)} · ${leadName(r.lead)} · ${ramo.nome||ramo.id}`);
+    }
+    if(missingImgs.length){
+      addLog(`Disparo bloqueado: ${missingImgs.length} lead(s) sem imagem do ramo.`);
+      return notify(`Disparo bloqueado: falta imagem de ramo em ${missingImgs.length} lead(s).`, 'err');
+    }
     const groups=new Map();
     rows.forEach(r=>{const ch=chipForRow(r,data.chips); if(!ch)return; const key=chipKey(ch); if(!groups.has(key))groups.set(key,{chip:ch,rows:[]}); groups.get(key).rows.push(r);});
     const runnable=[...groups.values()].filter(g=>hasConfig(g.chip)&&isConnected(g.chip));
@@ -214,6 +230,7 @@
     const target=phone(document.getElementById('v80FilaTestTarget')?.value||'');
     const ramo=resolveRamo(row.lead||{});
     const destino=target||leadPhone(row.lead||{});
+    if(ramo.unknown||ramo.id==='__fora_do_ramo__')return notify('Lead fora dos ramos cadastrados. Ajuste a subcategoria/ramo antes de testar como lead real.', 'err');
     if(!destino)return notify('Lead sem telefone e nenhum destino de teste informado.','warn');
     try{
       addLog(`Teste real: ${leadName(row.lead)} · ${ramo.nome||ramo.id} · via ${chipTitle(ch)} · destino +${destino}`);
