@@ -2551,3 +2551,72 @@ function copyInfraCommandV46(type) {
   console.log('[v119][config-pages-no-tabs] ativo',VERSION);
 })();
 </script>
+
+<script>
+/* V120 — Configurações em página única novamente.
+   Pedido: retirar páginas/cards de Configurações e voltar com tudo em uma única página.
+   - Desativa a home de páginas V119.
+   - Exibe todas as seções V109 em sequência.
+   - Esconde tabs do topo e botões de voltar.
+   - Mantém todas as funcionalidades existentes dentro das seções.
+*/
+(function(){
+  'use strict';
+  const VERSION='20260619-V120-CONFIG-SINGLE-PAGE';
+  function ensureStyle(){
+    let st=document.getElementById('configV120SinglePageStyle');
+    if(st) return;
+    st=document.createElement('style');
+    st.id='configV120SinglePageStyle';
+    st.textContent=`
+      #configHomeV119{display:none!important}
+      #configTabsV109{display:none!important}
+      #configPagesV109{display:block!important}
+      .config-v119-page-head{display:none!important}
+      .config-v109-page-title{display:block!important;margin:18px 0 10px!important}
+      .config-v109-page{display:block!important;margin:0 0 18px 0!important}
+      .config-v109-page.active{display:block!important}
+      .config-v109-page.v119-open{display:block!important}
+      #panel-configuracoes .config-v109-page:empty{display:none!important}
+      #panel-configuracoes .config-v109-page > .config-v119-page-head + .config-v109-page-title{margin-top:0!important}
+    `;
+    document.head.appendChild(st);
+  }
+  function showSinglePage(){
+    ensureStyle();
+    try{ if(typeof window.arrangeConfigPagesV109==='function') window.arrangeConfigPagesV109(); }catch(_){ }
+    const home=document.getElementById('configHomeV119');
+    if(home) home.style.display='none';
+    const tabs=document.getElementById('configTabsV109');
+    if(tabs) tabs.style.display='none';
+    document.querySelectorAll('.config-v109-page').forEach(page=>{
+      page.classList.add('active');
+      page.classList.remove('v119-open');
+      page.style.display='block';
+      page.querySelectorAll('.config-v119-page-head').forEach(h=>h.remove());
+    });
+    const shell=document.getElementById('configShellV109');
+    if(shell) shell.style.display='block';
+    try{localStorage.setItem('configV119Mode','single');}catch(_){ }
+  }
+  window.showConfigSinglePageV120=showSinglePage;
+
+  const prevSwitch=window.switchPanel;
+  if(typeof prevSwitch==='function' && !prevSwitch.__v120SinglePagePatched){
+    const patched=function(name){
+      const res=prevSwitch.apply(this,arguments);
+      if(name==='configuracoes') setTimeout(showSinglePage,260);
+      return res;
+    };
+    patched.__v120SinglePagePatched=true;
+    window.switchPanel=patched;
+  }
+  document.addEventListener('DOMContentLoaded',()=>{
+    setTimeout(showSinglePage,900);
+    setTimeout(showSinglePage,1800);
+    setTimeout(showSinglePage,3400);
+  });
+  setTimeout(showSinglePage,1200);
+  console.log('[v120][config-single-page] ativo',VERSION);
+})();
+</script>
