@@ -248,19 +248,42 @@
   function defaultRules(){return {
     minRating:4.0,
     minReviews:10,
+    minLeadScore:0,
     requirePhone:false,
+    requireWhatsapp:false,
     requireInstagram:false,
+    requireWebsite:false,
     allowOwnSite:true,
     allowWix:true,
     allowAggregators:true,
     allowFacebook:false,
-    allowWhatsappAsSite:true
+    allowWhatsappAsSite:true,
+    allowLinktree:true,
+    allowBeacons:true,
+    allowGoogleSites:true,
+    onlyBrazil:false,
+    allowedStates:'',
+    blockedCities:'',
+    useRegisteredRamosOnly:true,
+    allowUnmatchedCategories:false,
+    allowNoReviews:false,
+    allowHiddenRating:false,
+    blockDuplicatePhone:true,
+    blockDuplicateInstagram:true,
+    blockDuplicateWebsite:true,
+    blockSentCompany:true,
+    blockBasePermanente:true,
+    instagramOnlyPublic:true,
+    moveInvalidWhatsappToInstagram:true,
+    invalidDestination:'instagram'
   };}
   function getRules(){
     try{return {...defaultRules(),...(JSON.parse(localStorage.getItem(RULES_KEY)||'{}')||{})};}catch(_){return defaultRules();}
   }
   function saveRules(r){localStorage.setItem(RULES_KEY,JSON.stringify({...defaultRules(),...(r||{})}));}
-  function bool(id){return !!document.getElementById(id)?.checked;}
+  function bool(id){const el=document.getElementById(id); if(!el)return false; if(String(el.tagName||'').toUpperCase()==='SELECT')return String(el.value)==='true'; return !!el.checked;}
+  function txt(id){return String(document.getElementById(id)?.value||'').trim();}
+  function yn(id,val){return `<select id="${id}" onchange="saveImportRulesV108()"><option value="true" ${val?'selected':''}>Sim</option><option value="false" ${!val?'selected':''}>Não</option></select>`;}
   function num(id,fallback){const n=Number(document.getElementById(id)?.value);return Number.isFinite(n)?n:fallback;}
 
   function openDb(){
@@ -304,18 +327,65 @@
     const r=getRules();
     return `<div class="card v108-import-rules-card" style="margin-top:16px">
       <div class="card-title">Regras de importação</div>
-      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:12px;line-height:1.6">A importação usa estes requisitos + os ramos/subcategorias cadastrados. O seletor manual de ramo deixa de ser a fonte principal.</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
-        <div><label>Nota mínima</label><input id="v108MinRating" type="number" step="0.1" min="0" max="5" value="${esc(r.minRating)}" oninput="saveImportRulesV108()"></div>
-        <div><label>Reviews mínimos</label><input id="v108MinReviews" type="number" step="1" min="0" value="${esc(r.minReviews)}" oninput="saveImportRulesV108()"></div>
-        <label style="display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"><input id="v108RequirePhone" type="checkbox" ${r.requirePhone?'checked':''} onchange="saveImportRulesV108()"> Exigir telefone</label>
-        <label style="display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"><input id="v108RequireInstagram" type="checkbox" ${r.requireInstagram?'checked':''} onchange="saveImportRulesV108()"> Exigir Instagram</label>
-        <label style="display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"><input id="v108AllowOwnSite" type="checkbox" ${r.allowOwnSite?'checked':''} onchange="saveImportRulesV108()"> Permitir site próprio</label>
-        <label style="display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"><input id="v108AllowWix" type="checkbox" ${r.allowWix?'checked':''} onchange="saveImportRulesV108()"> Permitir Wix</label>
-        <label style="display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"><input id="v108AllowAggregators" type="checkbox" ${r.allowAggregators?'checked':''} onchange="saveImportRulesV108()"> Permitir agregadores</label>
-        <label style="display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:10px;color:var(--text2)"><input id="v108AllowFacebook" type="checkbox" ${r.allowFacebook?'checked':''} onchange="saveImportRulesV108()"> Permitir Facebook</label>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:14px;line-height:1.6">A importação usa estes requisitos + os ramos/subcategorias cadastrados. Tudo aqui é editável e persistente. Alterou, salvou, a próxima importação respeita.</div>
+      <style>
+        .v110-rules-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px}
+        .v110-rules-section{border:1px solid var(--border2);background:var(--bg);border-radius:14px;padding:14px}
+        .v110-rules-section h4{font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px 0}
+        .v110-rule-row{display:grid;grid-template-columns:1fr 110px;gap:8px;align-items:center;margin:8px 0}
+        .v110-rule-row label{font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin:0}
+        .v110-rule-row input,.v110-rule-row select{width:100%;min-height:34px;background:var(--input);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:7px 9px;font-family:'DM Mono',monospace;font-size:10px}
+        .v110-rule-wide{grid-column:1/-1;display:block}.v110-rule-wide label{display:block;margin-bottom:6px}
+      </style>
+      <div class="v110-rules-grid">
+        <div class="v110-rules-section"><h4>Qualificação</h4>
+          <div class="v110-rule-row"><label>Nota mínima</label><input id="v108MinRating" type="number" step="0.1" min="0" max="5" value="${esc(r.minRating)}" oninput="saveImportRulesV108()"></div>
+          <div class="v110-rule-row"><label>Reviews mínimos</label><input id="v108MinReviews" type="number" step="1" min="0" value="${esc(r.minReviews)}" oninput="saveImportRulesV108()"></div>
+          <div class="v110-rule-row"><label>Score mínimo</label><input id="v110MinLeadScore" type="number" step="1" min="0" value="${esc(r.minLeadScore)}" oninput="saveImportRulesV108()"></div>
+          <div class="v110-rule-row"><label>Permitir sem reviews</label>${yn('v110AllowNoReviews',r.allowNoReviews)}</div>
+          <div class="v110-rule-row"><label>Permitir nota oculta</label>${yn('v110AllowHiddenRating',r.allowHiddenRating)}</div>
+        </div>
+        <div class="v110-rules-section"><h4>Canais</h4>
+          <div class="v110-rule-row"><label>Exigir telefone</label>${yn('v108RequirePhone',r.requirePhone)}</div>
+          <div class="v110-rule-row"><label>Exigir WhatsApp válido</label>${yn('v110RequireWhatsapp',r.requireWhatsapp)}</div>
+          <div class="v110-rule-row"><label>Exigir Instagram</label>${yn('v108RequireInstagram',r.requireInstagram)}</div>
+          <div class="v110-rule-row"><label>Exigir website</label>${yn('v110RequireWebsite',r.requireWebsite)}</div>
+        </div>
+        <div class="v110-rules-section"><h4>Sites</h4>
+          <div class="v110-rule-row"><label>Permitir site próprio</label>${yn('v108AllowOwnSite',r.allowOwnSite)}</div>
+          <div class="v110-rule-row"><label>Permitir Wix</label>${yn('v108AllowWix',r.allowWix)}</div>
+          <div class="v110-rule-row"><label>Permitir agregadores</label>${yn('v108AllowAggregators',r.allowAggregators)}</div>
+          <div class="v110-rule-row"><label>Permitir Facebook</label>${yn('v108AllowFacebook',r.allowFacebook)}</div>
+          <div class="v110-rule-row"><label>Permitir Linktree</label>${yn('v110AllowLinktree',r.allowLinktree)}</div>
+          <div class="v110-rule-row"><label>Permitir Beacons</label>${yn('v110AllowBeacons',r.allowBeacons)}</div>
+          <div class="v110-rule-row"><label>Permitir Google Sites</label>${yn('v110AllowGoogleSites',r.allowGoogleSites)}</div>
+        </div>
+        <div class="v110-rules-section"><h4>Geografia</h4>
+          <div class="v110-rule-row"><label>Apenas Brasil</label>${yn('v110OnlyBrazil',r.onlyBrazil)}</div>
+          <div class="v110-rule-row v110-rule-wide"><label>Estados permitidos</label><input id="v110AllowedStates" value="${esc(r.allowedStates)}" placeholder="SP, PR, DF" oninput="saveImportRulesV108()"></div>
+          <div class="v110-rule-row v110-rule-wide"><label>Cidades bloqueadas</label><input id="v110BlockedCities" value="${esc(r.blockedCities)}" placeholder="Cidade A, Cidade B" oninput="saveImportRulesV108()"></div>
+        </div>
+        <div class="v110-rules-section"><h4>Categorias/Ramos</h4>
+          <div class="v110-rule-row"><label>Usar ramos cadastrados</label>${yn('v110UseRegisteredRamosOnly',r.useRegisteredRamosOnly)}</div>
+          <div class="v110-rule-row"><label>Permitir sem correspondência</label>${yn('v110AllowUnmatchedCategories',r.allowUnmatchedCategories)}</div>
+        </div>
+        <div class="v110-rules-section"><h4>Duplicidade</h4>
+          <div class="v110-rule-row"><label>Bloquear telefone duplicado</label>${yn('v110BlockDuplicatePhone',r.blockDuplicatePhone)}</div>
+          <div class="v110-rule-row"><label>Bloquear Instagram duplicado</label>${yn('v110BlockDuplicateInstagram',r.blockDuplicateInstagram)}</div>
+          <div class="v110-rule-row"><label>Bloquear website duplicado</label>${yn('v110BlockDuplicateWebsite',r.blockDuplicateWebsite)}</div>
+          <div class="v110-rule-row"><label>Bloquear já enviado</label>${yn('v110BlockSentCompany',r.blockSentCompany)}</div>
+          <div class="v110-rule-row"><label>Bloquear Base Permanente</label>${yn('v110BlockBasePermanente',r.blockBasePermanente)}</div>
+        </div>
+        <div class="v110-rules-section"><h4>Instagram</h4>
+          <div class="v110-rule-row"><label>Apenas perfil público</label>${yn('v110InstagramOnlyPublic',r.instagramOnlyPublic)}</div>
+        </div>
+        <div class="v110-rules-section"><h4>Operacional</h4>
+          <div class="v110-rule-row"><label>Inválidos WhatsApp → Instagram</label>${yn('v110MoveInvalidWhatsappToInstagram',r.moveInvalidWhatsappToInstagram)}</div>
+          <div class="v110-rule-row"><label>Destino inválidos</label><select id="v110InvalidDestination" onchange="saveImportRulesV108()"><option value="instagram" ${r.invalidDestination==='instagram'?'selected':''}>Instagram</option><option value="discard" ${r.invalidDestination==='discard'?'selected':''}>Descartar</option></select></div>
+        </div>
       </div>
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:10px;line-height:1.6">Categorias fora dos ramos cadastrados são recusadas automaticamente como <b>Fora do ramo</b>.</div>
+      <button class="btn btn-primary" type="button" onclick="saveImportRulesV108(true)">Salvar regras</button>
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:10px;line-height:1.6">Categorias fora dos ramos cadastrados serão recusadas quando <b>Usar ramos cadastrados</b> estiver ativo e <b>Permitir sem correspondência</b> estiver desligado.</div>
     </div>`;
   }
 
@@ -362,21 +432,43 @@
       else imgCard.outerHTML=html;
     }
   }
-  window.saveImportRulesV108=function(){
+  window.saveImportRulesV108=function(showMsg){
     saveRules({
       minRating:num('v108MinRating',4),
       minReviews:num('v108MinReviews',10),
+      minLeadScore:num('v110MinLeadScore',0),
       requirePhone:bool('v108RequirePhone'),
+      requireWhatsapp:bool('v110RequireWhatsapp'),
       requireInstagram:bool('v108RequireInstagram'),
+      requireWebsite:bool('v110RequireWebsite'),
       allowOwnSite:bool('v108AllowOwnSite'),
       allowWix:bool('v108AllowWix'),
       allowAggregators:bool('v108AllowAggregators'),
       allowFacebook:bool('v108AllowFacebook'),
-      allowWhatsappAsSite:true
+      allowWhatsappAsSite:true,
+      allowLinktree:bool('v110AllowLinktree'),
+      allowBeacons:bool('v110AllowBeacons'),
+      allowGoogleSites:bool('v110AllowGoogleSites'),
+      onlyBrazil:bool('v110OnlyBrazil'),
+      allowedStates:txt('v110AllowedStates'),
+      blockedCities:txt('v110BlockedCities'),
+      useRegisteredRamosOnly:bool('v110UseRegisteredRamosOnly'),
+      allowUnmatchedCategories:bool('v110AllowUnmatchedCategories'),
+      allowNoReviews:bool('v110AllowNoReviews'),
+      allowHiddenRating:bool('v110AllowHiddenRating'),
+      blockDuplicatePhone:bool('v110BlockDuplicatePhone'),
+      blockDuplicateInstagram:bool('v110BlockDuplicateInstagram'),
+      blockDuplicateWebsite:bool('v110BlockDuplicateWebsite'),
+      blockSentCompany:bool('v110BlockSentCompany'),
+      blockBasePermanente:bool('v110BlockBasePermanente'),
+      instagramOnlyPublic:bool('v110InstagramOnlyPublic'),
+      moveInvalidWhatsappToInstagram:bool('v110MoveInvalidWhatsappToInstagram'),
+      invalidDestination:txt('v110InvalidDestination')||'instagram'
     });
     try{if(typeof window.importPreview==='function')window.importPreview();}catch(_){ }
-    notify('✓ Regras de importação salvas');
+    if(showMsg)notify('✓ Regras de importação salvas');
   };
+
   window.onRamoImageChangeV108=function(ramoId,input){
     const file=input.files&&input.files[0]; if(!file)return;
     if(!/^image\//i.test(file.type||'')){notify('// selecione uma imagem válida','err');return;}
@@ -395,6 +487,15 @@
   function isInstagram(v){const d=domainOf(v); return d==='instagram.com'||d.endsWith('.instagram.com')||d==='instagr.am'||d.endsWith('.instagr.am');}
   function isWix(v){const d=domainOf(v); return d.includes('wixsite.com')||d.includes('wix.com');}
   function isAggregator(v){const d=domainOf(v); return ['linktr.ee','bio.site','beacons.ai','carrd.co','taplink.cc','msha.ke','lnk.bio','solo.to','about.me'].some(x=>d===x||d.endsWith('.'+x));}
+  function isLinktree(v){const d=domainOf(v); return d==='linktr.ee'||d.endsWith('.linktr.ee');}
+  function isBeacons(v){const d=domainOf(v); return d==='beacons.ai'||d.endsWith('.beacons.ai');}
+  function isGoogleSites(v){const d=domainOf(v); return d==='sites.google.com'||d.endsWith('.sites.google.com');}
+  function hasInstagramAny(item,a){return !!(a?.instagram||a?.instagram_url||a?.instagram_username||item?.instagram||item?.instagram_url||item?.instagramUsername||item?.instagram_username);}
+  function leadScoreFromAnalysis(a){return Number(a?.lead_score??a?.score??a?.qualification?.score??0)||0;}
+  function countryFrom(item,a){return String(a?.country_code||a?.country||a?.item?.country_code||item?.country_code||item?.country||'').trim().toUpperCase();}
+  function stateFrom(item,a){return String(a?.state||a?.item?.state||item?.state||item?.estado||'').trim().toUpperCase();}
+  function cityFrom(item,a){return norm(a?.city||a?.item?.city||item?.city||item?.cidade||'');}
+  function listFromCsv(v){return String(v||'').split(',').map(x=>x.trim()).filter(Boolean);}
   function websiteFromAnalysis(a){return a?.website?.site||a?.website?.url||a?.site||a?.website_url||a?.item?.website||a?.item?.url||'';}
   function ratingFromAnalysis(a){return Number(a?.qualification?.rating??a?.rating??a?.item?.rating??a?.item?.stars??0)||0;}
   function reviewsFromAnalysis(a){return Number(a?.qualification?.reviews??a?.reviewsCount??a?.reviews_count??a?.item?.reviewsCount??a?.item?.reviews_count??a?.item?.reviews??0)||0;}
@@ -411,14 +512,31 @@
           const rating=ratingFromAnalysis(analysis);
           const reviews=reviewsFromAnalysis(analysis);
           const site=websiteFromAnalysis(analysis);
-          if(rating<Number(rules.minRating||0)){analysis.route='skip';analysis.reason=`nota abaixo do mínimo (${rating||0})`;}
-          else if(reviews<Number(rules.minReviews||0)){analysis.route='skip';analysis.reason=`reviews abaixo do mínimo (${reviews||0})`;}
+          const country=countryFrom(item,analysis), st=stateFrom(item,analysis), city=cityFrom(item,analysis);
+          const allowedStates=listFromCsv(rules.allowedStates).map(x=>x.toUpperCase());
+          const blockedCities=listFromCsv(rules.blockedCities).map(norm);
+          const score=leadScoreFromAnalysis(analysis);
+          const noRating=!rating;
+          const noReviews=!reviews;
+          if(noRating && !rules.allowHiddenRating){analysis.route='skip';analysis.reason='nota oculta bloqueada';}
+          else if(!noRating && rating<Number(rules.minRating||0)){analysis.route='skip';analysis.reason=`nota abaixo do mínimo (${rating||0})`;}
+          else if(noReviews && !rules.allowNoReviews){analysis.route='skip';analysis.reason='sem reviews bloqueado';}
+          else if(!noReviews && reviews<Number(rules.minReviews||0)){analysis.route='skip';analysis.reason=`reviews abaixo do mínimo (${reviews||0})`;}
+          else if(score<Number(rules.minLeadScore||0)){analysis.route='skip';analysis.reason=`score abaixo do mínimo (${score||0})`;}
+          else if(rules.onlyBrazil && country && !['BR','BRA','BRASIL','BRAZIL'].includes(country)){analysis.route='skip';analysis.reason='fora do Brasil';}
+          else if(allowedStates.length && st && !allowedStates.includes(st)){analysis.route='skip';analysis.reason='estado não permitido';}
+          else if(blockedCities.length && city && blockedCities.includes(city)){analysis.route='skip';analysis.reason='cidade bloqueada';}
           else if(rules.requirePhone && !analysis.phone){analysis.route='skip';analysis.reason='sem telefone obrigatório';}
-          else if(rules.requireInstagram && !(analysis.instagram||item?.instagram||item?.instagram_url||item?.instagramUsername)){analysis.route='skip';analysis.reason='sem instagram obrigatório';}
+          else if(rules.requireWhatsapp && !(analysis.whatsapp||analysis.phone)){analysis.route='skip';analysis.reason='sem WhatsApp obrigatório';}
+          else if(rules.requireInstagram && !hasInstagramAny(item,analysis)){analysis.route='skip';analysis.reason='sem instagram obrigatório';}
+          else if(rules.requireWebsite && !site){analysis.route='skip';analysis.reason='sem website obrigatório';}
           else if(site && isFacebook(site) && !rules.allowFacebook){analysis.route='skip';analysis.reason='facebook bloqueado';}
           else if(site && isWix(site) && !rules.allowWix){analysis.route='skip';analysis.reason='wix bloqueado';}
+          else if(site && isLinktree(site) && !rules.allowLinktree){analysis.route='skip';analysis.reason='linktree bloqueado';}
+          else if(site && isBeacons(site) && !rules.allowBeacons){analysis.route='skip';analysis.reason='beacons bloqueado';}
+          else if(site && isGoogleSites(site) && !rules.allowGoogleSites){analysis.route='skip';analysis.reason='google sites bloqueado';}
           else if(site && isAggregator(site) && !rules.allowAggregators){analysis.route='skip';analysis.reason='agregador bloqueado';}
-          else if(site && !isWhatsapp(site) && !isInstagram(site) && !isAggregator(site) && !isWix(site) && !rules.allowOwnSite){analysis.route='skip';analysis.reason='site próprio bloqueado';}
+          else if(site && !isWhatsapp(site) && !isInstagram(site) && !isAggregator(site) && !isWix(site) && !isGoogleSites(site) && !rules.allowOwnSite){analysis.route='skip';analysis.reason='site próprio bloqueado';}
         }
       }catch(e){console.warn('[v108][rules analyze]',e?.message||e);}
       return analysis;

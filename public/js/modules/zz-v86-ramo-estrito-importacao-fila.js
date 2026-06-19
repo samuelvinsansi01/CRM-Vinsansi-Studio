@@ -10,6 +10,7 @@
   function slug(v){return norm(v).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'geral';}
   function unique(arr){return [...new Set((arr||[]).map(x=>String(x||'').trim()).filter(Boolean))];}
   function notify(msg,type){try{if(typeof window.notify==='function')return window.notify(msg,type);}catch(_){} console[type==='err'?'error':'log'](msg);}
+  function getImportRules(){try{return JSON.parse(localStorage.getItem('vs_import_rules_v108')||'{}')||{};}catch(_){return {};}}
 
   const MOVEIS=['marcenaria','marceneiro','moveleiro','moveis planejados','móveis planejados','movelaria','moveis sob medida','móveis sob medida','carpintaria','armarios planejados','armários planejados','cozinhas planejadas','dormitorios planejados','dormitórios planejados','moveis','móveis','loja de marcenaria','loja de móveis planejados','loja de moveis planejados'];
 
@@ -75,7 +76,10 @@
         analysis.parent_ramo=ramo||null;
         const reason=String(analysis.reason||'').toLowerCase();
         const protectedSkip=analysis.route==='skip' && (reason.includes('duplicado')||reason.includes('existente')||reason.includes('base permanente')||reason.includes('sent_contacts')||reason.includes('sem nome'));
-        if(!ramo && !protectedSkip){
+        const rules=getImportRules();
+        const strictRamos=rules.useRegisteredRamosOnly!==false;
+        const allowUnmatched=rules.allowUnmatchedCategories===true;
+        if(!ramo && !protectedSkip && strictRamos && !allowUnmatched){
           analysis.route='skip';
           analysis.reason='fora do ramo';
         }
