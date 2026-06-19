@@ -2484,9 +2484,7 @@ function copyInfraCommandV46(type) {
     const sel=document.getElementById('tplRamoSel');
     if(!sel || sel.__v121Protected) return;
     sel.__v121Protected=true;
-    ['click','mousedown','mouseup','pointerdown','pointerup'].forEach(ev=>{
-      sel.addEventListener(ev,function(e){ e.stopPropagation(); }, false);
-    });
+    // v122: select nativo real. Não interceptar click/mousedown/pointer.
   }
   const oldRenderRamos=window.renderRamosConfig;
   if(typeof oldRenderRamos==='function' && !oldRenderRamos.__v121Patched){
@@ -2504,6 +2502,25 @@ function copyInfraCommandV46(type) {
   });
   setTimeout(()=>{try{window.renderTemplatesConfig();}catch(_){}},1800);
   console.log('[v121][templates-select-native-image-120mb] ativo',VERSION);
+})();
+</script>
+
+<script>
+/* V122 — Hard fix de inputs/selects em Configurações.
+   Remove re-render automático e garante campos nativos clicáveis/editáveis. */
+(function(){
+  function unlock(){
+    document.querySelectorAll('#panel-settings input,#panel-settings select,#panel-settings textarea,#panel-configuracoes input,#panel-configuracoes select,#panel-configuracoes textarea').forEach(function(el){
+      el.style.pointerEvents='auto';
+      el.style.userSelect='auto';
+      el.removeAttribute('readonly');
+      if(el.tagName==='SELECT'){ el.style.position='relative'; el.style.zIndex='999'; }
+    });
+  }
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(unlock,300); setTimeout(unlock,1200); });
+  document.addEventListener('focusin',function(e){ if(e.target&&e.target.matches&&e.target.matches('input,select,textarea')) unlock(); }, false);
+  window.__v122UnlockConfigFields=unlock;
+  console.log('[v122][config-input-select-hard-fix] ativo');
 })();
 </script>
 

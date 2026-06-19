@@ -673,7 +673,7 @@
   document.addEventListener('DOMContentLoaded',()=>{
     setTimeout(()=>{hideLegacyImportRamoSelect(); injectSettingsCards();},900);
     setTimeout(()=>{hideLegacyImportRamoSelect(); injectSettingsCards();},2200);
-    setInterval(()=>{if(document.getElementById('panel-importar')?.classList.contains('active'))hideLegacyImportRamoSelect(); if(document.getElementById('panel-settings')?.classList.contains('active'))injectSettingsCards();},2500);
+    // v122: removido re-render automático a cada 2.5s; isso quebrava inputs/selects enquanto o usuário editava.
     console.log('[v108][import-rules-ramo-images] ativo',VERSION);
   });
 })();
@@ -898,13 +898,13 @@
   document.addEventListener('change',function(e){
     const field=e.target&&e.target.closest&&e.target.closest('.v108-import-rules-card input,.v108-import-rules-card select,.v108-import-rules-card textarea');
     if(!field) return;
-    e.stopPropagation();
+    // v122: não bloquear propagação de campos nativos.
     saveQuiet(field.id);
   },true);
   document.addEventListener('input',function(e){
     const field=e.target&&e.target.closest&&e.target.closest('.v108-import-rules-card input,.v108-import-rules-card textarea');
     if(!field) return;
-    e.stopPropagation();
+    // v122: não bloquear propagação de campos nativos.
     saveQuiet(field.id);
   },true);
 
