@@ -2194,5 +2194,209 @@ function copyInfraCommandV46(type) {
   }
 }
 </script>
+
+<script>
+/* V118 — Regras de Importação com SELECT NATIVO real.
+   Esta versão não usa botões customizados, não intercepta click/mousedown e não depende dos handlers antigos.
+   Mantém a mesma chave de persistência: vs_import_rules_v108.
+*/
+(function(){
+  'use strict';
+  const VERSION='20260619-V118-IMPORT-RULES-NATIVE-SELECT';
+  const KEY='vs_import_rules_v108';
+  const DEFAULTS={
+    minRating:4,
+    minReviews:10,
+    minLeadScore:0,
+    requirePhone:false,
+    requireWhatsapp:false,
+    requireInstagram:false,
+    requireWebsite:false,
+    allowOwnSite:true,
+    allowWix:true,
+    allowAggregators:true,
+    allowFacebook:false,
+    allowWhatsappAsSite:true,
+    allowLinktree:true,
+    allowBeacons:true,
+    allowGoogleSites:true,
+    onlyBrazil:false,
+    allowedStates:'',
+    blockedCities:'',
+    useRegisteredRamosOnly:true,
+    allowUnmatchedCategories:false,
+    allowNoReviews:false,
+    allowHiddenRating:false,
+    blockDuplicatePhone:true,
+    blockDuplicateInstagram:true,
+    blockDuplicateWebsite:true,
+    blockSentCompany:true,
+    blockBasePermanente:true,
+    instagramOnlyPublic:true,
+    moveInvalidWhatsappToInstagram:true,
+    invalidDestination:'instagram'
+  };
+  const LABEL={
+    minRating:'Nota mínima', minReviews:'Reviews mínimos', minLeadScore:'Score mínimo',
+    requirePhone:'Exigir telefone', requireWhatsapp:'Exigir WhatsApp válido', requireInstagram:'Exigir Instagram', requireWebsite:'Exigir website',
+    allowOwnSite:'Permitir site próprio', allowWix:'Permitir Wix', allowAggregators:'Permitir agregadores', allowFacebook:'Permitir Facebook', allowWhatsappAsSite:'Permitir WhatsApp como site', allowLinktree:'Permitir Linktree', allowBeacons:'Permitir Beacons', allowGoogleSites:'Permitir Google Sites',
+    onlyBrazil:'Apenas Brasil', allowedStates:'Estados permitidos', blockedCities:'Cidades bloqueadas',
+    useRegisteredRamosOnly:'Usar ramos cadastrados', allowUnmatchedCategories:'Permitir categoria sem correspondência', allowNoReviews:'Permitir sem reviews', allowHiddenRating:'Permitir nota oculta',
+    blockDuplicatePhone:'Bloquear telefone duplicado', blockDuplicateInstagram:'Bloquear Instagram duplicado', blockDuplicateWebsite:'Bloquear website duplicado', blockSentCompany:'Bloquear empresa já enviada', blockBasePermanente:'Bloquear Base Permanente',
+    instagramOnlyPublic:'Apenas perfil público', moveInvalidWhatsappToInstagram:'Inválidos WhatsApp → Instagram', invalidDestination:'Destino de inválidos'
+  };
+  const SECTIONS=[
+    ['Qualificação',[
+      ['number','minRating','Nota mínima',{step:'0.1',min:'0',max:'5'}],
+      ['number','minReviews','Reviews mínimos',{step:'1',min:'0'}],
+      ['number','minLeadScore','Score mínimo',{step:'1',min:'0'}],
+      ['bool','allowNoReviews','Permitir sem reviews'],
+      ['bool','allowHiddenRating','Permitir nota oculta']
+    ]],
+    ['Canais',[
+      ['bool','requirePhone','Exigir telefone'],
+      ['bool','requireWhatsapp','Exigir WhatsApp válido'],
+      ['bool','requireInstagram','Exigir Instagram'],
+      ['bool','requireWebsite','Exigir website']
+    ]],
+    ['Sites',[
+      ['bool','allowOwnSite','Permitir site próprio'],
+      ['bool','allowWix','Permitir Wix'],
+      ['bool','allowAggregators','Permitir agregadores'],
+      ['bool','allowFacebook','Permitir Facebook'],
+      ['bool','allowWhatsappAsSite','Permitir WhatsApp como site'],
+      ['bool','allowLinktree','Permitir Linktree'],
+      ['bool','allowBeacons','Permitir Beacons'],
+      ['bool','allowGoogleSites','Permitir Google Sites']
+    ]],
+    ['Geografia',[
+      ['bool','onlyBrazil','Apenas Brasil'],
+      ['text','allowedStates','Estados permitidos','Ex.: SP, PR, DF'],
+      ['text','blockedCities','Cidades bloqueadas','Ex.: Cidade A, Cidade B']
+    ]],
+    ['Categorias / Ramos',[
+      ['bool','useRegisteredRamosOnly','Usar apenas ramos cadastrados'],
+      ['bool','allowUnmatchedCategories','Permitir categoria sem correspondência']
+    ]],
+    ['Duplicidade',[
+      ['bool','blockDuplicatePhone','Bloquear telefone duplicado'],
+      ['bool','blockDuplicateInstagram','Bloquear Instagram duplicado'],
+      ['bool','blockDuplicateWebsite','Bloquear website duplicado'],
+      ['bool','blockSentCompany','Bloquear empresa já enviada'],
+      ['bool','blockBasePermanente','Bloquear Base Permanente']
+    ]],
+    ['Instagram / Operacional',[
+      ['bool','instagramOnlyPublic','Apenas perfil público'],
+      ['bool','moveInvalidWhatsappToInstagram','Inválidos WhatsApp → Instagram'],
+      ['choice','invalidDestination','Destino de inválidos',[['instagram','Instagram'],['discard','Descarte'],['attribution','Atribuição']]]
+    ]]
+  ];
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+  function notify(msg,type){try{if(typeof window.notify==='function')window.notify(msg,type);else console.log(msg);}catch(_){console.log(msg);}}
+  function read(){try{return {...DEFAULTS,...(JSON.parse(localStorage.getItem(KEY)||'{}')||{})};}catch(_){return {...DEFAULTS};}}
+  function write(r){const payload={...DEFAULTS,...(r||{})};try{localStorage.setItem(KEY,JSON.stringify(payload));}catch(_){}try{window.__crmImportRules=payload;}catch(_){}return payload;}
+  function boolSelect(key,value){return `<select class="v118-native-select" data-key="${esc(key)}"><option value="true" ${value?'selected':''}>Sim</option><option value="false" ${!value?'selected':''}>Não</option></select>`;}
+  function renderItem(item,r){
+    const [type,key,label,extra]=item;
+    const value=r[key];
+    if(type==='bool')return `<div class="v118-row"><label>${esc(label)}</label>${boolSelect(key,!!value)}</div>`;
+    if(type==='number'){
+      const attrs=Object.entries(extra||{}).map(([k,v])=>`${k}="${esc(v)}"`).join(' ');
+      return `<div class="v118-row"><label>${esc(label)}</label><input class="v118-native-input" data-key="${esc(key)}" type="number" ${attrs} value="${esc(value)}"></div>`;
+    }
+    if(type==='text')return `<div class="v118-wide"><label>${esc(label)}</label><input class="v118-native-input" data-key="${esc(key)}" type="text" placeholder="${esc(extra||'')}" value="${esc(value)}"></div>`;
+    if(type==='choice'){
+      const opts=(extra||[]).map(([v,t])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(t)}</option>`).join('');
+      return `<div class="v118-row"><label>${esc(label)}</label><select class="v118-native-select" data-key="${esc(key)}">${opts}</select></div>`;
+    }
+    return '';
+  }
+  function toastFor(key,value){
+    const label=LABEL[key]||key;
+    if(typeof value==='boolean')return `✓ ${label} ${value?'ativado':'desativado'}`;
+    if(key==='invalidDestination')return `✓ Destino de inválidos atualizado para ${value}`;
+    return `✓ ${label} atualizado para ${value}`;
+  }
+  function setRule(key,rawValue,showToast=true){
+    const r=read();
+    if(typeof DEFAULTS[key]==='boolean')r[key]=String(rawValue)==='true';
+    else if(typeof DEFAULTS[key]==='number'){
+      const n=Number(rawValue);r[key]=Number.isFinite(n)?n:DEFAULTS[key];
+    }else r[key]=String(rawValue??'');
+    const saved=write(r);
+    const val=saved[key];
+    const last=document.getElementById('v118LastChange');
+    if(last)last.textContent=`Última alteração: ${LABEL[key]||key} → ${typeof val==='boolean'?(val?'Sim':'Não'):val}`;
+    if(showToast)notify(toastFor(key,val));
+    return saved;
+  }
+  function removeLegacyCards(){
+    document.querySelectorAll('.v108-import-rules-card,.v117-import-rules-card').forEach(el=>el.remove());
+  }
+  function render(){
+    const page=document.getElementById('configPageV109_importacao')||document.getElementById('panel-configuracoes')||document.body;
+    if(!page)return;
+    removeLegacyCards();
+    let card=document.querySelector('.v118-import-rules-card');
+    const r=write(read());
+    const html=`<div class="card v118-import-rules-card" data-version="${VERSION}">
+      <div class="card-title">Regras de importação</div>
+      <div class="v118-sub">Controles nativos. Os selects são selects reais do navegador, sem handler global de clique.</div>
+      <style>
+        .v118-import-rules-card{margin-top:16px}.v118-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.6;margin-bottom:14px}
+        .v118-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-bottom:14px}.v118-section{border:1px solid var(--border2);background:var(--bg);border-radius:14px;padding:14px}
+        .v118-section h4{font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px}
+        .v118-row{display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;margin:8px 0}.v118-wide{display:block;margin:10px 0}
+        .v118-row label,.v118-wide label{font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin:0}.v118-wide label{display:block;margin-bottom:6px}
+        .v118-native-input,.v118-native-select{width:100%;min-height:38px;background:#06070b;border:1px solid var(--border2);color:var(--text);border-radius:9px;padding:8px 10px;font-family:'DM Mono',monospace;font-size:11px;outline:none;box-sizing:border-box;appearance:auto!important;-webkit-appearance:auto!important;pointer-events:auto!important;position:relative;z-index:5}
+        .v118-native-input:focus,.v118-native-select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(179,255,70,.12)}.v118-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}.v118-ok{font-family:'DM Mono',monospace;font-size:9px;color:#33d17a}
+      </style>
+      <div class="v118-grid">${SECTIONS.map(([title,items])=>`<div class="v118-section"><h4>${esc(title)}</h4>${items.map(item=>renderItem(item,r)).join('')}</div>`).join('')}</div>
+      <div class="v118-actions"><button class="btn btn-primary" type="button" id="v118SaveBtn">Salvar regras</button><button class="btn" type="button" id="v118ResetBtn">Restaurar padrão</button><span class="v118-ok" id="v118SavedNote"></span></div>
+      <div id="v118LastChange" class="v118-ok" style="margin-top:8px"></div>
+    </div>`;
+    if(card)card.outerHTML=html;else page.insertAdjacentHTML('beforeend',html);
+    bind();
+  }
+  let inputTimer=null;
+  function bind(){
+    const card=document.querySelector('.v118-import-rules-card');if(!card)return;
+    card.addEventListener('change',function(e){
+      const el=e.target.closest('.v118-native-input,.v118-native-select');
+      if(!el)return;
+      setRule(el.dataset.key,el.value,true);
+    });
+    card.addEventListener('input',function(e){
+      const el=e.target.closest('.v118-native-input');
+      if(!el)return;
+      clearTimeout(inputTimer);inputTimer=setTimeout(()=>setRule(el.dataset.key,el.value,false),250);
+    });
+    const save=document.getElementById('v118SaveBtn');
+    if(save)save.onclick=function(){
+      document.querySelectorAll('.v118-native-input,.v118-native-select').forEach(el=>setRule(el.dataset.key,el.value,false));
+      const note=document.getElementById('v118SavedNote');if(note)note.textContent='✓ salvo';notify('✓ Regras de importação salvas');
+    };
+    const reset=document.getElementById('v118ResetBtn');
+    if(reset)reset.onclick=function(){write(DEFAULTS);render();notify('✓ Regras restauradas para o padrão');};
+  }
+  function boot(){
+    try{if(typeof window.arrangeConfigPagesV109==='function')window.arrangeConfigPagesV109();}catch(_){}
+    render();
+  }
+  let attempts=0;
+  const interval=setInterval(()=>{
+    attempts++;
+    const page=document.getElementById('configPageV109_importacao');
+    if(page){removeLegacyCards();if(!document.querySelector('.v118-import-rules-card'))render();}
+    if(attempts>50)clearInterval(interval);
+  },200);
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,1200));
+  setTimeout(boot,500);setTimeout(boot,1500);setTimeout(boot,3000);
+  window.renderImportRulesV118=render;
+  window.getImportRulesV118=read;
+  console.log('[v118][import-rules-native-select] ativo',VERSION);
+})();
+</script>
+
 </body>
 </html>
