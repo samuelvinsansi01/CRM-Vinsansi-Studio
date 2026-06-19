@@ -26,13 +26,42 @@
   function esc(v){ return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
   function norm(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
   function cleanIgUsername(v){
-    let s=String(v||'').trim();
-    if(!s) return '';
-    s=s.replace(/^https?:\/\/(www\.)?instagram\.com\//i,'').replace(/^https?:\/\/instagram\.com\//i,'').replace(/^instagram\.com\//i,'').replace(/^www\.instagram\.com\//i,'').replace(/^@/,'').split(/[/?#]/)[0].trim();
-    s=s.replace(/[^a-zA-Z0-9._]/g,'').toLowerCase();
-    if(!s || ['http','https','www','instagram','instagram.com','com','null','undefined'].includes(s)) return '';
-    if(s.length < 2 || s.length > 30) return '';
-    return s;
+    let raw=String(v||'').trim();
+    if(!raw) return '';
+    raw=raw.replace(/[\u200B-\u200D\uFEFF]/g,'').trim();
+    raw=raw.replace(/^@+/, '').trim();
+    raw=raw.replace(/\?.*$/,'').replace(/#.*$/,'').trim();
+
+    let candidate=raw;
+    try{
+      let parse=raw;
+      if(/^instagram\.com\//i.test(parse)) parse='https://www.'+parse;
+      if(/^www\.instagram\.com\//i.test(parse)) parse='https://'+parse;
+      const u=new URL(parse);
+      const host=String(u.hostname||'').replace(/^www\./i,'').toLowerCase();
+      if(host==='instagram.com'){
+        const parts=String(u.pathname||'').split('/').filter(Boolean);
+        candidate=parts[0]||'';
+      }
+    }catch(_){
+      candidate=raw
+        .replace(/^https?:\/\//i,'')
+        .replace(/^www\.instagram\.com\//i,'')
+        .replace(/^instagram\.com\//i,'')
+        .split('/')[0];
+    }
+
+    candidate=String(candidate||'')
+      .trim()
+      .replace(/^@+/,'')
+      .split(/[/?#]/)[0]
+      .replace(/[^a-zA-Z0-9._]/g,'')
+      .toLowerCase();
+
+    const invalid=new Set(['','http','https','www','instagram','instagram.com','www.instagram.com','com','p','reel','reels','stories','story','explore','accounts','direct','about','privacy','terms','null','undefined']);
+    if(invalid.has(candidate)) return '';
+    if(candidate.length<2 || candidate.length>30) return '';
+    return candidate;
   }
   function instagramFromLead(lead){
     return cleanIgUsername(lead?.instagram_username || lead?.instagram_url || lead?.instagram || '');
@@ -510,7 +539,7 @@
   // V100 — Atribuição Instagram: salvar link sem sumir e continuar elegível para Fila Instagram.
   window.approveInstagramAttributionV31=async function(id){
     const c=sb(), user=uid(); if(!c||!user) return notify('// Supabase indisponível','err');
-    const input=document.getElementById(`atrib-insta-url-${CSS.escape(id)}`);
+    const input=document.getElementById(`atrib-insta-url-${id}`) || document.querySelector(`#atrib-insta-url-${CSS.escape(id)}`);
     const raw=String(input?.value||'').trim();
     const username=cleanIgUsername(raw);
     if(!username){ if(input) input.style.borderColor='var(--error)'; return notify('Cole um @ ou link válido do Instagram','warn'); }
@@ -541,7 +570,7 @@
   // V102 — Aprovação manual: só leads aprovados entram na Fila Instagram.
   window.instagramV102ApproveForQueue=async function(id){
     const c=sb(), user=uid(); if(!c||!user) return notify('// Supabase indisponível','err');
-    const input=document.getElementById(`atrib-insta-url-${CSS.escape(id)}`);
+    const input=document.getElementById(`atrib-insta-url-${id}`) || document.querySelector(`#atrib-insta-url-${CSS.escape(id)}`);
     let raw=String(input?.value||'').trim();
     let username=cleanIgUsername(raw);
     if(!username){
@@ -569,23 +598,10 @@
   };
 
   function ensureInstagramApprovalButtons(){
-    document.querySelectorAll('input[id^="atrib-insta-url-"]').forEach(input=>{
-      const id=String(input.id||'').replace('atrib-insta-url-','');
-      if(!id || document.querySelector(`[data-ig-v102-approve="${CSS.escape(id)}"]`)) return;
-      const wrap=input.closest('.atrib-v64-insta-input-wrap') || input.parentElement || input;
-      const btn=document.createElement('button');
-      btn.type='button';
-      btn.dataset.igV102Approve=id;
-      btn.className='btn btn-primary ig-v102-approve-btn';
-      btn.textContent='Aprovar para fila';
-      btn.style.cssText='font-size:9px;padding:6px 10px;margin-left:6px;white-space:nowrap';
-      btn.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); window.instagramV102ApproveForQueue(id); return false; };
-      if(wrap && wrap.parentElement){
-        if(wrap.style) wrap.style.display='inline-flex', wrap.style.alignItems='center', wrap.style.gap='6px';
-        wrap.appendChild(btn);
-      }
-    });
+    // V106: desativado. A aprovação da aba Instagram é controlada somente pelo handler definitivo v106.
+    try{ document.querySelectorAll('[data-ig-v102-approve], .ig-v102-approve-btn').forEach(btn=>btn.remove()); }catch(_){}
   }
+
 
   const prevUpdateBadges=window.updateBadges;
   window.updateBadges=function(){
