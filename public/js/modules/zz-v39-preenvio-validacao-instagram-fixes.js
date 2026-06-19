@@ -59,7 +59,7 @@
 
   function logPre(msg){ state.log.unshift(`${new Date().toLocaleTimeString('pt-BR')} · ${msg}`); state.log=state.log.slice(0,20); const el=document.getElementById('v39PreValidationLog'); if(el) el.innerHTML=state.log.map(esc).join('<br>'); }
 
-  async function getChips(){ const c=sb(); if(!c) return []; const {data,error}=await c.from('whatsapp_instances').select('id,chip_id,label,name,instance,base_url,evolution_url,url,api_key,status,connection_state,active,daily_limit,block_size,interval_seconds').eq('user_id',uid()).order('label',{ascending:true}); if(error){notify('Erro ao carregar chips: '+error.message,'err'); return [];} return (data||[]).filter(ch=>ch.active!==false && ch.instance); }
+  async function getChips(){ const c=sb(); if(!c) return []; const {data,error}=await c.from('whatsapp_instances').select('id,chip_id,label,name,instance,base_url,evolution_url,url,api_key,status,connection_state,active,daily_limit,block_size,interval_seconds').eq('user_id',uid()).order('label',{ascending:true}); if(error){notify('Erro ao carregar chips: '+error.message,'err'); return [];} return (data||[]).filter(ch=>ch.active!==false && ch.instance && isChipConnected(ch)); }
 
   async function attributionAvailableCount(){
     const c=sb(); if(!c) return 0;

@@ -23,6 +23,9 @@
   function dayLabel(iso){try{const [y,m,d]=String(iso).split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'}).replace('.','');}catch(_){return iso;}}
   function chipKey(ch){return String(ch?.instance||ch?.chip_id||ch?.label||ch?.id||'').trim();}
   function chipTitle(ch){return String(ch?.label||ch?.chip_id||ch?.name||ch?.instance||'chip').trim();}
+  function chipConnectionState(ch){return String(ch?.connection_state||ch?.connectionState||ch?.status||'').toLowerCase();}
+  function isChipConnected(ch){return ['connected','open','online','conectado','ready'].includes(chipConnectionState(ch));}
+  function isChipDisconnected(ch){return !isChipConnected(ch);}
   function cleanUrl(url){ const u=String(url||'').trim(); if(!u) return ''; return /^https?:\/\//i.test(u)?u:`https://${u}`; }
   function phoneOf(l){ return String(l?.normalized_phone||l?.phone||'').replace(/\D/g,''); }
   function mapsUrl(l){ return cleanUrl(l?.maps_url||l?.url||''); }
@@ -165,7 +168,8 @@
       setSelectedDate(state.selectedDate);
       publishSelection();
       const limit=dailyLimit();
-      const dailyCapacity=chips.reduce((sum,ch)=>sum+chipLimit(ch),0);
+      const connectedChips=chips.filter(isChipConnected);
+      const dailyCapacity=connectedChips.reduce((sum,ch)=>sum+chipLimit(ch),0);
       const counts=await dayCounts(dates);
       root.innerHTML=`
         <div class="page-header" style="flex-shrink:0">
@@ -205,7 +209,12 @@
     const all=await countDayItems(date,'all');
     const per=[];
     for(const ch of chips){ per.push({chip:ch,count:await countDayItems(date,chipKey(ch))}); }
-    return `<button class="day-tab ${state.selectedChip==='all'?'active':''}" onclick="setPreEnvioChipV31('all')">Todos (${all})</button>` + per.map(({chip,count})=>`<button class="day-tab ${state.selectedChip===chipKey(chip)?'active':''}" onclick="setPreEnvioChipV31('${esc(chipKey(chip))}')">${esc(chipTitle(chip))} (${count})</button>`).join('');
+    return `<button class="day-tab ${state.selectedChip==='all'?'active':''}" onclick="setPreEnvioChipV31('all')">Todos (${all})</button>` + per.map(({chip,count})=>{
+      const connected=isChipConnected(chip);
+      const cls=`day-tab ${state.selectedChip===chipKey(chip)?'active':''} ${connected?'':'disabled'}`;
+      const title=connected?'Chip conectado':'Chip desconectado: reconecte para preencher/validar/disparar';
+      return `<button class="${cls}" ${connected?`onclick="setPreEnvioChipV31('${esc(chipKey(chip))}')"`:'disabled'} title="${esc(title)}">${esc(chipTitle(chip))} (${count})${connected?'':' · off'}</button>`;
+    }).join('');
   }
   async function syncValidationTarget(){
     let limit=dailyLimit();
@@ -228,8 +237,10 @@
     publishSelection();
     const allChips=await getChips();
     const selected=state.selectedChip || 'all';
-    const chips=selected==='all' ? allChips : allChips.filter(ch=>chipKey(ch)===selected || chipTitle(ch)===selected);
-    if(!chips.length) return notify('// nenhum chip ativo encontrado','warn');
+    const selectedChips=selected==='all' ? allChips : allChips.filter(ch=>chipKey(ch)===selected || chipTitle(ch)===selected);
+    const chips=selectedChips.filter(isChipConnected);
+    if(selectedChips.length && !chips.length) return notify('// chip desconectado. Reconecte antes de preencher/validar.','warn');
+    if(!chips.length) return notify('// nenhum chip conectado encontrado','warn');
     let totalCreated=0;
     const exclude=[];
     const existingAll=await getPreItems(date,'all');
@@ -339,7 +350,8 @@
       const ok=missing===0 && excess===0;
       const fullFinal = occupied>=limit && finalCount>0 && operationalCount<=0;
       const subExtra = fullFinal ? ` · ${finalCount} na fila/enviados` : (finalCount?` · ${finalCount} na fila/enviados`:``);
-      cards.push(`<div class="v39-complete-card"><div><div class="v39-complete-title">${esc(chipTitle(chip))}</div><div class="v39-complete-sub">${esc(dayLabel(date))} · total ${rows.length} · em revisão ${Math.max(0,operationalCount)} · inválidos ${invalid} · retry ${retry}${subExtra} · base disponível ${available}${excess?` · excesso ${excess}`:''}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div class="v39-complete-count ${ok?'ok':'warn'}">${occupied}/${limit}${missing?' · faltam '+missing:''}${excess?' · excesso '+excess:''}</div>${missing?`<button class="v39-btn primary" onclick="completePreChipNowV44('${esc(chipKey(chip))}')">Completar agora</button>`:''}${excess?`<button class="v39-btn danger" onclick="remanejarExcessoPreEnvioV50('${esc(date)}','${esc(chipKey(chip))}')">Remanejar</button>`:''}</div></div>`);
+      const connected=isChipConnected(chip);
+      cards.push(`<div class="v39-complete-card ${connected?'':'v124-chip-disabled'}"><div><div class="v39-complete-title">${esc(chipTitle(chip))}${connected?'':' · desconectado'}</div><div class="v39-complete-sub">${esc(dayLabel(date))} · total ${rows.length} · em revisão ${Math.max(0,operationalCount)} · inválidos ${invalid} · retry ${retry}${subExtra} · base disponível ${available}${excess?` · excesso ${excess}`:''}${connected?'':' · não preenche enquanto estiver desconectado'}</div></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end"><div class="v39-complete-count ${connected?(ok?'ok':'warn'):'warn'}">${occupied}/${limit}${missing?' · faltam '+missing:''}${excess?' · excesso '+excess:''}</div>${(missing&&connected)?`<button class="v39-btn primary" onclick="completePreChipNowV44('${esc(chipKey(chip))}')">Completar agora</button>`:''}${(!connected)?`<button class="v39-btn" disabled>Reconecte o chip</button>`:''}${excess?`<button class="v39-btn danger" onclick="remanejarExcessoPreEnvioV50('${esc(date)}','${esc(chipKey(chip))}')">Remanejar</button>`:''}</div></div>`);
     }
     el.innerHTML=cards.join('');
     await renderExcessBanner(date);
