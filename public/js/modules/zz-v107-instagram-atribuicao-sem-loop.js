@@ -219,7 +219,7 @@
   if(document.readyState!=='loading') scheduleDecorate();
   setTimeout(scheduleDecorate,500);
 
-  console.log('[v107][instagram-atribuicao-sem-loop] ativo',VERSION);
+  console.log('[v111][regras-importacao-editaveis-fix] ativo',VERSION);
 })();
 
 /* V108 — Configurações estruturais: regras de importação + imagens fixas por ramo
@@ -281,9 +281,15 @@
     try{return {...defaultRules(),...(JSON.parse(localStorage.getItem(RULES_KEY)||'{}')||{})};}catch(_){return defaultRules();}
   }
   function saveRules(r){localStorage.setItem(RULES_KEY,JSON.stringify({...defaultRules(),...(r||{})}));}
-  function bool(id){const el=document.getElementById(id); if(!el)return false; if(String(el.tagName||'').toUpperCase()==='SELECT')return String(el.value)==='true'; return !!el.checked;}
+  function bool(id){const tg=document.querySelector(`.v111-toggle[data-rule="${id}"]`); if(tg)return String(tg.dataset.value)==='true'; const el=document.getElementById(id); if(!el)return false; if(String(el.tagName||'').toUpperCase()==='SELECT')return String(el.value)==='true'; return !!el.checked;}
   function txt(id){return String(document.getElementById(id)?.value||'').trim();}
-  function yn(id,val){return `<select id="${id}" onchange="saveImportRulesV108()"><option value="true" ${val?'selected':''}>Sim</option><option value="false" ${!val?'selected':''}>Não</option></select>`;}
+  function yn(id,val){
+    const v=!!val;
+    return `<div class="v111-toggle" data-rule="${id}" data-value="${v?'true':'false'}">
+      <button type="button" class="v111-toggle-btn ${v?'active':''}" onclick="setImportRuleBoolV111('${id}',true)">Sim</button>
+      <button type="button" class="v111-toggle-btn ${!v?'active':''}" onclick="setImportRuleBoolV111('${id}',false)">Não</button>
+    </div>`;
+  }
   function num(id,fallback){const n=Number(document.getElementById(id)?.value);return Number.isFinite(n)?n:fallback;}
 
   function openDb(){
@@ -334,8 +340,14 @@
         .v110-rules-section h4{font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px 0}
         .v110-rule-row{display:grid;grid-template-columns:1fr 110px;gap:8px;align-items:center;margin:8px 0}
         .v110-rule-row label{font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin:0}
-        .v110-rule-row input,.v110-rule-row select{width:100%;min-height:34px;background:var(--input);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:7px 9px;font-family:'DM Mono',monospace;font-size:10px}
+        .v110-rule-row input,.v110-rule-row select{width:100%;min-height:38px;background:#06070b;border:1px solid var(--border2);color:var(--text);border-radius:9px;padding:8px 10px;font-family:'DM Mono',monospace;font-size:11px;outline:none}
+        .v110-rule-row input:focus,.v110-rule-row select:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(179,255,70,.12)}
         .v110-rule-wide{grid-column:1/-1;display:block}.v110-rule-wide label{display:block;margin-bottom:6px}
+        .v111-toggle{display:grid;grid-template-columns:1fr 1fr;gap:5px;background:#06070b;border:1px solid var(--border2);border-radius:10px;padding:4px;min-height:38px}
+        .v111-toggle-btn{border:0;border-radius:8px;background:transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;font-weight:900;cursor:pointer;min-height:30px}
+        .v111-toggle-btn.active{background:var(--accent);color:#050607}
+        .v111-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+        .v111-saved-note{font-family:'DM Mono',monospace;font-size:9px;color:#33d17a;display:none}.v111-saved-note.show{display:inline}
       </style>
       <div class="v110-rules-grid">
         <div class="v110-rules-section"><h4>Qualificação</h4>
@@ -384,7 +396,11 @@
           <div class="v110-rule-row"><label>Destino inválidos</label><select id="v110InvalidDestination" onchange="saveImportRulesV108()"><option value="instagram" ${r.invalidDestination==='instagram'?'selected':''}>Instagram</option><option value="discard" ${r.invalidDestination==='discard'?'selected':''}>Descartar</option></select></div>
         </div>
       </div>
-      <button class="btn btn-primary" type="button" onclick="saveImportRulesV108(true)">Salvar regras</button>
+      <div class="v111-actions">
+        <button class="btn btn-primary" type="button" onclick="saveImportRulesV108(true)">Salvar regras</button>
+        <button class="btn btn-ghost" type="button" onclick="resetImportRulesV111()">Restaurar padrão</button>
+        <span id="v111SavedNote" class="v111-saved-note">✓ salvo</span>
+      </div>
       <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:10px;line-height:1.6">Categorias fora dos ramos cadastrados serão recusadas quando <b>Usar ramos cadastrados</b> estiver ativo e <b>Permitir sem correspondência</b> estiver desligado.</div>
     </div>`;
   }
@@ -432,6 +448,21 @@
       else imgCard.outerHTML=html;
     }
   }
+  window.setImportRuleBoolV111=function(id,value){
+    const el=document.querySelector(`.v111-toggle[data-rule="${id}"]`);
+    if(el){
+      el.dataset.value=value?'true':'false';
+      const b=el.querySelectorAll('.v111-toggle-btn');
+      if(b[0])b[0].classList.toggle('active',!!value);
+      if(b[1])b[1].classList.toggle('active',!value);
+    }
+    saveImportRulesV108(false);
+  };
+  window.resetImportRulesV111=function(){
+    saveRules(defaultRules());
+    try{injectSettingsCards();}catch(_){ }
+    notify('✓ Regras restauradas');
+  };
   window.saveImportRulesV108=function(showMsg){
     saveRules({
       minRating:num('v108MinRating',4),
@@ -466,6 +497,7 @@
       invalidDestination:txt('v110InvalidDestination')||'instagram'
     });
     try{if(typeof window.importPreview==='function')window.importPreview();}catch(_){ }
+    try{const n=document.getElementById('v111SavedNote'); if(n){n.classList.add('show'); setTimeout(()=>n.classList.remove('show'),1600);}}catch(_){ }
     if(showMsg)notify('✓ Regras de importação salvas');
   };
 
