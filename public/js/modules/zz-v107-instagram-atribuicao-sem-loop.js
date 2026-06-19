@@ -578,7 +578,7 @@
   window.onRamoImageChangeV108=function(ramoId,input){
     const file=input.files&&input.files[0]; if(!file)return;
     if(!/^image\//i.test(file.type||'')){notify('// selecione uma imagem válida','err');return;}
-    if(file.size>24*1024*1024){notify('// imagem acima de 24 MB. Comprima antes de usar.','err');return;}
+    if(file.size>120*1024*1024){notify('// imagem acima de 120 MB. Escolha uma imagem menor.','err');return;}
     const reader=new FileReader();
     reader.onload=async e=>{await setRamoImage(ramoId,e.target.result); notify('✓ Imagem fixa do ramo salva'); await injectSettingsCards(); try{if(typeof window.renderFilaZapV74==='function')window.renderFilaZapV74();}catch(_){ }};
     reader.onerror=()=>notify('// erro ao carregar imagem','err');

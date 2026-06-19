@@ -2398,6 +2398,115 @@ function copyInfraCommandV46(type) {
 })();
 </script>
 
+
+
+<script>
+/* V121 — Templates com select nativo + imagens fixas por ramo até 120MB.
+   - Volta Templates de Mensagem para select nativo de ramo.
+   - Mantém Configurações em página única.
+   - Não usa botão fake/dropdown custom para ramo.
+   - Imagens fixas por ramo seguem no IndexedDB/local do navegador, não no Supabase.
+*/
+(function(){
+  'use strict';
+  const VERSION='20260619-V121-TEMPLATES-SELECT-IMAGEM-120MB';
+  function esc(v){
+    if(typeof window.escHtml==='function') return window.escHtml(v);
+    return String(v??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]||m));
+  }
+  function getRamosSafe(){
+    try{return (typeof getRamos==='function'?getRamos():[])||[];}catch(_){return [];}
+  }
+  function currentTipo(){
+    try{return (typeof tplTipo!=='undefined' && tplTipo==='com-site')?'com-site':'sem-site';}catch(_){return 'sem-site';}
+  }
+  function currentRamo(){
+    try{return (typeof tplRamoId!=='undefined'?tplRamoId:null)||'';}catch(_){return '';}
+  }
+  function setRamo(id){
+    try{tplRamoId=id||null;}catch(_){window.tplRamoId=id||null;}
+    try{localStorage.setItem('tplRamoIdV121', id||'');}catch(_){ }
+  }
+  function setTipo(tipo){
+    try{tplTipo=(tipo==='com-site')?'com-site':'sem-site';}catch(_){window.tplTipo=(tipo==='com-site')?'com-site':'sem-site';}
+  }
+  window.onTplRamoChangeV121=function(sel){
+    setRamo(sel && sel.value ? sel.value : '');
+    window.renderTemplatesConfig();
+  };
+  window.setTplTipoV121=function(tipo){
+    setTipo(tipo);
+    window.renderTemplatesConfig();
+  };
+  window.renderTemplatesConfig=function(){
+    const el=document.getElementById('templatesList');
+    if(!el) return;
+    const ramos=getRamosSafe();
+    let ramoId=currentRamo();
+    if(ramoId && !ramos.some(r=>String(r.id)===String(ramoId))) ramoId='';
+    const tipoAtual=currentTipo();
+    const ramoSel=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+      <select id="tplRamoSel" class="tpl-native-select-v121" onchange="onTplRamoChangeV121(this)" style="flex:1;min-width:220px;font-size:11px;padding:9px 12px;border-radius:8px;border:1px solid var(--border2);background:var(--bg);color:var(--text)">
+        <option value="">— Selecione um ramo —</option>
+        ${ramos.map(r=>`<option value="${esc(r.id)}" ${String(ramoId)===String(r.id)?'selected':''}>${esc(r.nome)}</option>`).join('')}
+      </select>
+    </div>`;
+    const tipoTabs=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button type="button" class="btn ${tipoAtual==='sem-site'?'btn-primary':'btn-ghost'}" style="font-size:10px;padding:7px 12px" onclick="setTplTipoV121('sem-site')">🚫 Sem site</button>
+      <button type="button" class="btn ${tipoAtual==='com-site'?'btn-primary':'btn-ghost'}" style="font-size:10px;padding:7px 12px" onclick="setTplTipoV121('com-site')">🌐 Com site</button>
+    </div>`;
+    if(!ramoId){
+      el.innerHTML=ramoSel+tipoTabs+`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:16px 0">// Selecione um ramo no select acima para ver e editar os templates.</div>`;
+      protectTemplateSelect();
+      return;
+    }
+    let tpls=[];
+    try{
+      const raw=(typeof getTemplatesForRamoTipo==='function')?getTemplatesForRamoTipo(ramoId,tipoAtual):[];
+      tpls=(typeof normalizeTemplateListV48==='function')?normalizeTemplateListV48(raw):raw.map(t=>typeof t==='object'?t:({msg1:String(t||''),msg2:''}));
+    }catch(_){tpls=[];}
+    const maxTpl=10;
+    const tplsHtml=tpls.map((t,i)=>`<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;position:relative">
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">TEMPLATE ${i+1} · ${tipoAtual==='com-site'?'COM SITE':'SEM SITE'} · MSG 1 + MSG 2</div>
+      <label style="display:block;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin:0 0 5px">MENSAGEM 1</label>
+      <textarea style="min-height:72px;font-size:10px;line-height:1.6;margin-bottom:10px" oninput="saveRamoTemplateMessage('${esc(ramoId)}','${tipoAtual}',${i},'msg1',this.value)">${esc(t.msg1||'')}</textarea>
+      <label style="display:block;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin:0 0 5px">MENSAGEM 2</label>
+      <textarea style="min-height:72px;font-size:10px;line-height:1.6" oninput="saveRamoTemplateMessage('${esc(ramoId)}','${tipoAtual}',${i},'msg2',this.value)">${esc(t.msg2||'')}</textarea>
+      ${tpls.length>1?`<button type="button" class="del-btn" style="position:absolute;top:8px;right:8px" onclick="removerRamoTemplate('${esc(ramoId)}','${tipoAtual}',${i})">✕</button>`:''}
+    </div>`).join('');
+    el.innerHTML=ramoSel+tipoTabs+tplsHtml+`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:12px;flex-wrap:wrap">
+      <span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${tpls.length}/${maxTpl} templates · ${tipoAtual==='com-site'?'Com site':'Sem site'} · usado no WhatsApp e Instagram</span>
+      <button type="button" class="btn btn-ghost" onclick="adicionarRamoTemplate('${esc(ramoId)}','${tipoAtual}')" ${tpls.length>=maxTpl?'disabled':''}>+ Novo template</button>
+    </div>`;
+    protectTemplateSelect();
+  };
+  function protectTemplateSelect(){
+    const sel=document.getElementById('tplRamoSel');
+    if(!sel || sel.__v121Protected) return;
+    sel.__v121Protected=true;
+    ['click','mousedown','mouseup','pointerdown','pointerup'].forEach(ev=>{
+      sel.addEventListener(ev,function(e){ e.stopPropagation(); }, false);
+    });
+  }
+  const oldRenderRamos=window.renderRamosConfig;
+  if(typeof oldRenderRamos==='function' && !oldRenderRamos.__v121Patched){
+    const patched=function(){
+      const res=oldRenderRamos.apply(this,arguments);
+      setTimeout(()=>{try{window.renderTemplatesConfig();}catch(_){}},80);
+      return res;
+    };
+    patched.__v121Patched=true;
+    window.renderRamosConfig=patched;
+  }
+  document.addEventListener('DOMContentLoaded',()=>{
+    setTimeout(()=>{try{window.renderTemplatesConfig();}catch(_){}},1200);
+    setTimeout(()=>{try{window.renderTemplatesConfig();}catch(_){}},2400);
+  });
+  setTimeout(()=>{try{window.renderTemplatesConfig();}catch(_){}},1800);
+  console.log('[v121][templates-select-native-image-120mb] ativo',VERSION);
+})();
+</script>
+
 </body>
 </html>
 
