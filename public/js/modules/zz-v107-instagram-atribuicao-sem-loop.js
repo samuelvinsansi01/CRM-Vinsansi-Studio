@@ -833,7 +833,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260619-V115-CONFIG-REGRAS-STABLE';
+  const VERSION='20260619-V116-CONFIG-REGRAS-SELECT-FIX';
   const RULES_KEY='vs_import_rules_v108';
   let saveTimer=null;
   let lastFocusedControl=null;
@@ -884,16 +884,15 @@
     },180);
   }
 
-  // Blindagem para selects/inputs: não deixa handlers globais da página capturarem o clique e fecharem o campo.
-  ['pointerdown','mousedown','click','mouseup','touchstart'].forEach(evt=>{
-    document.addEventListener(evt,function(e){
-      const native=isNativeField(e.target);
-      if(!native) return;
-      lastFocusedControl=e.target.closest('input,select,textarea');
-      // Não impedir o comportamento nativo do select; só isolar o evento.
-      e.stopPropagation();
-    },true);
-  });
+  // V116: NÃO interceptar pointer/mouse/click de selects/inputs.
+  // A versão anterior chamava stopPropagation() no document capture.
+  // Isso impedia o evento de chegar no <select> em alguns navegadores, fazendo abrir e fechar na hora.
+  // Agora apenas registramos foco em focusin, sem bloquear o comportamento nativo.
+  document.addEventListener('focusin',function(e){
+    const native=isNativeField(e.target);
+    if(!native) return;
+    lastFocusedControl=e.target.closest('input,select,textarea');
+  },true);
 
   // Salva inputs/selects apenas quando mudarem, sem bloquear o uso do componente.
   document.addEventListener('change',function(e){
@@ -928,5 +927,5 @@
   setTimeout(sanitizeRulesForm,300);
   setTimeout(sanitizeRulesForm,1000);
 
-  console.log('[v115][config-regras-stable] ativo',VERSION);
+  console.log('[v116][config-regras-select-fix] ativo',VERSION);
 })();
