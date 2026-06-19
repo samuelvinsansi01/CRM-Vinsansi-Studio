@@ -2400,3 +2400,154 @@ function copyInfraCommandV46(type) {
 
 </body>
 </html>
+
+<script>
+/* V119 — Configurações como páginas reais, sem abas no topo.
+   Objetivo: parar conflitos de clique/select dentro das Configurações.
+   - A tela Configurações vira um menu de páginas.
+   - As antigas abas V109 ficam ocultas.
+   - Cada seção abre em tela própria com botão Voltar.
+   - Templates deixam de depender de <select>: seleção de ramo por botões.
+*/
+(function(){
+  'use strict';
+  const VERSION='20260619-V119-CONFIG-PAGES-NO-TABS';
+  const PAGES=[
+    ['whatsapp','Chips WhatsApp','Chips WhatsApp + Webhook + Persistência Supabase','⚙️'],
+    ['infra','Infraestrutura operacional','Supabase, Evolution, Cloudflare, Vercel e health checks','🧱'],
+    ['disparo','Configuração de disparo','Lotes, limites, delays e horários de disparo','🚀'],
+    ['instagram','Perfis Instagram','Perfis operacionais do Instagram, limites e lotes','📸'],
+    ['importacao','Regras de importação','Qualificação, canais, sites, duplicidade e categorias','📥'],
+    ['ramos','Ramos de prospecção','Categorias, subcategorias e imagens fixas por ramo','🧩'],
+    ['templates','Templates de mensagem','Mensagens 1 e 2 usadas no WhatsApp e Instagram','💬']
+  ];
+  function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+  function root(){return document.getElementById('panel-configuracoes');}
+  function ensureStyle(){
+    if(document.getElementById('configV119Style')) return;
+    const st=document.createElement('style');
+    st.id='configV119Style';
+    st.textContent=`
+      #configTabsV109{display:none!important}
+      #configPagesV109{display:block!important}
+      .config-v109-page{display:none!important}
+      .config-v109-page.v119-open{display:block!important}
+      .config-v109-page.v119-open .config-v109-page-title{display:none!important}
+      .config-v119-home{display:block;margin-top:14px}
+      .config-v119-home.v119-hidden{display:none!important}
+      .config-v119-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:12px}
+      .config-v119-card{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:16px;text-align:left;color:var(--text);cursor:pointer;transition:.15s ease;min-height:118px;display:flex;flex-direction:column;gap:10px}
+      .config-v119-card:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 0 0 1px rgba(179,255,70,.08)}
+      .config-v119-icon{width:34px;height:34px;border:1px solid var(--border2);border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+      .config-v119-title{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;color:var(--text)}
+      .config-v119-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.55}
+      .config-v119-page-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px 0;padding:12px 0;border-bottom:1px solid var(--border2)}
+      .config-v119-page-title{font-family:'Syne',sans-serif;font-weight:900;font-size:24px;color:var(--text)}
+      .config-v119-page-title span{color:var(--accent)}
+      .config-v119-back{border:1px solid var(--border2);background:var(--surface);color:var(--text);border-radius:10px;padding:9px 12px;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer}
+      .config-v119-back:hover{border-color:var(--accent);color:var(--accent)}
+      #templatesList + button{display:none!important}
+      .tpl-v119-ramo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin:10px 0 14px}
+      .tpl-v119-ramo{border:1px solid var(--border2);background:#06070b;color:var(--text2);border-radius:10px;padding:10px 12px;text-align:left;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;min-height:40px}
+      .tpl-v119-ramo.active{border-color:var(--accent);color:var(--accent);background:rgba(179,255,70,.08)}
+      .tpl-v119-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+      .tpl-v119-current{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)}
+    `;
+    document.head.appendChild(st);
+  }
+  function pageLabel(id){return (PAGES.find(p=>p[0]===id)||[])[1]||'Configurações';}
+  function ensureHome(){
+    const r=root(); if(!r) return null;
+    ensureStyle();
+    let home=document.getElementById('configHomeV119');
+    if(!home){
+      home=document.createElement('div');
+      home.id='configHomeV119';
+      home.className='config-v119-home';
+      home.innerHTML=`
+        <div class="card">
+          <div class="card-title">Páginas de configuração</div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.6;margin-bottom:10px">Escolha uma página. Não há mais abas internas no topo.</div>
+          <div class="config-v119-grid">
+            ${PAGES.map(([id,title,sub,icon])=>`<button type="button" class="config-v119-card" onclick="openConfigPageV119('${id}')"><div class="config-v119-icon">${icon}</div><div class="config-v119-title">${esc(title)}</div><div class="config-v119-sub">${esc(sub)}</div></button>`).join('')}
+          </div>
+        </div>`;
+      const shell=document.getElementById('configShellV109');
+      if(shell) shell.insertAdjacentElement('beforebegin',home);
+      else {
+        const header=r.querySelector('.page-header');
+        if(header) header.insertAdjacentElement('afterend',home); else r.prepend(home);
+      }
+    }
+    return home;
+  }
+  function addPageHeaders(){
+    PAGES.forEach(([id,title])=>{
+      const page=document.getElementById('configPageV109_'+id);
+      if(!page || page.querySelector('.config-v119-page-head')) return;
+      page.insertAdjacentHTML('afterbegin',`<div class="config-v119-page-head"><div class="config-v119-page-title">${esc(title)}<span>.</span></div><button type="button" class="config-v119-back" onclick="openConfigHomeV119()">← Voltar para Configurações</button></div>`);
+    });
+  }
+  function hideAllPages(){
+    document.querySelectorAll('.config-v109-page').forEach(p=>p.classList.remove('v119-open','active'));
+  }
+  function openHome(){
+    ensureHome(); addPageHeaders();
+    const h=document.getElementById('configHomeV119'); if(h) h.classList.remove('v119-hidden');
+    hideAllPages();
+    try{localStorage.setItem('configV119Mode','home');}catch(_){ }
+  }
+  function openPage(id){
+    ensureHome(); addPageHeaders();
+    const h=document.getElementById('configHomeV119'); if(h) h.classList.add('v119-hidden');
+    hideAllPages();
+    const page=document.getElementById('configPageV109_'+id);
+    if(page) page.classList.add('v119-open');
+    try{localStorage.setItem('configV119Mode',id); localStorage.setItem('configActivePageV109',id);}catch(_){ }
+    if(id==='templates' && typeof window.renderTemplatesConfig==='function') setTimeout(()=>window.renderTemplatesConfig(),30);
+    if(id==='importacao' && typeof window.renderImportRulesV118==='function') setTimeout(()=>window.renderImportRulesV118(),30);
+  }
+  function boot(){
+    const r=root(); if(!r) return;
+    try{ if(typeof window.arrangeConfigPagesV109==='function') window.arrangeConfigPagesV109(); }catch(_){ }
+    ensureHome(); addPageHeaders();
+    const saved=localStorage.getItem('configV119Mode')||'home';
+    if(saved && saved!=='home' && document.getElementById('configPageV109_'+saved)) openPage(saved); else openHome();
+  }
+  window.openConfigPageV119=openPage;
+  window.openConfigHomeV119=openHome;
+
+  // Sempre que entrar em Configurações pelo menu lateral, mostra a home de páginas.
+  const oldSwitch=window.switchPanel;
+  if(typeof oldSwitch==='function' && !oldSwitch.__v119Patched){
+    const patched=function(name){
+      const res=oldSwitch.apply(this,arguments);
+      if(name==='configuracoes') setTimeout(()=>{try{localStorage.setItem('configV119Mode','home');openHome();}catch(_){ }},180);
+      return res;
+    };
+    patched.__v119Patched=true;
+    window.switchPanel=patched;
+  }
+
+  // Templates sem select: seleção de ramo por botões estáveis.
+  window.renderTemplatesConfig=function(){
+    const el=document.getElementById('templatesList'); if(!el) return;
+    const ramos=(typeof getRamos==='function'?getRamos():[])||[];
+    const tipoAtual=(typeof tplTipo!=='undefined' && tplTipo==='com-site')?'com-site':'sem-site';
+    const selected= ramos.find(r=>r.id===tplRamoId) || null;
+    const ramoButtons=`<div class="tpl-v119-head"><div class="tpl-v119-current">${selected?`Ramo selecionado: <b>${esc(selected.nome)}</b>`:'Selecione um ramo para editar os templates'}</div></div><div class="tpl-v119-ramo-grid">${ramos.map(r=>`<button type="button" class="tpl-v119-ramo ${tplRamoId===r.id?'active':''}" onclick="selectTemplateRamoV119('${esc(r.id)}')">${esc(r.nome)}</button>`).join('')||'<div class="tpl-v119-current">Nenhum ramo cadastrado.</div>'}</div>`;
+    const tipoTabs=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"><button type="button" class="btn ${tipoAtual==='sem-site'?'btn-primary':'btn-ghost'}" style="font-size:10px;padding:7px 12px" onclick="setTemplateTipoV119('sem-site')">🚫 Sem site</button><button type="button" class="btn ${tipoAtual==='com-site'?'btn-primary':'btn-ghost'}" style="font-size:10px;padding:7px 12px" onclick="setTemplateTipoV119('com-site')">🌐 Com site</button></div>`;
+    if(!tplRamoId){ el.innerHTML=ramoButtons+tipoTabs+`<div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:16px 0">// Selecione um ramo para ver e editar os templates.</div>`; return; }
+    let tpls=[];
+    try{tpls=(typeof normalizeTemplateListV48==='function')?normalizeTemplateListV48(getTemplatesForRamoTipo(tplRamoId,tipoAtual)):getTemplatesForRamoTipo(tplRamoId,tipoAtual).map(t=>typeof t==='object'?t:({msg1:String(t||''),msg2:''}));}catch(_){tpls=[];}
+    const maxTpl=10;
+    const tplsHtml=tpls.map((t,i)=>`<div style="background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;position:relative"><div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:8px">TEMPLATE ${i+1} · ${tipoAtual==='com-site'?'COM SITE':'SEM SITE'} · MSG 1 + MSG 2</div><label style="display:block;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin:0 0 5px">MENSAGEM 1</label><textarea style="min-height:72px;font-size:10px;line-height:1.6;margin-bottom:10px" oninput="saveRamoTemplateMessage('${esc(tplRamoId)}','${tipoAtual}',${i},'msg1',this.value)">${esc(t.msg1||'')}</textarea><label style="display:block;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin:0 0 5px">MENSAGEM 2</label><textarea style="min-height:72px;font-size:10px;line-height:1.6" oninput="saveRamoTemplateMessage('${esc(tplRamoId)}','${tipoAtual}',${i},'msg2',this.value)">${esc(t.msg2||'')}</textarea>${tpls.length>1?`<button type="button" class="del-btn" style="position:absolute;top:8px;right:8px" onclick="removerRamoTemplate('${esc(tplRamoId)}','${tipoAtual}',${i})">✕</button>`:''}</div>`).join('');
+    el.innerHTML=ramoButtons+tipoTabs+tplsHtml+`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px"><span style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)">${tpls.length}/${maxTpl} templates · ${tipoAtual==='com-site'?'Com site':'Sem site'}</span><button type="button" class="btn btn-ghost" onclick="adicionarRamoTemplate('${esc(tplRamoId)}','${tipoAtual}')" ${tpls.length>=maxTpl?'disabled':''}>+ Novo template</button></div>`;
+  };
+  window.selectTemplateRamoV119=function(id){ tplRamoId=id||null; try{localStorage.setItem('tplRamoIdV119',tplRamoId||'');}catch(_){ } window.renderTemplatesConfig(); };
+  window.setTemplateTipoV119=function(tipo){ tplTipo=(tipo==='com-site')?'com-site':'sem-site'; window.renderTemplatesConfig(); };
+  document.addEventListener('DOMContentLoaded',()=>{setTimeout(boot,600);setTimeout(boot,1600);setTimeout(boot,3200);});
+  setTimeout(boot,1200);
+  console.log('[v119][config-pages-no-tabs] ativo',VERSION);
+})();
+</script>
