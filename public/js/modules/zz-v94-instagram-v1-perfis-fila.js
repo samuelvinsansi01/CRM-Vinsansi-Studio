@@ -6,7 +6,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260618-V94-INSTAGRAM-V1-PERFIS-FILA';
+  const VERSION='20260619-V101-INSTAGRAM-FILA-ELEGIVEL-STRICT';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
@@ -28,8 +28,23 @@
   function cleanIgUsername(v){
     let s=String(v||'').trim();
     if(!s) return '';
-    s=s.replace(/^https?:\/\/(www\.)?instagram\.com\//i,'').replace(/^instagram\.com\//i,'').replace(/^@/,'').split(/[/?#]/)[0].trim();
-    return s.replace(/[^a-zA-Z0-9._]/g,'').toLowerCase();
+    s=s.replace(/^https?:\/\/(www\.)?instagram\.com\//i,'').replace(/^https?:\/\/instagram\.com\//i,'').replace(/^instagram\.com\//i,'').replace(/^www\.instagram\.com\//i,'').replace(/^@/,'').split(/[/?#]/)[0].trim();
+    s=s.replace(/[^a-zA-Z0-9._]/g,'').toLowerCase();
+    if(!s || ['http','https','www','instagram','instagram.com','com','null','undefined'].includes(s)) return '';
+    if(s.length < 2 || s.length > 30) return '';
+    return s;
+  }
+  function instagramFromLead(lead){
+    return cleanIgUsername(lead?.instagram_username || lead?.instagram_url || lead?.instagram || '');
+  }
+  function isInstagramEligibleStage(lead){
+    const stage=String(lead?.current_stage||'').toLowerCase();
+    const channel=String(lead?.lead_channel||'').toLowerCase();
+    return stage==='attribution_instagram' || stage==='instagram_backlog' || channel==='instagram';
+  }
+  function isSentLikeLead(lead){
+    const hay=[lead?.status,lead?.current_status,lead?.current_stage,lead?.pipeline_status].map(x=>String(x||'').toLowerCase()).join(' ');
+    return /(^|_|)(sent|enviado|whatsapp_sent|instagram_sent)(_||$)/.test(hay);
   }
   function igUrl(username){ const u=cleanIgUsername(username); return u?`https://www.instagram.com/${u}/`:''; }
   function toDateInput(d){ const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); }
@@ -313,32 +328,62 @@
   }
   window.instagramV94FillProfile=async function(profileId){
     const p=getProfile(profileId); if(!p){ notify('Perfil não encontrado','err'); return; }
-    const capacity=Number(p.daily_limit||60);
-    const already=queueCache.filter(x=>String(x.profile_id)===String(profileId) && !['error','failed','erro'].includes(String(x.status||'').toLowerCase())).length;
-    const remaining=Math.max(0,capacity-already);
-    if(!remaining){ notify('Perfil já preenchido para o dia','warn'); return; }
     const c=sb(), user=uid(); if(!c||!user) return;
-    const {data:existing}=await c.from('instagram_dispatch_items').select('lead_id').eq('user_id',user).eq('scheduled_date',activeDate);
-    const existingIds=new Set((existing||[]).map(x=>String(x.lead_id)));
-    const {data:leads,error}=await c.from('leads').select('*').eq('user_id',user).in('current_stage',['attribution_instagram','instagram_backlog']).limit(1000);
+    const capacity=Number(p.daily_limit||60);
+    const blockSize=Number(p.block_size||15);
+
+    // Recalcular fila do perfil/dia com regra estrita. Mantém enviados; remove somente pendentes/erros antigos.
+    const {data:currentItems,error:curErr}=await c.from('instagram_dispatch_items')
+      .select('id,lead_id,status')
+      .eq('user_id',user).eq('profile_id',p.id).eq('scheduled_date',activeDate);
+    if(curErr){ notify('Erro ao ler fila atual: '+curErr.message,'err'); return; }
+    const sentItems=(currentItems||[]).filter(x=>['sent','enviado'].includes(String(x.status||'').toLowerCase()));
+    const rebuildItems=(currentItems||[]).filter(x=>!['sent','enviado'].includes(String(x.status||'').toLowerCase()));
+    if(rebuildItems.length){
+      const {error:delErr}=await c.from('instagram_dispatch_items').delete().in('id',rebuildItems.map(x=>x.id));
+      if(delErr){ notify('Erro ao limpar fila Instagram antiga: '+delErr.message,'err'); return; }
+    }
+    const already=sentItems.length;
+    const remaining=Math.max(0,capacity-already);
+    if(!remaining){ notify('Perfil já preenchido para o dia','warn'); await refreshInstagramV94(); return; }
+
+    const {data:allItems}=await c.from('instagram_dispatch_items').select('lead_id,status').eq('user_id',user);
+    const alreadyQueuedOrSentIds=new Set((allItems||[]).filter(x=>!['error','failed','erro'].includes(String(x.status||'').toLowerCase())).map(x=>String(x.lead_id)));
+    sentItems.forEach(x=>alreadyQueuedOrSentIds.add(String(x.lead_id)));
+
+    const {data:waItems}=await c.from('pre_dispatch_items').select('lead_id,status').eq('user_id',user).in('status',['sent','enviado','ready_to_dispatch','queued','sending']);
+    const whatsappBlockedIds=new Set((waItems||[]).map(x=>String(x.lead_id)));
+
+    const {data:baseRows}=await c.from('base_permanente').select('normalized_phone,instagram_username,instagram_url,status,whatsapp_sent_at,instagram_sent_at,last_channel,last_event_status').eq('user_id',user).limit(5000);
+    const blockedPhones=new Set((baseRows||[]).map(x=>String(x.normalized_phone||'')).filter(Boolean));
+    const blockedIg=new Set((baseRows||[]).flatMap(x=>[cleanIgUsername(x.instagram_username),cleanIgUsername(x.instagram_url)]).filter(Boolean));
+
+    const {data:sentRows}=await c.from('sent_contacts').select('normalized_phone,phone').eq('user_id',user).limit(5000);
+    (sentRows||[]).forEach(x=>{ const ph=String(x.normalized_phone||x.phone||'').replace(/\D/g,''); if(ph) blockedPhones.add(ph); });
+
+    const {data:leads,error}=await c.from('leads').select('*').eq('user_id',user).limit(2000);
     if(error){ notify('Erro ao buscar leads Instagram: '+error.message,'err'); return; }
     const candidates=(leads||[]).filter(l=>{
-      if(existingIds.has(String(l.id))) return false;
-      const ig=cleanIgUsername(l.instagram_username||l.instagram_url||l.instagram||l.website||'');
-      if(!ig) return false;
-      const stage=String(l.current_stage||'');
-      return stage==='attribution_instagram' || stage==='instagram_backlog';
+      const id=String(l.id);
+      if(alreadyQueuedOrSentIds.has(id)) return false;
+      if(whatsappBlockedIds.has(id)) return false;
+      if(!isInstagramEligibleStage(l)) return false;
+      if(isSentLikeLead(l)) return false;
+      const ig=instagramFromLead(l);
+      if(!ig || blockedIg.has(ig)) return false;
+      const phone=String(l.normalized_phone||'').replace(/\D/g,'');
+      if(phone && blockedPhones.has(phone)) return false;
+      return true;
     }).slice(0,remaining);
-    if(!candidates.length){ notify('Nenhum lead Instagram elegível para preencher','warn'); return; }
+    if(!candidates.length){ notify('Nenhum lead Instagram elegível para preencher','warn'); await refreshInstagramV94(); return; }
     const templates=await getTemplatesFlexible();
-    const blockSize=Number(p.block_size||15);
     const rows=candidates.map((lead,i)=>{
       const pos=already+i+1;
       const block=Math.floor((pos-1)/blockSize)+1;
       const ramo=parentCategoryOf(lead,{});
       const tipo=leadTypeOf(lead,{});
       const tpl=selectTemplate(templates,ramo,tipo,lead);
-      const ig=cleanIgUsername(lead.instagram_username||lead.instagram_url||lead.instagram||lead.website||'');
+      const ig=instagramFromLead(lead);
       return {
         user_id:user,
         lead_id:String(lead.id),
@@ -363,7 +408,7 @@
     });
     const {error:insErr}=await c.from('instagram_dispatch_items').upsert(rows,{onConflict:'profile_id,scheduled_date,lead_id'});
     if(insErr){ notify('Erro ao preencher perfil: '+insErr.message,'err'); return; }
-    notify(`✓ ${rows.length} leads inseridos na fila Instagram`);
+    notify(`✓ Fila Instagram recalculada: ${rows.length} leads elegíveis inseridos`);
     await refreshInstagramV94();
   };
 
