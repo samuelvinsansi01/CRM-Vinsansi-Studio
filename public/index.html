@@ -1917,6 +1917,268 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
 
 
 <script>
+/* V117 — Regras de Importação refeitas do zero, sem remendos.
+   Motivo: os patches antigos criavam/alteravam uma .v108-import-rules-card com handlers globais
+   que brigavam com selects, inputs e re-render da página. Esta versão:
+   - remove a tela antiga de regras;
+   - renderiza uma nova tela independente (.v117-import-rules-card);
+   - não usa SELECT nativo nos pontos que quebravam;
+   - salva no mesmo localStorage usado pela importação: vs_import_rules_v108;
+   - atualiza window.__crmImportRules para os demais módulos continuarem lendo a mesma fonte.
+*/
+(function(){
+  'use strict';
+  const VERSION='20260619-V117-IMPORT-RULES-REWRITE-CLEAN';
+  const KEY='vs_import_rules_v108';
+  const DEFAULTS={
+    minRating:4,
+    minReviews:10,
+    minLeadScore:0,
+    requirePhone:false,
+    requireWhatsapp:false,
+    requireInstagram:false,
+    requireWebsite:false,
+    allowOwnSite:true,
+    allowWix:true,
+    allowAggregators:true,
+    allowFacebook:false,
+    allowWhatsappAsSite:true,
+    allowLinktree:true,
+    allowBeacons:true,
+    allowGoogleSites:true,
+    onlyBrazil:false,
+    allowedStates:'',
+    blockedCities:'',
+    useRegisteredRamosOnly:true,
+    allowUnmatchedCategories:false,
+    allowNoReviews:false,
+    allowHiddenRating:false,
+    blockDuplicatePhone:true,
+    blockDuplicateInstagram:true,
+    blockDuplicateWebsite:true,
+    blockSentCompany:true,
+    blockBasePermanente:true,
+    instagramOnlyPublic:true,
+    moveInvalidWhatsappToInstagram:true,
+    invalidDestination:'instagram'
+  };
+  const LABEL={
+    minRating:'Nota mínima', minReviews:'Reviews mínimos', minLeadScore:'Score mínimo',
+    requirePhone:'Exigir telefone', requireWhatsapp:'Exigir WhatsApp válido', requireInstagram:'Exigir Instagram', requireWebsite:'Exigir website',
+    allowOwnSite:'Permitir site próprio', allowWix:'Permitir Wix', allowAggregators:'Permitir agregadores', allowFacebook:'Permitir Facebook', allowWhatsappAsSite:'Permitir WhatsApp como site', allowLinktree:'Permitir Linktree', allowBeacons:'Permitir Beacons', allowGoogleSites:'Permitir Google Sites',
+    onlyBrazil:'Apenas Brasil', allowedStates:'Estados permitidos', blockedCities:'Cidades bloqueadas',
+    useRegisteredRamosOnly:'Usar ramos cadastrados', allowUnmatchedCategories:'Permitir sem correspondência', allowNoReviews:'Permitir sem reviews', allowHiddenRating:'Permitir nota oculta',
+    blockDuplicatePhone:'Bloquear telefone duplicado', blockDuplicateInstagram:'Bloquear Instagram duplicado', blockDuplicateWebsite:'Bloquear website duplicado', blockSentCompany:'Bloquear já enviado', blockBasePermanente:'Bloquear Base Permanente',
+    instagramOnlyPublic:'Apenas perfil público', moveInvalidWhatsappToInstagram:'Inválidos WhatsApp → Instagram', invalidDestination:'Destino inválidos'
+  };
+  const SECTIONS=[
+    {title:'Qualificação', items:[
+      ['number','minRating','Nota mínima',{step:'0.1',min:'0',max:'5'}],
+      ['number','minReviews','Reviews mínimos',{step:'1',min:'0'}],
+      ['number','minLeadScore','Score mínimo',{step:'1',min:'0'}],
+      ['bool','allowNoReviews','Permitir sem reviews'],
+      ['bool','allowHiddenRating','Permitir nota oculta']
+    ]},
+    {title:'Canais', items:[
+      ['bool','requirePhone','Exigir telefone'],
+      ['bool','requireWhatsapp','Exigir WhatsApp válido'],
+      ['bool','requireInstagram','Exigir Instagram'],
+      ['bool','requireWebsite','Exigir website']
+    ]},
+    {title:'Sites', items:[
+      ['bool','allowOwnSite','Permitir site próprio'],
+      ['bool','allowWix','Permitir Wix'],
+      ['bool','allowAggregators','Permitir agregadores'],
+      ['bool','allowFacebook','Permitir Facebook'],
+      ['bool','allowWhatsappAsSite','Permitir WhatsApp como site'],
+      ['bool','allowLinktree','Permitir Linktree'],
+      ['bool','allowBeacons','Permitir Beacons'],
+      ['bool','allowGoogleSites','Permitir Google Sites']
+    ]},
+    {title:'Geografia', items:[
+      ['bool','onlyBrazil','Apenas Brasil'],
+      ['text','allowedStates','Estados permitidos','Ex.: SP, PR, DF'],
+      ['text','blockedCities','Cidades bloqueadas','Ex.: Cidade A, Cidade B']
+    ]},
+    {title:'Categorias / Ramos', items:[
+      ['bool','useRegisteredRamosOnly','Usar apenas ramos cadastrados'],
+      ['bool','allowUnmatchedCategories','Permitir categoria sem correspondência']
+    ]},
+    {title:'Duplicidade', items:[
+      ['bool','blockDuplicatePhone','Bloquear telefone duplicado'],
+      ['bool','blockDuplicateInstagram','Bloquear Instagram duplicado'],
+      ['bool','blockDuplicateWebsite','Bloquear website duplicado'],
+      ['bool','blockSentCompany','Bloquear empresa já enviada'],
+      ['bool','blockBasePermanente','Bloquear Base Permanente']
+    ]},
+    {title:'Instagram / Operacional', items:[
+      ['bool','instagramOnlyPublic','Apenas perfil público'],
+      ['bool','moveInvalidWhatsappToInstagram','Inválidos WhatsApp → Instagram'],
+      ['choice','invalidDestination','Destino de inválidos',[['instagram','Instagram'],['discard','Descarte'],['attribution','Atribuição']]]
+    ]}
+  ];
+
+  function safeNotify(msg,type){ try{ if(typeof window.notify==='function') window.notify(msg,type); else console.log(msg); }catch(_){ console.log(msg); } }
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function read(){
+    try{ return {...DEFAULTS,...(JSON.parse(localStorage.getItem(KEY)||'{}')||{})}; }
+    catch(_){ return {...DEFAULTS}; }
+  }
+  function write(r){
+    const payload={...DEFAULTS,...(r||{})};
+    try{ localStorage.setItem(KEY,JSON.stringify(payload)); }catch(_){ }
+    try{ window.__crmImportRules=payload; }catch(_){ }
+    return payload;
+  }
+  function currentValue(key){ return read()[key]; }
+  function toastFor(key,value){
+    const label=LABEL[key]||key;
+    if(typeof value==='boolean') return '✓ '+label+' '+(value?'ativado':'desativado');
+    if(key==='invalidDestination') return '✓ Destino de inválidos atualizado para '+String(value);
+    return '✓ '+label+' atualizado para '+String(value||'');
+  }
+  function updateLast(key,value){
+    const el=document.getElementById('v117LastChange');
+    if(el) el.textContent='Última alteração: '+(LABEL[key]||key)+' → '+(typeof value==='boolean'?(value?'Sim':'Não'):String(value||''));
+  }
+  function setRule(key,value,showToast=true){
+    const r=read();
+    if(typeof DEFAULTS[key]==='number'){
+      const n=Number(value);
+      r[key]=Number.isFinite(n)?n:DEFAULTS[key];
+    }else if(typeof DEFAULTS[key]==='boolean'){
+      r[key]=!!value;
+    }else{
+      r[key]=String(value??'');
+    }
+    const saved=write(r);
+    refreshOne(key,saved[key]);
+    updateLast(key,saved[key]);
+    if(showToast) safeNotify(toastFor(key,saved[key]));
+    return saved;
+  }
+  function refreshOne(key,value){
+    document.querySelectorAll('.v117-toggle[data-key="'+CSS.escape(key)+'"]').forEach(g=>{
+      g.dataset.value=value?'true':'false';
+      g.querySelectorAll('button').forEach(btn=>btn.classList.toggle('active',String(btn.dataset.value)===(value?'true':'false')));
+    });
+    document.querySelectorAll('.v117-choice[data-key="'+CSS.escape(key)+'"]').forEach(g=>{
+      g.dataset.value=String(value||'');
+      g.querySelectorAll('button').forEach(btn=>btn.classList.toggle('active',String(btn.dataset.value)===String(value||'')));
+    });
+    const input=document.querySelector('.v117-input[data-key="'+CSS.escape(key)+'"]');
+    if(input && document.activeElement!==input) input.value=value??'';
+  }
+  function renderItem(item){
+    const [type,key,label,extra]=item;
+    const value=currentValue(key);
+    if(type==='bool'){
+      return `<div class="v117-rule-row"><label>${esc(label)}</label><div class="v117-toggle" data-key="${esc(key)}" data-value="${value?'true':'false'}"><button type="button" data-value="true" class="${value?'active':''}">Sim</button><button type="button" data-value="false" class="${!value?'active':''}">Não</button></div></div>`;
+    }
+    if(type==='number'){
+      const attrs=Object.entries(extra||{}).map(([k,v])=>`${k}="${esc(v)}"`).join(' ');
+      return `<div class="v117-rule-row"><label>${esc(label)}</label><input class="v117-input" data-key="${esc(key)}" type="number" ${attrs} value="${esc(value)}"></div>`;
+    }
+    if(type==='text'){
+      return `<div class="v117-rule-wide"><label>${esc(label)}</label><input class="v117-input" data-key="${esc(key)}" type="text" placeholder="${esc(extra||'')}" value="${esc(value)}"></div>`;
+    }
+    if(type==='choice'){
+      const opts=(extra||[]).map(([v,t])=>`<button type="button" data-value="${esc(v)}" class="${String(value)===String(v)?'active':''}">${esc(t)}</button>`).join('');
+      return `<div class="v117-rule-wide"><label>${esc(label)}</label><div class="v117-choice" data-key="${esc(key)}" data-value="${esc(value)}">${opts}</div></div>`;
+    }
+    return '';
+  }
+  function render(){
+    write(read());
+    const html=`<div class="card v117-import-rules-card" data-version="${VERSION}">
+      <div class="card-title">Regras de importação</div>
+      <div class="v117-sub">Esta tela foi refeita do zero. Não usa mais os selects/handlers antigos. As regras são salvas no mesmo local usado pela importação.</div>
+      <style>
+        .v117-import-rules-card{margin-top:16px}
+        .v117-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.6;margin-bottom:14px}
+        .v117-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-bottom:14px}
+        .v117-section{border:1px solid var(--border2);background:var(--bg);border-radius:14px;padding:14px}
+        .v117-section h4{font-family:'DM Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px 0}
+        .v117-rule-row{display:grid;grid-template-columns:1fr 116px;gap:8px;align-items:center;margin:8px 0}
+        .v117-rule-row label,.v117-rule-wide label{font-family:'DM Mono',monospace;font-size:9px;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin:0}
+        .v117-rule-wide{display:block;margin:10px 0}.v117-rule-wide label{display:block;margin-bottom:6px}
+        .v117-input{width:100%;min-height:38px;background:#06070b;border:1px solid var(--border2);color:var(--text);border-radius:9px;padding:8px 10px;font-family:'DM Mono',monospace;font-size:11px;outline:none;box-sizing:border-box}
+        .v117-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(179,255,70,.12)}
+        .v117-toggle,.v117-choice{display:grid;gap:5px;background:#06070b;border:1px solid var(--border2);border-radius:10px;padding:4px;min-height:38px}
+        .v117-toggle{grid-template-columns:1fr 1fr}.v117-choice{grid-template-columns:repeat(auto-fit,minmax(90px,1fr))}
+        .v117-toggle button,.v117-choice button{border:0;border-radius:8px;background:transparent;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;font-weight:900;cursor:pointer;min-height:30px}
+        .v117-toggle button.active,.v117-choice button.active{background:var(--accent);color:#050607}
+        .v117-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}.v117-ok{font-family:'DM Mono',monospace;font-size:9px;color:#33d17a}.v117-danger{color:#ff6b6b}
+      </style>
+      <div class="v117-grid">${SECTIONS.map(sec=>`<div class="v117-section"><h4>${esc(sec.title)}</h4>${sec.items.map(renderItem).join('')}</div>`).join('')}</div>
+      <div class="v117-actions"><button class="btn btn-primary" type="button" id="v117SaveBtn">Salvar regras</button><button class="btn" type="button" id="v117ResetBtn">Restaurar padrão</button><span class="v117-ok" id="v117SavedNote"></span></div>
+      <div id="v117LastChange" class="v117-ok" style="margin-top:8px"></div>
+    </div>`;
+    const page=document.getElementById('configPageV109_importacao');
+    const root=document.getElementById('panel-configuracoes')||document.body;
+    document.querySelectorAll('.v108-import-rules-card,.v117-import-rules-card').forEach(el=>el.remove());
+    if(page) page.insertAdjacentHTML('beforeend',html);
+    else root.insertAdjacentHTML('beforeend',html);
+    bind();
+  }
+  function bind(){
+    const card=document.querySelector('.v117-import-rules-card'); if(!card) return;
+    card.addEventListener('click',function(e){
+      const toggle=e.target.closest('.v117-toggle button');
+      if(toggle){ e.preventDefault(); e.stopPropagation(); setRule(toggle.closest('.v117-toggle').dataset.key, toggle.dataset.value==='true'); return; }
+      const choice=e.target.closest('.v117-choice button');
+      if(choice){ e.preventDefault(); e.stopPropagation(); setRule(choice.closest('.v117-choice').dataset.key, choice.dataset.value); return; }
+      if(e.target.closest('#v117SaveBtn')){ e.preventDefault(); e.stopPropagation(); saveAll(true); return; }
+      if(e.target.closest('#v117ResetBtn')){ e.preventDefault(); e.stopPropagation(); write(DEFAULTS); render(); safeNotify('✓ Regras restauradas para o padrão'); return; }
+    });
+    let t=null;
+    card.addEventListener('input',function(e){
+      const input=e.target.closest('.v117-input'); if(!input) return;
+      clearTimeout(t); t=setTimeout(()=>setRule(input.dataset.key,input.value,false),250);
+    });
+    card.addEventListener('change',function(e){
+      const input=e.target.closest('.v117-input'); if(!input) return;
+      setRule(input.dataset.key,input.value,true);
+    });
+  }
+  function saveAll(show){
+    const r=read();
+    document.querySelectorAll('.v117-input').forEach(input=>{
+      const key=input.dataset.key;
+      if(!key) return;
+      if(typeof DEFAULTS[key]==='number'){
+        const n=Number(input.value); r[key]=Number.isFinite(n)?n:DEFAULTS[key];
+      }else r[key]=String(input.value||'');
+    });
+    document.querySelectorAll('.v117-toggle').forEach(g=>{ r[g.dataset.key]=String(g.dataset.value)==='true'; });
+    document.querySelectorAll('.v117-choice').forEach(g=>{ r[g.dataset.key]=String(g.dataset.value||''); });
+    write(r);
+    const note=document.getElementById('v117SavedNote'); if(note) note.textContent='✓ salvo';
+    if(show) safeNotify('✓ Regras de importação salvas');
+    try{ if(typeof window.importPreview==='function') setTimeout(()=>window.importPreview(),200); }catch(_){ }
+  }
+  function boot(){
+    const panel=document.getElementById('panel-configuracoes');
+    if(!panel) return;
+    // Garante que a paginação de Configurações exista antes de inserir a página limpa.
+    try{ if(typeof window.arrangeConfigPagesV109==='function') window.arrangeConfigPagesV109(); }catch(_){ }
+    render();
+  }
+  let tries=0;
+  const timer=setInterval(()=>{
+    tries++;
+    const ok=document.getElementById('panel-configuracoes');
+    if(ok){ boot(); clearInterval(timer); }
+    if(tries>30) clearInterval(timer);
+  },250);
+  document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,800));
+  window.renderImportRulesV117=render;
+  window.getImportRulesV117=read;
+  console.log('[v117][import-rules-clean] ativo',VERSION);
+})();
+</script>
+
+<script>
 function copyInfraCommandV46(type) {
   const cmd = 'cd C:\\cloudflared\ncloudflared.exe tunnel --config C:\\cloudflared\\config.yml run evolution';
   if (navigator.clipboard && navigator.clipboard.writeText) {
