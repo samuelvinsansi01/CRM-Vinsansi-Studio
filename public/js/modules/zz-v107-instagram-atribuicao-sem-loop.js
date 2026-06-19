@@ -677,3 +677,150 @@
     console.log('[v108][import-rules-ramo-images] ativo',VERSION);
   });
 })();
+
+/* V114 — Regras de importação com atualização otimista
+   - Clique em Sim/Não muda visual imediatamente.
+   - Salva localmente sem esperar preview/importação recalcular.
+   - Preview pesado roda em segundo plano, depois do clique.
+   - Se algo falhar, avisa sem travar a UI.
+*/
+(function(){
+  'use strict';
+  const VERSION='20260619-V114-REGRAS-IMPORTACAO-OTIMISTA';
+  const RULES_KEY='vs_import_rules_v108';
+  let debounceTimer=null;
+
+  function notify(msg,type){ try { if(typeof window.notify==='function') window.notify(msg,type); else console.log(msg); } catch(_){ } }
+  function nowLabel(){ try{return new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(_){return '';} }
+  function defaultRules(){return {
+    minRating:4,minReviews:10,minLeadScore:0,
+    requirePhone:false,requireWhatsapp:false,requireInstagram:false,requireWebsite:true,
+    allowOwnSite:true,allowWix:true,allowAggregators:true,allowFacebook:false,allowWhatsappAsSite:true,allowLinktree:true,allowBeacons:true,allowGoogleSites:true,
+    onlyBrazil:false,allowedStates:'',blockedCities:'',
+    useRegisteredRamosOnly:true,allowUnmatchedCategories:false,allowNoReviews:false,allowHiddenRating:false,
+    blockDuplicatePhone:true,blockDuplicateInstagram:true,blockDuplicateWebsite:true,blockSentCompany:true,blockBasePermanente:true,
+    instagramOnlyPublic:true,moveInvalidWhatsappToInstagram:true,invalidDestination:'instagram'
+  };}
+  function getStored(){ try{return {...defaultRules(),...(JSON.parse(localStorage.getItem(RULES_KEY)||'{}')||{})};}catch(_){return defaultRules();} }
+  function setStored(r){ const payload={...defaultRules(),...(r||{})}; localStorage.setItem(RULES_KEY,JSON.stringify(payload)); try{window.__crmImportRules=payload;}catch(_){} return payload; }
+  function valueOfToggle(id){ const tg=document.querySelector(`.v111-toggle[data-rule="${id}"]`); return tg ? String(tg.dataset.value)==='true' : false; }
+  function n(id,fallback){ const el=document.getElementById(id); const v=Number(el&&el.value); return Number.isFinite(v)?v:fallback; }
+  function t(id){ return String(document.getElementById(id)?.value||'').trim(); }
+
+  const ID_TO_KEY={
+    v108MinRating:'minRating',v108MinReviews:'minReviews',v110MinLeadScore:'minLeadScore',
+    v108RequirePhone:'requirePhone',v110RequireWhatsapp:'requireWhatsapp',v108RequireInstagram:'requireInstagram',v110RequireWebsite:'requireWebsite',
+    v108AllowOwnSite:'allowOwnSite',v108AllowWix:'allowWix',v108AllowAggregators:'allowAggregators',v108AllowFacebook:'allowFacebook',v110AllowLinktree:'allowLinktree',v110AllowBeacons:'allowBeacons',v110AllowGoogleSites:'allowGoogleSites',
+    v110OnlyBrazil:'onlyBrazil',v110AllowedStates:'allowedStates',v110BlockedCities:'blockedCities',
+    v110UseRegisteredRamosOnly:'useRegisteredRamosOnly',v110AllowUnmatchedCategories:'allowUnmatchedCategories',v110AllowNoReviews:'allowNoReviews',v110AllowHiddenRating:'allowHiddenRating',
+    v110BlockDuplicatePhone:'blockDuplicatePhone',v110BlockDuplicateInstagram:'blockDuplicateInstagram',v110BlockDuplicateWebsite:'blockDuplicateWebsite',v110BlockSentCompany:'blockSentCompany',v110BlockBasePermanente:'blockBasePermanente',
+    v110InstagramOnlyPublic:'instagramOnlyPublic',v110MoveInvalidWhatsappToInstagram:'moveInvalidWhatsappToInstagram',v110InvalidDestination:'invalidDestination'
+  };
+  const LABEL={
+    minRating:'Nota mínima',minReviews:'Reviews mínimos',minLeadScore:'Score mínimo',
+    requirePhone:'Exigir telefone',requireWhatsapp:'Exigir WhatsApp válido',requireInstagram:'Exigir Instagram',requireWebsite:'Exigir website',
+    allowOwnSite:'Permitir site próprio',allowWix:'Permitir Wix',allowAggregators:'Permitir agregadores',allowFacebook:'Permitir Facebook',allowLinktree:'Permitir Linktree',allowBeacons:'Permitir Beacons',allowGoogleSites:'Permitir Google Sites',
+    onlyBrazil:'Apenas Brasil',allowedStates:'Estados permitidos',blockedCities:'Cidades bloqueadas',
+    useRegisteredRamosOnly:'Usar ramos cadastrados',allowUnmatchedCategories:'Permitir sem correspondência',allowNoReviews:'Permitir sem reviews',allowHiddenRating:'Permitir nota oculta',
+    blockDuplicatePhone:'Bloquear telefone duplicado',blockDuplicateInstagram:'Bloquear Instagram duplicado',blockDuplicateWebsite:'Bloquear website duplicado',blockSentCompany:'Bloquear já enviado',blockBasePermanente:'Bloquear Base Permanente',
+    instagramOnlyPublic:'Apenas perfil público',moveInvalidWhatsappToInstagram:'Inválidos WhatsApp → Instagram',invalidDestination:'Destino inválidos'
+  };
+  function collectFromDom(){return {
+    minRating:n('v108MinRating',4),minReviews:n('v108MinReviews',10),minLeadScore:n('v110MinLeadScore',0),
+    requirePhone:valueOfToggle('v108RequirePhone'),requireWhatsapp:valueOfToggle('v110RequireWhatsapp'),requireInstagram:valueOfToggle('v108RequireInstagram'),requireWebsite:valueOfToggle('v110RequireWebsite'),
+    allowOwnSite:valueOfToggle('v108AllowOwnSite'),allowWix:valueOfToggle('v108AllowWix'),allowAggregators:valueOfToggle('v108AllowAggregators'),allowFacebook:valueOfToggle('v108AllowFacebook'),allowWhatsappAsSite:true,allowLinktree:valueOfToggle('v110AllowLinktree'),allowBeacons:valueOfToggle('v110AllowBeacons'),allowGoogleSites:valueOfToggle('v110AllowGoogleSites'),
+    onlyBrazil:valueOfToggle('v110OnlyBrazil'),allowedStates:t('v110AllowedStates'),blockedCities:t('v110BlockedCities'),
+    useRegisteredRamosOnly:valueOfToggle('v110UseRegisteredRamosOnly'),allowUnmatchedCategories:valueOfToggle('v110AllowUnmatchedCategories'),allowNoReviews:valueOfToggle('v110AllowNoReviews'),allowHiddenRating:valueOfToggle('v110AllowHiddenRating'),
+    blockDuplicatePhone:valueOfToggle('v110BlockDuplicatePhone'),blockDuplicateInstagram:valueOfToggle('v110BlockDuplicateInstagram'),blockDuplicateWebsite:valueOfToggle('v110BlockDuplicateWebsite'),blockSentCompany:valueOfToggle('v110BlockSentCompany'),blockBasePermanente:valueOfToggle('v110BlockBasePermanente'),
+    instagramOnlyPublic:valueOfToggle('v110InstagramOnlyPublic'),moveInvalidWhatsappToInstagram:valueOfToggle('v110MoveInvalidWhatsappToInstagram'),invalidDestination:t('v110InvalidDestination')||'instagram'
+  };}
+  function statusLine(key,value){
+    const label=LABEL[key]||key;
+    let msg='✓ '+label+' atualizado';
+    if(typeof value==='boolean') msg='✓ '+label+' '+(value?'ativado':'desativado');
+    else if(value!==undefined && value!==null && String(value)!=='') msg='✓ '+label+' atualizado para '+String(value);
+    if(key==='useRegisteredRamosOnly') msg=value?'✓ Apenas categorias cadastradas ativado':'✓ Apenas categorias cadastradas desativado';
+    if(key==='allowUnmatchedCategories') msg=value?'✓ Categorias sem correspondência aceitas':'✓ Categorias sem correspondência recusadas';
+    if(key==='moveInvalidWhatsappToInstagram') msg=value?'✓ Inválidos WhatsApp irão para Instagram':'✓ Inválidos WhatsApp não irão para Instagram';
+    return msg;
+  }
+  function updateLastChange(key,value){
+    try{
+      let el=document.getElementById('v113LastRuleChange');
+      if(!el){
+        const card=document.querySelector('.v108-import-rules-card');
+        card?.insertAdjacentHTML('beforeend','<div id="v113LastRuleChange" style="font-family:\'DM Mono\',monospace;font-size:9px;color:#33d17a;margin-top:10px"></div>');
+        el=document.getElementById('v113LastRuleChange');
+      }
+      if(el) el.textContent='Última alteração: '+(LABEL[key]||key)+' → '+(typeof value==='boolean'?(value?'Sim':'Não'):String(value||''))+' · '+nowLabel();
+    }catch(_){}
+  }
+  function savedNote(text){
+    try{
+      const n=document.getElementById('v111SavedNote');
+      if(n){n.textContent=text||'✓ salvo'; n.classList.add('show'); setTimeout(()=>{n.classList.remove('show'); n.textContent='✓ salvo';},1200);}
+    }catch(_){}
+  }
+  function runBackgroundPreview(){
+    clearTimeout(debounceTimer);
+    debounceTimer=setTimeout(()=>{
+      try{ if(typeof window.importPreview==='function') window.importPreview(); }
+      catch(e){ console.warn('[v114][importPreview background]',e?.message||e); }
+    },350);
+  }
+  function optimisticSave(changedId, explicitValue){
+    const payload=collectFromDom();
+    const key=ID_TO_KEY[changedId]||changedId;
+    const before=getStored();
+    const saved=setStored(payload);
+    let k=ID_TO_KEY[changedId]||null;
+    if(!k){ for(const x of Object.keys(saved)){ if(JSON.stringify(before[x])!==JSON.stringify(saved[x])){ k=x; break; } } }
+    if(k){ notify(statusLine(k,saved[k])); updateLastChange(k,saved[k]); }
+    else if(explicitValue!==undefined && key){ notify(statusLine(key, explicitValue)); updateLastChange(key, explicitValue); }
+    else notify('✓ Regras salvas');
+    savedNote('✓ salvo');
+    runBackgroundPreview();
+  }
+
+  window.setImportRuleBoolV111=function(id,value){
+    const el=document.querySelector(`.v111-toggle[data-rule="${id}"]`);
+    const v=!!value;
+    if(el){
+      el.dataset.value=v?'true':'false';
+      el.setAttribute('aria-pressed',v?'true':'false');
+      el.querySelectorAll('.v111-toggle-btn').forEach(btn=>{
+        const active=String(btn.dataset.value)===(v?'true':'false');
+        btn.classList.toggle('active',active);
+        btn.setAttribute('aria-selected',active?'true':'false');
+      });
+    }
+    // Salva depois de atualizar o DOM, mas sem bloquear o clique.
+    setTimeout(()=>optimisticSave(id,v),0);
+  };
+
+  window.saveImportRulesV108=function(showMsg,changedId){
+    const payload=collectFromDom();
+    setStored(payload);
+    savedNote('✓ salvo');
+    if(showMsg) notify('✓ Regras de importação salvas');
+    else optimisticSave(changedId||null);
+    runBackgroundPreview();
+  };
+
+  if(!window.__v114RuleInputsListener){
+    window.__v114RuleInputsListener=true;
+    document.addEventListener('input',function(ev){
+      const el=ev.target;
+      if(!el || !ID_TO_KEY[el.id]) return;
+      clearTimeout(debounceTimer);
+      debounceTimer=setTimeout(()=>optimisticSave(el.id),300);
+    },true);
+    document.addEventListener('change',function(ev){
+      const el=ev.target;
+      if(!el || !ID_TO_KEY[el.id]) return;
+      optimisticSave(el.id);
+    },true);
+  }
+
+  console.log('[v114][regras-importacao-otimista] ativo',VERSION);
+})();
