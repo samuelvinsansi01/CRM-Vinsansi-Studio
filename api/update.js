@@ -128,6 +128,32 @@ async function instagramNext(input) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+
+async function instagramQueue(input) {
+  const userId = String(input.user_id || input.userId || '').trim();
+  const profileUsername = cleanUsername(input.profile_username || input.profileUsername || input.profile || '');
+  const scheduledDate = String(input.scheduled_date || input.scheduledDate || todayISO()).slice(0, 10);
+  if (!userId) throw new Error('user_id ausente');
+  if (!profileUsername) throw new Error('profile_username ausente');
+
+  const profileRows = await sbRest(
+    `instagram_profiles?select=*&user_id=eq.${encodeURIComponent(userId)}&username=eq.${encodeURIComponent(profileUsername)}&active=eq.true&limit=1`,
+    { method:'GET', prefer:'return=minimal' }
+  );
+  const profile = Array.isArray(profileRows) ? profileRows[0] || null : null;
+
+  const path = [
+    'instagram_dispatch_items?select=*',
+    `user_id=eq.${encodeURIComponent(userId)}`,
+    `profile_username=eq.${encodeURIComponent(profileUsername)}`,
+    `scheduled_date=eq.${encodeURIComponent(scheduledDate)}`,
+    'status=in.(queued,sending,error)',
+    'order=block_number.asc,position.asc'
+  ].join('&');
+  const rows = await sbRest(path, { method:'GET', prefer:'return=minimal' });
+  return { profile, items: Array.isArray(rows) ? rows : [] };
+}
+
 async function upsertBase(userId, item, lead, when) {
   const ig = cleanUsername(item.instagram_username || item.instagram_url || (lead && (lead.instagram_username || lead.instagram_url || lead.instagram)) || '');
   const phone = normalizePhone(lead && (lead.normalized_phone || lead.phone) || '');
@@ -276,6 +302,10 @@ async function handleInstagram(input, req) {
     const item = await instagramNext(input);
     return { success:true, item, empty:!item };
   }
+  if (action === 'instagram_queue' || action === 'queue') {
+    const queue = await instagramQueue(input);
+    return { success:true, ...queue, empty:!queue.items.length };
+  }
   if (action === 'instagram_update' || action === 'update') {
     const item = await instagramUpdate(input);
     return { success:true, item };
@@ -292,7 +322,7 @@ async function handleInstagram(input, req) {
     const profile = await instagramProfileRemove(input);
     return { success:true, profile };
   }
-  throw new Error('action obrigatória: instagram_next, instagram_update ou instagram_profile_*');
+  throw new Error('action obrigatória: instagram_next, instagram_queue, instagram_update ou instagram_profile_*');
 }
 
 export default async function handler(req, res) {
@@ -303,7 +333,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET' || req.method === 'POST') {
       const input = req.method === 'GET' ? (req.query || {}) : (req.body || {});
       const action = String(input.action || '').trim().toLowerCase();
-      if (action === 'instagram_next' || action === 'instagram_update' || action === 'next' || action === 'update' || action === 'instagram_profiles_list' || action === 'instagram_profile_upsert' || action === 'instagram_profile_remove') {
+      if (action === 'instagram_next' || action === 'instagram_queue' || action === 'instagram_update' || action === 'next' || action === 'queue' || action === 'update' || action === 'instagram_profiles_list' || action === 'instagram_profile_upsert' || action === 'instagram_profile_remove') {
         const result = await handleInstagram(input, req);
         return res.status(200).json(result);
       }
