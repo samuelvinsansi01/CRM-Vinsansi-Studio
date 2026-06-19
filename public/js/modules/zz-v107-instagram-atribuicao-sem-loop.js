@@ -280,14 +280,25 @@
   function getRules(){
     try{return {...defaultRules(),...(JSON.parse(localStorage.getItem(RULES_KEY)||'{}')||{})};}catch(_){return defaultRules();}
   }
-  function saveRules(r){localStorage.setItem(RULES_KEY,JSON.stringify({...defaultRules(),...(r||{})}));}
-  function bool(id){const tg=document.querySelector(`.v111-toggle[data-rule="${id}"]`); if(tg)return String(tg.dataset.value)==='true'; const el=document.getElementById(id); if(!el)return false; if(String(el.tagName||'').toUpperCase()==='SELECT')return String(el.value)==='true'; return !!el.checked;}
+  function saveRules(r){
+    const payload={...defaultRules(),...(r||{})};
+    localStorage.setItem(RULES_KEY,JSON.stringify(payload));
+    try{window.__crmImportRules=payload;}catch(_){ }
+  }
+  function bool(id){
+    const tg=document.querySelector(`.v111-toggle[data-rule="${id}"]`);
+    if(tg)return String(tg.dataset.value)==='true';
+    const el=document.getElementById(id);
+    if(!el)return false;
+    if(String(el.tagName||'').toUpperCase()==='SELECT')return String(el.value)==='true';
+    return !!el.checked;
+  }
   function txt(id){return String(document.getElementById(id)?.value||'').trim();}
   function yn(id,val){
     const v=!!val;
-    return `<div class="v111-toggle" data-rule="${id}" data-value="${v?'true':'false'}">
-      <button type="button" class="v111-toggle-btn ${v?'active':''}" onclick="setImportRuleBoolV111('${id}',true)">Sim</button>
-      <button type="button" class="v111-toggle-btn ${!v?'active':''}" onclick="setImportRuleBoolV111('${id}',false)">Não</button>
+    return `<div class="v111-toggle" data-rule="${id}" data-value="${v?'true':'false'}" role="group" aria-label="${id}">
+      <button type="button" class="v111-toggle-btn ${v?'active':''}" data-rule="${id}" data-value="true">Sim</button>
+      <button type="button" class="v111-toggle-btn ${!v?'active':''}" data-rule="${id}" data-value="false">Não</button>
     </div>`;
   }
   function num(id,fallback){const n=Number(document.getElementById(id)?.value);return Number.isFinite(n)?n:fallback;}
@@ -451,13 +462,28 @@
   window.setImportRuleBoolV111=function(id,value){
     const el=document.querySelector(`.v111-toggle[data-rule="${id}"]`);
     if(el){
-      el.dataset.value=value?'true':'false';
-      const b=el.querySelectorAll('.v111-toggle-btn');
-      if(b[0])b[0].classList.toggle('active',!!value);
-      if(b[1])b[1].classList.toggle('active',!value);
+      const v=!!value;
+      el.dataset.value=v?'true':'false';
+      el.setAttribute('aria-pressed',v?'true':'false');
+      el.querySelectorAll('.v111-toggle-btn').forEach(btn=>{
+        const is=String(btn.dataset.value)===(v?'true':'false');
+        btn.classList.toggle('active',is);
+        btn.setAttribute('aria-selected',is?'true':'false');
+      });
     }
     saveImportRulesV108(false);
   };
+
+  if(!window.__v112ImportRuleToggleListener){
+    window.__v112ImportRuleToggleListener=true;
+    document.addEventListener('click',function(ev){
+      const btn=ev.target&&ev.target.closest&&ev.target.closest('.v111-toggle-btn[data-rule]');
+      if(!btn)return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      window.setImportRuleBoolV111(btn.dataset.rule, String(btn.dataset.value)==='true');
+    },true);
+  }
   window.resetImportRulesV111=function(){
     saveRules(defaultRules());
     try{injectSettingsCards();}catch(_){ }
