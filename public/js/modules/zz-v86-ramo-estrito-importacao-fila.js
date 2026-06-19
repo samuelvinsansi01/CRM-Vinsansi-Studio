@@ -92,7 +92,7 @@
   if(typeof prevPreview==='function'){
     window.importPreview=function(){
       const out=prevPreview.apply(this,arguments);
-      setTimeout(()=>{try{notify('Filtro de ramo estrito ativo: só entram categorias/subcategorias cadastradas.');}catch(_){}},0);
+      // aviso genérico removido: a tela de regras agora usa feedback específico por campo
       return out;
     };
   }

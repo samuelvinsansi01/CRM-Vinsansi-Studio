@@ -230,7 +230,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260619-V108-IMPORT-RULES-RAMO-IMAGES';
+  const VERSION='20260619-V113-IMPORT-RULES-TOASTS';
   const RULES_KEY='vs_import_rules_v108';
   const IDB_NAME='vs_ramo_images_v108';
   const IDB_STORE='images';
@@ -302,6 +302,47 @@
     </div>`;
   }
   function num(id,fallback){const n=Number(document.getElementById(id)?.value);return Number.isFinite(n)?n:fallback;}
+
+
+  const RULE_LABELS_V113={
+    minRating:'Nota mínima',minReviews:'Reviews mínimos',minLeadScore:'Score mínimo',
+    requirePhone:'Exigir telefone',requireWhatsapp:'Exigir WhatsApp válido',requireInstagram:'Exigir Instagram',requireWebsite:'Exigir website',
+    allowOwnSite:'Permitir site próprio',allowWix:'Permitir Wix',allowAggregators:'Permitir agregadores',allowFacebook:'Permitir Facebook',allowLinktree:'Permitir Linktree',allowBeacons:'Permitir Beacons',allowGoogleSites:'Permitir Google Sites',
+    onlyBrazil:'Apenas Brasil',allowedStates:'Estados permitidos',blockedCities:'Cidades bloqueadas',
+    useRegisteredRamosOnly:'Usar ramos cadastrados',allowUnmatchedCategories:'Permitir sem correspondência',allowNoReviews:'Permitir sem reviews',allowHiddenRating:'Permitir nota oculta',
+    blockDuplicatePhone:'Bloquear telefone duplicado',blockDuplicateInstagram:'Bloquear Instagram duplicado',blockDuplicateWebsite:'Bloquear website duplicado',blockSentCompany:'Bloquear já enviado',blockBasePermanente:'Bloquear Base Permanente',
+    instagramOnlyPublic:'Apenas perfil público',moveInvalidWhatsappToInstagram:'Inválidos WhatsApp → Instagram',invalidDestination:'Destino inválidos'
+  };
+  const RULE_ID_TO_KEY_V113={
+    v108MinRating:'minRating',v108MinReviews:'minReviews',v110MinLeadScore:'minLeadScore',
+    v108RequirePhone:'requirePhone',v110RequireWhatsapp:'requireWhatsapp',v108RequireInstagram:'requireInstagram',v110RequireWebsite:'requireWebsite',
+    v108AllowOwnSite:'allowOwnSite',v108AllowWix:'allowWix',v108AllowAggregators:'allowAggregators',v108AllowFacebook:'allowFacebook',v110AllowLinktree:'allowLinktree',v110AllowBeacons:'allowBeacons',v110AllowGoogleSites:'allowGoogleSites',
+    v110OnlyBrazil:'onlyBrazil',v110AllowedStates:'allowedStates',v110BlockedCities:'blockedCities',
+    v110UseRegisteredRamosOnly:'useRegisteredRamosOnly',v110AllowUnmatchedCategories:'allowUnmatchedCategories',v110AllowNoReviews:'allowNoReviews',v110AllowHiddenRating:'allowHiddenRating',
+    v110BlockDuplicatePhone:'blockDuplicatePhone',v110BlockDuplicateInstagram:'blockDuplicateInstagram',v110BlockDuplicateWebsite:'blockDuplicateWebsite',v110BlockSentCompany:'blockSentCompany',v110BlockBasePermanente:'blockBasePermanente',
+    v110InstagramOnlyPublic:'instagramOnlyPublic',v110MoveInvalidWhatsappToInstagram:'moveInvalidWhatsappToInstagram',v110InvalidDestination:'invalidDestination'
+  };
+  let lastRuleToastAtV113=0;
+  function ruleToastV113(key,value){
+    const label=RULE_LABELS_V113[key]||key;
+    let msg='✓ '+label+' atualizado';
+    if(typeof value==='boolean') msg='✓ '+label+' '+(value?'ativado':'desativado');
+    else if(value!==undefined && value!==null && String(value)!=='') msg='✓ '+label+' atualizado para '+String(value);
+    if(key==='useRegisteredRamosOnly') msg=value?'✓ Apenas categorias/subcategorias cadastradas serão importadas':'✓ Ramos cadastrados não serão obrigatórios na importação';
+    if(key==='allowUnmatchedCategories') msg=value?'✓ Categorias sem correspondência serão aceitas':'✓ Categorias sem correspondência serão recusadas';
+    if(key==='moveInvalidWhatsappToInstagram') msg=value?'✓ Inválidos do WhatsApp irão para Instagram':'✓ Inválidos do WhatsApp não irão para Instagram';
+    if(key==='invalidDestination') msg='✓ Destino de inválidos atualizado para '+String(value);
+    lastRuleToastAtV113=Date.now();
+    notify(msg);
+    try{
+      let el=document.getElementById('v113LastRuleChange');
+      if(!el){
+        const actions=document.querySelector('.v111-actions');
+        if(actions){actions.insertAdjacentHTML('afterend','<div id="v113LastRuleChange" style="font-family:\'DM Mono\',monospace;font-size:9px;color:#33d17a;margin-top:8px"></div>');el=document.getElementById('v113LastRuleChange');}
+      }
+      if(el)el.textContent='Última alteração: '+label+' → '+(typeof value==='boolean'?(value?'Sim':'Não'):String(value||''));
+    }catch(_){}
+  }
 
   function openDb(){
     if(dbPromise)return dbPromise;
@@ -471,7 +512,7 @@
         btn.setAttribute('aria-selected',is?'true':'false');
       });
     }
-    saveImportRulesV108(false);
+    saveImportRulesV108(false,id);
   };
 
   if(!window.__v112ImportRuleToggleListener){
@@ -489,8 +530,9 @@
     try{injectSettingsCards();}catch(_){ }
     notify('✓ Regras restauradas');
   };
-  window.saveImportRulesV108=function(showMsg){
-    saveRules({
+  window.saveImportRulesV108=function(showMsg,changedId){
+    const before=getRules();
+    const payload={
       minRating:num('v108MinRating',4),
       minReviews:num('v108MinReviews',10),
       minLeadScore:num('v110MinLeadScore',0),
@@ -521,10 +563,16 @@
       instagramOnlyPublic:bool('v110InstagramOnlyPublic'),
       moveInvalidWhatsappToInstagram:bool('v110MoveInvalidWhatsappToInstagram'),
       invalidDestination:txt('v110InvalidDestination')||'instagram'
-    });
+    };
+    saveRules(payload);
     try{if(typeof window.importPreview==='function')window.importPreview();}catch(_){ }
     try{const n=document.getElementById('v111SavedNote'); if(n){n.classList.add('show'); setTimeout(()=>n.classList.remove('show'),1600);}}catch(_){ }
-    if(showMsg)notify('✓ Regras de importação salvas');
+    if(showMsg){notify('✓ Regras de importação salvas');return;}
+    let key=RULE_ID_TO_KEY_V113[changedId]||null;
+    if(!key){
+      for(const k of Object.keys(payload)){if(JSON.stringify(before[k])!==JSON.stringify(payload[k])){key=k;break;}}
+    }
+    if(key && Date.now()-lastRuleToastAtV113>120){ruleToastV113(key,payload[key]);}
   };
 
   window.onRamoImageChangeV108=function(ramoId,input){
