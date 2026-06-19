@@ -232,8 +232,10 @@
         ? `<button class="btn btn-ghost v65-approve-queue is-approved" style="font-size:9px;padding:6px 10px;white-space:nowrap;border-color:rgba(174,255,70,.45);color:var(--accent);" disabled>✓ Aprovado para fila</button>`
         : `<button class="btn btn-primary v65-approve-queue" style="font-size:9px;padding:6px 10px;white-space:nowrap" onclick="event.preventDefault();event.stopPropagation();aprovarLeadAtribuicaoParaFilaV65('${esc(l.id)}','${esc(currentTab)}');return false;">✓ Aprovar para fila</button>`)
       : '';
-    const invalidBtn=(currentTab==='com-site'||currentTab==='agregadores') && typeof window.invalidarLeadAtribuicaoV58==='function'
-      ? `<button class="btn btn-ghost v58-invalid-atrib" style="font-size:9px;padding:6px 10px;border-color:rgba(255,80,80,.45);color:var(--error);white-space:nowrap" onclick="event.preventDefault();event.stopPropagation();invalidarLeadAtribuicaoV58('${esc(l.id)}');return false;">Invalidar lead</button>` : '';
+    const invalidFn = currentTab==='insta' ? 'invalidarLeadInstagramBaseV47' : 'invalidarLeadAtribuicaoV58';
+    const canInvalid = (currentTab==='com-site'||currentTab==='agregadores'||currentTab==='insta') && typeof window[invalidFn]==='function';
+    const invalidBtn=canInvalid
+      ? `<button class="btn btn-ghost v58-invalid-atrib" style="font-size:9px;padding:6px 10px;border-color:rgba(255,80,80,.45);color:var(--error);white-space:nowrap" onclick="event.preventDefault();event.stopPropagation();window['${invalidFn}']('${esc(l.id)}');return false;">Invalidar lead</button>` : '';
     return `<div class="empresa-card atrib-v64-card" data-lead-id="${esc(l.id)}"><div class="empresa-info atrib-v64-info"><div class="empresa-nome atrib-v64-name">${nameHtml(l)}</div><div class="empresa-meta atrib-v64-meta">${tabBadge()}${links || '<span class="atrib-v64-muted">Sem link salvo</span>'}</div></div>${instaInput}<div class="empresa-actions atrib-v64-actions"><button class="btn btn-ghost" style="font-size:9px;padding:6px 10px" onclick="event.stopPropagation();openLeadDrawer('${esc(l.id)}')">Ficha</button>${approveBtn}${invalidBtn}</div></div>`;
   }
   function applyStyles(){

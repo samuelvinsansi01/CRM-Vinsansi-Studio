@@ -209,6 +209,63 @@ async function instagramUpdate(input) {
   return updated;
 }
 
+
+async function instagramProfilesList(input) {
+  const userId = String(input.user_id || input.userId || '').trim();
+  if (!userId) throw new Error('user_id ausente');
+  const rows = await sbRest(
+    `instagram_profiles?select=*&user_id=eq.${encodeURIComponent(userId)}&active=eq.true&order=username.asc`,
+    { method:'GET', prefer:'return=minimal' }
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function instagramProfileUpsert(input) {
+  const userId = String(input.user_id || input.userId || '').trim();
+  const username = cleanUsername(input.username || input.profile_username || input.profileUsername || input.profile || '');
+  if (!userId) throw new Error('user_id ausente');
+  if (!username) throw new Error('username do perfil ausente');
+  const now = new Date().toISOString();
+  const payload = {
+    user_id: userId,
+    username,
+    display_name: input.display_name || input.displayName || username,
+    active: true,
+    daily_limit: Number(input.daily_limit || input.dailyLimit || 60) || 60,
+    blocks: Number(input.blocks || 4) || 4,
+    block_size: Number(input.block_size || input.blockSize || 15) || 15,
+    interval_minutes: Number(input.interval_minutes || input.intervalMinutes || 120) || 120,
+    status: input.status || 'active',
+    updated_at: now
+  };
+  const existing = await sbRest(
+    `instagram_profiles?select=id&user_id=eq.${encodeURIComponent(userId)}&username=eq.${encodeURIComponent(username)}&limit=1`,
+    { method:'GET', prefer:'return=minimal' }
+  );
+  if (Array.isArray(existing) && existing[0] && existing[0].id) {
+    const rows = await sbRest(
+      `instagram_profiles?id=eq.${encodeURIComponent(existing[0].id)}&user_id=eq.${encodeURIComponent(userId)}`,
+      { method:'PATCH', body: JSON.stringify(payload) }
+    );
+    return Array.isArray(rows) ? rows[0] : rows;
+  }
+  payload.created_at = now;
+  const rows = await sbRest('instagram_profiles', { method:'POST', body: JSON.stringify(payload) });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+async function instagramProfileRemove(input) {
+  const userId = String(input.user_id || input.userId || '').trim();
+  const id = String(input.id || input.profile_id || input.profileId || '').trim();
+  if (!userId) throw new Error('user_id ausente');
+  if (!id) throw new Error('id do perfil ausente');
+  const rows = await sbRest(
+    `instagram_profiles?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`,
+    { method:'PATCH', body: JSON.stringify({ active:false, updated_at:new Date().toISOString() }) }
+  );
+  return Array.isArray(rows) ? rows[0] || { id, active:false } : rows;
+}
+
 async function handleInstagram(input, req) {
   if (EXTENSION_SECRET) {
     const provided = String(req.headers['x-instagram-extension-secret'] || '').trim();
@@ -223,7 +280,19 @@ async function handleInstagram(input, req) {
     const item = await instagramUpdate(input);
     return { success:true, item };
   }
-  throw new Error('action obrigatória: instagram_next ou instagram_update');
+  if (action === 'instagram_profiles_list') {
+    const profiles = await instagramProfilesList(input);
+    return { success:true, profiles };
+  }
+  if (action === 'instagram_profile_upsert') {
+    const profile = await instagramProfileUpsert(input);
+    return { success:true, profile };
+  }
+  if (action === 'instagram_profile_remove') {
+    const profile = await instagramProfileRemove(input);
+    return { success:true, profile };
+  }
+  throw new Error('action obrigatória: instagram_next, instagram_update ou instagram_profile_*');
 }
 
 export default async function handler(req, res) {
@@ -234,7 +303,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET' || req.method === 'POST') {
       const input = req.method === 'GET' ? (req.query || {}) : (req.body || {});
       const action = String(input.action || '').trim().toLowerCase();
-      if (action === 'instagram_next' || action === 'instagram_update' || action === 'next' || action === 'update') {
+      if (action === 'instagram_next' || action === 'instagram_update' || action === 'next' || action === 'update' || action === 'instagram_profiles_list' || action === 'instagram_profile_upsert' || action === 'instagram_profile_remove') {
         const result = await handleInstagram(input, req);
         return res.status(200).json(result);
       }

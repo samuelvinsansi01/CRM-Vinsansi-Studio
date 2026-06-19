@@ -17,6 +17,12 @@
   function sb(){ try { return window.sbClient || window.supabaseClient || window.supabase || null; } catch(e){ return null; } }
   function uid(){ try { return window.currentUser?.id || window.authUser?.id || ''; } catch(e){ return ''; } }
   function notify(msg,type){ try { if(typeof window.notify==='function') window.notify(msg,type); else console.log(msg); } catch(e){} }
+  async function apiInstagram(action, payload={}){
+    const res=await fetch('/api/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,user_id:uid(),...payload})});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok || data.error || data.success===false) throw new Error(data.error || data.message || ('API HTTP '+res.status));
+    return data;
+  }
   function esc(v){ return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
   function norm(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim(); }
   function cleanIgUsername(v){
@@ -53,11 +59,19 @@
     return lead?.category_name || lead?.category || 'Ramo não identificado';
   }
   async function loadProfiles(){
-    const c=sb(), user=uid(); if(!c||!user) return [];
-    const {data,error}=await c.from('instagram_profiles').select('*').eq('user_id',user).eq('active',true).order('username',{ascending:true});
-    if(error){ console.warn('[v94][profiles]',error.message); return []; }
-    profilesCache=(data||[]).map(p=>({ ...DEFAULTS, ...p, username:cleanIgUsername(p.username) }));
-    return profilesCache;
+    const c=sb(), user=uid(); if(!user) return [];
+    try{
+      const data=await apiInstagram('instagram_profiles_list');
+      profilesCache=(data.profiles||[]).map(p=>({ ...DEFAULTS, ...p, username:cleanIgUsername(p.username) }));
+      return profilesCache;
+    }catch(apiErr){
+      console.warn('[v100][profiles-api]',apiErr.message);
+      if(!c) return [];
+      const {data,error}=await c.from('instagram_profiles').select('*').eq('user_id',user).eq('active',true).order('username',{ascending:true});
+      if(error){ console.warn('[v94][profiles]',error.message); return []; }
+      profilesCache=(data||[]).map(p=>({ ...DEFAULTS, ...p, username:cleanIgUsername(p.username) }));
+      return profilesCache;
+    }
   }
   async function loadQueue(){
     const c=sb(), user=uid(); if(!c||!user) return [];
@@ -306,14 +320,14 @@
     const c=sb(), user=uid(); if(!c||!user) return;
     const {data:existing}=await c.from('instagram_dispatch_items').select('lead_id').eq('user_id',user).eq('scheduled_date',activeDate);
     const existingIds=new Set((existing||[]).map(x=>String(x.lead_id)));
-    const {data:leads,error}=await c.from('leads').select('*').eq('user_id',user).eq('current_stage','attribution_instagram').limit(1000);
+    const {data:leads,error}=await c.from('leads').select('*').eq('user_id',user).in('current_stage',['attribution_instagram','instagram_backlog']).limit(1000);
     if(error){ notify('Erro ao buscar leads Instagram: '+error.message,'err'); return; }
     const candidates=(leads||[]).filter(l=>{
       if(existingIds.has(String(l.id))) return false;
       const ig=cleanIgUsername(l.instagram_username||l.instagram_url||l.instagram||l.website||'');
       if(!ig) return false;
       const stage=String(l.current_stage||'');
-      return stage==='attribution_instagram';
+      return stage==='attribution_instagram' || stage==='instagram_backlog';
     }).slice(0,remaining);
     if(!candidates.length){ notify('Nenhum lead Instagram elegível para preencher','warn'); return; }
     const templates=await getTemplatesFlexible();
@@ -396,25 +410,34 @@
     </div>`).join('');
   }
   window.instagramV94AddProfile=async function(){
-    const c=sb(), user=uid(); if(!c||!user) return;
     const username=cleanIgUsername(document.getElementById('igProfileUsernameV94')?.value);
     if(!username){ notify('Informe o @perfil','err'); return; }
-    const payload={user_id:user,username,display_name:username,active:true,
+    const payload={username,display_name:username,active:true,
       daily_limit:Number(document.getElementById('igProfileLimitV94')?.value||60),
       blocks:Number(document.getElementById('igProfileBlocksV94')?.value||4),
       block_size:Number(document.getElementById('igProfileBlockSizeV94')?.value||15),
       interval_minutes:Number(document.getElementById('igProfileIntervalV94')?.value||120),
-      status:'active',updated_at:new Date().toISOString()};
-    const {error}=await c.from('instagram_profiles').upsert(payload,{onConflict:'user_id,username'});
-    if(error){ notify('Erro ao salvar perfil: '+error.message,'err'); return; }
+      status:'active'};
+    try{
+      await apiInstagram('instagram_profile_upsert', payload);
+    }catch(apiErr){
+      const c=sb(), user=uid();
+      if(!c||!user){ notify('Erro ao salvar perfil: '+apiErr.message,'err'); return; }
+      const {error}=await c.from('instagram_profiles').upsert({user_id:user,...payload,updated_at:new Date().toISOString()},{onConflict:'user_id,username'});
+      if(error){ notify('Erro ao salvar perfil: '+error.message,'err'); return; }
+    }
     document.getElementById('igProfileUsernameV94').value='';
     notify('✓ Perfil Instagram salvo'); await renderProfilesConfig(); await refreshInstagramV94();
   };
   window.instagramV94RemoveProfile=async function(id){
     if(!confirm('Remover este perfil Instagram?')) return;
-    const c=sb(); if(!c) return;
-    const {error}=await c.from('instagram_profiles').update({active:false,updated_at:new Date().toISOString()}).eq('id',id);
-    if(error){ notify('Erro ao remover perfil: '+error.message,'err'); return; }
+    try{
+      await apiInstagram('instagram_profile_remove',{id});
+    }catch(apiErr){
+      const c=sb(); if(!c){ notify('Erro ao remover perfil: '+apiErr.message,'err'); return; }
+      const {error}=await c.from('instagram_profiles').update({active:false,updated_at:new Date().toISOString()}).eq('id',id);
+      if(error){ notify('Erro ao remover perfil: '+error.message,'err'); return; }
+    }
     notify('✓ Perfil removido'); await renderProfilesConfig(); await refreshInstagramV94();
   };
 
@@ -431,6 +454,34 @@
     setTimeout(ensureInstagramConfig,100);
     return out;
   };
+
+  // V100 — Atribuição Instagram: salvar link sem sumir e continuar elegível para Fila Instagram.
+  window.approveInstagramAttributionV31=async function(id){
+    const c=sb(), user=uid(); if(!c||!user) return notify('// Supabase indisponível','err');
+    const input=document.getElementById(`atrib-insta-url-${CSS.escape(id)}`);
+    const raw=String(input?.value||'').trim();
+    const username=cleanIgUsername(raw);
+    if(!username){ if(input) input.style.borderColor='var(--error)'; return notify('Cole um @ ou link válido do Instagram','warn'); }
+    const url=igUrl(username);
+    const card=document.querySelector(`[data-lead-id="${CSS.escape(id)}"]`);
+    if(card) card.style.opacity='.65';
+    const {error}=await c.from('leads').update({
+      instagram:url,
+      instagram_url:url,
+      instagram_username:username,
+      current_stage:'attribution_instagram',
+      lead_channel:'instagram',
+      pipeline_status:'approved_for_instagram_queue',
+      updated_at:new Date().toISOString()
+    }).eq('user_id',user).eq('id',id);
+    if(error){ if(card) card.style.opacity='1'; return notify('Erro ao salvar Instagram: '+error.message,'err'); }
+    if(card) card.style.opacity='1';
+    notify('✓ Instagram salvo. Lead continua na Atribuição e já pode ser puxado para a Fila Instagram.');
+    try{ if(typeof window.renderAtribuicaoPanelV31==='function') await window.renderAtribuicaoPanelV31(); else if(typeof window.renderAtribuicao==='function') await window.renderAtribuicao(); }catch(_){ }
+    try{ await refreshInstagramV94(); }catch(_){ }
+    try{ if(typeof window.updateMenuBadgesTotalsV65==='function') window.updateMenuBadgesTotalsV65(true); else if(typeof window.updateBadges==='function') window.updateBadges(); }catch(_){ }
+  };
+
   const prevUpdateBadges=window.updateBadges;
   window.updateBadges=function(){
     const out=typeof prevUpdateBadges==='function' ? prevUpdateBadges.apply(this,arguments) : undefined;
