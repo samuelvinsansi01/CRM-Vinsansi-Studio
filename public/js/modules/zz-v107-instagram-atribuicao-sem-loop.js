@@ -824,3 +824,109 @@
 
   console.log('[v114][regras-importacao-otimista] ativo',VERSION);
 })();
+
+/* V115 — Estabilização final das Configurações estruturais
+   - Corrige selects/campos da página Regras de Importação abrindo e fechando.
+   - Evita que cliques dentro de input/select/textarea sejam capturados por handlers globais.
+   - Mantém atualização otimista, mas sem re-renderizar enquanto o usuário interage.
+   - Revalida integração: imagens fixas por ramo, templates unificados e fila Instagram permanecem sem alteração.
+*/
+(function(){
+  'use strict';
+  const VERSION='20260619-V115-CONFIG-REGRAS-STABLE';
+  const RULES_KEY='vs_import_rules_v108';
+  let saveTimer=null;
+  let lastFocusedControl=null;
+
+  function notify(msg,type){ try{ if(typeof window.notify==='function') window.notify(msg,type); else console.log(msg); }catch(_){} }
+  function isRulesControl(el){ return !!(el && el.closest && el.closest('.v108-import-rules-card') && el.closest('input,select,textarea,button')); }
+  function isNativeField(el){ return !!(el && el.closest && el.closest('.v108-import-rules-card') && el.closest('input,select,textarea')); }
+  function defaultRules(){return {
+    minRating:4,minReviews:10,minLeadScore:0,
+    requirePhone:false,requireWhatsapp:false,requireInstagram:false,requireWebsite:true,
+    allowOwnSite:true,allowWix:true,allowAggregators:true,allowFacebook:false,allowWhatsappAsSite:true,allowLinktree:true,allowBeacons:true,allowGoogleSites:true,
+    onlyBrazil:false,allowedStates:'',blockedCities:'',
+    useRegisteredRamosOnly:true,allowUnmatchedCategories:false,allowNoReviews:false,allowHiddenRating:false,
+    blockDuplicatePhone:true,blockDuplicateInstagram:true,blockDuplicateWebsite:true,blockSentCompany:true,blockBasePermanente:true,
+    instagramOnlyPublic:true,moveInvalidWhatsappToInstagram:true,invalidDestination:'instagram'
+  };}
+  function stored(){ try{return {...defaultRules(),...(JSON.parse(localStorage.getItem(RULES_KEY)||'{}')||{})};}catch(_){return defaultRules();} }
+  function setStored(payload){ const p={...defaultRules(),...(payload||{})}; localStorage.setItem(RULES_KEY,JSON.stringify(p)); try{window.__crmImportRules=p;}catch(_){} return p; }
+  function val(id){ return String(document.getElementById(id)?.value||'').trim(); }
+  function num(id,fb){ const n=Number(document.getElementById(id)?.value); return Number.isFinite(n)?n:fb; }
+  function bool(id){ const tg=document.querySelector(`.v111-toggle[data-rule="${id}"]`); return tg ? String(tg.dataset.value)==='true' : false; }
+  function collect(){ return {
+    minRating:num('v108MinRating',4),minReviews:num('v108MinReviews',10),minLeadScore:num('v110MinLeadScore',0),
+    requirePhone:bool('v108RequirePhone'),requireWhatsapp:bool('v110RequireWhatsapp'),requireInstagram:bool('v108RequireInstagram'),requireWebsite:bool('v110RequireWebsite'),
+    allowOwnSite:bool('v108AllowOwnSite'),allowWix:bool('v108AllowWix'),allowAggregators:bool('v108AllowAggregators'),allowFacebook:bool('v108AllowFacebook'),allowWhatsappAsSite:true,allowLinktree:bool('v110AllowLinktree'),allowBeacons:bool('v110AllowBeacons'),allowGoogleSites:bool('v110AllowGoogleSites'),
+    onlyBrazil:bool('v110OnlyBrazil'),allowedStates:val('v110AllowedStates'),blockedCities:val('v110BlockedCities'),
+    useRegisteredRamosOnly:bool('v110UseRegisteredRamosOnly'),allowUnmatchedCategories:bool('v110AllowUnmatchedCategories'),allowNoReviews:bool('v110AllowNoReviews'),allowHiddenRating:bool('v110AllowHiddenRating'),
+    blockDuplicatePhone:bool('v110BlockDuplicatePhone'),blockDuplicateInstagram:bool('v110BlockDuplicateInstagram'),blockDuplicateWebsite:bool('v110BlockDuplicateWebsite'),blockSentCompany:bool('v110BlockSentCompany'),blockBasePermanente:bool('v110BlockBasePermanente'),
+    instagramOnlyPublic:bool('v110InstagramOnlyPublic'),moveInvalidWhatsappToInstagram:bool('v110MoveInvalidWhatsappToInstagram'),invalidDestination:val('v110InvalidDestination')||'instagram'
+  }; }
+  const LABEL={
+    v108MinRating:'Nota mínima',v108MinReviews:'Reviews mínimos',v110MinLeadScore:'Score mínimo',
+    v110AllowedStates:'Estados permitidos',v110BlockedCities:'Cidades bloqueadas',v110InvalidDestination:'Destino inválidos'
+  };
+  function setSavedNote(){ try{ const n=document.getElementById('v111SavedNote'); if(n){n.textContent='✓ salvo'; n.classList.add('show'); setTimeout(()=>n.classList.remove('show'),900);} }catch(_){} }
+  function saveQuiet(changedId){
+    clearTimeout(saveTimer);
+    saveTimer=setTimeout(()=>{
+      const payload=setStored(collect());
+      setSavedNote();
+      if(changedId && LABEL[changedId]) notify('✓ '+LABEL[changedId]+' atualizado');
+      try{
+        const el=document.getElementById('v113LastRuleChange');
+        if(el && changedId && LABEL[changedId]) el.textContent='Última alteração: '+LABEL[changedId]+' → '+(document.getElementById(changedId)?.value||'');
+      }catch(_){}
+      // Import preview em background, sem trocar foco nem reconstruir a tela de regras.
+      setTimeout(()=>{ try{ if(typeof window.importPreview==='function') window.importPreview(); }catch(e){ console.warn('[v115][importPreview background]',e?.message||e); } },250);
+    },180);
+  }
+
+  // Blindagem para selects/inputs: não deixa handlers globais da página capturarem o clique e fecharem o campo.
+  ['pointerdown','mousedown','click','mouseup','touchstart'].forEach(evt=>{
+    document.addEventListener(evt,function(e){
+      const native=isNativeField(e.target);
+      if(!native) return;
+      lastFocusedControl=e.target.closest('input,select,textarea');
+      // Não impedir o comportamento nativo do select; só isolar o evento.
+      e.stopPropagation();
+    },true);
+  });
+
+  // Salva inputs/selects apenas quando mudarem, sem bloquear o uso do componente.
+  document.addEventListener('change',function(e){
+    const field=e.target&&e.target.closest&&e.target.closest('.v108-import-rules-card input,.v108-import-rules-card select,.v108-import-rules-card textarea');
+    if(!field) return;
+    e.stopPropagation();
+    saveQuiet(field.id);
+  },true);
+  document.addEventListener('input',function(e){
+    const field=e.target&&e.target.closest&&e.target.closest('.v108-import-rules-card input,.v108-import-rules-card textarea');
+    if(!field) return;
+    e.stopPropagation();
+    saveQuiet(field.id);
+  },true);
+
+  // Ajusta atributos inline legados quando a página for renderizada.
+  function sanitizeRulesForm(){
+    const card=document.querySelector('.v108-import-rules-card');
+    if(!card) return;
+    card.querySelectorAll('input,select,textarea').forEach(el=>{
+      el.removeAttribute('oninput');
+      el.removeAttribute('onchange');
+      el.style.pointerEvents='auto';
+    });
+    card.querySelectorAll('select').forEach(el=>{
+      el.style.position='relative';
+      el.style.zIndex='30';
+    });
+  }
+  const mo=new MutationObserver(()=>sanitizeRulesForm());
+  try{ mo.observe(document.documentElement,{childList:true,subtree:true}); }catch(_){}
+  setTimeout(sanitizeRulesForm,300);
+  setTimeout(sanitizeRulesForm,1000);
+
+  console.log('[v115][config-regras-stable] ativo',VERSION);
+})();
