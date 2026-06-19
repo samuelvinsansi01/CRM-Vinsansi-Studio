@@ -6,7 +6,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260619-V101-INSTAGRAM-FILA-ELEGIVEL-STRICT';
+  const VERSION='20260619-V102-INSTAGRAM-APROVACAO-PERFIL-SALVO';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
@@ -45,6 +45,11 @@
   function isSentLikeLead(lead){
     const hay=[lead?.status,lead?.current_status,lead?.current_stage,lead?.pipeline_status].map(x=>String(x||'').toLowerCase()).join(' ');
     return /(^|_|)(sent|enviado|whatsapp_sent|instagram_sent)(_||$)/.test(hay);
+  }
+
+  function isInstagramApprovedForQueue(lead){
+    const ps=String(lead?.pipeline_status||lead?.current_status||lead?.status||'').toLowerCase();
+    return ps==='approved_for_instagram_queue' || ps==='instagram_approved' || ps==='approved_instagram' || ps.includes('approved_for_instagram');
   }
   function igUrl(username){ const u=cleanIgUsername(username); return u?`https://www.instagram.com/${u}/`:''; }
   function toDateInput(d){ const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); }
@@ -368,6 +373,8 @@
       if(alreadyQueuedOrSentIds.has(id)) return false;
       if(whatsappBlockedIds.has(id)) return false;
       if(!isInstagramEligibleStage(l)) return false;
+      // V102: Fila Instagram só puxa leads que já tiveram o perfil salvo E foram aprovados manualmente.
+      if(!isInstagramApprovedForQueue(l)) return false;
       if(isSentLikeLead(l)) return false;
       const ig=instagramFromLead(l);
       if(!ig || blockedIg.has(ig)) return false;
@@ -516,16 +523,69 @@
       instagram_username:username,
       current_stage:'attribution_instagram',
       lead_channel:'instagram',
-      pipeline_status:'approved_for_instagram_queue',
+      // V102: salvar Instagram NÃO aprova automaticamente para fila.
+      // A aprovação é uma ação separada para evitar puxar leads sem revisão.
+      pipeline_status:'instagram_profile_saved',
       updated_at:new Date().toISOString()
     }).eq('user_id',user).eq('id',id);
     if(error){ if(card) card.style.opacity='1'; return notify('Erro ao salvar Instagram: '+error.message,'err'); }
     if(card) card.style.opacity='1';
-    notify('✓ Instagram salvo. Lead continua na Atribuição e já pode ser puxado para a Fila Instagram.');
+    notify('✓ Instagram salvo. Agora clique em Aprovar para fila quando revisar este lead.');
     try{ if(typeof window.renderAtribuicaoPanelV31==='function') await window.renderAtribuicaoPanelV31(); else if(typeof window.renderAtribuicao==='function') await window.renderAtribuicao(); }catch(_){ }
     try{ await refreshInstagramV94(); }catch(_){ }
     try{ if(typeof window.updateMenuBadgesTotalsV65==='function') window.updateMenuBadgesTotalsV65(true); else if(typeof window.updateBadges==='function') window.updateBadges(); }catch(_){ }
   };
+
+
+
+  // V102 — Aprovação manual: só leads aprovados entram na Fila Instagram.
+  window.instagramV102ApproveForQueue=async function(id){
+    const c=sb(), user=uid(); if(!c||!user) return notify('// Supabase indisponível','err');
+    const input=document.getElementById(`atrib-insta-url-${CSS.escape(id)}`);
+    let raw=String(input?.value||'').trim();
+    let username=cleanIgUsername(raw);
+    if(!username){
+      const {data:lead}=await c.from('leads').select('instagram,instagram_url,instagram_username').eq('user_id',user).eq('id',id).maybeSingle();
+      username=instagramFromLead(lead||{});
+    }
+    if(!username){
+      if(input) input.style.borderColor='var(--error)';
+      return notify('Para aprovar, primeiro cole e salve um Instagram válido.','warn');
+    }
+    const url=igUrl(username);
+    const {error}=await c.from('leads').update({
+      instagram:url,
+      instagram_url:url,
+      instagram_username:username,
+      current_stage:'attribution_instagram',
+      lead_channel:'instagram',
+      pipeline_status:'approved_for_instagram_queue',
+      updated_at:new Date().toISOString()
+    }).eq('user_id',user).eq('id',id);
+    if(error) return notify('Erro ao aprovar para fila: '+error.message,'err');
+    notify('✓ Lead aprovado para Fila Instagram');
+    try{ ensureInstagramApprovalButtons(); }catch(_){ }
+    try{ if(typeof window.renderAtribuicaoPanelV31==='function') await window.renderAtribuicaoPanelV31(); else if(typeof window.renderAtribuicao==='function') await window.renderAtribuicao(); }catch(_){ }
+  };
+
+  function ensureInstagramApprovalButtons(){
+    document.querySelectorAll('input[id^="atrib-insta-url-"]').forEach(input=>{
+      const id=String(input.id||'').replace('atrib-insta-url-','');
+      if(!id || document.querySelector(`[data-ig-v102-approve="${CSS.escape(id)}"]`)) return;
+      const wrap=input.closest('.atrib-v64-insta-input-wrap') || input.parentElement || input;
+      const btn=document.createElement('button');
+      btn.type='button';
+      btn.dataset.igV102Approve=id;
+      btn.className='btn btn-primary ig-v102-approve-btn';
+      btn.textContent='Aprovar para fila';
+      btn.style.cssText='font-size:9px;padding:6px 10px;margin-left:6px;white-space:nowrap';
+      btn.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); window.instagramV102ApproveForQueue(id); return false; };
+      if(wrap && wrap.parentElement){
+        if(wrap.style) wrap.style.display='inline-flex', wrap.style.alignItems='center', wrap.style.gap='6px';
+        wrap.appendChild(btn);
+      }
+    });
+  }
 
   const prevUpdateBadges=window.updateBadges;
   window.updateBadges=function(){
@@ -536,8 +596,9 @@
   window.renderInstagram=refreshInstagramV94;
 
   document.addEventListener('DOMContentLoaded',()=>{
-    setTimeout(()=>{ ensureInstagramPanel(); ensureInstagramConfig(); refreshInstagramV94(); },900);
-    setTimeout(()=>{ ensureInstagramConfig(); },1800);
+    setTimeout(()=>{ ensureInstagramPanel(); ensureInstagramConfig(); refreshInstagramV94(); ensureInstagramApprovalButtons(); },900);
+    setTimeout(()=>{ ensureInstagramConfig(); ensureInstagramApprovalButtons(); },1800);
+    setInterval(()=>{ try{ ensureInstagramApprovalButtons(); }catch(e){} },2500);
   });
   console.log('[v94][instagram-v1] ativo',VERSION);
 })();
