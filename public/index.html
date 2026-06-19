@@ -1822,6 +1822,99 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
   <script src="js/modules/zz-v90-fila-sem-aba-teste-card-accordion.js?v=20260618-V90-FILA-SEM-ABA-TESTE-CARD-ACCORDION"></script>
   <script src="js/modules/zz-v94-instagram-v1-perfis-fila.js?v=20260619-V101-INSTA-FILA-STRICT"></script>
   <script src="js/modules/zz-v107-instagram-atribuicao-sem-loop.js?v=20260619-V108-IMPORT-RULES-RAMO-IMAGES"></script>
+<script>
+(function(){
+  const V='20260619-V109-CONFIG-PAGINAS';
+  const PAGES=[
+    ['whatsapp','Chips WhatsApp','Chips WhatsApp + Webhook das conversas + Persistência Supabase'],
+    ['infra','Infraestrutura','Infraestrutura operacional'],
+    ['disparo','Disparo','Configuração de disparo'],
+    ['instagram','Perfis Instagram','Perfis Instagram'],
+    ['importacao','Importação','Regras de importação'],
+    ['ramos','Ramos','Ramos de prospecção + Imagens fixas por ramo'],
+    ['templates','Templates','Templates de mensagem']
+  ];
+  let arranging=false;
+  function norm(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();}
+  function panel(){return document.getElementById('panel-configuracoes');}
+  function titleOf(el){return norm(el?.querySelector?.('.card-title,.persistence-v36-title')?.textContent||'');}
+  function closestByTitle(text){
+    const root=panel(); if(!root)return null; const target=norm(text);
+    const titles=[...root.querySelectorAll('.card-title,.persistence-v36-title')];
+    const found=titles.find(t=>norm(t.textContent).includes(target));
+    return found?.closest('.card,.persistence-v36-card')||null;
+  }
+  function ensureShell(){
+    const root=panel(); if(!root)return null;
+    if(!document.getElementById('configPagesV109Style')){
+      const st=document.createElement('style'); st.id='configPagesV109Style';
+      st.textContent=`
+        .config-v109-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px 0}
+        .config-v109-tab{border:1px solid var(--border2);background:var(--surface);color:var(--muted);border-radius:999px;padding:9px 12px;font-family:'DM Mono',monospace;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+        .config-v109-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(122,92,255,.08)}
+        .config-v109-page{display:none}
+        .config-v109-page.active{display:block}
+        .config-v109-page-title{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin:0 0 12px 0}
+      `; document.head.appendChild(st);
+    }
+    let shell=document.getElementById('configShellV109');
+    if(!shell){
+      shell=document.createElement('div'); shell.id='configShellV109';
+      shell.innerHTML=`<div class="config-v109-tabs" id="configTabsV109"></div><div id="configPagesV109"></div>`;
+      const header=root.querySelector('.page-header');
+      header?.insertAdjacentElement('afterend',shell);
+    }
+    const tabs=shell.querySelector('#configTabsV109'); const pages=shell.querySelector('#configPagesV109');
+    PAGES.forEach(([id,label,title])=>{
+      if(!document.getElementById('configPageV109_'+id)){
+        const page=document.createElement('div'); page.id='configPageV109_'+id; page.className='config-v109-page';
+        page.innerHTML=`<div class="config-v109-page-title">${title}</div>`; pages.appendChild(page);
+      }
+      if(!tabs.querySelector(`[data-page="${id}"]`)){
+        const btn=document.createElement('button'); btn.type='button'; btn.className='config-v109-tab'; btn.dataset.page=id; btn.textContent=label;
+        btn.onclick=()=>activate(id); tabs.appendChild(btn);
+      }
+    });
+    return shell;
+  }
+  function activate(id){
+    const selected=PAGES.some(p=>p[0]===id)?id:'whatsapp';
+    document.querySelectorAll('.config-v109-tab').forEach(b=>b.classList.toggle('active',b.dataset.page===selected));
+    document.querySelectorAll('.config-v109-page').forEach(p=>p.classList.toggle('active',p.id==='configPageV109_'+selected));
+    try{localStorage.setItem('configActivePageV109',selected);}catch(_){ }
+  }
+  function move(el,pageId){
+    if(!el || el.id==='configShellV109' || el.closest('#configShellV109')?.id===('configPageV109_'+pageId)) return;
+    const page=document.getElementById('configPageV109_'+pageId); if(page) page.appendChild(el);
+  }
+  function arrange(){
+    if(arranging)return; arranging=true;
+    try{
+      const root=panel(); if(!root)return; ensureShell();
+      move(document.getElementById('chipGrid')?.closest('.card'),'whatsapp');
+      move(closestByTitle('Webhook das conversas'),'whatsapp');
+      move(closestByTitle('Persistência Supabase'),'whatsapp');
+      move(root.querySelector('.infra-v46-card'),'infra');
+      move(closestByTitle('Configuração de disparo'),'disparo');
+      move(document.getElementById('igProfilesConfigV94'),'instagram');
+      move(root.querySelector('.v108-import-rules-card'),'importacao');
+      move(document.getElementById('ramosConfigList')?.closest('.card'),'ramos');
+      move(root.querySelector('.v108-ramo-images-card'),'ramos');
+      move(closestByTitle('Templates de mensagem'),'templates');
+      root.querySelectorAll('.card-title').forEach(t=>{if(norm(t.textContent).includes('templates instagram')){const c=t.closest('.card'); if(c)c.style.display='none';}});
+      const active=localStorage.getItem('configActivePageV109')||'whatsapp'; activate(active);
+    }catch(e){console.warn('[v109][config-pages]',e);}
+    arranging=false;
+  }
+  document.addEventListener('DOMContentLoaded',()=>{
+    setTimeout(arrange,200); setTimeout(arrange,900); setTimeout(arrange,1800); setTimeout(arrange,3500);
+    const root=panel(); if(root){new MutationObserver(()=>{clearTimeout(window.__configPagesV109); window.__configPagesV109=setTimeout(arrange,120);}).observe(root,{childList:true,subtree:true});}
+  });
+  window.arrangeConfigPagesV109=arrange;
+  console.log('[v109][config-pages] ativo',V);
+})();
+</script>
+
 
 <script>
 function copyInfraCommandV46(type) {
