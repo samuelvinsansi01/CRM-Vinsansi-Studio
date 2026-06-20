@@ -129,10 +129,10 @@ function getAny(obj, keys) {
 
 function extractTemplateText(template, which) {
   const keys1 = [
-    'message_1','message1','msg1','msg_1','mensagem1','mensagem_1','texto1','texto_1','body1','body_1','content1','content_1','first_message','firstMessage','text_1'
+    'part_1','part1','message_1','message1','msg1','msg_1','mensagem1','mensagem_1','texto1','texto_1','body1','body_1','content1','content_1','first_message','firstMessage','text_1'
   ];
   const keys2 = [
-    'message_2','message2','msg2','msg_2','mensagem2','mensagem_2','texto2','texto_2','body2','body_2','content2','content_2','second_message','secondMessage','text_2'
+    'part_2','part2','message_2','message2','msg2','msg_2','mensagem2','mensagem_2','texto2','texto_2','body2','body_2','content2','content_2','second_message','secondMessage','text_2'
   ];
   let value = getAny(template, which === 1 ? keys1 : keys2);
   if (!value && template && typeof template.payload === 'object') value = getAny(template.payload, which === 1 ? keys1 : keys2);
@@ -164,23 +164,45 @@ function leadTypeOfForTemplate(item, lead) {
   return hasSite ? 'com-site' : 'sem-site';
 }
 
+function templateRamoAliases(value = '') {
+  const base = normText(value);
+  const out = new Set([base].filter(Boolean));
+  const joined = base.replace(/-/g, ' ');
+  if (joined.includes('moveis') || joined.includes('movel') || joined.includes('marcen') || joined.includes('planejad')) {
+    out.add('marcenaria');
+    out.add('moveis-planejados');
+    out.add('moveis');
+    out.add('moveis-planejados');
+  }
+  return [...out].filter(Boolean);
+}
+
 function selectTemplateForItem(templates, item, lead) {
-  const ramo = item.parent_category || (lead && (lead.parent_category || lead.category_name || lead.category)) || '';
+  const ramo = item.parent_category || item.ramo || item.ramo_nome || (lead && (lead.parent_category || lead.category_name || lead.category)) || '';
   const tipo = leadTypeOfForTemplate(item, lead);
-  const nr = normText(ramo);
+  const ramoAliases = new Set([
+    ...templateRamoAliases(ramo),
+    ...templateRamoAliases(item.ramo_id || item.branch_id || ''),
+    ...templateRamoAliases(lead && (lead.ramo_id || lead.branch_id) || '')
+  ].filter(Boolean));
   const nt = normText(tipo);
   const scored = (templates || []).map((t) => {
-    const tr = normText(getAny(t, ['ramo','ramo_pai','parent_category','category','category_name','niche','segment','segmento']));
+    const trValues = [
+      getAny(t, ['ramo_id','branch_id']),
+      getAny(t, ['ramo','ramo_pai','parent_category','category','category_name','niche','segment','segmento','name'])
+    ].filter(Boolean);
+    const trAliases = new Set(trValues.flatMap(templateRamoAliases));
     const tt = normText(getAny(t, ['tipo','lead_type','type','template_type','audience']));
     const ch = normText(getAny(t, ['channel','canal','channels']));
     const activeRaw = t.active ?? t.enabled ?? t.is_active;
     if (activeRaw === false) return null;
-    const ramoOk = !tr || !nr || tr === nr || nr.includes(tr) || tr.includes(nr);
+    const ramoOk = !trAliases.size || !ramoAliases.size || [...trAliases].some(a => [...ramoAliases].some(b => a === b || a.includes(b) || b.includes(a)));
     const tipoOk = !tt || tt === nt || tt.includes(nt) || nt.includes(tt) || (nt.includes('sem') && tt.includes('sem')) || (nt.includes('com') && tt.includes('com')) || (nt.includes('agreg') && tt.includes('agreg'));
     const canalOk = !ch || ch.includes('ambos') || ch.includes('instagram') || ch.includes('whatsapp');
     if (!ramoOk || !tipoOk || !canalOk) return null;
     let score = 0;
-    if (tr && nr && tr === nr) score += 10; else if (tr) score += 4;
+    if (trAliases.size && ramoAliases.size && [...trAliases].some(a => ramoAliases.has(a))) score += 12;
+    else if (trAliases.size) score += 5;
     if (tt && tt === nt) score += 8; else if (tt) score += 3;
     if (ch.includes('instagram')) score += 3;
     if (ch.includes('ambos')) score += 2;
@@ -191,7 +213,7 @@ function selectTemplateForItem(templates, item, lead) {
 
 async function enrichInstagramItemsWithTemplates(userId, items = []) {
   if (!Array.isArray(items) || !items.length) return items;
-  const templates = await sbRest(`message_templates?select=*&user_id=eq.${encodeURIComponent(userId)}`, { method:'GET', prefer:'return=minimal' }).catch(() => []);
+  const templates = await sbRest(`message_templates?select=*&user_id=eq.${encodeURIComponent(userId)}&active=eq.true`, { method:'GET', prefer:'return=minimal' }).catch(() => []);
   const leadIds = [...new Set(items.map(i => String(i.lead_id || '')).filter(isUuid))];
   let leadsById = new Map();
   if (leadIds.length) {

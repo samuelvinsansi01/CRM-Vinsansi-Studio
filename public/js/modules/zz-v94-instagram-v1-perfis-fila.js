@@ -340,25 +340,40 @@
 
   async function getTemplatesFlexible(){
     const c=sb(), user=uid(); if(!c||!user) return [];
-    const {data}=await c.from('message_templates').select('*').eq('user_id',user);
+    const {data}=await c.from('message_templates').select('*').eq('user_id',user).eq('active',true);
     return data||[];
   }
+  function templateAliasesV127(value=''){
+    const base=norm(value); const out=new Set([base].filter(Boolean));
+    const j=base.replace(/-/g,' ');
+    if(j.includes('moveis')||j.includes('movel')||j.includes('marcen')||j.includes('planejad')){
+      out.add('marcenaria'); out.add('moveis-planejados'); out.add('moveis');
+    }
+    return [...out].filter(Boolean);
+  }
   function selectTemplate(templates,ramo,tipo,lead){
-    const nr=norm(ramo), nt=norm(tipo).replace('_','-');
+    const nt=norm(tipo).replace('_','-');
+    const aliases=new Set([
+      ...templateAliasesV127(ramo),
+      ...templateAliasesV127(lead?.ramo_id||lead?.branch_id||''),
+      ...templateAliasesV127(lead?.parent_category||lead?.category_name||lead?.category||'')
+    ]);
     const candidates=(templates||[]).filter(t=>{
-      const tr=norm(t.ramo||t.ramo_pai||t.category||t.category_name||t.parent_category||t.niche||'');
-      const tt=norm(t.tipo||t.lead_type||t.type||'');
+      if(t.active===false) return false;
+      const trVals=[t.ramo_id,t.branch_id,t.ramo,t.ramo_pai,t.category,t.category_name,t.parent_category,t.niche,t.name].filter(Boolean);
+      const trAliases=new Set(trVals.flatMap(templateAliasesV127));
+      const tt=norm(t.tipo||t.lead_type||t.type||t.template_type||'');
       const ch=norm(t.channel||t.canal||t.channels||'ambos');
-      const ramoOk=!tr || tr===nr || nr.includes(tr) || tr.includes(nr);
-      const tipoOk=!tt || tt===nt || tt.includes(nt) || nt.includes(tt) || (nt==='sem-site' && tt.includes('sem')) || (nt==='com-site' && tt.includes('com'));
+      const ramoOk=!trAliases.size || !aliases.size || [...trAliases].some(a=>[...aliases].some(b=>a===b||a.includes(b)||b.includes(a)));
+      const tipoOk=!tt || tt===nt || tt.includes(nt) || nt.includes(tt) || (nt.includes('sem') && tt.includes('sem')) || (nt.includes('com') && tt.includes('com')) || (nt.includes('agreg') && tt.includes('agreg'));
       const canalOk=!ch || ch.includes('ambos') || ch.includes('instagram') || ch.includes('whatsapp');
       return ramoOk && tipoOk && canalOk;
     });
     const t=candidates[0] || templates[0] || {};
     const name=lead?.company_name||lead?.name||'sua empresa';
-    const m1=String(t.message_1||t.msg1||t.texto1||t.body1||t.mensagem1||t.content||'Olá, tudo bem? Me chamo Samuel.').replace(/\{EMPRESA\}/g,name);
-    const m2=String(t.message_2||t.msg2||t.texto2||t.body2||t.mensagem2||'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.').replace(/\{EMPRESA\}/g,name);
-    return {message_1:m1,message_2:m2};
+    const m1=String(t.part_1||t.message_1||t.msg1||t.texto1||t.body1||t.mensagem1||t.content||'Olá, tudo bem? Me chamo Samuel.').replace(/\{EMPRESA\}/g,name).replace(/\{\{\s*empresa\s*\}\}/gi,name);
+    const m2=String(t.part_2||t.message_2||t.msg2||t.texto2||t.body2||t.mensagem2||'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.').replace(/\{EMPRESA\}/g,name).replace(/\{\{\s*empresa\s*\}\}/gi,name);
+    return {message_1:m1,message_2:m2,template_id:t.id||null};
   }
   window.instagramV94FillProfile=async function(profileId){
     const p=getProfile(profileId); if(!p){ notify('Perfil não encontrado','err'); return; }
@@ -438,6 +453,7 @@
         lead_type:tipo,
         message_1:tpl.message_1,
         message_2:tpl.message_2,
+        template_id:tpl.template_id||null,
         created_at:new Date().toISOString(),
         updated_at:new Date().toISOString()
       };
