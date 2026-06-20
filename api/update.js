@@ -108,6 +108,132 @@ async function findLead(userId, leadId) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+
+function normText(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_]+/g, '-')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function getAny(obj, keys) {
+  for (const k of keys) {
+    if (obj && obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim() !== '') return obj[k];
+  }
+  return '';
+}
+
+function extractTemplateText(template, which) {
+  const keys1 = [
+    'message_1','message1','msg1','msg_1','mensagem1','mensagem_1','texto1','texto_1','body1','body_1','content1','content_1','first_message','firstMessage','text_1'
+  ];
+  const keys2 = [
+    'message_2','message2','msg2','msg_2','mensagem2','mensagem_2','texto2','texto_2','body2','body_2','content2','content_2','second_message','secondMessage','text_2'
+  ];
+  let value = getAny(template, which === 1 ? keys1 : keys2);
+  if (!value && template && typeof template.payload === 'object') value = getAny(template.payload, which === 1 ? keys1 : keys2);
+  if (!value && template && typeof template.raw_payload === 'object') value = getAny(template.raw_payload, which === 1 ? keys1 : keys2);
+  if (!value && template && typeof template.content === 'object') value = getAny(template.content, which === 1 ? keys1 : keys2);
+  return String(value || '').trim();
+}
+
+function renderTemplateText(text, lead, item) {
+  const company = (lead && (lead.company_name || lead.name)) || item.company_name || 'sua empresa';
+  const instagram = cleanUsername(item.instagram_username || item.instagram_url || (lead && (lead.instagram_username || lead.instagram_url || lead.instagram)) || '');
+  const city = (lead && lead.city) || item.city || '';
+  const state = (lead && lead.state) || item.state || '';
+  return String(text || '')
+    .replace(/\{\{\s*empresa\s*\}\}|\{\s*EMPRESA\s*\}|\{\s*empresa\s*\}/g, company)
+    .replace(/\{\{\s*nome\s*\}\}|\{\s*NOME\s*\}|\{\s*nome\s*\}/g, company)
+    .replace(/\{\{\s*instagram\s*\}\}|\{\s*INSTAGRAM\s*\}|\{\s*instagram\s*\}/g, instagram ? '@' + instagram : '')
+    .replace(/\{\{\s*cidade\s*\}\}|\{\s*CIDADE\s*\}|\{\s*cidade\s*\}/g, city)
+    .replace(/\{\{\s*estado\s*\}\}|\{\s*ESTADO\s*\}|\{\s*estado\s*\}/g, state);
+}
+
+function leadTypeOfForTemplate(item, lead) {
+  const raw = String(item.lead_type || (lead && lead.lead_type) || '').trim().toLowerCase();
+  const websiteType = String((lead && lead.website_type) || '').toLowerCase();
+  const hasSite = Boolean((lead && lead.website) || item.website || websiteType.includes('own') || websiteType.includes('site'));
+  if (raw.includes('agreg')) return 'agregador';
+  if (raw.includes('com')) return 'com-site';
+  if (raw.includes('sem')) return 'sem-site';
+  return hasSite ? 'com-site' : 'sem-site';
+}
+
+function selectTemplateForItem(templates, item, lead) {
+  const ramo = item.parent_category || (lead && (lead.parent_category || lead.category_name || lead.category)) || '';
+  const tipo = leadTypeOfForTemplate(item, lead);
+  const nr = normText(ramo);
+  const nt = normText(tipo);
+  const scored = (templates || []).map((t) => {
+    const tr = normText(getAny(t, ['ramo','ramo_pai','parent_category','category','category_name','niche','segment','segmento']));
+    const tt = normText(getAny(t, ['tipo','lead_type','type','template_type','audience']));
+    const ch = normText(getAny(t, ['channel','canal','channels']));
+    const activeRaw = t.active ?? t.enabled ?? t.is_active;
+    if (activeRaw === false) return null;
+    const ramoOk = !tr || !nr || tr === nr || nr.includes(tr) || tr.includes(nr);
+    const tipoOk = !tt || tt === nt || tt.includes(nt) || nt.includes(tt) || (nt.includes('sem') && tt.includes('sem')) || (nt.includes('com') && tt.includes('com')) || (nt.includes('agreg') && tt.includes('agreg'));
+    const canalOk = !ch || ch.includes('ambos') || ch.includes('instagram') || ch.includes('whatsapp');
+    if (!ramoOk || !tipoOk || !canalOk) return null;
+    let score = 0;
+    if (tr && nr && tr === nr) score += 10; else if (tr) score += 4;
+    if (tt && tt === nt) score += 8; else if (tt) score += 3;
+    if (ch.includes('instagram')) score += 3;
+    if (ch.includes('ambos')) score += 2;
+    return { t, score };
+  }).filter(Boolean).sort((a,b) => b.score - a.score);
+  return scored[0]?.t || null;
+}
+
+async function enrichInstagramItemsWithTemplates(userId, items = []) {
+  if (!Array.isArray(items) || !items.length) return items;
+  const templates = await sbRest(`message_templates?select=*&user_id=eq.${encodeURIComponent(userId)}`, { method:'GET', prefer:'return=minimal' }).catch(() => []);
+  const leadIds = [...new Set(items.map(i => String(i.lead_id || '')).filter(isUuid))];
+  let leadsById = new Map();
+  if (leadIds.length) {
+    const leads = await sbRest(`leads?select=*&user_id=eq.${encodeURIComponent(userId)}&id=in.(${leadIds.map(encodeURIComponent).join(',')})`, { method:'GET', prefer:'return=minimal' }).catch(() => []);
+    leadsById = new Map((Array.isArray(leads) ? leads : []).map(l => [String(l.id), l]));
+  }
+  const enriched = [];
+  const patches = [];
+  for (const item of items) {
+    const lead = leadsById.get(String(item.lead_id || '')) || null;
+    const template = selectTemplateForItem(templates, item, lead);
+    const raw1 = template ? extractTemplateText(template, 1) : '';
+    const raw2 = template ? extractTemplateText(template, 2) : '';
+    const msg1 = raw1 ? renderTemplateText(raw1, lead, item) : String(item.message_1 || '').trim();
+    const msg2 = raw2 ? renderTemplateText(raw2, lead, item) : String(item.message_2 || '').trim();
+    const next = {
+      ...item,
+      company_name: item.company_name || (lead && lead.company_name) || 'Lead Instagram',
+      instagram_username: cleanUsername(item.instagram_username || item.instagram_url || (lead && (lead.instagram_username || lead.instagram_url || lead.instagram)) || ''),
+      instagram_url: item.instagram_url || (cleanUsername(item.instagram_username || (lead && (lead.instagram_username || lead.instagram_url || lead.instagram)) || '') ? `https://www.instagram.com/${cleanUsername(item.instagram_username || (lead && (lead.instagram_username || lead.instagram_url || lead.instagram)) || '')}/` : null),
+      parent_category: item.parent_category || (lead && (lead.parent_category || lead.category_name || lead.category)) || null,
+      lead_type: leadTypeOfForTemplate(item, lead),
+      message_1: msg1,
+      message_2: msg2,
+      template_found: Boolean(template),
+      template_id: template && template.id ? template.id : item.template_id || null
+    };
+    enriched.push(next);
+    if (item.id && ((msg1 && msg1 !== item.message_1) || (msg2 && msg2 !== item.message_2) || (next.template_id && next.template_id !== item.template_id))) {
+      patches.push({ id: item.id, message_1: msg1 || item.message_1 || '', message_2: msg2 || item.message_2 || '', template_id: next.template_id, updated_at: new Date().toISOString() });
+    }
+  }
+  // Atualiza a fila em segundo plano para que a tela do CRM e a extensão passem a ler o template real.
+  await Promise.allSettled(patches.slice(0, 80).map((patch) => {
+    const id = patch.id;
+    delete patch.id;
+    return sbRest(`instagram_dispatch_items?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(userId)}`, { method:'PATCH', body: JSON.stringify(patch) });
+  }));
+  return enriched;
+}
+
+
 async function instagramNext(input) {
   const userId = String(input.user_id || input.userId || '').trim();
   const profileUsername = cleanUsername(input.profile_username || input.profileUsername || input.profile || '');
@@ -125,7 +251,8 @@ async function instagramNext(input) {
     'limit=1'
   ].join('&');
   const rows = await sbRest(path, { method:'GET', prefer:'return=minimal' });
-  return Array.isArray(rows) ? rows[0] || null : null;
+  const enriched = await enrichInstagramItemsWithTemplates(userId, Array.isArray(rows) ? rows : []);
+  return enriched[0] || null;
 }
 
 
@@ -151,7 +278,8 @@ async function instagramQueue(input) {
     'order=block_number.asc,position.asc'
   ].join('&');
   const rows = await sbRest(path, { method:'GET', prefer:'return=minimal' });
-  return { profile, items: Array.isArray(rows) ? rows : [] };
+  const items = await enrichInstagramItemsWithTemplates(userId, Array.isArray(rows) ? rows : []);
+  return { profile, items };
 }
 
 async function upsertBase(userId, item, lead, when) {
