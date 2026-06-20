@@ -244,7 +244,7 @@
     return `<details style="border-top:1px solid var(--border2)">
       <summary style="list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center">
         <div style="min-width:0;flex:1">
-          <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.position||'')} - ${esc(name)}</div>
+          <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((Number(idx)||0)+1)} - ${esc(name)}</div>
           <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">@${esc(username||'sem instagram')}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">

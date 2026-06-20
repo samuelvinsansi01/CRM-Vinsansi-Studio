@@ -46,6 +46,58 @@
   }
   function igUrl(v){ const u = cleanUsername(v); return u ? 'https://www.instagram.com/' + u + '/' : ''; }
 
+  function norm(v){
+    return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim().replace(/[_]+/g,'-').replace(/\s+/g,'-');
+  }
+  function templateAliases(value=''){
+    const base=norm(value); const out=new Set([base].filter(Boolean));
+    const j=base.replace(/-/g,' ');
+    if(j.includes('moveis')||j.includes('movel')||j.includes('marcen')||j.includes('planejad')){
+      out.add('marcenaria'); out.add('moveis-planejados'); out.add('moveis'); out.add('loja-de-moveis');
+    }
+    return [...out].filter(Boolean);
+  }
+  async function getTemplates(c,user){
+    const { data, error } = await c.from('message_templates').select('*').eq('user_id',user).eq('active',true);
+    if (error) { console.warn('[v109][templates]', error.message); return []; }
+    return data || [];
+  }
+  function applyVars(txt, lead){
+    const name = leadName(lead);
+    return String(txt || '')
+      .replace(/\{EMPRESA\}/g, name)
+      .replace(/\{\{\s*empresa\s*\}\}/gi, name)
+      .replace(/\{NOME\}/g, name)
+      .replace(/\{\{\s*nome\s*\}\}/gi, name);
+  }
+  function selectTemplate(templates, lead){
+    const ramo = categoryOf(lead);
+    const tipo = leadTypeOf(lead);
+    const nt = norm(tipo).replace('_','-');
+    const aliases = new Set([
+      ...templateAliases(ramo),
+      ...templateAliases(lead?.ramo_id || lead?.branch_id || ''),
+      ...templateAliases(lead?.parent_category || lead?.category_name || lead?.category || '')
+    ]);
+    const candidates = (templates || []).filter(t => {
+      if (t.active === false) return false;
+      const trVals = [t.ramo_id,t.branch_id,t.ramo,t.ramo_pai,t.category,t.category_name,t.parent_category,t.niche,t.name].filter(Boolean);
+      const trAliases = new Set(trVals.flatMap(templateAliases));
+      const tt = norm(t.tipo || t.lead_type || t.type || t.template_type || '');
+      const ch = norm(t.channel || t.canal || t.channels || 'ambos');
+      const ramoOk = !trAliases.size || !aliases.size || [...trAliases].some(a => [...aliases].some(b => a===b || a.includes(b) || b.includes(a)));
+      const tipoOk = !tt || tt===nt || tt.includes(nt) || nt.includes(tt) || (nt.includes('sem') && tt.includes('sem')) || (nt.includes('com') && tt.includes('com')) || (nt.includes('agreg') && tt.includes('agreg'));
+      const canalOk = !ch || ch.includes('ambos') || ch.includes('instagram') || ch.includes('whatsapp');
+      return ramoOk && tipoOk && canalOk;
+    });
+    const t = candidates[0] || templates[0] || {};
+    return {
+      message_1: applyVars(t.part_1 || t.message_1 || t.msg1 || t.texto1 || t.body1 || t.mensagem1 || t.content || 'Olá, tudo bem? Me chamo Samuel.', lead),
+      message_2: applyVars(t.part_2 || t.message_2 || t.msg2 || t.texto2 || t.body2 || t.mensagem2 || 'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.', lead),
+      template_id: t.id || null
+    };
+  }
+
   function leadName(lead){ return lead?.company_name || lead?.name || lead?.nome || 'Lead Instagram'; }
   function leadTypeOf(lead){
     const s = String(lead?.lead_type || lead?.website_type || lead?.current_stage || '').toLowerCase();
@@ -107,6 +159,8 @@
 
     const blockSize = Number(p.block_size || 15) || 15;
     const position = selected.used + 1;
+    const templates = await getTemplates(c, user);
+    const tpl = selectTemplate(templates, lead);
     const row = {
       user_id:user,
       lead_id:String(lead.id),
@@ -123,8 +177,9 @@
       instagram_url:igUrl(username),
       parent_category:categoryOf(lead),
       lead_type:leadTypeOf(lead),
-      message_1:'Olá, tudo bem? Me chamo Samuel.',
-      message_2:'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.',
+      message_1:tpl.message_1,
+      message_2:tpl.message_2,
+      template_id:tpl.template_id||null,
       updated_at:new Date().toISOString()
     };
 
