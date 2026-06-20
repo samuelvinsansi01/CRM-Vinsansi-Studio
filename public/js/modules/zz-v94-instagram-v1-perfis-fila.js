@@ -240,7 +240,11 @@
     const username=cleanIgUsername(item.instagram_username || lead.instagram_username || lead.instagram_url || lead.instagram || item.instagram_url);
     const ramo=item.parent_category || parentCategoryOf(lead,item);
     const tipo=leadTypeOf(lead,item);
-    const msg1=(item.message_1||'').trim(); const msg2=(item.message_2||'').trim();
+    let msg1=(item.message_1||'').trim(); let msg2=(item.message_2||'').trim();
+    if(!msg1 || !msg2 || msg1 === 'Olá, tudo bem? Me chamo Samuel.' || msg2 === 'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.'){
+      const local=localTemplatePairV110({...lead, company_name:name, parent_category:ramo}, tipo);
+      if(local){ msg1=local.message_1||msg1; msg2=local.message_2||msg2; }
+    }
     return `<details style="border-top:1px solid var(--border2)">
       <summary style="list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center">
         <div style="min-width:0;flex:1">
@@ -338,6 +342,42 @@
     await c.from('base_permanente').upsert(payload,{onConflict: phone?'user_id,normalized_phone':'user_id,instagram_username'});
   }
 
+
+  function resolveRamoForTemplateV110(lead){
+    try{
+      if(typeof window.resolveParentRamoForLeadV76==='function'){
+        const r=window.resolveParentRamoForLeadV76(lead);
+        if(r&&typeof r==='object') return {id:String(r.id||r.nome||''),nome:String(r.nome||r.id||'')};
+        if(r) return {id:String(r),nome:String(r)};
+      }
+    }catch(_){}
+    try{
+      const raw=[lead?.parent_category,lead?.category_name,lead?.category,Array.isArray(lead?.categories)?lead.categories.join(' '):lead?.categories].filter(Boolean).join(' ');
+      const n=norm(raw).replace(/-/g,' ');
+      const ramos=typeof window.getRamos==='function'?(window.getRamos()||[]):[];
+      for(const r of ramos){
+        const keys=[r.id,r.nome,...(r.keywords||[]),...(r.subcategories||[])].filter(Boolean).map(x=>norm(x).replace(/-/g,' '));
+        if(keys.some(k=>k&&(n===k||n.includes(k)||k.includes(n)))) return {id:String(r.id||r.nome||''),nome:String(r.nome||r.id||'')};
+      }
+    }catch(_){}
+    const fb=lead?.parent_category||lead?.category_name||lead?.category||'';
+    return {id:String(lead?.ramo_id||lead?.branch_id||fb||''),nome:String(fb||'')};
+  }
+  function localTemplatePairV110(lead,tipo){
+    const name=lead?.company_name||lead?.name||'sua empresa';
+    const rr=resolveRamoForTemplateV110(lead);
+    try{
+      if(typeof window.pickTemplate==='function'){
+        const p1=window.pickTemplate(name,rr.id||null,tipo||'sem-site');
+        const p2=typeof window.pickOtherTemplate==='function'?window.pickOtherTemplate(name,p1?.idx??-1,rr.id||null,tipo||'sem-site'):null;
+        const m1=String(p1?.msg1||p1?.text||'').trim();
+        const m2=String(p1?.msg2||p2?.msg2||p2?.text||'').trim();
+        if(m1||m2) return {message_1:m1||'Olá, tudo bem? Me chamo Samuel.',message_2:m2||'',template_id:null,ramo_nome:rr.nome||rr.id};
+      }
+    }catch(e){ console.warn('[v110][ig-local-template]', e?.message||e); }
+    return null;
+  }
+
   async function getTemplatesFlexible(){
     const c=sb(), user=uid(); if(!c||!user) return [];
     const {data}=await c.from('message_templates').select('*').eq('user_id',user).eq('active',true);
@@ -352,6 +392,8 @@
     return [...out].filter(Boolean);
   }
   function selectTemplate(templates,ramo,tipo,lead){
+    const local=localTemplatePairV110(lead,tipo);
+    if(local) return local;
     const nt=norm(tipo).replace('_','-');
     const aliases=new Set([
       ...templateAliasesV127(ramo),
@@ -449,7 +491,7 @@
         company_name:lead.company_name||lead.name||'',
         instagram_username:ig,
         instagram_url:igUrl(ig),
-        parent_category:ramo,
+        parent_category:tpl.ramo_nome || ramo,
         lead_type:tipo,
         message_1:tpl.message_1,
         message_2:tpl.message_2,

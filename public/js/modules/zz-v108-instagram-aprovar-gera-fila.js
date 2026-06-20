@@ -57,6 +57,43 @@
     }
     return [...out].filter(Boolean);
   }
+
+  function resolveRamoForTemplate(lead){
+    try {
+      if (typeof window.resolveParentRamoForLeadV76 === 'function') {
+        const r = window.resolveParentRamoForLeadV76(lead);
+        if (r && typeof r === 'object') return { id:String(r.id || r.nome || ''), nome:String(r.nome || r.id || '') };
+        if (r) return { id:String(r), nome:String(r) };
+      }
+    } catch(_) {}
+    try {
+      const raw = [lead?.parent_category, lead?.category_name, lead?.category, Array.isArray(lead?.categories)?lead.categories.join(' '):lead?.categories].filter(Boolean).join(' ');
+      const n = norm(raw).replace(/-/g,' ');
+      const ramos = typeof window.getRamos === 'function' ? (window.getRamos() || []) : [];
+      for (const r of ramos) {
+        const keys = [r.id, r.nome, ...(r.keywords||[]), ...(r.subcategories||[])].filter(Boolean).map(x=>norm(x).replace(/-/g,' '));
+        if (keys.some(k => k && (n === k || n.includes(k) || k.includes(n)))) return { id:String(r.id || r.nome || ''), nome:String(r.nome || r.id || '') };
+      }
+    } catch(_) {}
+    const fb = categoryOf(lead);
+    return { id:String(lead?.ramo_id || lead?.branch_id || fb || ''), nome:String(fb || '') };
+  }
+  function selectTemplateLocalFirst(lead){
+    const name = leadName(lead);
+    const tipo = leadTypeOf(lead);
+    const ramo = resolveRamoForTemplate(lead);
+    try {
+      if (typeof window.pickTemplate === 'function') {
+        const p1 = window.pickTemplate(name, ramo.id || null, tipo);
+        const p2 = typeof window.pickOtherTemplate === 'function' ? window.pickOtherTemplate(name, p1?.idx ?? -1, ramo.id || null, tipo) : null;
+        const m1 = String(p1?.msg1 || p1?.text || '').trim();
+        const m2 = String(p1?.msg2 || p2?.msg2 || p2?.text || '').trim();
+        if (m1 || m2) return { message_1:m1 || applyVars('Olá, tudo bem? Me chamo Samuel.', lead), message_2:m2 || '', template_id:null, ramo_id:ramo.id, ramo_nome:ramo.nome };
+      }
+    } catch(e) { console.warn('[v110][local-template]', e?.message || e); }
+    return null;
+  }
+
   async function getTemplates(c,user){
     const { data, error } = await c.from('message_templates').select('*').eq('user_id',user).eq('active',true);
     if (error) { console.warn('[v109][templates]', error.message); return []; }
@@ -71,7 +108,10 @@
       .replace(/\{\{\s*nome\s*\}\}/gi, name);
   }
   function selectTemplate(templates, lead){
-    const ramo = categoryOf(lead);
+    const local = selectTemplateLocalFirst(lead);
+    if (local) return local;
+    const rr = resolveRamoForTemplate(lead);
+    const ramo = rr.nome || categoryOf(lead);
     const tipo = leadTypeOf(lead);
     const nt = norm(tipo).replace('_','-');
     const aliases = new Set([
@@ -175,7 +215,7 @@
       company_name:leadName(lead),
       instagram_username:username,
       instagram_url:igUrl(username),
-      parent_category:categoryOf(lead),
+      parent_category:tpl.ramo_nome || categoryOf(lead),
       lead_type:leadTypeOf(lead),
       message_1:tpl.message_1,
       message_2:tpl.message_2,
