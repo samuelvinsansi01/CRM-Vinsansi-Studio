@@ -1,3 +1,5 @@
+/* Lead Certo — módulo dono do disparo WhatsApp: controles operacionais, lead teste e envio Msg1 → Msg2 → Imagem.
+   Consolidado sem carregamento dos patches visuais antigos. */
 /* V83 — Fila WhatsApp: disparo real + Lead Teste manual com atributos.
    - Não cria tabela nova.
    - Usa Supabase como fonte de verdade para status dos leads.

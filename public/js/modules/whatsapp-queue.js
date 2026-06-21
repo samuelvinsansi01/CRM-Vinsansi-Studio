@@ -1,3 +1,5 @@
+/* Lead Certo — módulo dono da Fila WhatsApp: renderização, lotes, imagens por ramo, status e remover/devolver lead.
+   Consolidado sem carregamento dos patches visuais antigos. */
 /* V78 — Fila WhatsApp: fila final real + navegação sem travar
    Base: V74 — status enxutos + lotes pela configuração + accordions sem piscar
    - Visual baseado na V72 aprovada.
