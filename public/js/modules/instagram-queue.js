@@ -6,7 +6,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260621-V120-INSTAGRAM-BACKLOG-ALOCACAO-POR-DIA';
+  const VERSION='20260621-V150-INSTAGRAM-TEMPLATE-FROZEN';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
@@ -167,6 +167,7 @@
       const {data:leads,error:leadsErr}=await c.from('leads').select('*').in('id',ids);
       if(!leadsErr){ (leads||[]).forEach(l=>leadsById[String(l.id)]=l); }
     }
+    await repairFrozenInstagramMessagesV150();
     return queueCache;
   }
 
@@ -532,11 +533,8 @@
     const username=cleanIgUsername(item.instagram_username || lead.instagram_username || lead.instagram_url || lead.instagram || item.instagram_url);
     const ramo=item.parent_category || parentCategoryOf(lead,item);
     const tipo=leadTypeOf(lead,item);
-    let msg1=(item.message_1||'').trim(); let msg2=(item.message_2||'').trim();
-    if(!msg1 || !msg2 || msg1 === 'Olá, tudo bem? Me chamo Samuel.' || msg2 === 'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.'){
-      const local=localTemplatePairV110({...lead, company_name:name, parent_category:ramo}, tipo);
-      if(local){ msg1=local.message_1||msg1; msg2=local.message_2||msg2; }
-    }
+    const msg1=(item.message_1||'').trim();
+    const msg2=(item.message_2||'').trim();
     const rowBg=isErrorStatus(item.status)?'rgba(255,92,92,.035)':(isInvalidStatus(item.status)?'rgba(255,92,92,.045)':'rgba(255,255,255,.01)');
     return `<details class="ig-v119-row" style="border-bottom:1px solid var(--border2);background:${rowBg}">
       <summary style="list-style:none;cursor:pointer;padding:10px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center;min-height:42px">
@@ -833,42 +831,124 @@
 
   async function getTemplatesFlexible(){
     const c=sb(), user=uid(); if(!c||!user) return [];
-    const {data}=await c.from('message_templates').select('*').eq('user_id',user).eq('active',true);
+    const {data,error}=await c.from('message_templates').select('*').eq('user_id',user).eq('active',true);
+    if(error){ console.warn('[instagram][templates-db]', error.message); return []; }
     return data||[];
   }
-  function templateAliasesV127(value=''){
-    const base=norm(value); const out=new Set([base].filter(Boolean));
-    const j=base.replace(/-/g,' ');
-    if(j.includes('moveis')||j.includes('movel')||j.includes('marcen')||j.includes('planejad')){
-      out.add('marcenaria'); out.add('moveis-planejados'); out.add('moveis');
+
+  function templateAliasesV150(value=''){
+    const base=norm(value).replace(/_/g,'-').replace(/\s+/g,'-');
+    const spaced=base.replace(/-/g,' ');
+    const out=new Set([base, spaced].filter(Boolean));
+    if(spaced.includes('moveis') || spaced.includes('movel') || spaced.includes('marcen') || spaced.includes('planejad')){
+      ['moveis-planejados','móveis-planejados','moveis planejados','móveis planejados','marcenaria','marcenarias','moveis','móveis'].forEach(x=>out.add(norm(x).replace(/\s+/g,'-')));
     }
     return [...out].filter(Boolean);
   }
-  function selectTemplate(templates,ramo,tipo,lead){
-    const local=localTemplatePairV110(lead,tipo);
-    if(local) return local;
-    const nt=norm(tipo).replace('_','-');
-    const aliases=new Set([
-      ...templateAliasesV127(ramo),
-      ...templateAliasesV127(lead?.ramo_id||lead?.branch_id||''),
-      ...templateAliasesV127(lead?.parent_category||lead?.category_name||lead?.category||'')
+
+  function typeAliasesV150(tipo=''){
+    const t=norm(tipo).replace(/_/g,'-').replace(/\s+/g,'-');
+    if(t.includes('agreg')) return new Set(['agregador','agregadores','bio-link','biolink','linktree','com-agregador']);
+    if(t.includes('com') && t.includes('site')) return new Set(['com-site','com_site','com site','site','whatsapp-com-site']);
+    return new Set(['sem-site','sem_site','sem site','semsite','whatsapp','whatsapp-sem-site']);
+  }
+
+  function rowRamoAliasesV150(t){
+    return new Set([t.ramo_id,t.branch_id,t.ramo,t.ramo_pai,t.category,t.category_name,t.parent_category,t.niche]
+      .filter(Boolean).flatMap(templateAliasesV150));
+  }
+
+  function rowTypeAliasesV150(t){
+    return typeAliasesV150(t.tipo || t.lead_type || t.type || t.template_type || '');
+  }
+
+  function templateScoreV150(t, wantedRamos, wantedTypes){
+    if(t.active===false) return -9999;
+    const rAliases=rowRamoAliasesV150(t);
+    const tAliases=rowTypeAliasesV150(t);
+    const ch=norm(t.channel || t.canal || t.channels || '');
+    let score=0;
+    const hasRamo=[...rAliases].some(a=>[...wantedRamos].some(b=>a===b || a.includes(b) || b.includes(a)));
+    const hasType=[...tAliases].some(a=>[...wantedTypes].some(b=>norm(a).replace(/\s+/g,'-')===norm(b).replace(/\s+/g,'-')));
+    if(hasRamo) score+=100;
+    if(hasType) score+=60;
+    if(ch.includes('instagram')) score+=10;
+    if(!ch || ch.includes('ambos') || ch.includes('whatsapp')) score+=2;
+    if(!hasRamo) score-=100;
+    if(!hasType) score-=80;
+    return score;
+  }
+
+  function applyEmpresaVarsV150(text, empresa){
+    return String(text||'')
+      .replace(/\{EMPRESA\}/g, empresa)
+      .replace(/\{\{\s*empresa\s*\}\}/gi, empresa)
+      .replace(/\{company_name\}/gi, empresa);
+  }
+
+  function selectTemplate(templates, ramo, tipo, lead){
+    const empresa=lead?.company_name || lead?.name || 'sua empresa';
+    const wantedRamos=new Set([
+      ...templateAliasesV150(ramo),
+      ...templateAliasesV150(lead?.ramo_id || lead?.branch_id || ''),
+      ...templateAliasesV150(lead?.parent_category || lead?.category_name || lead?.category || '')
     ]);
-    const candidates=(templates||[]).filter(t=>{
-      if(t.active===false) return false;
-      const trVals=[t.ramo_id,t.branch_id,t.ramo,t.ramo_pai,t.category,t.category_name,t.parent_category,t.niche,t.name].filter(Boolean);
-      const trAliases=new Set(trVals.flatMap(templateAliasesV127));
-      const tt=norm(t.tipo||t.lead_type||t.type||t.template_type||'');
-      const ch=norm(t.channel||t.canal||t.channels||'ambos');
-      const ramoOk=!trAliases.size || !aliases.size || [...trAliases].some(a=>[...aliases].some(b=>a===b||a.includes(b)||b.includes(a)));
-      const tipoOk=!tt || tt===nt || tt.includes(nt) || nt.includes(tt) || (nt.includes('sem') && tt.includes('sem')) || (nt.includes('com') && tt.includes('com')) || (nt.includes('agreg') && tt.includes('agreg'));
-      const canalOk=!ch || ch.includes('ambos') || ch.includes('instagram') || ch.includes('whatsapp');
-      return ramoOk && tipoOk && canalOk;
-    });
-    const t=candidates[0] || templates[0] || {};
-    const name=lead?.company_name||lead?.name||'sua empresa';
-    const m1=String(t.part_1||t.message_1||t.msg1||t.texto1||t.body1||t.mensagem1||t.content||'Olá, tudo bem? Me chamo Samuel.').replace(/\{EMPRESA\}/g,name).replace(/\{\{\s*empresa\s*\}\}/gi,name);
-    const m2=String(t.part_2||t.message_2||t.msg2||t.texto2||t.body2||t.mensagem2||'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.').replace(/\{EMPRESA\}/g,name).replace(/\{\{\s*empresa\s*\}\}/gi,name);
-    return {message_1:m1,message_2:m2,template_id:t.id||null};
+    const wantedTypes=typeAliasesV150(tipo);
+
+    const ranked=(templates||[])
+      .map(t=>({t,score:templateScoreV150(t,wantedRamos,wantedTypes)}))
+      .filter(x=>x.score>0)
+      .sort((a,b)=>b.score-a.score || String(a.t.name||'').localeCompare(String(b.t.name||'')));
+
+    const exact=ranked[0]?.t || null;
+    if(!exact){
+      return {
+        message_1:`Olá, tudo bem? Me chamo Samuel. Encontrei a ${empresa} e vi uma oportunidade de apresentar melhor o trabalho de vocês pela internet.`,
+        message_2:'Vi que existe potencial para melhorar a primeira impressão de quem conhece a empresa online. Posso te mostrar uma amostra simples?',
+        template_id:null,
+        template_source:'fallback'
+      };
+    }
+    const m1=applyEmpresaVarsV150(exact.part_1||exact.message_1||exact.msg1||exact.texto1||exact.body1||exact.mensagem1||exact.content||'', empresa);
+    const m2=applyEmpresaVarsV150(exact.part_2||exact.message_2||exact.msg2||exact.texto2||exact.body2||exact.mensagem2||'', empresa);
+    return {message_1:m1,message_2:m2,template_id:exact.id||null,template_source:'message_templates'};
+  }
+
+  function isDefaultOrMissingMsgV150(item){
+    const m1=String(item?.message_1||'').trim();
+    const m2=String(item?.message_2||'').trim();
+    if(!m1 || !m2) return true;
+    if(m1 === 'Olá, tudo bem? Me chamo Samuel.') return true;
+    if(m2 === 'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.') return true;
+    return false;
+  }
+
+  async function repairFrozenInstagramMessagesV150(){
+    const c=sb(), user=uid(); if(!c||!user) return;
+    const templates=await getTemplatesFlexible();
+    if(!templates.length) return;
+    const toFix=[];
+    for(const item of queueCache||[]){
+      if(!isActiveQueueStatus(item.status)) continue;
+      const lead=getItemLead(item);
+      const ramo=item.parent_category || parentCategoryOf(lead,item);
+      const tipo=leadTypeOf(lead,item);
+      // Regra final: item em fila sempre usa par congelado do mesmo template correto do ramo + tipo.
+      // Isso corrige filas antigas que misturaram Msg1 de um template e Msg2 de outro.
+      const tpl=selectTemplate(templates,ramo,tipo,{...lead,company_name:item.company_name||lead.company_name,parent_category:ramo});
+      const changed = String(item.message_1||'').trim() !== String(tpl.message_1||'').trim()
+        || String(item.message_2||'').trim() !== String(tpl.message_2||'').trim()
+        || String(item.template_id||'') !== String(tpl.template_id||'');
+      if(changed && tpl.message_1 && tpl.message_2){
+        toFix.push({id:item.id, message_1:tpl.message_1, message_2:tpl.message_2, template_id:tpl.template_id||null, updated_at:new Date().toISOString()});
+        item.message_1=tpl.message_1; item.message_2=tpl.message_2; item.template_id=tpl.template_id||null;
+      }
+    }
+    for(const row of toFix){
+      try{ await c.from('instagram_dispatch_items').update({message_1:row.message_1,message_2:row.message_2,template_id:row.template_id,updated_at:row.updated_at}).eq('user_id',user).eq('id',row.id); }
+      catch(e){ console.warn('[instagram][template-repair]', row.id, e?.message||e); }
+    }
+    if(toFix.length) notify(`✓ ${toFix.length} mensagens da fila Instagram foram congeladas pelo template correto`);
   }
 
   function profileEffectiveLimit(profile){
