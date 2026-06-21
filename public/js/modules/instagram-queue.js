@@ -13,6 +13,7 @@
   let activeProfileFilter='all';
   let profilesCache=[];
   let queueCache=[];
+  let backlogCache=[];
   let leadsById={};
   let weekCountsCache={};
 
@@ -167,6 +168,32 @@
     }
     return queueCache;
   }
+
+  async function loadBacklog(){
+    const c=sb(), user=uid(); if(!c||!user){ backlogCache=[]; return []; }
+    try{
+      const {data:items}=await c.from('instagram_dispatch_items').select('lead_id,status,instagram_username,instagram_url').eq('user_id',user).limit(5000);
+      const blockedIds=new Set((items||[]).filter(x=>!isErrorStatus(x.status)&&!isInvalidStatus(x.status)).map(x=>String(x.lead_id||'')).filter(Boolean));
+      const blockedIg=new Set((items||[]).filter(x=>!isErrorStatus(x.status)&&!isInvalidStatus(x.status)).flatMap(x=>[cleanIgUsername(x.instagram_username),cleanIgUsername(x.instagram_url)]).filter(Boolean));
+      const {data:baseRows}=await c.from('base_permanente').select('normalized_phone,instagram_username,instagram_url,status').eq('user_id',user).limit(5000);
+      const blockedPhones=new Set((baseRows||[]).map(x=>String(x.normalized_phone||'')).filter(Boolean));
+      (baseRows||[]).forEach(x=>{ const ig=cleanIgUsername(x.instagram_username||x.instagram_url); if(ig) blockedIg.add(ig); });
+      const {data,error}=await c.from('leads').select('*').eq('user_id',user).or('current_stage.eq.instagram_backlog,current_status.eq.instagram_backlog,pipeline_status.eq.instagram_backlog').order('updated_at',{ascending:false}).limit(2000);
+      if(error){ console.warn('[instagram][backlog]',error.message); backlogCache=[]; return []; }
+      backlogCache=(data||[]).filter(l=>{
+        const id=String(l.id||'');
+        if(blockedIds.has(id)) return false;
+        if(isSentLikeLead(l)) return false;
+        const ph=String(l.normalized_phone||l.phone||'').replace(/\D/g,'');
+        if(ph && blockedPhones.has(ph)) return false;
+        const ig=instagramFromLead(l);
+        if(!ig || blockedIg.has(ig)) return false;
+        return true;
+      });
+      return backlogCache;
+    }catch(e){ console.warn('[instagram][loadBacklog]',e?.message||e); backlogCache=[]; return []; }
+  }
+
   async function loadWeekCounts(){
     const c=sb(), user=uid(); if(!c||!user){ weekCountsCache={}; return {}; }
     const dates=weekDatesISO(activeDate);
@@ -198,6 +225,7 @@
       ensureInstagramPanel();
       await loadProfiles();
       await loadQueue();
+      await loadBacklog();
       await loadWeekCounts();
       loadPreferredProfileFilter();
       renderQueue();
@@ -218,9 +246,15 @@
     const el=document.getElementById('igV112Week'); if(!el) return;
     const dates=weekDatesISO(activeDate);
     const totalLimit=(profilesCache||[]).reduce((acc,p)=>acc+Number(p.daily_limit||60),0) || 60;
-    el.innerHTML=dates.map(d=>{
+    const backlogActive=activeStatus==='backlog';
+    const backlogCard=`<button class="ig-v112-week-card ${backlogActive?'active':''}" onclick="window.instagramV142SetBacklog()" style="text-align:left;border:1px solid ${backlogActive?'var(--accent)':'var(--border2)'};background:${backlogActive?'rgba(164,255,64,.06)':'var(--card)'};border-radius:12px;padding:13px 12px;min-height:68px;cursor:pointer;color:var(--text);position:relative">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:${backlogActive?'var(--accent)':'var(--muted)'};margin-bottom:8px">📦 Backlog</div>
+      <div style="font-size:18px;font-weight:900">${backlogCache.length}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:4px">aguardando alocação</div>
+    </button>`;
+    el.innerHTML=backlogCard + dates.map(d=>{
       const c=weekCountsCache[d] || {total:0,queued:0,sent:0,error:0,invalid:0};
-      const active=d===activeDate;
+      const active=(d===activeDate && activeStatus!=='backlog');
       const isToday=d===toDateInput(new Date());
       return `<button class="ig-v112-week-card ${active?'active':''} ${isToday?'today':''}" onclick="window.instagramV112SetDate('${esc(d)}')" style="text-align:left;border:1px solid ${active?'var(--accent)':(isToday?'rgba(184,240,89,.38)':'var(--border2)')};background:${active?'rgba(164,255,64,.06)':'var(--card)'};border-radius:12px;padding:13px 12px;min-height:68px;cursor:pointer;color:var(--text);position:relative">
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:${active||isToday?'var(--accent)':'var(--muted)'};margin-bottom:8px">${esc(fmtWeekCardDate(d))}</div>
@@ -231,7 +265,13 @@
     }).join('');
   }
 
+  window.instagramV142SetBacklog=function(){
+    activeStatus='backlog';
+    renderQueue();
+  };
+
   window.instagramV112SetDate=function(date){
+    if(activeStatus==='backlog') activeStatus='queued';
     activeDate=String(date||toDateInput(new Date())).slice(0,10);
     const input=document.getElementById('igV94Date'); if(input) input.value=activeDate;
     refreshInstagramV94();
@@ -283,7 +323,7 @@
           <button class="btn btn-ghost" id="igV94Refresh">Atualizar</button>
         </div>
       </div>
-      <div id="igV112Week" style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:10px;margin:10px 0 14px 0"></div>
+      <div id="igV112Week" style="flex-shrink:0;display:grid;grid-template-columns:repeat(8,minmax(110px,1fr));gap:10px;margin:10px 0 14px 0"></div>
       <div class="status-tabs" id="igV94Tabs" style="flex-shrink:0"></div>
       <div id="igV113ProfileFilters" style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px 0"></div>
       <div class="stats-row" id="igV94Stats" style="flex-shrink:0"></div>
@@ -294,7 +334,7 @@
   }
   function renderTabs(){
     const c=counters();
-    const tabs=[['queued','Em fila',c.queued],['sent','Enviadas',c.sent],['error','Erro',c.error],['invalid','Invalidados',c.invalid||0]];
+    const tabs=[['backlog','Backlog',backlogCache.length],['queued','Em fila',c.queued],['sent','Enviadas',c.sent],['error','Erro',c.error],['invalid','Invalidados',c.invalid||0]];
     const el=document.getElementById('igV94Tabs'); if(!el) return;
     el.innerHTML=tabs.map(([k,l,n])=>`<button class="status-tab ${activeStatus===k?'active':''}" onclick="window.setInstagramStatusV94('${k}')">${l} <span class="st-count">${n}</span></button>`).join('');
   }
@@ -354,7 +394,44 @@
     });
     return [...map.values()];
   }
+
+  function renderBacklogList(){
+    renderWeekCards(); renderTabs(); renderProfileFilters(); renderStats();
+    const el=document.getElementById('igV94Content'); if(!el) return;
+    if(!backlogCache.length){
+      el.innerHTML=`<div class="stretch-card" style="text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;padding:28px">// nenhum lead no Backlog Instagram</div>`;
+      return;
+    }
+    el.innerHTML=`<div class="stretch-card" style="padding:0;overflow:hidden">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+        <div><div class="card-title" style="margin:0">BACKLOG</div><div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${backlogCache.length} empresas aguardando alocação</div></div>
+        <button class="btn btn-primary" style="font-size:10px;padding:7px 12px" onclick="window.instagramV142AutoAllocateBacklog()">Alocar automaticamente</button>
+      </div>
+      <div style="padding:12px 18px;display:flex;flex-direction:column;gap:10px">
+        ${backlogCache.map((lead,i)=>renderBacklogLeadRow(lead,i+1)).join('')}
+      </div>
+    </div>`;
+  }
+
+  function renderBacklogLeadRow(lead,idx){
+    const username=instagramFromLead(lead);
+    const ramo=parentCategoryOf(lead,{});
+    return `<div class="ig-v119-row" style="border:1px solid var(--border2);border-radius:12px;background:rgba(255,255,255,.01);padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="min-width:260px;flex:1">
+        <div style="font-size:13px;font-weight:900">${esc(idx)} - ${esc(lead.company_name||lead.name||'Lead sem nome')}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px">@${esc(username||'sem instagram')} ${lead.city||lead.state?` · ${esc([lead.city,lead.state].filter(Boolean).join('/'))}`:''} ${lead.rating?` · ⭐ ${esc(lead.rating)} · ${esc(lead.reviews_count||0)} avaliações`:''}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+        <span class="q-badge">${esc(ramo)}</span>
+        ${username?`<a class="btn btn-ghost" style="font-size:10px;padding:7px 12px;text-decoration:none" target="_blank" href="${esc(igUrl(username))}">Abrir</a>`:''}
+        <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="window.openLeadDrawer && window.openLeadDrawer('${esc(lead.id)}')">Ficha</button>
+        <button class="btn btn-primary" style="font-size:10px;padding:7px 12px" onclick="window.instagramV142AllocateLead('${esc(lead.id)}')">→ Alocar</button>
+      </div>
+    </div>`;
+  }
+
   function renderQueue(){
+    if(activeStatus==='backlog') return renderBacklogList();
     renderWeekCards(); renderTabs(); renderProfileFilters(); renderStats();
     const el=document.getElementById('igV94Content'); if(!el) return;
     if(!profilesCache.length){
@@ -743,6 +820,72 @@
     const m2=String(t.part_2||t.message_2||t.msg2||t.texto2||t.body2||t.mensagem2||'Vi uma oportunidade de apresentar melhor o trabalho de vocês na internet.').replace(/\{EMPRESA\}/g,name).replace(/\{\{\s*empresa\s*\}\}/gi,name);
     return {message_1:m1,message_2:m2,template_id:t.id||null};
   }
+
+  async function allocateBacklogLeadToProfile(lead, profile){
+    const c=sb(), user=uid(); if(!c||!user) throw new Error('Supabase indisponível');
+    if(!profile) throw new Error('Cadastre ou selecione um perfil Instagram');
+    const registeredRamo=resolveRegisteredParentRamoStrictV111(lead,{});
+    if(!registeredRamo) throw new Error('Ramo não cadastrado para este lead');
+    const ig=instagramFromLead(lead);
+    if(!ig) throw new Error('Lead sem Instagram válido');
+    const {data:existing}=await c.from('instagram_dispatch_items').select('id,status').eq('user_id',user).eq('lead_id',String(lead.id)).limit(1);
+    if((existing||[]).some(x=>!isErrorStatus(x.status)&&!isInvalidStatus(x.status))) throw new Error('Lead já está em fila/enviado');
+    const {data:dayItems,error:dayErr}=await c.from('instagram_dispatch_items').select('position,block_number,status').eq('user_id',user).eq('profile_id',profile.id).eq('scheduled_date',activeDate).order('position',{ascending:false}).limit(1);
+    if(dayErr) throw dayErr;
+    const pos=Number((dayItems||[])[0]?.position||0)+1;
+    const blockSize=Number(profile.block_size||15);
+    const block=Math.ceil(pos/blockSize)||1;
+    const templates=await getTemplatesFlexible();
+    const tipo=leadTypeOf(lead,{});
+    const tpl=selectTemplate(templates,registeredRamo.nome||lead.parent_category||lead.category||'',tipo,{...lead,parent_category:registeredRamo.nome,ramo_id:registeredRamo.id});
+    const row={
+      user_id:user, lead_id:String(lead.id), profile_id:profile.id, profile_username:profile.username,
+      scheduled_date:activeDate, block_number:block, block_size:blockSize, position:pos, status:'queued', follow_status:'not_checked',
+      company_name:lead.company_name||lead.name||'', instagram_username:ig, instagram_url:igUrl(ig),
+      parent_category:registeredRamo.nome, lead_type:tipo, message_1:tpl.message_1, message_2:tpl.message_2,
+      template_id:tpl.template_id||null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()
+    };
+    const {error:insErr}=await c.from('instagram_dispatch_items').upsert(row,{onConflict:'profile_id,scheduled_date,lead_id'});
+    if(insErr) throw insErr;
+    return row;
+  }
+
+  function selectedProfileForAllocation(){
+    if(activeProfileFilter && activeProfileFilter!=='all') return getProfile(activeProfileFilter);
+    return profilesCache[0]||null;
+  }
+
+  window.instagramV142AllocateLead=async function(leadId){
+    try{
+      const lead=backlogCache.find(l=>String(l.id)===String(leadId));
+      if(!lead) return notify('Lead não está mais no Backlog','warn');
+      const p=selectedProfileForAllocation();
+      await allocateBacklogLeadToProfile(lead,p);
+      notify('✓ Lead alocado para '+fmtDate(activeDate));
+      activeStatus='queued';
+      await refreshInstagramV94();
+    }catch(e){ notify('Erro ao alocar: '+(e?.message||e),'err'); }
+  };
+
+  window.instagramV142AutoAllocateBacklog=async function(){
+    try{
+      const p=selectedProfileForAllocation();
+      if(!p) return notify('Cadastre um perfil Instagram antes de alocar','warn');
+      const capacity=Number(p.daily_limit||60);
+      const current=(queueCache||[]).filter(x=>String(x.profile_id)===String(p.id)&&isActiveQueueStatus(x.status)).length;
+      const limit=Math.max(0,capacity-current);
+      if(!limit) return notify('Perfil já atingiu o limite do dia','warn');
+      const list=backlogCache.slice(0,limit);
+      let ok=0;
+      for(const lead of list){
+        try{ await allocateBacklogLeadToProfile(lead,p); ok++; }catch(e){ console.warn('[instagram][auto-allocate]',lead.id,e?.message||e); }
+      }
+      notify(`✓ ${ok} leads alocados para ${fmtDate(activeDate)}`);
+      activeStatus='queued';
+      await refreshInstagramV94();
+    }catch(e){ notify('Erro ao alocar backlog: '+(e?.message||e),'err'); }
+  };
+
   window.instagramV94FillProfile=async function(profileId){
     const p=getProfile(profileId); if(!p){ notify('Perfil não encontrado','err'); return; }
     const c=sb(), user=uid(); if(!c||!user) return;
