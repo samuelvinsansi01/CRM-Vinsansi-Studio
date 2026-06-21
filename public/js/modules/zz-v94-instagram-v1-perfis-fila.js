@@ -6,7 +6,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260621-V113-INSTAGRAM-PERFIS-DUPLICADOS-INVALIDOS-FIX';
+  const VERSION='20260621-V114-HOJE-CARDS-FIX';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
@@ -199,10 +199,12 @@
     el.innerHTML=dates.map(d=>{
       const c=weekCountsCache[d] || {total:0,queued:0,sent:0,error:0,invalid:0};
       const active=d===activeDate;
-      return `<button class="ig-v112-week-card ${active?'active':''}" onclick="window.instagramV112SetDate('${esc(d)}')" style="text-align:left;border:1px solid ${active?'var(--accent)':'var(--border2)'};background:${active?'rgba(164,255,64,.06)':'var(--card)'};border-radius:12px;padding:13px 12px;min-height:68px;cursor:pointer;color:var(--text)">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;color:${active?'var(--accent)':'var(--muted)'};margin-bottom:8px">${esc(fmtWeekCardDate(d))}</div>
+      const isToday=d===toDateInput(new Date());
+      return `<button class="ig-v112-week-card ${active?'active':''} ${isToday?'today':''}" onclick="window.instagramV112SetDate('${esc(d)}')" style="text-align:left;border:1px solid ${active?'var(--accent)':(isToday?'rgba(184,240,89,.38)':'var(--border2)')};background:${active?'rgba(164,255,64,.06)':'var(--card)'};border-radius:12px;padding:13px 12px;min-height:68px;cursor:pointer;color:var(--text);position:relative">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:${active||isToday?'var(--accent)':'var(--muted)'};margin-bottom:8px">${esc(fmtWeekCardDate(d))}</div>
         <div style="font-size:18px;font-weight:900">${c.total}/${totalLimit}</div>
         <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:4px">fila ${c.queued} · env ${c.sent} · erro ${c.error} · inv ${c.invalid||0}</div>
+        ${isToday?`<div style="display:inline-flex;align-items:center;margin-top:8px;padding:2px 7px;border-radius:999px;border:1px solid rgba(184,240,89,.35);background:rgba(184,240,89,.08);color:var(--accent);font-family:'DM Mono',monospace;font-size:8px;font-weight:800;letter-spacing:.04em">HOJE</div>`:''}
       </button>`;
     }).join('');
   }
