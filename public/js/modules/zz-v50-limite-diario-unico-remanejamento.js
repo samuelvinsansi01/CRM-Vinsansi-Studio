@@ -98,6 +98,28 @@
     if(error){ console.warn('[v50][day-counts]',error.message); return {}; }
     return (data||[]).reduce((a,r)=>{a[r.scheduled_date]=(a[r.scheduled_date]||0)+1;return a;},{});
   }
+  async function dayCountsDetailedV116(dates){
+    const out={}; dates.forEach(d=>out[d]={total:0,review:0,valid:0,retry:0,invalid:0});
+    const c=sb(); if(!c) return out;
+    const {data,error}=await c.from('pre_dispatch_items')
+      .select('scheduled_date,status,validation_status,invalid_reason')
+      .eq('user_id',uid())
+      .in('scheduled_date',dates);
+    if(error){ console.warn('[v116][pre-day-counts]', error.message); return out; }
+    (data||[]).forEach(r=>{
+      const d=String(r.scheduled_date||'').slice(0,10);
+      if(!out[d]) out[d]={total:0,review:0,valid:0,retry:0,invalid:0};
+      const st=String(r.status||'').toLowerCase();
+      const vs=String(r.validation_status||'').toLowerCase();
+      if(['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','scheduled','sending','sent','enviado','enviada'].includes(st)) return;
+      out[d].total++;
+      if(st.includes('invalid') || vs.includes('invalid') || r.invalid_reason) out[d].invalid++;
+      else if(vs.includes('valid') || st==='approved') out[d].valid++;
+      else if(st.includes('retry') || vs.includes('retry') || st.includes('error') || vs.includes('error')) out[d].retry++;
+      else out[d].review++;
+    });
+    return out;
+  }
   async function getPreItems(date, chip='all'){
     const c=sb(); if(!c) return [];
     let q=c.from('pre_dispatch_items')
@@ -171,12 +193,14 @@
       const connectedChips=chips.filter(isChipConnected);
       const dailyCapacity=connectedChips.reduce((sum,ch)=>sum+chipLimit(ch),0);
       const counts=await dayCounts(dates);
+      const detailed=await dayCountsDetailedV116(dates);
+      const today=todayIso();
       root.innerHTML=`
         <div class="page-header" style="flex-shrink:0">
           <div><div class="page-title">Pré-envio <span>semanal.</span></div><div class="page-sub">// planejamento por dia · limite diário por chip como fonte única · revisão manual · retorno automático à meia-noite</div></div>
         </div>
-        <div id="preWeekCards" class="pre-week-cards">
-          ${dates.map(d=>`<button class="pre-day-card ${d===state.selectedDate?'active':''}" data-date="${d}" onclick="setPreEnvioDateV31('${d}')"><span>${esc(dayLabel(d))}</span><strong>${counts[d]||0}/${dailyCapacity}</strong></button>`).join('')}
+        <div id="preWeekCards" class="pre-week-cards pre-week-cards-v116">
+          ${dates.map(d=>{ const dc=detailed[d]||{total:counts[d]||0,review:0,valid:0,retry:0,invalid:0}; const isToday=d===today; return `<button class="pre-day-card ${d===state.selectedDate?'active':''} ${isToday?'today':''}" data-date="${d}" onclick="setPreEnvioDateV31('${d}')"><span>${esc(dayLabel(d))}</span><strong>${dc.total||0}/${dailyCapacity}</strong><small>rev ${dc.review||0} · ok ${dc.valid||0} · retry ${dc.retry||0} · inv ${dc.invalid||0}</small>${isToday?`<em>HOJE</em>`:''}</button>`; }).join('')}
         </div>
         <div class="card" style="margin-bottom:14px">
           <div class="card-title">Criar pré-envio</div>
@@ -399,4 +423,25 @@
   }
   document.addEventListener('DOMContentLoaded',()=>{ install(); setTimeout(install,500); setTimeout(install,1500); });
   if(document.readyState!=='loading') install();
+})();
+
+
+/* V116 — Pré-envio: todos os cards da semana seguem o mesmo padrão visual; o dia atual ganha badge HOJE sem perder contadores. */
+(function(){
+  if(document.getElementById('preenvio-v116-card-style')) return;
+  const style=document.createElement('style');
+  style.id='preenvio-v116-card-style';
+  style.textContent=`
+    #preWeekCards.pre-week-cards{display:grid!important;grid-template-columns:repeat(7,minmax(110px,1fr))!important;gap:10px!important;margin:0 0 14px 0!important}
+    #preWeekCards .pre-day-card{background:var(--card)!important;border:1px solid var(--border2)!important;border-radius:12px!important;padding:13px 12px!important;text-align:left!important;cursor:pointer!important;color:var(--text)!important;font-family:'DM Mono',monospace!important;min-height:92px!important;position:relative!important;display:block!important}
+    #preWeekCards .pre-day-card span{display:block!important;font-size:10px!important;color:var(--muted)!important;margin-bottom:8px!important;line-height:1.25!important}
+    #preWeekCards .pre-day-card strong{display:block!important;font-size:18px!important;color:var(--text)!important;font-family:'DM Mono',monospace!important;font-weight:900!important;line-height:1.1!important;margin:0!important}
+    #preWeekCards .pre-day-card small{display:block!important;font-size:8px!important;color:var(--muted)!important;margin-top:6px!important;line-height:1.35!important;font-family:'DM Mono',monospace!important}
+    #preWeekCards .pre-day-card em{display:inline-flex!important;align-items:center!important;margin-top:8px!important;padding:2px 7px!important;border-radius:999px!important;border:1px solid rgba(184,240,89,.35)!important;background:rgba(184,240,89,.08)!important;color:var(--accent)!important;font-style:normal!important;font-size:8px!important;font-family:'DM Mono',monospace!important;font-weight:800!important;letter-spacing:.04em!important}
+    #preWeekCards .pre-day-card.active{border-color:var(--accent)!important;box-shadow:0 0 0 1px rgba(184,240,89,.15)!important;background:rgba(184,240,89,.06)!important}
+    #preWeekCards .pre-day-card.today:not(.active){border-color:rgba(184,240,89,.38)!important;box-shadow:0 0 0 1px rgba(184,240,89,.08)!important}
+    #preWeekCards .pre-day-card.active span,#preWeekCards .pre-day-card.today span{color:var(--accent)!important}
+    @media(max-width:1100px){#preWeekCards.pre-week-cards{grid-template-columns:repeat(2,minmax(120px,1fr))!important}}
+  `;
+  document.head.appendChild(style);
 })();
