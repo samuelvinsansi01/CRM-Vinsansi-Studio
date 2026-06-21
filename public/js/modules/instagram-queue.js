@@ -160,6 +160,7 @@
     const {data,error}=await c.from('instagram_dispatch_items').select('*').eq('user_id',user).eq('scheduled_date',activeDate).order('profile_username',{ascending:true}).order('block_number',{ascending:true}).order('position',{ascending:true});
     if(error){ console.warn('[v94][queue]',error.message); return []; }
     queueCache=data||[];
+    await normalizeOrphanInstagramItems();
     const ids=[...new Set(queueCache.map(x=>String(x.lead_id||'')).filter(Boolean))];
     leadsById={};
     if(ids.length){
@@ -278,6 +279,54 @@
   };
 
   function getProfile(id){ return profilesCache.find(p=>String(p.id)===String(id)); }
+  function defaultInstagramProfile(){
+    if(!profilesCache.length) return null;
+    if(activeProfileFilter && activeProfileFilter!=='all'){
+      const byFilter=getProfile(activeProfileFilter);
+      if(byFilter) return byFilter;
+    }
+    let u='';
+    try{ u=cleanIgUsername(localStorage.getItem('instagram_logged_profile_username')||''); }catch(_){ }
+    if(u){
+      const byUser=(profilesCache||[]).find(x=>cleanIgUsername(x.username)===u);
+      if(byUser) return byUser;
+    }
+    return profilesCache[0] || null;
+  }
+  function effectiveProfileForItem(item){
+    const p=getProfile(item?.profile_id);
+    if(p) return p;
+    const username=cleanIgUsername(item?.profile_username||'');
+    if(username){
+      const byUsername=(profilesCache||[]).find(x=>cleanIgUsername(x.username)===username);
+      if(byUsername) return byUsername;
+      return {id:item?.profile_id||'', username};
+    }
+    return defaultInstagramProfile() || {id:'sem-perfil',username:'sem-perfil'};
+  }
+  function effectiveProfileKeyForItem(item){
+    const p=effectiveProfileForItem(item);
+    return String(p?.id || cleanIgUsername(p?.username) || 'sem-perfil');
+  }
+  async function normalizeOrphanInstagramItems(){
+    const c=sb(), user=uid();
+    const p=defaultInstagramProfile();
+    if(!c || !user || !p?.id) return false;
+    const orphans=(queueCache||[]).filter(item=>!item.profile_id || !cleanIgUsername(item.profile_username||''));
+    if(!orphans.length) return false;
+    const ids=orphans.map(x=>x.id).filter(Boolean);
+    if(!ids.length) return false;
+    const {error}=await c.from('instagram_dispatch_items')
+      .update({profile_id:p.id,profile_username:p.username,updated_at:new Date().toISOString()})
+      .in('id',ids)
+      .eq('user_id',user);
+    if(error){ console.warn('[instagram][normalize-orphan-items]', error.message); return false; }
+    queueCache=(queueCache||[]).map(item=>ids.includes(item.id)?{...item,profile_id:p.id,profile_username:p.username}:item);
+    return true;
+  }
+  function selectedProfileForAllocation(){
+    return defaultInstagramProfile();
+  }
   function getItemLead(item){ return leadsById[String(item.lead_id)] || {}; }
   function counters(status){
     const list=queueCache||[];
@@ -354,7 +403,7 @@
     const totals={};
     (profilesCache||[]).forEach(p=>{ totals[String(p.id)]={queued:0,sent:0,error:0,invalid:0,total:0}; });
     (queueCache||[]).forEach(item=>{
-      const pid=String(item.profile_id||'');
+      const pid=effectiveProfileKeyForItem(item);
       if(!totals[pid]) totals[pid]={queued:0,sent:0,error:0,invalid:0,total:0};
       totals[pid].total++;
       if(isSentStatus(item.status)) totals[pid].sent++; else if(isErrorStatus(item.status)) totals[pid].error++; else if(isInvalidStatus(item.status)) totals[pid].invalid++; else totals[pid].queued++;
@@ -386,8 +435,9 @@
   function groupByProfileAndBlock(items){
     const map=new Map();
     items.forEach(item=>{
-      const pid=String(item.profile_id||item.profile_username||'sem-perfil');
-      if(!map.has(pid)) map.set(pid,{profile:getProfile(item.profile_id)||{username:item.profile_username||'sem-perfil'},blocks:new Map()});
+      const p=effectiveProfileForItem(item);
+      const pid=String(p?.id || cleanIgUsername(p?.username) || 'sem-perfil');
+      if(!map.has(pid)) map.set(pid,{profile:p,blocks:new Map()});
       const g=map.get(pid); const b=Number(item.block_number||1);
       if(!g.blocks.has(b)) g.blocks.set(b,[]);
       g.blocks.get(b).push(item);
@@ -439,7 +489,7 @@
       return;
     }
     const list=queueCache.filter(item=>{
-      if(activeProfileFilter!=='all' && String(item.profile_id||'')!==String(activeProfileFilter)) return false;
+      if(activeProfileFilter!=='all' && effectiveProfileKeyForItem(item)!==String(activeProfileFilter)) return false;
       const s=String(item.status||'queued').toLowerCase();
       if(activeStatus==='sent') return isSentStatus(s);
       if(activeStatus==='error') return isErrorStatus(s);
