@@ -821,6 +821,26 @@
     return {message_1:m1,message_2:m2,template_id:t.id||null};
   }
 
+  function profileEffectiveLimit(profile){
+    const daily=Number(profile?.daily_limit||DEFAULTS.daily_limit||60);
+    const blocks=Number(profile?.blocks||DEFAULTS.blocks||4);
+    const blockSize=Number(profile?.block_size||DEFAULTS.block_size||15);
+    return Math.max(0, Math.min(daily, blocks * blockSize));
+  }
+
+  function computeNextInstagramSlot(profile, dayItems=[]){
+    const blockSize=Math.max(1, Number(profile?.block_size||DEFAULTS.block_size||15));
+    const blocks=Math.max(1, Number(profile?.blocks||DEFAULTS.blocks||4));
+    const limit=profileEffectiveLimit(profile);
+    const active=(dayItems||[]).filter(x=>!isErrorStatus(x.status)&&!isInvalidStatus(x.status));
+    const count=active.length;
+    if(count>=limit) throw new Error('Perfil já atingiu o limite do dia');
+    const position=count+1;
+    const blockNumber=Math.floor(count/blockSize)+1;
+    if(blockNumber>blocks) throw new Error('Todos os lotes do perfil já estão completos');
+    return {position, block_number:blockNumber, block_size:blockSize, count, limit};
+  }
+
   async function allocateBacklogLeadToProfile(lead, profile){
     const c=sb(), user=uid(); if(!c||!user) throw new Error('Supabase indisponível');
     if(!profile) throw new Error('Cadastre ou selecione um perfil Instagram');
@@ -828,31 +848,53 @@
     if(!registeredRamo) throw new Error('Ramo não cadastrado para este lead');
     const ig=instagramFromLead(lead);
     if(!ig) throw new Error('Lead sem Instagram válido');
-    const {data:existing}=await c.from('instagram_dispatch_items').select('id,status').eq('user_id',user).eq('lead_id',String(lead.id)).limit(1);
-    if((existing||[]).some(x=>!isErrorStatus(x.status)&&!isInvalidStatus(x.status))) throw new Error('Lead já está em fila/enviado');
-    const {data:dayItems,error:dayErr}=await c.from('instagram_dispatch_items').select('position,block_number,status').eq('user_id',user).eq('profile_id',profile.id).eq('scheduled_date',activeDate).order('position',{ascending:false}).limit(1);
+
+    const {data:existing}=await c.from('instagram_dispatch_items')
+      .select('id,status,profile_id,scheduled_date')
+      .eq('user_id',user)
+      .eq('lead_id',String(lead.id))
+      .limit(20);
+    if((existing||[]).some(x=>!isErrorStatus(x.status)&&!isInvalidStatus(x.status))){
+      throw new Error('Lead já está em fila/enviado');
+    }
+
+    const {data:dayItems,error:dayErr}=await c.from('instagram_dispatch_items')
+      .select('id,position,block_number,status')
+      .eq('user_id',user)
+      .eq('profile_id',profile.id)
+      .eq('scheduled_date',activeDate)
+      .order('position',{ascending:true});
     if(dayErr) throw dayErr;
-    const pos=Number((dayItems||[])[0]?.position||0)+1;
-    const blockSize=Number(profile.block_size||15);
-    const block=Math.ceil(pos/blockSize)||1;
+
+    const slot=computeNextInstagramSlot(profile, dayItems||[]);
     const templates=await getTemplatesFlexible();
     const tipo=leadTypeOf(lead,{});
     const tpl=selectTemplate(templates,registeredRamo.nome||lead.parent_category||lead.category||'',tipo,{...lead,parent_category:registeredRamo.nome,ramo_id:registeredRamo.id});
     const row={
-      user_id:user, lead_id:String(lead.id), profile_id:profile.id, profile_username:profile.username,
-      scheduled_date:activeDate, block_number:block, block_size:blockSize, position:pos, status:'queued', follow_status:'not_checked',
-      company_name:lead.company_name||lead.name||'', instagram_username:ig, instagram_url:igUrl(ig),
-      parent_category:registeredRamo.nome, lead_type:tipo, message_1:tpl.message_1, message_2:tpl.message_2,
-      template_id:tpl.template_id||null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()
+      user_id:user,
+      lead_id:String(lead.id),
+      profile_id:profile.id,
+      profile_username:profile.username,
+      scheduled_date:activeDate,
+      block_number:slot.block_number,
+      block_size:slot.block_size,
+      position:slot.position,
+      status:'queued',
+      follow_status:'not_checked',
+      company_name:lead.company_name||lead.name||'',
+      instagram_username:ig,
+      instagram_url:igUrl(ig),
+      parent_category:registeredRamo.nome,
+      lead_type:tipo,
+      message_1:tpl.message_1,
+      message_2:tpl.message_2,
+      template_id:tpl.template_id||null,
+      created_at:new Date().toISOString(),
+      updated_at:new Date().toISOString()
     };
     const {error:insErr}=await c.from('instagram_dispatch_items').upsert(row,{onConflict:'profile_id,scheduled_date,lead_id'});
     if(insErr) throw insErr;
     return row;
-  }
-
-  function selectedProfileForAllocation(){
-    if(activeProfileFilter && activeProfileFilter!=='all') return getProfile(activeProfileFilter);
-    return profilesCache[0]||null;
   }
 
   window.instagramV142AllocateLead=async function(leadId){
@@ -862,7 +904,8 @@
       const p=selectedProfileForAllocation();
       await allocateBacklogLeadToProfile(lead,p);
       notify('✓ Lead alocado para '+fmtDate(activeDate));
-      activeStatus='queued';
+      // Não redireciona: permanece no Backlog para continuar alocando.
+      activeStatus='backlog';
       await refreshInstagramV94();
     }catch(e){ notify('Erro ao alocar: '+(e?.message||e),'err'); }
   };
@@ -871,9 +914,16 @@
     try{
       const p=selectedProfileForAllocation();
       if(!p) return notify('Cadastre um perfil Instagram antes de alocar','warn');
-      const capacity=Number(p.daily_limit||60);
-      const current=(queueCache||[]).filter(x=>String(x.profile_id)===String(p.id)&&isActiveQueueStatus(x.status)).length;
-      const limit=Math.max(0,capacity-current);
+      const c=sb(), user=uid();
+      if(!c||!user) return notify('Supabase indisponível','err');
+      const {data:dayItems,error}=await c.from('instagram_dispatch_items')
+        .select('id,status')
+        .eq('user_id',user)
+        .eq('profile_id',p.id)
+        .eq('scheduled_date',activeDate);
+      if(error) throw error;
+      const slot=computeNextInstagramSlot(p, dayItems||[]);
+      const limit=Math.max(0, slot.limit - slot.count);
       if(!limit) return notify('Perfil já atingiu o limite do dia','warn');
       const list=backlogCache.slice(0,limit);
       let ok=0;
@@ -881,7 +931,8 @@
         try{ await allocateBacklogLeadToProfile(lead,p); ok++; }catch(e){ console.warn('[instagram][auto-allocate]',lead.id,e?.message||e); }
       }
       notify(`✓ ${ok} leads alocados para ${fmtDate(activeDate)}`);
-      activeStatus='queued';
+      // Não redireciona: continua no Backlog após alocação automática.
+      activeStatus='backlog';
       await refreshInstagramV94();
     }catch(e){ notify('Erro ao alocar backlog: '+(e?.message||e),'err'); }
   };
@@ -889,95 +940,34 @@
   window.instagramV94FillProfile=async function(profileId){
     const p=getProfile(profileId); if(!p){ notify('Perfil não encontrado','err'); return; }
     const c=sb(), user=uid(); if(!c||!user) return;
-    const capacity=Number(p.daily_limit||60);
-    const blockSize=Number(p.block_size||15);
+    try{
+      await loadBacklog();
+      const {data:dayItems,error:dayErr}=await c.from('instagram_dispatch_items')
+        .select('id,status,position,block_number')
+        .eq('user_id',user)
+        .eq('profile_id',p.id)
+        .eq('scheduled_date',activeDate)
+        .order('position',{ascending:true});
+      if(dayErr) throw dayErr;
+      const slot=computeNextInstagramSlot(p, dayItems||[]);
+      const remaining=Math.max(0, slot.limit - slot.count);
+      if(!remaining){ notify('Perfil já atingiu o limite do dia','warn'); await refreshInstagramV94(); return; }
 
-    // Recalcular fila do perfil/dia com regra estrita. Mantém enviados; remove somente pendentes/erros antigos.
-    const {data:currentItems,error:curErr}=await c.from('instagram_dispatch_items')
-      .select('id,lead_id,status')
-      .eq('user_id',user).eq('profile_id',p.id).eq('scheduled_date',activeDate);
-    if(curErr){ notify('Erro ao ler fila atual: '+curErr.message,'err'); return; }
-    const sentItems=(currentItems||[]).filter(x=>['sent','enviado'].includes(String(x.status||'').toLowerCase()));
-    const rebuildItems=(currentItems||[]).filter(x=>!['sent','enviado'].includes(String(x.status||'').toLowerCase()));
-    if(rebuildItems.length){
-      const {error:delErr}=await c.from('instagram_dispatch_items').delete().in('id',rebuildItems.map(x=>x.id));
-      if(delErr){ notify('Erro ao limpar fila Instagram antiga: '+delErr.message,'err'); return; }
+      const list=(backlogCache||[]).slice(0,remaining);
+      if(!list.length){ notify('Nenhum lead no Backlog Instagram para alocar','warn'); await refreshInstagramV94(); return; }
+
+      let ok=0;
+      for(const lead of list){
+        try{ await allocateBacklogLeadToProfile(lead,p); ok++; }
+        catch(e){ console.warn('[instagram][fill-profile-backlog]', lead?.id, e?.message||e); }
+      }
+      notify(`✓ ${ok} leads alocados no perfil @${p.username} para ${fmtDate(activeDate)}`);
+      // Não redireciona depois de preencher/alocar.
+      activeStatus='backlog';
+      await refreshInstagramV94();
+    }catch(e){
+      notify('Erro ao preencher perfil: '+(e?.message||e),'err');
     }
-    const already=sentItems.length;
-    const remaining=Math.max(0,capacity-already);
-    if(!remaining){ notify('Perfil já preenchido para o dia','warn'); await refreshInstagramV94(); return; }
-
-    const {data:allItems}=await c.from('instagram_dispatch_items').select('lead_id,status,instagram_username,instagram_url').eq('user_id',user);
-    const activeItems=(allItems||[]).filter(x=>!isErrorStatus(x.status));
-    const alreadyQueuedOrSentIds=new Set(activeItems.map(x=>String(x.lead_id)));
-    const activeQueuedIg=new Set(activeItems.flatMap(x=>[cleanIgUsername(x.instagram_username),cleanIgUsername(x.instagram_url)]).filter(Boolean));
-    sentItems.forEach(x=>alreadyQueuedOrSentIds.add(String(x.lead_id)));
-
-    const {data:waItems}=await c.from('pre_dispatch_items').select('lead_id,status').eq('user_id',user).in('status',['sent','enviado','ready_to_dispatch','queued','sending']);
-    const whatsappBlockedIds=new Set((waItems||[]).map(x=>String(x.lead_id)));
-
-    const {data:baseRows}=await c.from('base_permanente').select('normalized_phone,instagram_username,instagram_url,status,whatsapp_sent_at,instagram_sent_at,last_channel,last_event_status').eq('user_id',user).limit(5000);
-    const blockedPhones=new Set((baseRows||[]).map(x=>String(x.normalized_phone||'')).filter(Boolean));
-    const blockedIg=new Set((baseRows||[]).flatMap(x=>[cleanIgUsername(x.instagram_username),cleanIgUsername(x.instagram_url)]).filter(Boolean));
-
-    const {data:sentRows}=await c.from('sent_contacts').select('normalized_phone,phone').eq('user_id',user).limit(5000);
-    (sentRows||[]).forEach(x=>{ const ph=String(x.normalized_phone||x.phone||'').replace(/\D/g,''); if(ph) blockedPhones.add(ph); });
-
-    const {data:leads,error}=await c.from('leads').select('*').eq('user_id',user).limit(2000);
-    if(error){ notify('Erro ao buscar leads Instagram: '+error.message,'err'); return; }
-    const candidates=(leads||[]).filter(l=>{
-      const id=String(l.id);
-      if(alreadyQueuedOrSentIds.has(id)) return false;
-      if(whatsappBlockedIds.has(id)) return false;
-      if(!isInstagramEligibleStage(l)) return false;
-      // V120: Fila Instagram só aloca leads do Backlog Instagram.
-      if(!isInstagramApprovedForQueue(l)) return false;
-      if(isSentLikeLead(l)) return false;
-      const registeredRamo=resolveRegisteredParentRamoStrictV111(l,{});
-      if(!registeredRamo) return false;
-      const ig=instagramFromLead(l);
-      if(!ig || blockedIg.has(ig) || activeQueuedIg.has(ig)) return false;
-      const phone=String(l.normalized_phone||'').replace(/\D/g,'');
-      if(phone && blockedPhones.has(phone)) return false;
-      return true;
-    }).slice(0,remaining);
-    if(!candidates.length){ notify('Nenhum lead Instagram elegível para preencher','warn'); await refreshInstagramV94(); return; }
-    const templates=await getTemplatesFlexible();
-    const rows=candidates.map((lead,i)=>{
-      const pos=already+i+1;
-      const block=Math.floor((pos-1)/blockSize)+1;
-      const registeredRamo=resolveRegisteredParentRamoStrictV111(lead,{});
-      const ramo=registeredRamo?.nome || parentCategoryOf(lead,{});
-      const tipo=leadTypeOf(lead,{});
-      const tpl=selectTemplate(templates,ramo,tipo,{...lead,parent_category:ramo,ramo_id:registeredRamo?.id||lead.ramo_id});
-      const ig=instagramFromLead(lead);
-      return {
-        user_id:user,
-        lead_id:String(lead.id),
-        profile_id:p.id,
-        profile_username:p.username,
-        scheduled_date:activeDate,
-        block_number:block,
-        block_size:blockSize,
-        position:pos,
-        status:'queued',
-        follow_status:'not_checked',
-        company_name:lead.company_name||lead.name||'',
-        instagram_username:ig,
-        instagram_url:igUrl(ig),
-        parent_category:registeredRamo?.nome || tpl.ramo_nome || ramo,
-        lead_type:tipo,
-        message_1:tpl.message_1,
-        message_2:tpl.message_2,
-        template_id:tpl.template_id||null,
-        created_at:new Date().toISOString(),
-        updated_at:new Date().toISOString()
-      };
-    });
-    const {error:insErr}=await c.from('instagram_dispatch_items').upsert(rows,{onConflict:'profile_id,scheduled_date,lead_id'});
-    if(insErr){ notify('Erro ao preencher perfil: '+insErr.message,'err'); return; }
-    notify(`✓ Fila Instagram recalculada: ${rows.length} leads elegíveis inseridos`);
-    await refreshInstagramV94();
   };
 
   // Configurações — adiciona Perfis Instagram e esconde Templates Instagram antigo.
