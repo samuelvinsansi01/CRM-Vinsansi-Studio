@@ -165,10 +165,12 @@
     try{
       const dates=Array.from({length:7},(_,i)=>addDays(today(),i)); if(!dates.includes(state.date)) state.date=dates[0];
       const [counts,chips,items]=await Promise.all([getCounts(dates),getChips(),getItems(state.date,state.chip)]);
+      const selectedChip = chips.find(ch=>ch.instance===state.chip);
+      const cardLimit = selectedChip ? (Number(selectedChip.daily_limit)||120) : 120;
       const chipOptions=`<button class="pre-chip ${state.chip==='all'?'active':''}" data-chip="all">Todos</button>`+chips.map(ch=>`<button class="pre-chip ${state.chip===ch.instance?'active':''}" data-chip="${esc(ch.instance)}">${esc(ch.label)} <small>${esc(ch.daily_limit)}/dia</small></button>`).join('');
       r.innerHTML=`<div class="pre-final">
         <div class="page-head"><div><div class="page-title">Pré-envio <span>semanal.</span></div><div class="page-subtitle">Fila por dia e chip, sem código legado.</div></div></div>
-        <div id="preWeekCards" class="pre-week-cards-v129">${dates.map(d=>{const c=counts[d]||{};return `<button class="pre-day-card ${state.date===d?'active':''} ${d===today()?'today':''}" data-date="${d}"><span>${weekday(d)}, ${brDate(d)}</span><strong>${c.total||0}</strong><small>rev ${c.review||0} · ok ${c.approved||0} · retry ${c.retry||0} · inv ${c.invalid||0}</small>${d===today()?'<em>HOJE</em>':''}</button>`;}).join('')}</div>
+        <div id="preWeekCards" class="pre-week-cards-v129">${dates.map(d=>{const c=counts[d]||{};return `<button class="pre-day-card ${state.date===d?'active':''} ${d===today()?'today':''}" data-date="${d}"><span>${weekday(d)}, ${brDate(d)}</span><strong>${c.total||0}/${cardLimit}</strong><small>rev ${c.review||0} · ok ${c.approved||0} · retry ${c.retry||0} · inv ${c.invalid||0}</small>${d===today()?'<em>HOJE</em>':''}</button>`;}).join('')}</div>
         <div class="pre-final-card"><div class="card-title">Chips</div><div class="pre-chip-row">${chipOptions}</div></div>
         <div class="pre-final-card"><div class="card-title">Criar pré-envio</div><div class="pre-source-line"><b>Preencha a fila com leads de:</b><button class="btn btn-primary" data-fill="whatsapp">WhatsApp</button><button class="btn btn-primary" data-fill="site_agg">Com site + agregadores</button><button class="btn btn-primary" data-fill="general">Geral</button></div><div class="pre-final-help">WhatsApp puxa sem site. Com site e Agregadores só entram se estiverem aprovados na Atribuição.</div></div>
         <div class="pre-final-card"><div class="pre-final-toolbar"><div><div class="card-title">Itens do dia</div><div class="pre-final-help">${esc(weekday(state.date))}, ${esc(brDate(state.date))} · ${state.chip==='all'?'Todos os chips':esc(state.chip)}</div></div><div><button class="btn btn-ghost" data-day-return="1">↩ Voltar dia para Atribuição</button><button class="btn btn-primary" data-send-approved="1">Enviar aprovados para Fila WhatsApp</button></div></div><div class="pre-final-list">${items.length?items.map(renderItem).join(''):`<div class="pre-empty">// nenhum lead neste dia/chip</div>`}</div></div>
@@ -187,12 +189,12 @@
     const act=ev.target.closest('[data-pre-action]'); if(act){ev.preventDefault();const id=act.dataset.id;const a=act.dataset.preAction;if(a==='return')returnItem(id);else if(a==='approve')setItemStatus(id,'approved');else if(a==='retry')setItemStatus(id,'validation_retry');else if(a==='invalid')setItemStatus(id,'invalid');return;}
   },true);
   window.renderPreEnvioPanelV31=function(){style();return render();};
+  window.renderPreDispatchFinal=window.renderPreEnvioPanelV31;
   window.createPreSendBatchV31=function(){return fillByMode('general');};
   window.createPreSendBatchBySourceV128=function(mode){return fillByMode(mode||'general');};
   window.returnPreEnvioDayToAttributionV31=function(date){state.date=date||state.date;return returnDay();};
   window.returnPreEnvioItemToAttribution=function(id){return returnItem(id);};
   document.addEventListener('DOMContentLoaded',()=>{style();setTimeout(()=>{if(document.getElementById('panel-pre-envio')?.classList.contains('active'))render();},100);});
-  document.addEventListener('click',ev=>{const nav=ev.target.closest('[data-panel],.nav-item,button,a');const txt=String(nav?.textContent||'');if(txt.includes('Pré-envio'))setTimeout(()=>{style();render();},80);},true);
   if(document.readyState!=='loading')setTimeout(()=>{style(); if(document.getElementById('panel-pre-envio'))render();},150);
   console.log('[Lead Certo] Pré-envio final ativo',VERSION);
 })();
