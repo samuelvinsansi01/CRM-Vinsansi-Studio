@@ -212,13 +212,13 @@
     const leadIds=[...new Set(rows.map(x=>x.lead_id).filter(Boolean))];
     const now=new Date().toISOString();
     const upItems=await c.from('pre_dispatch_items')
-      .update({status:'dispatch_queue',updated_at:now})
+      .update({status:'ready_to_dispatch',updated_at:now})
       .eq('user_id',user)
       .in('id',ids);
     if(upItems.error)return notify('Erro ao enviar para fila: '+upItems.error.message,'err');
     if(leadIds.length){
       const upLeads=await c.from('leads')
-        .update({current_stage:'dispatch_queue',current_status:'queued',status:'Não enviada',updated_at:now})
+        .update({current_stage:'dispatch_queue',current_status:'queued',status:'Em fila',updated_at:now})
         .eq('user_id',user)
         .in('id',leadIds);
       if(upLeads.error)return notify('Itens enviados, mas houve erro ao atualizar leads: '+upLeads.error.message,'err');

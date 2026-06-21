@@ -233,13 +233,16 @@
     const chips=(ch.data||[]).filter(x=>x.active!==false && x.instance);
     const finalRows=rows.filter(r=>{
       const st=String(r.status||'').toLowerCase();
-      const l=leads[r.lead_id]||{};
-      const stage=String(l.current_stage||'').toLowerCase();
-      // A Fila WhatsApp só mostra o que foi enviado para a fila final.
-      // No fluxo atual, o botão "Enviar aprovados para fila final" marca o lead como dispatch_queue.
-      if(st==='ready_to_dispatch') return stage==='dispatch_queue';
-      return ['queued','dispatch_queue','not_sent','waiting','scheduled','sending','sent','enviado','paused','error','erro','failed'].includes(st) && stage==='dispatch_queue';
+      // Regra oficial: a tabela pre_dispatch_items é a fonte da Fila WhatsApp.
+      // Se o item foi enviado pelo Pré-envio para a fila, ele deve aparecer mesmo que
+      // algum lead antigo ainda esteja com current_stage desatualizado.
+      return ['ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending','sent','enviado','paused','error','erro','failed'].includes(st);
     });
+    // Auto-reparo leve para itens que já estão na fila mas cujo lead ficou antigo como pre_send/pre_dispatch_review.
+    try{
+      const repairIds=[...new Set(finalRows.filter(r=>['ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending'].includes(String(r.status||'').toLowerCase())).map(r=>r.lead_id).filter(id=>{const l=leads[id]||{};return String(l.current_stage||'').toLowerCase()!=='dispatch_queue';}))];
+      if(repairIds.length) c.from('leads').update({current_stage:'dispatch_queue',current_status:'queued',status:'Em fila',updated_at:new Date().toISOString()}).eq('user_id',uid()).in('id',repairIds).then(()=>{});
+    }catch(_){ }
     finalRows.forEach(r=>{if(!chips.some(ch=>chipKey(ch)===rowChipKey(r)||chipTitle(ch)===rowChipTitle(r))) chips.push({id:rowChipKey(r)||rowChipTitle(r),instance:rowChipKey(r),label:rowChipTitle(r),daily_limit:120,block_size:60,active:true});});
     const items=finalRows.map(r=>({...r,lead:leads[r.lead_id]||{}}));
     return {items,chips,error:ch.error||null};
