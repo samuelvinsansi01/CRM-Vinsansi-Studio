@@ -6,7 +6,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260621-V115-INSTAGRAM-EDIT-PRE-CARD-FIX';
+  const VERSION='20260621-V119-INSTAGRAM-LISTA-SCROLL-PREENVIO-FIX';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
@@ -227,10 +227,29 @@
     };
   }
 
+  function ensureInstagramV119Styles(){
+    if(document.getElementById('ig-v119-style')) return;
+    const st=document.createElement('style');
+    st.id='ig-v119-style';
+    st.textContent=`
+      #panel-instagram{overflow-y:auto!important;height:100vh!important;align-items:stretch!important;}
+      #igV94Content.ig-v119-content{max-height:none!important;overflow:visible!important;}
+      #igV94Content .stretch-card{overflow:visible!important;}
+      .ig-v119-row>summary::-webkit-details-marker,.ig-v119-lote summary::-webkit-details-marker{display:none;}
+      .ig-v119-row:hover{background:rgba(255,255,255,.025)!important;}
+      @media (max-width: 900px){
+        #igV112Week{grid-template-columns:repeat(2,minmax(130px,1fr))!important;}
+        .insta-msg-blocks{grid-template-columns:1fr!important;}
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
   function ensureInstagramPanel(){
     const panel=document.getElementById('panel-instagram'); if(!panel) return;
     if(panel.dataset.v94==='1') return;
     panel.dataset.v94='1';
+    ensureInstagramV119Styles();
     panel.innerHTML=`
       <div class="page-header" style="flex-shrink:0">
         <div>
@@ -246,7 +265,7 @@
       <div class="status-tabs" id="igV94Tabs" style="flex-shrink:0"></div>
       <div id="igV113ProfileFilters" style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px 0"></div>
       <div class="stats-row" id="igV94Stats" style="flex-shrink:0"></div>
-      <div id="igV94Content" class="stretch-list" style="flex:1;min-height:0;overflow:auto"></div>
+      <div id="igV94Content" class="ig-v119-content" style="flex:0 0 auto;min-height:0;overflow:visible;max-height:none;display:flex;flex-direction:column;gap:12px;padding-bottom:36px"></div>
     `;
     document.getElementById('igV94Date')?.addEventListener('change',e=>{ activeDate=e.target.value||toDateInput(new Date()); refreshInstagramV94(); });
     document.getElementById('igV94Refresh')?.addEventListener('click',refreshInstagramV94);
@@ -347,13 +366,16 @@
   }
   function renderBlock(b,items,p){
     const sent=items.filter(x=>['sent','enviado'].includes(String(x.status||'').toLowerCase())).length;
-    return `<details class="ig-v94-block" open style="border:1px solid var(--border2);border-radius:12px;overflow:hidden;background:var(--bg)">
-      <summary style="cursor:pointer;list-style:none;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border2)">
-        <div style="font-weight:800">Lote ${b}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${items.length}/${p.block_size||15} leads · ${sent} enviados</div>
-      </summary>
+    const errors=items.filter(x=>isErrorStatus(x.status)).length;
+    const invalids=items.filter(x=>isInvalidStatus(x.status)).length;
+    const queued=items.length-sent-errors-invalids;
+    return `<div class="ig-v119-lote" style="border:1px solid var(--border2);border-radius:12px;overflow:hidden;background:var(--bg);margin-bottom:10px">
+      <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border2)">
+        <div style="font-weight:900;font-size:15px">Lote ${b}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${items.length}/${p.block_size||15} leads · fila ${queued} · env ${sent} · erro ${errors} · inv ${invalids}</div>
+      </div>
       <div>${items.map((item,i)=>renderLeadRow(item,i+1)).join('')}</div>
-    </details>`;
+    </div>`;
   }
   function renderLeadRow(item,idx){
     const lead=getItemLead(item);
@@ -366,11 +388,12 @@
       const local=localTemplatePairV110({...lead, company_name:name, parent_category:ramo}, tipo);
       if(local){ msg1=local.message_1||msg1; msg2=local.message_2||msg2; }
     }
-    return `<details style="border-top:1px solid var(--border2)">
-      <summary style="list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center">
+    const rowBg=isErrorStatus(item.status)?'rgba(255,92,92,.035)':(isInvalidStatus(item.status)?'rgba(255,92,92,.045)':'rgba(255,255,255,.01)');
+    return `<details class="ig-v119-row" style="border-bottom:1px solid var(--border2);background:${rowBg}">
+      <summary style="list-style:none;cursor:pointer;padding:10px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center;min-height:42px">
         <div style="min-width:0;flex:1">
-          <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(Number(idx)||1)} - ${esc(name)}</div>
-          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">@${esc(username||'sem instagram')}</div>
+          <div style="font-size:13px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(Number(idx)||1)} - ${esc(name)}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:1px">@${esc(username||'sem instagram')}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
           <span class="q-badge">${esc(ramo)}</span>
@@ -379,7 +402,7 @@
           <span style="color:var(--muted)">›</span>
         </div>
       </summary>
-      <div style="padding:0 14px 14px 14px;display:grid;gap:10px">
+      <div style="padding:0 14px 12px 14px;display:grid;gap:10px">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${username?`<a class="btn btn-ghost" style="font-size:10px;padding:7px 12px;text-decoration:none" target="_blank" href="${esc(igUrl(username))}">Abrir perfil</a>`:''}
           <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="window.instagramV115EditInstagram('${esc(item.id)}')">Editar Instagram</button>
@@ -393,22 +416,11 @@
           <div class="insta-msg-block"><div class="insta-msg-block-label">Mensagem 1</div><div class="insta-msg-text">${esc(msg1||'Template não encontrado')}</div></div>
           <div class="insta-msg-block"><div class="insta-msg-block-label">Mensagem 2</div><div class="insta-msg-text">${esc(msg2||'Template não encontrado')}</div></div>
         </div>
-        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Follow: ${esc(item.follow_status||'not_checked')} · Imagem: ${item.image_url?'configurada':'usar imagem do ramo no processo assistido'}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">Follow: ${esc(item.follow_status||'not_checked')} · Imagem: usar imagem do ramo no processo assistido</div>
       </div>
     </details>`;
   }
 
-  async function refreshInstagramV94(){
-    ensureInstagramPanel();
-    await loadProfiles();
-    loadPreferredProfileFilter();
-    await loadWeekCounts();
-    await loadQueue();
-    renderQueue();
-    try{ if(typeof window.updateBadges==='function') window.updateBadges(); }catch(e){}
-  }
-  window.refreshInstagramV94=refreshInstagramV94;
-  window.setInstagramStatusV94=function(s){ activeStatus=s; renderQueue(); };
   window.instagramV94Copy=function(id,n){
     const item=queueCache.find(x=>String(x.id)===String(id)); if(!item) return;
     const txt=String(n)==='2'?item.message_2:item.message_1;
