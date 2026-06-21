@@ -195,12 +195,35 @@
   }
   async function sendApprovedToQueue(){
     const c=db(),user=uid(); if(!c||!user)return;
-    let q=c.from('pre_dispatch_items').select('id').eq('user_id',user).eq('scheduled_date',state.date).eq('status','approved');
+    // Regra oficial: o lote sai montado no Pré-envio e deve ir direto para a Fila WhatsApp
+    // do chip/dia correspondente. Para a fila enxergar corretamente, precisamos marcar o
+    // item E o lead como dispatch_queue. Antes só o item mudava para ready_to_dispatch,
+    // enquanto o lead continuava como pre_send/pre_dispatch_review, por isso não aparecia.
+    let q=c.from('pre_dispatch_items')
+      .select('id,lead_id')
+      .eq('user_id',user)
+      .eq('scheduled_date',state.date)
+      .eq('status','approved');
     if(state.chip&&state.chip!=='all')q=q.eq('chip_instance',state.chip);
     const {data,error}=await q; if(error)return notify('Erro: '+error.message,'err');
-    if(!(data||[]).length)return notify('Nenhum aprovado para enviar à fila.','warn');
-    await c.from('pre_dispatch_items').update({status:'ready_to_dispatch',updated_at:new Date().toISOString()}).eq('user_id',user).in('id',data.map(x=>x.id));
-    notify('✓ Aprovados enviados para Fila WhatsApp.'); await render();
+    const rows=data||[];
+    if(!rows.length)return notify('Nenhum aprovado para enviar à fila.','warn');
+    const ids=rows.map(x=>x.id);
+    const leadIds=[...new Set(rows.map(x=>x.lead_id).filter(Boolean))];
+    const now=new Date().toISOString();
+    const upItems=await c.from('pre_dispatch_items')
+      .update({status:'dispatch_queue',updated_at:now})
+      .eq('user_id',user)
+      .in('id',ids);
+    if(upItems.error)return notify('Erro ao enviar para fila: '+upItems.error.message,'err');
+    if(leadIds.length){
+      const upLeads=await c.from('leads')
+        .update({current_stage:'dispatch_queue',current_status:'queued',status:'Não enviada',updated_at:now})
+        .eq('user_id',user)
+        .in('id',leadIds);
+      if(upLeads.error)return notify('Itens enviados, mas houve erro ao atualizar leads: '+upLeads.error.message,'err');
+    }
+    notify('✓ Leads enviados para a Fila WhatsApp do chip selecionado.'); await render();
     try{ if(typeof window.renderFilaZapV73==='function') window.renderFilaZapV73(); }catch(_){ }
   }
 
