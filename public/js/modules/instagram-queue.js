@@ -890,13 +890,8 @@
     notify('✓ Perfil removido'); await renderProfilesConfig(); await refreshInstagramV94();
   };
 
-  const prevSwitch=window.switchPanel;
-  window.switchPanel=function(panel){
-    const out=typeof prevSwitch==='function' ? prevSwitch.apply(this,arguments) : undefined;
-    if(panel==='instagram') setTimeout(refreshInstagramV94,80);
-    if(panel==='configuracoes') setTimeout(ensureInstagramConfig,150);
-    return out;
-  };
+  // Lead Certo v139: este módulo não é dono da navegação.
+  // A rota Instagram é controlada exclusivamente por core/router-final.js.
   const prevRenderConfig=window.renderConfiguracoes;
   window.renderConfiguracoes=function(){
     const out=typeof prevRenderConfig==='function' ? prevRenderConfig.apply(this,arguments) : undefined;
@@ -904,73 +899,13 @@
     return out;
   };
 
-  // V100 — Atribuição Instagram: salvar link sem sumir e continuar elegível para Fila Instagram.
-  window.approveInstagramAttributionV31=async function(id){
-    const c=sb(), user=uid(); if(!c||!user) return notify('// Supabase indisponível','err');
-    const input=document.getElementById(`atrib-insta-url-${id}`) || document.querySelector(`#atrib-insta-url-${CSS.escape(id)}`);
-    const raw=String(input?.value||'').trim();
-    const username=cleanIgUsername(raw);
-    if(!username){ if(input) input.style.borderColor='var(--error)'; return notify('Cole um @ ou link válido do Instagram','warn'); }
-    const url=igUrl(username);
-    const card=document.querySelector(`[data-lead-id="${CSS.escape(id)}"]`);
-    if(card) card.style.opacity='.65';
-    const {error}=await c.from('leads').update({
-      instagram:url,
-      instagram_url:url,
-      instagram_username:username,
-      current_stage:'attribution_instagram',
-      lead_channel:'instagram',
-      // V115: se o link já é um perfil válido, a própria ação do botão aprova para a fila.
-      pipeline_status:'approved_for_instagram_queue',
-      updated_at:new Date().toISOString()
-    }).eq('user_id',user).eq('id',id);
-    if(error){ if(card) card.style.opacity='1'; return notify('Erro ao salvar Instagram: '+error.message,'err'); }
-    if(card) card.style.opacity='1';
-    notify('✓ Instagram válido aprovado para a Fila Instagram');
-    try{ if(typeof window.renderAtribuicaoPanelV31==='function') await window.renderAtribuicaoPanelV31(); else if(typeof window.renderAtribuicao==='function') await window.renderAtribuicao(); }catch(_){ }
-    try{ await refreshInstagramV94(); }catch(_){ }
-    try{ if(typeof window.updateMenuBadgesTotalsV65==='function') window.updateMenuBadgesTotalsV65(true); else if(typeof window.updateBadges==='function') window.updateBadges(); }catch(_){ }
-  };
+  // Lead Certo v139: Atribuição Instagram pertence somente a modules/attribution.js.
+  // Bloco legado V100 removido para não sobrescrever Aprovar -> Backlog.
 
 
+  // Lead Certo v139: aprovação manual antiga V102 removida.
+  // O fluxo oficial é Atribuição -> Backlog -> Alocar no dia.
 
-  // V102 — Aprovação manual: só leads aprovados entram na Fila Instagram.
-  window.instagramV102ApproveForQueue=async function(id){
-    const c=sb(), user=uid(); if(!c||!user) return notify('// Supabase indisponível','err');
-    const input=document.getElementById(`atrib-insta-url-${id}`) || document.querySelector(`#atrib-insta-url-${CSS.escape(id)}`);
-    let raw=String(input?.value||'').trim();
-    let username=cleanIgUsername(raw);
-    if(!username){
-      const {data:lead}=await c.from('leads').select('instagram,instagram_url,instagram_username').eq('user_id',user).eq('id',id).maybeSingle();
-      username=instagramFromLead(lead||{});
-    }
-    if(!username){
-      if(input) input.style.borderColor='var(--error)';
-      return notify('Para aprovar, primeiro cole e salve um Instagram válido.','warn');
-    }
-    const url=igUrl(username);
-    try{
-      const checks=[];
-      checks.push(c.from('instagram_dispatch_items').select('id,profile_username,status,company_name').eq('user_id',user).or(`instagram_username.eq.${username},instagram_url.eq.${url}`).neq('lead_id',String(id)).limit(1));
-      checks.push(c.from('base_permanente').select('id,status,company_name').eq('user_id',user).or(`instagram_username.eq.${username},instagram_url.eq.${url}`).limit(1));
-      const [q,b]=await Promise.all(checks);
-      if((q.data||[])[0] && !isErrorStatus(q.data[0].status)) return notify('Instagram já existe em outra fila/perfil: @'+username,'warn');
-      if((b.data||[])[0]) return notify('Instagram já está na Base Permanente: @'+username,'warn');
-    }catch(e){ console.warn('[v113][approve-duplicate-check]',e?.message||e); }
-    const {error}=await c.from('leads').update({
-      instagram:url,
-      instagram_url:url,
-      instagram_username:username,
-      current_stage:'attribution_instagram',
-      lead_channel:'instagram',
-      pipeline_status:'approved_for_instagram_queue',
-      updated_at:new Date().toISOString()
-    }).eq('user_id',user).eq('id',id);
-    if(error) return notify('Erro ao aprovar para fila: '+error.message,'err');
-    notify('✓ Lead aprovado para Fila Instagram');
-    try{ ensureInstagramApprovalButtons(); }catch(_){ }
-    try{ if(typeof window.renderAtribuicaoPanelV31==='function') await window.renderAtribuicaoPanelV31(); else if(typeof window.renderAtribuicao==='function') await window.renderAtribuicao(); }catch(_){ }
-  };
 
   function ensureInstagramApprovalButtons(){
     // V106: desativado. A aprovação da aba Instagram é controlada somente pelo handler definitivo v106.
@@ -984,11 +919,8 @@
     try { const b=document.getElementById('badge-instagram'); if(b){ const c=counters(); b.textContent=String(c.queued+c.error); } } catch(e){}
     return out;
   };
-  // Exports oficiais usados pelo router final.
-  // Sem isso, a rota Instagram pode existir, mas o router não encontra o renderizador certo.
-  window.refreshInstagramV94=refreshInstagramV94;
-  window.renderInstagramQueuePanel=refreshInstagramV94;
   window.renderInstagram=refreshInstagramV94;
+  window.renderInstagramQueuePanel=refreshInstagramV94;
 
   document.addEventListener('DOMContentLoaded',()=>{
     setTimeout(()=>{ ensureInstagramPanel(); ensureInstagramConfig(); refreshInstagramV94(); ensureInstagramApprovalButtons(); },900);
@@ -1195,12 +1127,8 @@
     return typeof prevFill==='function' ? prevFill.apply(this,arguments) : undefined;
   };
 
-  const prevAtrib=window.renderAtribuicaoPanelV31;
-  window.renderAtribuicaoPanelV31=async function renderAtribV121(){
-    try{ await runBackfill(false); }catch(e){ console.warn('[v121][atrib]', e?.message||e); }
-    return typeof prevAtrib==='function' ? prevAtrib.apply(this,arguments) : undefined;
-  };
-  window.renderAtribuicao=window.renderAtribuicaoPanelV31;
+  // Lead Certo v139: não sobrescrever render da Atribuição.
+  // Backfill do Instagram roda apenas ao abrir a Fila Instagram/preencher perfil.
 
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>runBackfill(false),1800));
   window.__V121_INSTAGRAM_SENT_BACKFILL__=VERSION;

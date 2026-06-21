@@ -322,8 +322,8 @@
   const prevRender=window.renderFilaZapV74||window.renderFilaZapV73||window.renderFilaZap;
   window.renderFilaZap=async function(){const out=typeof prevRender==='function'?await prevRender.apply(this,arguments):undefined; scheduleInject(); return out;};
   window.renderFilaZapV80=window.renderFilaZap;
-  const prevSwitch=window.switchPanel;
-  window.switchPanel=function(name){const r=typeof prevSwitch==='function'?prevSwitch.apply(this,arguments):undefined; const n=String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); if(['whatsapp','fila-zap','fila_whatsapp','zap'].includes(n)||name==='WhatsApp')scheduleInject(); return r;};
+  // Lead Certo v139: disparo WhatsApp não sobrescreve switchPanel.
+  // O router abre a tela e o módulo injeta controles via renderFilaZapV73/scheduleInject quando necessário.
   document.addEventListener('click',e=>{if(e.target.closest?.('.nav-item[data-label="WhatsApp"],.day-tab,.status-tab,.v73-chip-head'))scheduleInject();},true);
   document.addEventListener('DOMContentLoaded',()=>{hydrateRuntime(); scheduleInject();});
   window.startDispatchV80=startDispatchV80; window.pauseDispatchV80=pauseAllV80; window.resumeDispatchV80=resumeAllV80; window.stopDispatchV80=stopAllV80; window.previewDispatchV80=previewV80; window.sendTestDispatchV80=sendManualLeadTestV83; window.sendManualLeadTestV83=sendManualLeadTestV83; window.previewManualLeadTestV83=previewManualV83; window.onManualLeadTestImageV83=onManualImageV83; window.pauseChipV80=pauseChipV80; window.resumeChipV80=resumeChipV80; window.stopChipV80=stopChipV80;

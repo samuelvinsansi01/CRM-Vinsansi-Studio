@@ -336,8 +336,8 @@
   window.getLoteImagemPorRamoV73=function(chipId,loteNum,ramoId){return getImage(chipId,loteNum,ramoId);};
   window.loadLoteImagemPorRamoV73=function(chipId,loteNum,ramoId){return loadImage(chipId,loteNum,ramoId);};
   window.resolveLeadParentRamoV73=resolveRamo;
-  const prevSwitch=window.switchPanel;
-  window.switchPanel=function(name){const n=String(name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); if(['whatsapp','fila-zap','fila_whatsapp','zap'].includes(n)||name==='WhatsApp'){renderFilaZapV73();return;} return typeof prevSwitch==='function'?prevSwitch(name):undefined;};
+  // Lead Certo v139: Fila WhatsApp não sobrescreve switchPanel.
+  // O router chama renderFilaZapV73 quando a rota fila-zap é aberta.
   document.addEventListener('click',function(e){const nav=e.target.closest?.('.nav-item[data-label]'); if(!nav)return; if((nav.getAttribute('data-label')||'')!=='WhatsApp')return; e.preventDefault(); e.stopPropagation(); if(e.stopImmediatePropagation)e.stopImmediatePropagation(); renderFilaZapV73();},true);
   document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{try{if(document.getElementById('panel-fila-zap')?.classList.contains('active'))renderFilaZapV73();}catch(_){}},700));
   window.__V74_FILA_WHATSAPP_STATUS_LOTES_CONFIG_SEM_PISCAR__=VERSION;

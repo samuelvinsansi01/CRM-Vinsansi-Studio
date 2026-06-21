@@ -601,12 +601,8 @@
   window.renderAtribuicaoPanelV31=render;
   window.renderAtribuicaoPanelFinalV130=render;
 
-  const prevSwitch=window.switchPanel;
-  window.switchPanel=function(name){
-    const n=String(name||'').toLowerCase();
-    if(n==='atribuicao'||name==='Atribuição'){ try{ document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active')); panel()?.classList.add('active'); }catch(_){} render(); return; }
-    return prevSwitch?prevSwitch(name):undefined;
-  };
+  // Lead Certo v139: navegação pertence somente ao core/router-final.js.
+  // Este módulo só exporta renderAtribuicao/renderAtribuicaoPanelV31.
 
   document.addEventListener('click',handleClick,true);
   document.addEventListener('DOMContentLoaded',()=>{ style(); ensureAggregatorTab(); setTimeout(()=>{ refreshCounts(); if(panel()?.classList.contains('active')) render(); },450); setTimeout(()=>{ refreshCounts(); if(panel()?.classList.contains('active')) render(); },1300); });
