@@ -1341,7 +1341,7 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
 </aside>
 </div>
 <div class="notify" id="notify"></div>
-<script>window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30=true;window.ALLOW_LEGACY_LOCAL_LEAD_PUSH=false;window.__SUPABASE_REBUILDING_LEADS_V30=false;</script>
+<script>window.DB_FIRST_DISABLE_OPERATIONAL_SYNC_V30=true;window.ALLOW_LEGACY_LOCAL_LEAD_PUSH=false;window.__SUPABASE_REBUILDING_LEADS_V30=false;window.LEAD_CERTO_NO_LEGACY=true;</script>
 <script src="js/adapters/supabase-adapter.js"></script>
 <script src="js/core/prelude.js?v=20260618-V62-AUTH-F5-PERSISTENTE"></script>
 <script src="js/modules/crm.js?v=20260616-LEAD-DRAWER-INFO"></script>
@@ -1362,8 +1362,7 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
 <script src="js/modules/whatsapp/audit.js"></script>
 <script src="js/modules/supabase-operations.js"></script>
 <script src="js/modules/conversations.js"></script>
-<script src="js/core/legacy-state.js"></script>
-<script src="js/modules/assignment.js"></script>
+<script src="js/core/state.js?v=20260621-LEAD-CERTO-STATE"></script>
 <script src="js/core/navigation-storage.js?v=20260613-1125"></script>
 <script src="js/modules/leads-base.js"></script>
 <script src="js/modules/imports-validation.js?v=20260615-V35-APIFY-FIELDS-1"></script>
@@ -1372,32 +1371,13 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
 <script src="js/modules/imports/history-excluded.js"></script>
 <script src="js/modules/imports/importer.js?v=20260615-V36-ENRICH-BASE-MISSING-1"></script>
 <script src="js/modules/imports/validation.js"></script>
-<script src="js/modules/legacy-dispatch.js"></script>
 <script src="js/modules/sent-contacts-protection.js"></script>
-<script src="js/modules/dispatch/chip-slots.js"></script>
-<script src="js/modules/dispatch/chip-panels.js"></script>
-<script src="js/modules/dispatch/company-list.js"></script>
-<script src="js/modules/dispatch/batch-images.js"></script>
-<script src="js/modules/dispatch/queue-state.js"></script>
-<script src="js/modules/dispatch/schedule-config.js"></script>
-<script src="js/modules/dispatch/legacy-batch-send.js"></script>
-<script src="js/modules/instagram.js"></script>
-<script src="js/modules/instagram/redirects.js"></script>
 <script src="js/modules/instagram/settings.js"></script>
-<script src="js/modules/instagram/assignment.js"></script>
-<script src="js/modules/instagram/week-templates.js"></script>
-<script src="js/modules/instagram/dashboard.js"></script>
 <script src="js/modules/tracking.js"></script>
 <script src="js/app.js?v=20260613-1125"></script>
-<script src="js/compatibility/sidebar-legacy.js"></script>
-<script src="js/modules/chips-compatibility.js"></script>
 <script src="js/modules/whatsapp-manual-send.js"></script>
-<script src="js/compatibility/queue-conversation.js"></script>
 <script src="js/modules/import-inbox.js"></script>
 <script src="js/modules/whatsapp-supabase.js"></script>
-<script src="js/compatibility/sidebar-recovery.js"></script>
-<script src="js/compatibility/stability-guards.js"></script>
-<script src="js/modules/final-operational-flow.js?v=20260613-1125"></script>
 
 <script>
 (function(){
@@ -1595,24 +1575,15 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
   setInterval(normalizeMenuSummariesV415, 2000);
 })();
 </script>
-<script src="js/modules/navigation-dispatch-final.js?v=20260618-V77-NAV-CONFIG-FIX"></script>
 <script src="js/modules/whatsapp-operational-final.js?v=20260616-V39-BASE"></script>
 <script src="js/modules/base-permanente-crud.js?v=20260616-V39"></script>
 <script src="js/modules/lead-drawer-contact-events-v38.js?v=20260616-V39"></script>
-<!-- disabled by V129 clean consolidation: -->
-<!-- disabled by V129 clean consolidation: -->
-<!-- disabled by V129 clean consolidation: -->
 <script src="js/modules/dispatch-config-editor.js?v=20260617-V49-CONFIG-DISPARO-EDITAVEL"></script>
-<!-- disabled by V129 clean consolidation: -->
 <script src="js/modules/chips-db-first.js?v=20260617-V51-CHIPS-DB-FIRST"></script>
 <script src="js/modules/chips-remove-db-first.js?v=20260617-V53-CHIPS-SEM-REDIRECT"></script>
 <script src="js/modules/qr-db-first.js?v=20260617-V55-QR-DB-FIRST"></script>
-<!-- disabled by V129 clean consolidation: -->
 <script src="js/modules/menu-badges-db-first.js?v=20260617-V61-MENU-BADGES-STATUS-CORRETO"></script>
 <script src="js/modules/menu-operational-lean.js?v=20260618-V63-MENU-OPERACIONAL-ENXUTO"></script>
-<!-- disabled by V129 clean consolidation: -->
-<!-- disabled by V129 clean consolidation: -->
-<!-- disabled by V129 clean consolidation: -->
 <script src="js/modules/whatsapp-queue-visual.js?v=20260618-V72-FILA-WHATSAPP-VISUAL-REF"></script>
 <script src="js/modules/whatsapp-queue-status-lotes.js?v=20260618-V78-FILA-FINAL-REAL-NAV-OK"></script>
 <script src="js/modules/categories-dynamic.js?v=20260618-V76-RAMOS-SUBCATEGORIAS-DINAMICAS"></script>
@@ -1624,16 +1595,11 @@ cloudflared.exe tunnel --config C:\cloudflared\config.yml run evolution</code><b
 <script src="js/modules/normalized-queue-remove.js?v=20260618-V87-FILA-NORMALIZADA-DISPARO-REMOVER"></script>
 <script src="js/modules/whatsapp-queue-layout-aside.js?v=20260618-V89-FILA-TESTE-ASIDE-FINAL"></script>
 <script src="js/modules/whatsapp-queue-card-accordion.js?v=20260618-V90-FILA-SEM-ABA-TESTE-CARD-ACCORDION"></script>
-<script src="js/modules/instagram-profiles-queue.js?v=20260621-LEAD-CERTO-INSTA"></script>
-<script src="js/modules/instagram-sent-backfill-protection.js?v=20260621-LEAD-CERTO-INSTA-BACKFILL"></script>
-<!-- disabled by V129 clean consolidation: -->
-<!-- disabled by V129 clean consolidation: -->
-<!-- disabled by V129 clean consolidation: -->
-<script src="js/modules/templates-supabase-persist.js?v=20260620-V127-TEMPLATES-SUPABASE-PERSIST"></script>
 
-<script src="js/modules/attribution-aggregators.js?v=20260621-LEAD-CERTO-AGREGADORES"></script><script src="js/modules/pre-dispatch-final.js?v=20260621-PRE-FINAL"></script>
-<script src="js/modules/lead-certo-stabilizer.js?v=20260621-V132-SEM-LEGADO"></script>
-<!-- disabled by V129 clean consolidation: -->
+<script src="js/modules/attribution.js?v=20260621-LEAD-CERTO-ATTRIBUTION"></script>
+<script src="js/modules/pre-dispatch.js?v=20260621-LEAD-CERTO-PRE-DISPATCH"></script>
+<script src="js/modules/instagram-queue.js?v=20260621-LEAD-CERTO-INSTAGRAM-QUEUE"></script>
+<script src="js/modules/templates-supabase-persist.js?v=20260620-V127-TEMPLATES-SUPABASE-PERSIST"></script>
 <script>
 function copyInfraCommandV46(type) {
   const cmd = 'cd C:\\cloudflared\ncloudflared.exe tunnel --config C:\\cloudflared\\config.yml run evolution';

@@ -1,5 +1,5 @@
 /* ════════════════════════════
-   DEFAULT RAMOS
+   STATE / DEFAULT RAMOS
 ════════════════════════════ */
 const RAMOS_DEFAULT = [
   {
