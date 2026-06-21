@@ -485,7 +485,7 @@
   };
 
   window.instagramV113MarkInvalid=async function(id){
-    const reason='Outros';
+    const reason='outro';
     const c=sb(); if(!c) return;
     const item=queueCache.find(x=>String(x.id)===String(id));
     const lead=getItemLead(item||{});
@@ -524,12 +524,12 @@
       last_channel:'instagram',
       last_event_type:'instagram_invalidated',
       last_event_status:'invalidated',
-      invalid_reason:reason||'Outros',
+      invalid_reason:reason||'outro',
       invalid_source:'instagram_fila',
       invalidated_at:when,
       last_contact_at:when,
       status:'invalidado',
-      raw_payload:{...(lead.raw_payload||{}), instagram_dispatch_item_id:item.id||null, lead_id:item.lead_id||lead.id||null, invalid_reason:reason||'Outros'},
+      raw_payload:{...(lead.raw_payload||{}), instagram_dispatch_item_id:item.id||null, lead_id:item.lead_id||lead.id||null, invalid_reason:reason||'outro'},
       updated_at:new Date().toISOString()
     };
     const ors=[]; if(phone) ors.push(`normalized_phone.eq.${phone}`); if(ig) ors.push(`instagram_username.eq.${ig}`);
@@ -538,8 +538,8 @@
     let baseId=null;
     if(existing[0]?.id){ baseId=existing[0].id; await c.from('base_permanente').update(payload).eq('user_id',user).eq('id',baseId); }
     else { const r=await c.from('base_permanente').insert({...payload,created_at:new Date().toISOString()}).select('id').maybeSingle(); baseId=r.data?.id||null; }
-    await c.from('contact_events').insert({user_id:user,lead_id:String(item.lead_id||lead.id||''),base_permanente_id:baseId,company_name:payload.company_name,normalized_phone:phone||null,website:payload.website,instagram_url:payload.instagram_url,maps_url:payload.maps_url,channel:'instagram',source_account:item.profile_username||null,source_instance:item.profile_id||null,event_type:'invalidated',status:'invalidated',sent_at:when,metadata:{instagram_dispatch_item_id:item.id||null,reason:reason||'Outros'}});
-    if(item.lead_id){ await c.from('leads').update({current_stage:'archived',current_status:'instagram_invalidated',status:'Invalidado Instagram',rejected_at:when,rejected_reason:reason||'Outros',archived_at:when,updated_at:new Date().toISOString()}).eq('user_id',user).eq('id',String(item.lead_id)); }
+    await c.from('contact_events').insert({user_id:user,lead_id:String(item.lead_id||lead.id||''),base_permanente_id:baseId,company_name:payload.company_name,normalized_phone:phone||null,website:payload.website,instagram_url:payload.instagram_url,maps_url:payload.maps_url,channel:'instagram',source_account:item.profile_username||null,source_instance:item.profile_id||null,event_type:'invalidated',status:'invalidated',sent_at:when,metadata:{instagram_dispatch_item_id:item.id||null,reason:reason||'outro'}});
+    if(item.lead_id){ await c.from('leads').update({current_stage:'archived',current_status:'instagram_invalidated',status:'Invalidado Instagram',rejected_at:when,rejected_reason:reason||'outro',archived_at:when,updated_at:new Date().toISOString()}).eq('user_id',user).eq('id',String(item.lead_id)); }
   }
 
   async function upsertBaseInstagramSent(lead,item,when){

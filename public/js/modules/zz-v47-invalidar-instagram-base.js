@@ -122,8 +122,9 @@
     try{ if(typeof window.updateSafeBadgesV31==='function') window.updateSafeBadgesV31(); }catch(_){ }
   }
 
+  // V124: na fila/backlog Instagram, Invalidar é direto como 6 - Outro, sem popup.
   window.invalidarLeadInstagramBaseV47=async function(leadId){
-    const reason=chooseReason('fora_do_perfil'); if(!reason) return;
+    const reason='outro';
     const c=sb(); if(!c) return notify('Supabase indisponível','err');
     const lead=await getLead(leadId);
     if(!lead) return notify('Lead não encontrado','warn');

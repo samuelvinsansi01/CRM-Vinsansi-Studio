@@ -183,9 +183,9 @@
     const reason=chooseReason('fora_do_perfil'); if(!reason) return;
     return invalidatePreLead(id,reason);
   };
+  // V124: na Atribuição Instagram, Invalidar é direto como 6 - Outro, sem popup.
   window.invalidarLeadInstagramAtribV45=async function(leadId){
-    const reason=chooseReason('fora_do_perfil'); if(!reason) return;
-    return invalidateInstagramAttribution(leadId,reason);
+    return invalidateInstagramAttribution(leadId,'outro');
   };
 
   function injectButtons(){
