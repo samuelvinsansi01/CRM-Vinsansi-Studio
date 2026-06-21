@@ -92,20 +92,40 @@
     return 'sem-site';
   }
   function parentCategoryOf(lead,item){
+    const registered=resolveRegisteredParentRamoStrictV111(lead,item);
+    if(registered?.nome) return registered.nome;
     if(item?.parent_category) return item.parent_category;
     if(lead?.parent_category) return lead.parent_category;
     if(typeof window.resolveParentRamoForLeadV76==='function') { try { return window.resolveParentRamoForLeadV76(lead)?.nome || window.resolveParentRamoForLeadV76(lead) || ''; } catch(e){} }
-    if(typeof window.getRamos==='function'){
-      try{
-        const raw=[lead?.category,lead?.category_name,Array.isArray(lead?.categories)?lead.categories.join(' '):lead?.categories].filter(Boolean).join(' ');
-        const n=norm(raw);
-        for(const r of window.getRamos()){
-          const keys=[r.nome,...(r.keywords||[]),...(r.subcategories||[])].map(norm);
-          if(keys.some(k=>k && (n===k || n.includes(k) || k.includes(n)))) return r.nome;
-        }
-      }catch(e){}
+    return lead?.category_name || lead?.category || 'Ramo não cadastrado';
+  }
+
+  function categoryTextForMatchV111(lead,item){
+    const vals=[];
+    const push=v=>{
+      if(v===null||v===undefined) return;
+      if(Array.isArray(v)) v.forEach(push);
+      else if(typeof v==='object') Object.values(v).forEach(push);
+      else vals.push(String(v));
+    };
+    push(item?.parent_category); push(lead?.parent_category); push(lead?.category_name); push(lead?.category); push(lead?.categories);
+    try{ push(lead?.raw_payload?.category); push(lead?.raw_payload?.categoryName); push(lead?.raw_payload?.categories); }catch(_){}
+    return vals.filter(Boolean).join(' ');
+  }
+
+  function resolveRegisteredParentRamoStrictV111(lead,item={}){
+    const ramos=typeof window.getRamos==='function' ? (window.getRamos()||[]) : [];
+    if(!ramos.length) return null;
+    const raw=categoryTextForMatchV111(lead,item);
+    const n=norm(raw).replace(/-/g,' ');
+    if(!n) return null;
+    for(const r of ramos){
+      const keys=[r.id,r.nome,...(r.keywords||[]),...(r.subcategories||[])].filter(Boolean).map(x=>norm(x).replace(/-/g,' ')).filter(Boolean);
+      if(keys.some(k=>n===k || n.includes(k) || k.includes(n))){
+        return { id:String(r.id||r.nome||''), nome:String(r.nome||r.id||'') };
+      }
     }
-    return lead?.category_name || lead?.category || 'Ramo não identificado';
+    return null;
   }
   async function loadProfiles(){
     const c=sb(), user=uid(); if(!user) return [];
@@ -231,7 +251,7 @@
         <div style="font-weight:800">Lote ${b}</div>
         <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">${items.length}/${p.block_size||15} leads · ${sent} enviados</div>
       </summary>
-      <div>${items.map(renderLeadRow).join('')}</div>
+      <div>${items.map((item,i)=>renderLeadRow(item,i+1)).join('')}</div>
     </details>`;
   }
   function renderLeadRow(item,idx){
@@ -248,7 +268,7 @@
     return `<details style="border-top:1px solid var(--border2)">
       <summary style="list-style:none;cursor:pointer;padding:12px 14px;display:flex;justify-content:space-between;gap:12px;align-items:center">
         <div style="min-width:0;flex:1">
-          <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((Number(idx)||0)+1)} - ${esc(name)}</div>
+          <div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(Number(idx)||1)} - ${esc(name)}</div>
           <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)">@${esc(username||'sem instagram')}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
@@ -462,6 +482,8 @@
       // V102: Fila Instagram só puxa leads que já tiveram o perfil salvo E foram aprovados manualmente.
       if(!isInstagramApprovedForQueue(l)) return false;
       if(isSentLikeLead(l)) return false;
+      const registeredRamo=resolveRegisteredParentRamoStrictV111(l,{});
+      if(!registeredRamo) return false;
       const ig=instagramFromLead(l);
       if(!ig || blockedIg.has(ig)) return false;
       const phone=String(l.normalized_phone||'').replace(/\D/g,'');
@@ -473,9 +495,10 @@
     const rows=candidates.map((lead,i)=>{
       const pos=already+i+1;
       const block=Math.floor((pos-1)/blockSize)+1;
-      const ramo=parentCategoryOf(lead,{});
+      const registeredRamo=resolveRegisteredParentRamoStrictV111(lead,{});
+      const ramo=registeredRamo?.nome || parentCategoryOf(lead,{});
       const tipo=leadTypeOf(lead,{});
-      const tpl=selectTemplate(templates,ramo,tipo,lead);
+      const tpl=selectTemplate(templates,ramo,tipo,{...lead,parent_category:ramo,ramo_id:registeredRamo?.id||lead.ramo_id});
       const ig=instagramFromLead(lead);
       return {
         user_id:user,
@@ -491,7 +514,7 @@
         company_name:lead.company_name||lead.name||'',
         instagram_username:ig,
         instagram_url:igUrl(ig),
-        parent_category:tpl.ramo_nome || ramo,
+        parent_category:registeredRamo?.nome || tpl.ramo_nome || ramo,
         lead_type:tipo,
         message_1:tpl.message_1,
         message_2:tpl.message_2,

@@ -147,6 +147,31 @@
   }
   function categoryOf(lead){ return lead?.parent_category || lead?.category_name || lead?.category || 'Ramo não identificado'; }
 
+  function categoryTextForMatchV111(lead){
+    const vals=[];
+    const push=v=>{
+      if(v===null||v===undefined) return;
+      if(Array.isArray(v)) v.forEach(push);
+      else if(typeof v==='object') Object.values(v).forEach(push);
+      else vals.push(String(v));
+    };
+    push(lead?.parent_category); push(lead?.category_name); push(lead?.category); push(lead?.categories);
+    try{ push(lead?.raw_payload?.category); push(lead?.raw_payload?.categoryName); push(lead?.raw_payload?.categories); }catch(_){}
+    return vals.filter(Boolean).join(' ');
+  }
+
+  function resolveRegisteredParentRamoStrictV111(lead){
+    const ramos = typeof window.getRamos === 'function' ? (window.getRamos() || []) : [];
+    if (!ramos.length) return null;
+    const n = norm(categoryTextForMatchV111(lead)).replace(/-/g,' ');
+    if (!n) return null;
+    for (const r of ramos) {
+      const keys = [r.id, r.nome, ...(r.keywords||[]), ...(r.subcategories||[])].filter(Boolean).map(x=>norm(x).replace(/-/g,' ')).filter(Boolean);
+      if (keys.some(k => n === k || n.includes(k) || k.includes(n))) return { id:String(r.id || r.nome || ''), nome:String(r.nome || r.id || '') };
+    }
+    return null;
+  }
+
   async function pickProfile(c, user, date){
     const { data:profiles, error:pErr } = await c.from('instagram_profiles')
       .select('*')
@@ -199,8 +224,10 @@
 
     const blockSize = Number(p.block_size || 15) || 15;
     const position = selected.used + 1;
+    const registeredRamo = resolveRegisteredParentRamoStrictV111(lead);
+    if (!registeredRamo) throw new Error('categoria_nao_cadastrada');
     const templates = await getTemplates(c, user);
-    const tpl = selectTemplate(templates, lead);
+    const tpl = selectTemplate(templates, { ...lead, parent_category:registeredRamo.nome, ramo_id:registeredRamo.id });
     const row = {
       user_id:user,
       lead_id:String(lead.id),
@@ -215,7 +242,7 @@
       company_name:leadName(lead),
       instagram_username:username,
       instagram_url:igUrl(username),
-      parent_category:tpl.ramo_nome || categoryOf(lead),
+      parent_category:registeredRamo.nome || tpl.ramo_nome || categoryOf(lead),
       lead_type:leadTypeOf(lead),
       message_1:tpl.message_1,
       message_2:tpl.message_2,
@@ -247,6 +274,12 @@
     if (!username) {
       if (input) input.style.borderColor = 'var(--error,#ff4d4d)';
       return notify('Cole um @ ou link válido do Instagram', 'warn');
+    }
+
+    const registeredRamo = resolveRegisteredParentRamoStrictV111(lead);
+    if (!registeredRamo) {
+      if (input) input.style.borderColor = 'var(--error,#ff4d4d)';
+      return notify('Lead bloqueado: categoria/subcategoria não cadastrada nos ramos da plataforma. Cadastre a subcategoria ou ajuste o ramo antes de enviar para a fila Instagram.', 'warn');
     }
 
     const url = igUrl(username);
