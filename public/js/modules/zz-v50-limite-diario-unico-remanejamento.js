@@ -445,3 +445,58 @@
   `;
   document.head.appendChild(style);
 })();
+
+
+/* V120 — Correção definitiva dos cards semanais do Pré-envio.
+   Mantém todos os cards com o mesmo HTML visual: data + contador + detalhe; o dia de hoje apenas ganha badge HOJE. */
+(function(){
+  function normalizePreCardsV120(){
+    const wrap=document.getElementById('preWeekCards'); if(!wrap) return;
+    const cards=[...wrap.querySelectorAll('.pre-day-card')]; if(!cards.length) return;
+    let cap='120';
+    for(const c of cards){ const m=(c.querySelector('strong')?.textContent||'').match(/\/(\d+)/); if(m){ cap=m[1]; break; } }
+    cards.forEach(card=>{
+      const span=card.querySelector('span');
+      if(!card.querySelector('strong')){
+        const strong=document.createElement('strong'); strong.textContent='0/'+cap;
+        if(span && span.nextSibling) card.insertBefore(strong, span.nextSibling); else card.appendChild(strong);
+      }
+      if(!card.querySelector('small')){
+        const small=document.createElement('small'); small.textContent='rev 0 · ok 0 · retry 0 · inv 0';
+        const strong=card.querySelector('strong');
+        if(strong && strong.nextSibling) card.insertBefore(small, strong.nextSibling); else card.appendChild(small);
+      }
+      const date=card.getAttribute('data-date')||'';
+      const today=new Date(); today.setMinutes(today.getMinutes()-today.getTimezoneOffset());
+      const todayIso=today.toISOString().slice(0,10);
+      if(date===todayIso && !card.querySelector('em')){ const em=document.createElement('em'); em.textContent='HOJE'; card.appendChild(em); }
+    });
+  }
+  function installStyleV120(){
+    if(document.getElementById('preenvio-v120-card-style')) return;
+    const style=document.createElement('style'); style.id='preenvio-v120-card-style';
+    style.textContent=`
+      #preWeekCards.pre-week-cards{display:grid!important;grid-template-columns:repeat(7,minmax(110px,1fr))!important;gap:10px!important;margin:0 0 14px 0!important}
+      #preWeekCards .pre-day-card{background:var(--card)!important;border:1px solid var(--border2)!important;border-radius:12px!important;padding:13px 12px!important;text-align:left!important;cursor:pointer!important;color:var(--text)!important;font-family:'DM Mono',monospace!important;min-height:92px!important;position:relative!important;display:block!important;overflow:visible!important;white-space:normal!important}
+      #preWeekCards .pre-day-card span{display:block!important;font-size:10px!important;color:var(--muted)!important;margin-bottom:8px!important;line-height:1.25!important;white-space:normal!important}
+      #preWeekCards .pre-day-card strong{display:block!important;visibility:visible!important;opacity:1!important;font-size:18px!important;color:var(--text)!important;font-family:'DM Mono',monospace!important;font-weight:900!important;line-height:1.1!important;margin:0!important;height:auto!important;max-height:none!important;overflow:visible!important}
+      #preWeekCards .pre-day-card small{display:block!important;visibility:visible!important;opacity:1!important;font-size:8px!important;color:var(--muted)!important;margin-top:6px!important;line-height:1.35!important;font-family:'DM Mono',monospace!important;height:auto!important;max-height:none!important;overflow:visible!important}
+      #preWeekCards .pre-day-card em{display:inline-flex!important;align-items:center!important;margin-top:8px!important;padding:2px 7px!important;border-radius:999px!important;border:1px solid rgba(184,240,89,.35)!important;background:rgba(184,240,89,.08)!important;color:var(--accent)!important;font-style:normal!important;font-size:8px!important;font-family:'DM Mono',monospace!important;font-weight:800!important;letter-spacing:.04em!important}
+      #preWeekCards .pre-day-card.active{border-color:var(--accent)!important;box-shadow:0 0 0 1px rgba(184,240,89,.15)!important;background:rgba(184,240,89,.06)!important}
+      #preWeekCards .pre-day-card.today:not(.active){border-color:rgba(184,240,89,.38)!important;box-shadow:0 0 0 1px rgba(184,240,89,.08)!important}
+      #preWeekCards .pre-day-card.active span,#preWeekCards .pre-day-card.today span{color:var(--accent)!important}
+      @media(max-width:1100px){#preWeekCards.pre-week-cards{grid-template-columns:repeat(2,minmax(120px,1fr))!important}}
+    `; document.head.appendChild(style);
+  }
+  const oldRender=window.renderPreEnvioPanelV31;
+  function hook(){
+    installStyleV120(); normalizePreCardsV120();
+    if(typeof window.renderPreEnvioPanelV31==='function' && window.renderPreEnvioPanelV31!==patched){
+      const prev=window.renderPreEnvioPanelV31;
+      window.renderPreEnvioPanelV31=patched;
+      function patched(){ const res=prev.apply(this,arguments); Promise.resolve(res).finally(()=>setTimeout(normalizePreCardsV120,20)); return res; }
+    }
+  }
+  document.addEventListener('DOMContentLoaded',()=>{ hook(); setTimeout(hook,500); setTimeout(hook,1500); setInterval(normalizePreCardsV120,1200); });
+  if(document.readyState!=='loading'){ hook(); setTimeout(hook,500); }
+})();

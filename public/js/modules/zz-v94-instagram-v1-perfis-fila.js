@@ -6,7 +6,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260621-V119-INSTAGRAM-LISTA-SCROLL-PREENVIO-FIX';
+  const VERSION='20260621-V120-INSTAGRAM-BACKLOG-ALOCACAO-POR-DIA';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
@@ -79,8 +79,9 @@
   }
 
   function isInstagramApprovedForQueue(lead){
+    const stage=String(lead?.current_stage||'').toLowerCase();
     const ps=String(lead?.pipeline_status||lead?.current_status||lead?.status||'').toLowerCase();
-    return ps==='approved_for_instagram_queue' || ps==='instagram_approved' || ps==='approved_instagram' || ps.includes('approved_for_instagram');
+    return stage==='instagram_backlog' || ps==='instagram_backlog' || ps==='approved_for_instagram_queue' || ps==='instagram_approved' || ps==='approved_instagram' || ps.includes('approved_for_instagram');
   }
   function igUrl(username){ const u=cleanIgUsername(username); return u?`https://www.instagram.com/${u}/`:''; }
   function toDateInput(d){ const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); }
@@ -765,7 +766,7 @@
       if(alreadyQueuedOrSentIds.has(id)) return false;
       if(whatsappBlockedIds.has(id)) return false;
       if(!isInstagramEligibleStage(l)) return false;
-      // V102: Fila Instagram só puxa leads que já tiveram o perfil salvo E foram aprovados manualmente.
+      // V120: Fila Instagram só aloca leads do Backlog Instagram.
       if(!isInstagramApprovedForQueue(l)) return false;
       if(isSentLikeLead(l)) return false;
       const registeredRamo=resolveRegisteredParentRamoStrictV111(l,{});

@@ -290,24 +290,19 @@
       instagram_url:url,
       instagram_username:username,
       current_stage:'instagram_backlog',
-      current_status:'ready_for_instagram_queue',
-      status:'ready_for_instagram_queue',
+      current_status:'instagram_backlog',
+      status:'Aguardando alocação Instagram',
       lead_channel:'instagram',
-      pipeline_status:'approved_for_instagram_queue',
+      pipeline_status:'instagram_backlog',
       updated_at:new Date().toISOString()
     };
     const { error:uErr } = await c.from('leads').update(leadPayload).eq('user_id', user).eq('id', id);
     if (uErr) return notify('Erro ao aprovar Instagram: ' + uErr.message, 'err');
     lead = { ...lead, ...leadPayload };
 
-    try {
-      const q = await upsertDispatchItem(c, user, lead, username);
-      if (q.queued) notify(`✓ @${username} aprovado e inserido na Fila Instagram (@${q.profile})`);
-      else notify(`✓ @${username} aprovado. Configure um perfil Instagram ativo para gerar a fila.`, 'warn');
-    } catch (e) {
-      console.warn('[v108][instagram-dispatch-insert]', e?.message || e);
-      notify(`✓ @${username} aprovado, mas não consegui inserir na fila: ${e.message || e}`, 'warn');
-    }
+    // V120: nova regra operacional. Atribuição não aloca mais diretamente no dia/perfil.
+    // Fluxo correto: Atribuição Instagram -> Backlog Instagram -> Preencher perfil/alocar no dia -> Dia alocado.
+    notify(`✓ @${username} aprovado para o Backlog Instagram. Aloque pelo botão Preencher perfil no dia desejado.`);
 
     try { if (typeof window.renderAtribuicaoPanelV31 === 'function') await window.renderAtribuicaoPanelV31(); else if (typeof window.renderAtribuicao === 'function') await window.renderAtribuicao(); } catch(_) {}
     try { if (typeof window.refreshInstagramV94 === 'function') await window.refreshInstagramV94(); else if (typeof window.renderInstagram === 'function') await window.renderInstagram(); } catch(_) {}

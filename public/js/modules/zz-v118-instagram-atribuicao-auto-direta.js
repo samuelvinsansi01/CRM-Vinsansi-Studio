@@ -1,4 +1,4 @@
-/* V118 — Instagram Atribuição realmente direta
+/* V118 — Instagram Atribuição para Backlog, sem alocação automática
    Correção definitiva:
    - qualquer lead da aba Instagram que já tenha instagram.com/perfil ou @perfil válido é aprovado automaticamente para a Fila Instagram;
    - o botão "Aprovar para fila" também é interceptado mesmo se vier do handler antigo v65/v107;
@@ -7,7 +7,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260621-V118-INSTAGRAM-ATRIBUICAO-AUTO-DIRETA';
+  const VERSION='20260621-V120-INSTAGRAM-ATRIBUICAO-BACKLOG-SEM-ALOCAR';
   const approving = new Set();
   const approvedOnce = new Set();
 
@@ -105,15 +105,13 @@
       if(input.dataset.igV118Bound!=='1'){
         input.dataset.igV118Bound='1';
         input.addEventListener('input',()=>markInput(input),true);
-        input.addEventListener('change',()=>{ markInput(input); setTimeout(()=>approveNow(id,{fromChange:true}),120); },true);
-        input.addEventListener('paste',()=>setTimeout(()=>{ markInput(input); approveNow(id,{fromPaste:true}); },120),true);
+        input.addEventListener('change',()=>{ markInput(input); },true);
+        input.addEventListener('paste',()=>setTimeout(()=>{ markInput(input); },120),true);
         input.addEventListener('keydown',(ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); ev.stopPropagation(); approveNow(id,{fromClick:true}); } },true);
       }
-      // Principal: se o lead já veio com Instagram válido no campo, entra sozinho na fila.
-      if(username && input.dataset.igV118AutoQueued!=='1'){
-        input.dataset.igV118AutoQueued='1';
-        setTimeout(()=>approveNow(id,{auto:true}), 450);
-      }
+      // V120: não aprovar/alocar automaticamente só por existir link no campo.
+      // O clique em "Aprovar para fila" envia para o Backlog Instagram; a alocação no dia acontece em Preencher perfil.
+      if(username) input.dataset.igV118BacklogReady='1';
     });
   }
 
