@@ -29,6 +29,16 @@
     if(stage.includes('site')||lead?.has_own_site||String(lead?.website||'').trim()) return 'com-site';
     return 'sem-site';
   }
+  function isNoSiteLead(lead){
+    const stage=String(lead?.current_stage||'').toLowerCase();
+    const type=String(leadType(lead)||'');
+    return stage==='attribution_whatsapp' || type==='sem-site';
+  }
+  function initialPreDispatchStatus(lead){
+    // Regra oficial: leads WhatsApp/sem site não precisam de aprovação manual no Pré-envio.
+    // Eles entram como aprovados para seguir direto para a Fila WhatsApp quando você enviar aprovados.
+    return isNoSiteLead(lead) ? 'approved' : 'review';
+  }
   function originStage(item,lead){
     const raw=item?.raw_payload||{};
     if(raw.origin_stage) return raw.origin_stage;
@@ -101,7 +111,17 @@
       const current=(existing||[]).length; (existing||[]).forEach(x=>blocked.add(String(x.lead_id)));
       const need=Math.max(0,(Number(chip.daily_limit)||120)-current); if(need<=0)continue;
       const leads=await fetchLeads(mode,need,blocked); if(!leads.length)continue;
-      const rows=leads.map((lead,i)=>({user_id:user,lead_id:lead.id,chip_instance:chip.instance,chip_label:chip.label,scheduled_date:state.date,lead_type:leadType(lead),status:'review',position:current+i+1,raw_payload:{origin_stage:lead.current_stage,source_filter:mode,approved_in_attribution:isApprovedLead(lead),origin:VERSION}}));
+      const rows=leads.map((lead,i)=>({
+        user_id:user,
+        lead_id:lead.id,
+        chip_instance:chip.instance,
+        chip_label:chip.label,
+        scheduled_date:state.date,
+        lead_type:leadType(lead),
+        status:initialPreDispatchStatus(lead),
+        position:current+i+1,
+        raw_payload:{origin_stage:lead.current_stage,source_filter:mode,approved_in_attribution:isApprovedLead(lead),auto_approved_no_site:isNoSiteLead(lead),origin:VERSION}
+      }));
       const {error}=await c.from('pre_dispatch_items').insert(rows); if(error){console.warn('[pre-final insert]',error.message);continue;}
       await c.from('leads').update({current_stage:'pre_send',current_status:'pre_dispatch_review',updated_at:new Date().toISOString()}).eq('user_id',user).in('id',leads.map(l=>l.id));
       total+=leads.length;
@@ -144,7 +164,9 @@
 
   function renderItem(item){
     const l=item.leads||{}; const status=String(item.status||'review');
-    const badge=status==='approved'?'APROVADO':status.includes('invalid')?'INVÁLIDO':status.includes('retry')?'RETRY':'REVISÃO';
+    const autoApproved = status==='approved' && (item.raw_payload?.auto_approved_no_site || item.lead_type==='sem-site');
+    const badge=status==='approved'?(autoApproved?'AUTO APROVADO':'APROVADO'):status.includes('invalid')?'INVÁLIDO':status.includes('retry')?'RETRY':'REVISÃO';
+    const approveButton = status==='approved' ? '' : `<button class="btn btn-ghost" data-pre-action="approve" data-id="${esc(item.id)}">Aprovar</button>`;
     return `<div class="pre-final-row" data-pre-id="${esc(item.id)}">
       <div class="pre-final-main">
         <div class="pre-final-title">${esc(l.company_name||'Lead sem nome')}</div>
@@ -153,7 +175,7 @@
       <div class="pre-final-status ${esc(status)}">${badge}</div>
       <div class="pre-final-actions">
         <button class="btn btn-ghost" data-pre-action="return" data-id="${esc(item.id)}">↩ Atribuição</button>
-        <button class="btn btn-ghost" data-pre-action="approve" data-id="${esc(item.id)}">Aprovar</button>
+        ${approveButton}
         <button class="btn btn-ghost" data-pre-action="retry" data-id="${esc(item.id)}">Retry</button>
         <button class="btn btn-ghost" data-pre-action="invalid" data-id="${esc(item.id)}">Inválido</button>
       </div>
@@ -172,7 +194,7 @@
         <div class="page-head"><div><div class="page-title">Pré-envio <span>semanal.</span></div><div class="page-subtitle">Fila por dia e chip, sem código legado.</div></div></div>
         <div id="preWeekCards" class="pre-week-cards-v129">${dates.map(d=>{const c=counts[d]||{};return `<button class="pre-day-card ${state.date===d?'active':''} ${d===today()?'today':''}" data-date="${d}"><span>${weekday(d)}, ${brDate(d)}</span><strong>${c.total||0}/${cardLimit}</strong><small>rev ${c.review||0} · ok ${c.approved||0} · retry ${c.retry||0} · inv ${c.invalid||0}</small>${d===today()?'<em>HOJE</em>':''}</button>`;}).join('')}</div>
         <div class="pre-final-card"><div class="card-title">Chips</div><div class="pre-chip-row">${chipOptions}</div></div>
-        <div class="pre-final-card"><div class="card-title">Criar pré-envio</div><div class="pre-source-line"><b>Preencha a fila com leads de:</b><button class="btn btn-primary" data-fill="whatsapp">WhatsApp</button><button class="btn btn-primary" data-fill="site_agg">Com site + agregadores</button><button class="btn btn-primary" data-fill="general">Geral</button></div><div class="pre-final-help">WhatsApp puxa sem site. Com site e Agregadores só entram se estiverem aprovados na Atribuição.</div></div>
+        <div class="pre-final-card"><div class="card-title">Criar pré-envio</div><div class="pre-source-line"><b>Preencha a fila com leads de:</b><button class="btn btn-primary" data-fill="whatsapp">WhatsApp</button><button class="btn btn-primary" data-fill="site_agg">Com site + agregadores</button><button class="btn btn-primary" data-fill="general">Geral</button></div><div class="pre-final-help">WhatsApp/sem site entra automaticamente aprovado. Com site e Agregadores só entram se estiverem aprovados na Atribuição.</div></div>
         <div class="pre-final-card"><div class="pre-final-toolbar"><div><div class="card-title">Itens do dia</div><div class="pre-final-help">${esc(weekday(state.date))}, ${esc(brDate(state.date))} · ${state.chip==='all'?'Todos os chips':esc(state.chip)}</div></div><div><button class="btn btn-ghost" data-day-return="1">↩ Voltar dia para Atribuição</button><button class="btn btn-primary" data-send-approved="1">Enviar aprovados para Fila WhatsApp</button></div></div><div class="pre-final-list">${items.length?items.map(renderItem).join(''):`<div class="pre-empty">// nenhum lead neste dia/chip</div>`}</div></div>
       </div>`;
     }finally{state.loading=false;}
