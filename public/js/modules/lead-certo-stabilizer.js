@@ -1,6 +1,5 @@
 /* Lead Certo V132 — estabilizador final sem ZZ.
    Objetivo: parar sobrescrita de legado e fechar ações críticas:
-   - Pré-envio: voltar dia/item para atribuição com regra correta.
    - Atribuição: invalidar sempre 6 - Outro sem redirect.
    - Atribuição Instagram: aprovar -> backlog, sem fila direta/redirect.
    Este arquivo deve ser carregado por último. */
@@ -138,7 +137,7 @@
   document.addEventListener('click',function(ev){
     const btn=ev.target?.closest?.('button,a,[role="button"]'); if(!btn) return;
     const text=String(btn.textContent||btn.value||'').toLowerCase();
-    const panel=btn.closest('#panel-atribuicao,#panel-pre-envio,#preEnvioRoot,#panel-instagram');
+    const panel=btn.closest('#panel-atribuicao,#panel-instagram');
     if(!panel) return;
     if(btn.matches('[data-pre-return-item]')){ ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); returnPreEnvioItemToAttribution(btn.dataset.preReturnItem); return; }
     if(text.includes('voltar') && text.includes('atribui')){
