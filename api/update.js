@@ -407,6 +407,88 @@ async function upsertBase(userId, item, lead, when) {
   return { id: baseId };
 }
 
+
+async function upsertBaseInvalid(userId, item, lead, when, reason = 'Outros') {
+  const ig = cleanUsername(item.instagram_username || item.instagram_url || (lead && (lead.instagram_username || lead.instagram_url || lead.instagram)) || '');
+  const phone = normalizePhone(lead && (lead.normalized_phone || lead.phone) || '');
+  const payload = {
+    user_id: userId,
+    company_name: item.company_name || (lead && lead.company_name) || 'Lead Instagram',
+    phone: lead && lead.phone || null,
+    normalized_phone: phone || null,
+    website: lead && lead.website || null,
+    instagram_url: ig ? `https://www.instagram.com/${ig}/` : (lead && lead.instagram_url || null),
+    instagram_username: ig || (lead && lead.instagram_username) || null,
+    category: lead && lead.category || null,
+    category_name: lead && lead.category_name || item.parent_category || null,
+    categories: lead && lead.categories || null,
+    city: lead && lead.city || null,
+    state: lead && lead.state || null,
+    country_code: lead && lead.country_code || 'BR',
+    rating: lead && lead.rating || null,
+    reviews_count: lead && lead.reviews_count || null,
+    maps_url: lead && lead.maps_url || null,
+    raw_payload: { ...((lead && lead.raw_payload) || {}), instagram_dispatch_item_id: item.id || null, lead_id: item.lead_id || (lead && lead.id) || null, invalid_reason: reason || 'Outros' },
+    source: 'instagram_extension_api',
+    last_channel: 'instagram',
+    last_event_type: 'instagram_invalidated',
+    last_event_status: 'invalidated',
+    invalid_reason: reason || 'Outros',
+    invalid_source: 'instagram_extension',
+    invalidated_at: when,
+    last_contact_at: when,
+    status: 'invalidado',
+    updated_at: new Date().toISOString()
+  };
+  const or = [];
+  if (phone) or.push(`normalized_phone.eq.${encodeURIComponent(phone)}`);
+  if (ig) or.push(`instagram_username.eq.${encodeURIComponent(ig)}`);
+  let existing = [];
+  if (or.length) existing = await sbRest(`base_permanente?select=id&user_id=eq.${encodeURIComponent(userId)}&or=(${or.join(',')})&limit=1`, { method:'GET', prefer:'return=minimal' });
+  let baseId = null;
+  if (Array.isArray(existing) && existing[0] && existing[0].id) {
+    baseId = existing[0].id;
+    await sbRest(`base_permanente?id=eq.${encodeURIComponent(baseId)}&user_id=eq.${encodeURIComponent(userId)}`, { method:'PATCH', body: JSON.stringify(payload) });
+  } else {
+    payload.created_at = new Date().toISOString();
+    const inserted = await sbRest('base_permanente', { method:'POST', body: JSON.stringify(payload) });
+    baseId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : null;
+  }
+  try {
+    await sbRest('contact_events', { method:'POST', body: JSON.stringify({
+      user_id: userId,
+      lead_id: String(item.lead_id || (lead && lead.id) || ''),
+      base_permanente_id: baseId,
+      company_name: payload.company_name,
+      normalized_phone: phone || null,
+      website: payload.website,
+      instagram_url: payload.instagram_url,
+      maps_url: payload.maps_url,
+      channel: 'instagram',
+      source_account: item.profile_username || null,
+      source_instance: item.profile_id || null,
+      event_type: 'invalidated',
+      status: 'invalidated',
+      sent_at: when,
+      metadata: { instagram_dispatch_item_id: item.id || null, reason: reason || 'Outros' }
+    }) });
+  } catch (e) { console.warn('[instagram-api][contact_events-invalid]', e.message || e); }
+  if (item.lead_id) {
+    try {
+      await sbRest(`leads?id=eq.${encodeURIComponent(item.lead_id)}&user_id=eq.${encodeURIComponent(userId)}`, { method:'PATCH', body: JSON.stringify({
+        current_stage: 'archived',
+        current_status: 'instagram_invalidated',
+        status: 'Invalidado Instagram',
+        rejected_at: when,
+        rejected_reason: reason || 'Outros',
+        archived_at: when,
+        updated_at: new Date().toISOString()
+      }) });
+    } catch (e) { console.warn('[instagram-api][lead-invalid]', e.message || e); }
+  }
+  return { id: baseId };
+}
+
 async function instagramUpdate(input) {
   const userId = String(input.user_id || input.userId || '').trim();
   const id = String(input.id || input.item_id || input.itemId || '').trim();
@@ -428,6 +510,8 @@ async function instagramUpdate(input) {
     if (followStatus === 'followed' || followStatus === 'already_following') patch.followed_at = item.followed_at || now;
   } else if (action === 'error' || action === 'mark_error') {
     patch = { ...patch, status:'error', error_message: reason || 'erro operacional' };
+  } else if (action === 'invalid' || action === 'invalidated' || action === 'mark_invalid') {
+    patch = { ...patch, status:'invalidated', error_message: reason || 'Outros' };
   } else if (action === 'follow') {
     patch = { ...patch, follow_status: followStatus || 'followed', followed_at: item.followed_at || now };
   } else {
@@ -439,6 +523,10 @@ async function instagramUpdate(input) {
   if (patch.status === 'sent') {
     const lead = await findLead(userId, item.lead_id);
     await upsertBase(userId, updated, lead, now);
+  }
+  if (patch.status === 'invalidated') {
+    const lead = await findLead(userId, item.lead_id);
+    await upsertBaseInvalid(userId, updated, lead, now, reason || 'Outros');
   }
   return updated;
 }

@@ -6,10 +6,11 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260621-V112-INSTAGRAM-SEMANAL-BASE-FIX';
+  const VERSION='20260621-V113-INSTAGRAM-PERFIS-DUPLICADOS-INVALIDOS-FIX';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
+  let activeProfileFilter='all';
   let profilesCache=[];
   let queueCache=[];
   let leadsById={};
@@ -89,8 +90,12 @@
   function weekStartISO(s){ const d=parseLocalDate(s); const day=d.getDay(); d.setDate(d.getDate()-day); return toDateInput(d); }
   function weekDatesISO(s){ const start=weekStartISO(s); return Array.from({length:7},(_,i)=>addDaysISO(start,i)); }
   function fmtWeekCardDate(s){ try { const [y,m,d]=String(s).split('-').map(Number); const dt=new Date(y,m-1,d); const wd=dt.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''); return `${wd}, ${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}`; } catch(e){ return s; } }
-  function statusVisual(s){ s=String(s||'queued').toLowerCase(); if(['sent','enviado'].includes(s)) return 'Enviada'; if(['error','failed','erro'].includes(s)) return 'Erro'; return 'Em fila'; }
-  function statusClass(s){ s=String(s||'queued').toLowerCase(); if(['sent','enviado'].includes(s)) return 'ok'; if(['error','failed','erro'].includes(s)) return 'err'; return 'queue'; }
+  function isSentStatus(s){ return ['sent','enviado'].includes(String(s||'').toLowerCase()); }
+  function isErrorStatus(s){ return ['error','failed','erro'].includes(String(s||'').toLowerCase()); }
+  function isInvalidStatus(s){ return ['invalid','invalidated','invalido','invalidado'].includes(String(s||'').toLowerCase()); }
+  function isActiveQueueStatus(s){ return !isSentStatus(s) && !isErrorStatus(s) && !isInvalidStatus(s); }
+  function statusVisual(s){ s=String(s||'queued').toLowerCase(); if(isSentStatus(s)) return 'Enviada'; if(isErrorStatus(s)) return 'Erro'; if(isInvalidStatus(s)) return 'Invalidado'; return 'Em fila'; }
+  function statusClass(s){ s=String(s||'queued').toLowerCase(); if(isSentStatus(s)) return 'ok'; if(isErrorStatus(s)) return 'err'; if(isInvalidStatus(s)) return 'err'; return 'queue'; }
   function leadTypeOf(lead,item){
     const t=String(item?.lead_type || lead?.lead_type || lead?.website_type || '').toLowerCase();
     if(t.includes('agreg')) return 'agregador';
@@ -178,8 +183,9 @@
       if(!m[d]) m[d]={total:0,queued:0,sent:0,error:0};
       const st=String(r.status||'queued').toLowerCase();
       m[d].total++;
-      if(['sent','enviado'].includes(st)) m[d].sent++;
-      else if(['error','failed','erro'].includes(st)) m[d].error++;
+      if(isSentStatus(st)) m[d].sent++;
+      else if(isErrorStatus(st)) m[d].error++;
+      else if(isInvalidStatus(st)) m[d].invalid=(m[d].invalid||0)+1;
       else m[d].queued++;
     });
     weekCountsCache=m;
@@ -191,12 +197,12 @@
     const dates=weekDatesISO(activeDate);
     const totalLimit=(profilesCache||[]).reduce((acc,p)=>acc+Number(p.daily_limit||60),0) || 60;
     el.innerHTML=dates.map(d=>{
-      const c=weekCountsCache[d] || {total:0,queued:0,sent:0,error:0};
+      const c=weekCountsCache[d] || {total:0,queued:0,sent:0,error:0,invalid:0};
       const active=d===activeDate;
       return `<button class="ig-v112-week-card ${active?'active':''}" onclick="window.instagramV112SetDate('${esc(d)}')" style="text-align:left;border:1px solid ${active?'var(--accent)':'var(--border2)'};background:${active?'rgba(164,255,64,.06)':'var(--card)'};border-radius:12px;padding:13px 12px;min-height:68px;cursor:pointer;color:var(--text)">
         <div style="font-family:'DM Mono',monospace;font-size:10px;color:${active?'var(--accent)':'var(--muted)'};margin-bottom:8px">${esc(fmtWeekCardDate(d))}</div>
         <div style="font-size:18px;font-weight:900">${c.total}/${totalLimit}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:4px">fila ${c.queued} · env ${c.sent} · erro ${c.error}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:4px">fila ${c.queued} · env ${c.sent} · erro ${c.error} · inv ${c.invalid||0}</div>
       </button>`;
     }).join('');
   }
@@ -212,9 +218,10 @@
   function counters(status){
     const list=queueCache||[];
     return {
-      queued:list.filter(x=>!['sent','enviado','error','failed','erro'].includes(String(x.status||'queued').toLowerCase())).length,
-      sent:list.filter(x=>['sent','enviado'].includes(String(x.status||'').toLowerCase())).length,
-      error:list.filter(x=>['error','failed','erro'].includes(String(x.status||'').toLowerCase())).length
+      queued:list.filter(x=>isActiveQueueStatus(x.status)).length,
+      sent:list.filter(x=>isSentStatus(x.status)).length,
+      error:list.filter(x=>isErrorStatus(x.status)).length,
+      invalid:list.filter(x=>isInvalidStatus(x.status)).length
     };
   }
 
@@ -235,6 +242,7 @@
       </div>
       <div id="igV112Week" style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:10px;margin:10px 0 14px 0"></div>
       <div class="status-tabs" id="igV94Tabs" style="flex-shrink:0"></div>
+      <div id="igV113ProfileFilters" style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px 0"></div>
       <div class="stats-row" id="igV94Stats" style="flex-shrink:0"></div>
       <div id="igV94Content" class="stretch-list" style="flex:1;min-height:0;overflow:auto"></div>
     `;
@@ -243,7 +251,7 @@
   }
   function renderTabs(){
     const c=counters();
-    const tabs=[['queued','Em fila',c.queued],['sent','Enviadas',c.sent],['error','Erro',c.error]];
+    const tabs=[['queued','Em fila',c.queued],['sent','Enviadas',c.sent],['error','Erro',c.error],['invalid','Invalidados',c.invalid||0]];
     const el=document.getElementById('igV94Tabs'); if(!el) return;
     el.innerHTML=tabs.map(([k,l,n])=>`<button class="status-tab ${activeStatus===k?'active':''}" onclick="window.setInstagramStatusV94('${k}')">${l} <span class="st-count">${n}</span></button>`).join('');
   }
@@ -254,7 +262,43 @@
       <div class="stat-card"><div class="stat-label">PERFIS</div><div class="stat-value">${profilesCache.length}</div></div>
       <div class="stat-card"><div class="stat-label">EM FILA</div><div class="stat-value">${c.queued}</div></div>
       <div class="stat-card"><div class="stat-label">ENVIADAS</div><div class="stat-value">${c.sent}</div></div>
-      <div class="stat-card"><div class="stat-label">ERROS</div><div class="stat-value">${c.error}</div></div>`;
+      <div class="stat-card"><div class="stat-label">ERROS</div><div class="stat-value">${c.error}</div></div>
+      <div class="stat-card"><div class="stat-label">INVALIDADOS</div><div class="stat-value">${c.invalid||0}</div></div>`;
+  }
+
+  function renderProfileFilters(){
+    const el=document.getElementById('igV113ProfileFilters'); if(!el) return;
+    const totals={};
+    (profilesCache||[]).forEach(p=>{ totals[String(p.id)]={queued:0,sent:0,error:0,invalid:0,total:0}; });
+    (queueCache||[]).forEach(item=>{
+      const pid=String(item.profile_id||'');
+      if(!totals[pid]) totals[pid]={queued:0,sent:0,error:0,invalid:0,total:0};
+      totals[pid].total++;
+      if(isSentStatus(item.status)) totals[pid].sent++; else if(isErrorStatus(item.status)) totals[pid].error++; else if(isInvalidStatus(item.status)) totals[pid].invalid++; else totals[pid].queued++;
+    });
+    const mk=(key,label,sub)=>`<button class="status-tab ${String(activeProfileFilter)===String(key)?'active':''}" onclick="window.instagramV113SetProfileFilter('${esc(key)}')"><b>${esc(label)}</b> <span class="st-count">${esc(sub||'')}</span></button>`;
+    const allCount=queueCache.length;
+    el.innerHTML=[mk('all','Todos',allCount),...(profilesCache||[]).map(p=>{
+      const t=totals[String(p.id)]||{queued:0,sent:0,error:0,invalid:0,total:0};
+      return mk(String(p.id),'@'+(p.username||'perfil'), `${t.queued}/${p.daily_limit||60}`);
+    })].join('');
+  }
+  window.instagramV113SetProfileFilter=function(profileId){ activeProfileFilter=String(profileId||'all'); renderQueue(); };
+  window.instagramV113SetLoggedProfile=function(username){
+    const u=cleanIgUsername(username);
+    if(!u){ notify('Perfil logado inválido','err'); return; }
+    try{ localStorage.setItem('instagram_logged_profile_username',u); }catch(_){ }
+    const p=(profilesCache||[]).find(x=>cleanIgUsername(x.username)===u);
+    if(p) activeProfileFilter=String(p.id);
+    notify('✓ Extensão/aba vinculada ao perfil @'+u);
+    renderQueue();
+  };
+  function loadPreferredProfileFilter(){
+    if(activeProfileFilter!=='all') return;
+    let u=''; try{ u=cleanIgUsername(localStorage.getItem('instagram_logged_profile_username')||''); }catch(_){ }
+    if(!u) return;
+    const p=(profilesCache||[]).find(x=>cleanIgUsername(x.username)===u);
+    if(p) activeProfileFilter=String(p.id);
   }
   function groupByProfileAndBlock(items){
     const map=new Map();
@@ -268,17 +312,19 @@
     return [...map.values()];
   }
   function renderQueue(){
-    renderWeekCards(); renderTabs(); renderStats();
+    renderWeekCards(); renderTabs(); renderProfileFilters(); renderStats();
     const el=document.getElementById('igV94Content'); if(!el) return;
     if(!profilesCache.length){
       el.innerHTML=`<div class="stretch-card" style="text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;padding:28px">// nenhum perfil Instagram configurado. Vá em Configurações → Perfis Instagram.</div>`;
       return;
     }
     const list=queueCache.filter(item=>{
+      if(activeProfileFilter!=='all' && String(item.profile_id||'')!==String(activeProfileFilter)) return false;
       const s=String(item.status||'queued').toLowerCase();
-      if(activeStatus==='sent') return ['sent','enviado'].includes(s);
-      if(activeStatus==='error') return ['error','failed','erro'].includes(s);
-      return !['sent','enviado','error','failed','erro'].includes(s);
+      if(activeStatus==='sent') return isSentStatus(s);
+      if(activeStatus==='error') return isErrorStatus(s);
+      if(activeStatus==='invalid') return isInvalidStatus(s);
+      return isActiveQueueStatus(s);
     });
     if(!list.length){
       el.innerHTML=`<div class="stretch-card" style="text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;padding:28px">// nenhum item em ${esc(statusVisual(activeStatus).toLowerCase())} para ${esc(fmtDate(activeDate))}</div>`;
@@ -338,6 +384,7 @@
           <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="window.instagramV94Copy('${esc(item.id)}','2')">Copiar Msg 2</button>
           <button class="btn btn-primary" style="font-size:10px;padding:7px 12px" onclick="window.instagramV94MarkSent('${esc(item.id)}')">Marcar enviada</button>
           <button class="btn btn-danger" style="font-size:10px;padding:7px 12px" onclick="window.instagramV94MarkError('${esc(item.id)}')">Erro</button>
+          <button class="btn btn-danger" style="font-size:10px;padding:7px 12px" onclick="window.instagramV113MarkInvalid('${esc(item.id)}')">Invalidar</button>
         </div>
         <div class="insta-msg-blocks" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="insta-msg-block"><div class="insta-msg-block-label">Mensagem 1</div><div class="insta-msg-text">${esc(msg1||'Template não encontrado')}</div></div>
@@ -351,6 +398,7 @@
   async function refreshInstagramV94(){
     ensureInstagramPanel();
     await loadProfiles();
+    loadPreferredProfileFilter();
     await loadWeekCounts();
     await loadQueue();
     renderQueue();
@@ -381,6 +429,65 @@
     if(error){ notify('Erro ao marcar erro: '+error.message,'err'); return; }
     notify('✓ Marcado como erro'); await refreshInstagramV94();
   };
+
+  window.instagramV113MarkInvalid=async function(id){
+    const reason=prompt('Motivo da invalidação:', 'Outros'); if(reason===null) return;
+    const c=sb(); if(!c) return;
+    const item=queueCache.find(x=>String(x.id)===String(id));
+    const lead=getItemLead(item||{});
+    const now=new Date().toISOString();
+    const {error}=await c.from('instagram_dispatch_items').update({status:'invalidated',error_message:reason,last_action_at:now,updated_at:now}).eq('id',id);
+    if(error){ notify('Erro ao invalidar: '+error.message,'err'); return; }
+    try{ await upsertBaseInstagramInvalid(lead,item,reason,now); }catch(e){ console.warn('[v113][invalid-base]',e?.message||e); }
+    notify('✓ Lead invalidado e protegido na Base Permanente');
+    await refreshInstagramV94();
+  };
+
+  async function upsertBaseInstagramInvalid(lead,item,reason,when){
+    const c=sb(), user=uid(); if(!c||!user||!item) return;
+    lead=lead||{};
+    const phone=String(lead.normalized_phone||lead.phone||'').replace(/\D/g,'');
+    const ig=cleanIgUsername(item.instagram_username||item.instagram_url||lead.instagram_username||lead.instagram_url||lead.instagram);
+    const payload={
+      user_id:user,
+      company_name:lead.company_name||item.company_name||'Lead Instagram',
+      phone:lead.phone||null,
+      normalized_phone:phone||null,
+      website:lead.website||null,
+      website_domain:lead.website_domain||null,
+      instagram_url:ig?igUrl(ig):(lead.instagram_url||item.instagram_url||null),
+      instagram_username:ig||lead.instagram_username||null,
+      category:lead.category||null,
+      category_name:lead.category_name||item.parent_category||null,
+      categories:Array.isArray(lead.categories)?lead.categories:(lead.categories||[]),
+      city:lead.city||null,
+      state:lead.state||null,
+      country_code:lead.country_code||'BR',
+      rating:lead.rating||null,
+      reviews_count:lead.reviews_count||null,
+      maps_url:lead.maps_url||null,
+      source:'instagram_fila_manual',
+      last_channel:'instagram',
+      last_event_type:'instagram_invalidated',
+      last_event_status:'invalidated',
+      invalid_reason:reason||'Outros',
+      invalid_source:'instagram_fila',
+      invalidated_at:when,
+      last_contact_at:when,
+      status:'invalidado',
+      raw_payload:{...(lead.raw_payload||{}), instagram_dispatch_item_id:item.id||null, lead_id:item.lead_id||lead.id||null, invalid_reason:reason||'Outros'},
+      updated_at:new Date().toISOString()
+    };
+    const ors=[]; if(phone) ors.push(`normalized_phone.eq.${phone}`); if(ig) ors.push(`instagram_username.eq.${ig}`);
+    let existing=[];
+    if(ors.length){ const r=await c.from('base_permanente').select('id').eq('user_id',user).or(ors.join(',')).limit(1); if(!r.error) existing=r.data||[]; }
+    let baseId=null;
+    if(existing[0]?.id){ baseId=existing[0].id; await c.from('base_permanente').update(payload).eq('user_id',user).eq('id',baseId); }
+    else { const r=await c.from('base_permanente').insert({...payload,created_at:new Date().toISOString()}).select('id').maybeSingle(); baseId=r.data?.id||null; }
+    await c.from('contact_events').insert({user_id:user,lead_id:String(item.lead_id||lead.id||''),base_permanente_id:baseId,company_name:payload.company_name,normalized_phone:phone||null,website:payload.website,instagram_url:payload.instagram_url,maps_url:payload.maps_url,channel:'instagram',source_account:item.profile_username||null,source_instance:item.profile_id||null,event_type:'invalidated',status:'invalidated',sent_at:when,metadata:{instagram_dispatch_item_id:item.id||null,reason:reason||'Outros'}});
+    if(item.lead_id){ await c.from('leads').update({current_stage:'archived',current_status:'instagram_invalidated',status:'Invalidado Instagram',rejected_at:when,rejected_reason:reason||'Outros',archived_at:when,updated_at:new Date().toISOString()}).eq('user_id',user).eq('id',String(item.lead_id)); }
+  }
+
   async function upsertBaseInstagramSent(lead,item,when){
     const c=sb(), user=uid(); if(!c||!user||!item) return;
     lead = lead || {};
@@ -582,8 +689,10 @@
     const remaining=Math.max(0,capacity-already);
     if(!remaining){ notify('Perfil já preenchido para o dia','warn'); await refreshInstagramV94(); return; }
 
-    const {data:allItems}=await c.from('instagram_dispatch_items').select('lead_id,status').eq('user_id',user);
-    const alreadyQueuedOrSentIds=new Set((allItems||[]).filter(x=>!['error','failed','erro'].includes(String(x.status||'').toLowerCase())).map(x=>String(x.lead_id)));
+    const {data:allItems}=await c.from('instagram_dispatch_items').select('lead_id,status,instagram_username,instagram_url').eq('user_id',user);
+    const activeItems=(allItems||[]).filter(x=>!isErrorStatus(x.status));
+    const alreadyQueuedOrSentIds=new Set(activeItems.map(x=>String(x.lead_id)));
+    const activeQueuedIg=new Set(activeItems.flatMap(x=>[cleanIgUsername(x.instagram_username),cleanIgUsername(x.instagram_url)]).filter(Boolean));
     sentItems.forEach(x=>alreadyQueuedOrSentIds.add(String(x.lead_id)));
 
     const {data:waItems}=await c.from('pre_dispatch_items').select('lead_id,status').eq('user_id',user).in('status',['sent','enviado','ready_to_dispatch','queued','sending']);
@@ -609,7 +718,7 @@
       const registeredRamo=resolveRegisteredParentRamoStrictV111(l,{});
       if(!registeredRamo) return false;
       const ig=instagramFromLead(l);
-      if(!ig || blockedIg.has(ig)) return false;
+      if(!ig || blockedIg.has(ig) || activeQueuedIg.has(ig)) return false;
       const phone=String(l.normalized_phone||'').replace(/\D/g,'');
       if(phone && blockedPhones.has(phone)) return false;
       return true;
@@ -787,6 +896,14 @@
       return notify('Para aprovar, primeiro cole e salve um Instagram válido.','warn');
     }
     const url=igUrl(username);
+    try{
+      const checks=[];
+      checks.push(c.from('instagram_dispatch_items').select('id,profile_username,status,company_name').eq('user_id',user).or(`instagram_username.eq.${username},instagram_url.eq.${url}`).neq('lead_id',String(id)).limit(1));
+      checks.push(c.from('base_permanente').select('id,status,company_name').eq('user_id',user).or(`instagram_username.eq.${username},instagram_url.eq.${url}`).limit(1));
+      const [q,b]=await Promise.all(checks);
+      if((q.data||[])[0] && !isErrorStatus(q.data[0].status)) return notify('Instagram já existe em outra fila/perfil: @'+username,'warn');
+      if((b.data||[])[0]) return notify('Instagram já está na Base Permanente: @'+username,'warn');
+    }catch(e){ console.warn('[v113][approve-duplicate-check]',e?.message||e); }
     const {error}=await c.from('leads').update({
       instagram:url,
       instagram_url:url,
