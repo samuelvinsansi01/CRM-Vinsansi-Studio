@@ -310,7 +310,7 @@
 
   async function renderFilaZapV73(){
     addStyle(); const panel=document.getElementById('panel-fila-zap'); if(!panel)return;
-    document.querySelectorAll('.panel').forEach(p=>{const on=p.id==='panel-fila-zap';p.classList.toggle('active',on);p.style.display=on?'flex':'none';});
+    document.querySelectorAll('.panel').forEach(p=>{const on=p.id==='panel-fila-zap';p.classList.toggle('active',on); if(p.id==='panel-fila-zap') p.style.display='flex'; else p.style.display='';});
     panel.classList.add('v73-panel'); panel.classList.remove('v72-panel');
     panel.innerHTML=`<div class="zapLeft"><div class="zapLeft-inner"><div class="page-header" style="flex-shrink:0;padding:20px 20px 0"><div class="page-title">Fila <span>WhatsApp.</span></div><div class="page-sub">// carregando...</div></div></div></div><div class="zapDivider"></div><div class="zapRight"><div class="fila-empty">// carregando chips...</div></div>`;
     const data=await fetchData(); state.last=data;
