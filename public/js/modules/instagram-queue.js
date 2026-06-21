@@ -984,6 +984,10 @@
     try { const b=document.getElementById('badge-instagram'); if(b){ const c=counters(); b.textContent=String(c.queued+c.error); } } catch(e){}
     return out;
   };
+  // Exports oficiais usados pelo router final.
+  // Sem isso, a rota Instagram pode existir, mas o router não encontra o renderizador certo.
+  window.refreshInstagramV94=refreshInstagramV94;
+  window.renderInstagramQueuePanel=refreshInstagramV94;
   window.renderInstagram=refreshInstagramV94;
 
   document.addEventListener('DOMContentLoaded',()=>{
