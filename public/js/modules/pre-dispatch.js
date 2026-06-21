@@ -21,6 +21,48 @@
   function root(){return document.getElementById('preEnvioRoot')||document.getElementById('panel-pre-envio');}
   function currentDate(){return state.date||today();}
   function chipLabel(ch){return String(ch?.label||ch?.name||ch?.instance||ch?.chip_id||'Chip');}
+
+  function parseJsonSafe(v){try{return JSON.parse(v||'null');}catch(_){return null;}}
+  function getDispatchConfigCapacity(){
+    try{
+      const cfg = typeof window.getDispatchEditableConfigV49==='function' ? window.getDispatchEditableConfigV49() : null;
+      const blockSize = Number(cfg?.loteTamanho || cfg?.block_size || cfg?.blockSize || 0);
+      const blocks = Number(cfg?.blocoQuantidade || cfg?.blocks || 0);
+      const total = blockSize>0 && blocks>0 ? blockSize*blocks : 0;
+      if(total>0) return total;
+    }catch(_){ }
+    const keys=['vs_evo_config','evo_config','vs_disparo_config','disparoConfig'];
+    for(const k of keys){
+      const cfg=parseJsonSafe(localStorage.getItem(k)); if(!cfg) continue;
+      const blockSize=Number(cfg.loteTamanho ?? cfg.disparosPorBloco ?? cfg.block_size ?? cfg.blockSize ?? 0);
+      const blocks=Number(cfg.blocoQuantidade ?? cfg.quantidadeBlocos ?? cfg.blocks ?? 0);
+      const total=blockSize>0 && blocks>0 ? blockSize*blocks : 0;
+      if(total>0) return total;
+    }
+    return 0;
+  }
+  function getLocalChipConfig(instance){
+    const target=String(instance||'').trim(); if(!target) return null;
+    const keys=[];
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i); if(k && k.includes('vs_whatsapp_chips_v29')) keys.push(k);}
+    for(const k of keys){
+      const arr=parseJsonSafe(localStorage.getItem(k)); if(!Array.isArray(arr)) continue;
+      const found=arr.find(ch=>String(ch.instance||ch.chip_id||ch.id||ch.name||'').trim()===target || String(ch.label||ch.nome||'').trim()===target);
+      if(found) return found;
+    }
+    return null;
+  }
+  function chipDailyLimit(chip){
+    const local=getLocalChipConfig(chip?.instance||chip?.chip_id||chip?.label);
+    const dbLimit=Number(chip?.daily_limit||chip?.dailyLimit||0);
+    const localLimit=Number(local?.dailyLimit||local?.daily_limit||0);
+    const cfgLimit=Number(getDispatchConfigCapacity()||0);
+    // Prioriza valores configurados de verdade, especialmente quando o usuário troca 120 para outro limite.
+    if(dbLimit>0 && dbLimit!==120) return dbLimit;
+    if(localLimit>0 && localLimit!==120) return localLimit;
+    if(cfgLimit>0 && cfgLimit!==120) return cfgLimit;
+    return dbLimit>0 ? dbLimit : (localLimit>0 ? localLimit : (cfgLimit>0 ? cfgLimit : 120));
+  }
   function leadType(lead){
     const stage=String(lead?.current_stage||'').toLowerCase();
     const wt=String(lead?.website_type||'').toLowerCase();
@@ -53,7 +95,7 @@
     const c=db(), user=uid(); if(!c||!user)return [];
     const {data,error}=await c.from('whatsapp_instances').select('id,instance,label,name,chip_id,daily_limit,block_size,active,status,created_at').eq('user_id',user).eq('active',true).order('created_at',{ascending:true});
     if(error){console.warn('[pre-final chips]',error.message);return [];}
-    return (data||[]).filter(x=>x.instance||x.chip_id||x.label).map(x=>({...x,instance:String(x.instance||x.chip_id||x.label),label:chipLabel(x),daily_limit:Number(x.daily_limit||120)||120}));
+    return (data||[]).filter(x=>x.instance||x.chip_id||x.label).map(x=>({...x,instance:String(x.instance||x.chip_id||x.label),label:chipLabel(x),daily_limit:chipDailyLimit(x), block_size:Number(x.block_size||0)||0}));
   }
   async function getCounts(dates){
     const c=db(), user=uid(); const out={}; dates.forEach(d=>out[d]={total:0,review:0,approved:0,retry:0,invalid:0,ready:0});
@@ -109,7 +151,7 @@
       const {data:existing,error:exErr}=await c.from('pre_dispatch_items').select('lead_id').eq('user_id',user).eq('scheduled_date',state.date).eq('chip_instance',chip.instance).in('status',listStatuses.concat(['ready_to_dispatch']));
       if(exErr){console.warn('[pre-final existing]',exErr.message);continue;}
       const current=(existing||[]).length; (existing||[]).forEach(x=>blocked.add(String(x.lead_id)));
-      const need=Math.max(0,(Number(chip.daily_limit)||120)-current); if(need<=0)continue;
+      const need=Math.max(0,chipDailyLimit(chip)-current); if(need<=0)continue;
       const leads=await fetchLeads(mode,need,blocked); if(!leads.length)continue;
       const rows=leads.map((lead,i)=>({
         user_id:user,
@@ -188,8 +230,8 @@
       const dates=Array.from({length:7},(_,i)=>addDays(today(),i)); if(!dates.includes(state.date)) state.date=dates[0];
       const [counts,chips,items]=await Promise.all([getCounts(dates),getChips(),getItems(state.date,state.chip)]);
       const selectedChip = chips.find(ch=>ch.instance===state.chip);
-      const cardLimit = selectedChip ? (Number(selectedChip.daily_limit)||120) : 120;
-      const chipOptions=`<button class="pre-chip ${state.chip==='all'?'active':''}" data-chip="all">Todos</button>`+chips.map(ch=>`<button class="pre-chip ${state.chip===ch.instance?'active':''}" data-chip="${esc(ch.instance)}">${esc(ch.label)} <small>${esc(ch.daily_limit)}/dia</small></button>`).join('');
+      const cardLimit = selectedChip ? chipDailyLimit(selectedChip) : (chips.reduce((sum,ch)=>sum+chipDailyLimit(ch),0)||120);
+      const chipOptions=`<button class="pre-chip ${state.chip==='all'?'active':''}" data-chip="all">Todos</button>`+chips.map(ch=>`<button class="pre-chip ${state.chip===ch.instance?'active':''}" data-chip="${esc(ch.instance)}">${esc(ch.label)} <small>${esc(chipDailyLimit(ch))}/dia</small></button>`).join('');
       r.innerHTML=`<div class="pre-final">
         <div class="page-head"><div><div class="page-title">Pré-envio <span>semanal.</span></div><div class="page-subtitle">Fila por dia e chip, sem código legado.</div></div></div>
         <div id="preWeekCards" class="pre-week-cards-v129">${dates.map(d=>{const c=counts[d]||{};return `<button class="pre-day-card ${state.date===d?'active':''} ${d===today()?'today':''}" data-date="${d}"><span>${weekday(d)}, ${brDate(d)}</span><strong>${c.total||0}/${cardLimit}</strong><small>rev ${c.review||0} · ok ${c.approved||0} · retry ${c.retry||0} · inv ${c.invalid||0}</small>${d===today()?'<em>HOJE</em>':''}</button>`;}).join('')}</div>
