@@ -6,7 +6,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260621-V114-HOJE-CARDS-FIX';
+  const VERSION='20260621-V115-INSTAGRAM-EDIT-PRE-CARD-FIX';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
@@ -382,6 +382,7 @@
       <div style="padding:0 14px 14px 14px;display:grid;gap:10px">
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           ${username?`<a class="btn btn-ghost" style="font-size:10px;padding:7px 12px;text-decoration:none" target="_blank" href="${esc(igUrl(username))}">Abrir perfil</a>`:''}
+          <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="window.instagramV115EditInstagram('${esc(item.id)}')">Editar Instagram</button>
           <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="window.instagramV94Copy('${esc(item.id)}','1')">Copiar Msg 1</button>
           <button class="btn btn-ghost" style="font-size:10px;padding:7px 12px" onclick="window.instagramV94Copy('${esc(item.id)}','2')">Copiar Msg 2</button>
           <button class="btn btn-primary" style="font-size:10px;padding:7px 12px" onclick="window.instagramV94MarkSent('${esc(item.id)}')">Marcar enviada</button>
@@ -432,8 +433,46 @@
     notify('✓ Marcado como erro'); await refreshInstagramV94();
   };
 
+  window.instagramV115EditInstagram=async function(id){
+    const c=sb(), user=uid(); if(!c||!user) return notify('// Supabase indisponível','err');
+    const item=queueCache.find(x=>String(x.id)===String(id));
+    if(!item) return notify('Item da fila não encontrado','err');
+    const lead=getItemLead(item||{});
+    const atual=cleanIgUsername(item.instagram_username || item.instagram_url || lead.instagram_username || lead.instagram_url || lead.instagram || '');
+    const raw=prompt('Novo Instagram do lead:', atual ? '@'+atual : '');
+    if(raw===null) return;
+    const username=cleanIgUsername(raw);
+    if(!username) return notify('Instagram inválido. Use @perfil ou instagram.com/perfil.','warn');
+    const url=igUrl(username);
+    try{
+      const q=await c.from('instagram_dispatch_items')
+        .select('id,lead_id,status,company_name,profile_username')
+        .eq('user_id',user)
+        .or(`instagram_username.eq.${username},instagram_url.eq.${url}`)
+        .neq('id',String(id))
+        .limit(1);
+      const dup=(q.data||[])[0];
+      if(dup && !isErrorStatus(dup.status)) return notify('Instagram já está em outra fila/perfil: @'+username,'warn');
+      const b=await c.from('base_permanente')
+        .select('id,status,company_name')
+        .eq('user_id',user)
+        .or(`instagram_username.eq.${username},instagram_url.eq.${url}`)
+        .limit(1);
+      if((b.data||[])[0]) return notify('Instagram já está na Base Permanente: @'+username,'warn');
+    }catch(e){ console.warn('[v115][edit-instagram-dup-check]',e?.message||e); }
+    const now=new Date().toISOString();
+    const {error:e1}=await c.from('instagram_dispatch_items').update({instagram_username:username,instagram_url:url,error_message:null,last_action_at:now,updated_at:now}).eq('user_id',user).eq('id',id);
+    if(e1) return notify('Erro ao editar Instagram: '+e1.message,'err');
+    if(item.lead_id){
+      const {error:e2}=await c.from('leads').update({instagram:url,instagram_url:url,instagram_username:username,lead_channel:'instagram',updated_at:now}).eq('user_id',user).eq('id',String(item.lead_id));
+      if(e2) console.warn('[v115][edit-instagram-lead]',e2.message);
+    }
+    notify('✓ Instagram atualizado para @'+username);
+    await refreshInstagramV94();
+  };
+
   window.instagramV113MarkInvalid=async function(id){
-    const reason=prompt('Motivo da invalidação:', 'Outros'); if(reason===null) return;
+    const reason='Outros';
     const c=sb(); if(!c) return;
     const item=queueCache.find(x=>String(x.id)===String(id));
     const lead=getItemLead(item||{});
@@ -868,14 +907,13 @@
       instagram_username:username,
       current_stage:'attribution_instagram',
       lead_channel:'instagram',
-      // V102: salvar Instagram NÃO aprova automaticamente para fila.
-      // A aprovação é uma ação separada para evitar puxar leads sem revisão.
-      pipeline_status:'instagram_profile_saved',
+      // V115: se o link já é um perfil válido, a própria ação do botão aprova para a fila.
+      pipeline_status:'approved_for_instagram_queue',
       updated_at:new Date().toISOString()
     }).eq('user_id',user).eq('id',id);
     if(error){ if(card) card.style.opacity='1'; return notify('Erro ao salvar Instagram: '+error.message,'err'); }
     if(card) card.style.opacity='1';
-    notify('✓ Instagram salvo. Agora clique em Aprovar para fila quando revisar este lead.');
+    notify('✓ Instagram válido aprovado para a Fila Instagram');
     try{ if(typeof window.renderAtribuicaoPanelV31==='function') await window.renderAtribuicaoPanelV31(); else if(typeof window.renderAtribuicao==='function') await window.renderAtribuicao(); }catch(_){ }
     try{ await refreshInstagramV94(); }catch(_){ }
     try{ if(typeof window.updateMenuBadgesTotalsV65==='function') window.updateMenuBadgesTotalsV65(true); else if(typeof window.updateBadges==='function') window.updateBadges(); }catch(_){ }

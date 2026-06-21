@@ -1140,6 +1140,26 @@
     if(error){ console.warn('[v31.7][day-counts]', error.message); return {}; }
     return (data||[]).reduce((acc,r)=>{ acc[r.scheduled_date]=(acc[r.scheduled_date]||0)+1; return acc; },{});
   }
+  async function dayCountsDetailedV115(dates){
+    const c=db(); const out={}; dates.forEach(d=>out[d]={total:0,review:0,valid:0,retry:0,invalid:0});
+    if(!c) return out;
+    const { data, error } = await c.from('pre_dispatch_items')
+      .select('scheduled_date,status,validation_status,invalid_reason')
+      .eq('user_id',uid())
+      .in('scheduled_date',dates);
+    if(error){ console.warn('[v115][pre-day-counts]', error.message); return out; }
+    (data||[]).forEach(r=>{
+      const d=String(r.scheduled_date||'').slice(0,10); if(!out[d]) out[d]={total:0,review:0,valid:0,retry:0,invalid:0};
+      const st=String(r.status||'').toLowerCase(); const vs=String(r.validation_status||'').toLowerCase();
+      if(['ready_to_dispatch','queued','dispatch_queue','not_sent','waiting','scheduled','sending','sent','enviado','enviada','error','erro','failed'].includes(st)) return;
+      out[d].total++;
+      if(st.includes('invalid') || vs.includes('invalid') || r.invalid_reason) out[d].invalid++;
+      else if(vs.includes('valid') || st==='approved') out[d].valid++;
+      else if(st.includes('retry') || vs.includes('retry') || st.includes('error') || vs.includes('error')) out[d].retry++;
+      else out[d].review++;
+    });
+    return out;
+  }
 
   async function restoreExpiredDailyItemsV317(){
     const c=db(); if(!c) return;
@@ -1194,6 +1214,7 @@
     if(!dates.includes(selectedDate)) setSelectedPreEnvioDateV317(dates.includes(todayIso()) ? todayIso() : dates[0], false);
     const dailyCapacity = chips.reduce((sum,ch)=>sum + Number(ch.daily_limit || 120),0) || (chips.length*120) || 0;
     const countsByDay = await dayCounts(dates);
+    const detailedByDayV115 = await dayCountsDetailedV115(dates);
     root.innerHTML = `
       <div class="page-header" style="flex-shrink:0">
         <div>
@@ -1202,9 +1223,10 @@
         </div>
       </div>
       <div id="preWeekCards" class="pre-week-cards">
-        ${dates.map(d=>{ const isToday=d===todayIso(); return `<button class="pre-day-card ${d===selectedDate?'active':''} ${isToday?'today':''}" data-date="${d}" onclick="setPreEnvioDateV31('${d}')">
+        ${dates.map(d=>{ const isToday=d===todayIso(); const dc=detailedByDayV115[d]||{total:countsByDay[d]||0,review:0,valid:0,retry:0,invalid:0}; return `<button class="pre-day-card ${d===selectedDate?'active':''} ${isToday?'today':''}" data-date="${d}" onclick="setPreEnvioDateV31('${d}')">
           <span>${dayLabel(d)}</span>
-          <strong>${countsByDay[d]||0}/${dailyCapacity}</strong>
+          <strong>${dc.total||0}/${dailyCapacity}</strong>
+          <small>rev ${dc.review||0} · ok ${dc.valid||0} · retry ${dc.retry||0} · inv ${dc.invalid||0}</small>
           ${isToday?`<em>HOJE</em>`:''}
         </button>`; }).join('')}
       </div>
@@ -1693,10 +1715,10 @@
   function applyPreEnvioStylesV317(){
     if(document.getElementById('preenvio-v317-style')) return;
     const style=document.createElement('style'); style.id='preenvio-v317-style'; style.textContent=`
-      .pre-week-cards{display:grid;grid-template-columns:repeat(7,minmax(90px,1fr));gap:10px;margin:0 0 14px 0}
-      .pre-day-card{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:12px;padding:12px 10px;text-align:left;cursor:pointer;color:var(--text);font-family:'DM Mono',monospace;min-height:68px}
-      .pre-day-card span{display:block;font-size:10px;color:var(--muted);margin-bottom:7px}.pre-day-card strong{font-size:16px;color:var(--text)}.pre-day-card em{display:inline-flex;align-items:center;margin-top:8px;padding:2px 7px;border-radius:999px;border:1px solid rgba(184,240,89,.35);background:rgba(184,240,89,.08);color:var(--accent);font-style:normal;font-size:8px;font-family:'DM Mono',monospace;font-weight:800;letter-spacing:.04em}
-      .pre-day-card.today:not(.active){border-color:rgba(184,240,89,.38);box-shadow:0 0 0 1px rgba(184,240,89,.08)}.pre-day-card.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(184,240,89,.15);background:rgba(184,240,89,.08)}.pre-day-card.active strong{color:var(--accent)}
+      .pre-week-cards{display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:10px;margin:0 0 14px 0}
+      .pre-day-card{background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:13px 12px;text-align:left;cursor:pointer;color:var(--text);font-family:'DM Mono',monospace;min-height:92px;position:relative}
+      .pre-day-card span{display:block;font-size:10px;color:var(--muted);margin-bottom:8px}.pre-day-card strong{display:block;font-size:18px;color:var(--text);font-family:inherit;font-weight:900}.pre-day-card small{display:block;font-size:8px;color:var(--muted);margin-top:4px;line-height:1.35}.pre-day-card em{display:inline-flex;align-items:center;margin-top:8px;padding:2px 7px;border-radius:999px;border:1px solid rgba(184,240,89,.35);background:rgba(184,240,89,.08);color:var(--accent);font-style:normal;font-size:8px;font-family:'DM Mono',monospace;font-weight:800;letter-spacing:.04em}
+      .pre-day-card.today:not(.active){border-color:rgba(184,240,89,.38);box-shadow:0 0 0 1px rgba(184,240,89,.08)}.pre-day-card.active{border-color:var(--accent);box-shadow:0 0 0 1px rgba(184,240,89,.15);background:rgba(184,240,89,.06)}.pre-day-card.active span,.pre-day-card.today span{color:var(--accent)}
       #preEnvioList .pre-card-name,#panel-fila-zap .pre-card-name{font-size:14px!important;line-height:1.25!important;font-weight:600!important}
       #preEnvioList .pre-card-link,#preEnvioList .pre-sep,#preEnvioList .pre-chip-mini,#panel-fila-zap .pre-card-link,#panel-fila-zap .pre-sep{font-size:10px!important;line-height:1.25!important;text-decoration:none!important}
       .pre-card-link{background:none;border:0;padding:0;cursor:pointer;font-family:'Syne',sans-serif;font-weight:700}.pre-site{color:var(--accent)!important}.pre-whatsapp{color:var(--ok)!important}.pre-card-link.muted{color:var(--muted)!important}.pre-sep{color:var(--muted);margin:0 3px}.pre-chip-mini{color:var(--muted);margin-left:8px;font-family:'DM Mono',monospace}
