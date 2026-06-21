@@ -193,6 +193,27 @@
     return m;
   }
 
+  async function refreshInstagramV94(){
+    try{
+      ensureInstagramPanel();
+      await loadProfiles();
+      await loadQueue();
+      await loadWeekCounts();
+      loadPreferredProfileFilter();
+      renderQueue();
+      if(typeof window.updateBadges==='function') window.updateBadges();
+    }catch(e){
+      console.error('[instagram-queue][refresh]', e);
+      const panel=document.getElementById('panel-instagram');
+      if(panel){
+        panel.innerHTML = `
+          <div class="page-header"><div><div class="page-title">Instagram <span>Fila.</span></div><div class="page-sub">// erro ao carregar fila</div></div></div>
+          <div class="stretch-card" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--danger);padding:24px">// ${esc(e?.message||e||'erro desconhecido')}</div>
+        `;
+      }
+    }
+  }
+
   function renderWeekCards(){
     const el=document.getElementById('igV112Week'); if(!el) return;
     const dates=weekDatesISO(activeDate);
