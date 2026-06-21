@@ -6,13 +6,14 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260619-V102-INSTAGRAM-APROVACAO-PERFIL-SALVO';
+  const VERSION='20260621-V112-INSTAGRAM-SEMANAL-BASE-FIX';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
   let profilesCache=[];
   let queueCache=[];
   let leadsById={};
+  let weekCountsCache={};
 
   function sb(){ try { return window.sbClient || window.supabaseClient || window.supabase || null; } catch(e){ return null; } }
   function uid(){ try { return window.currentUser?.id || window.authUser?.id || ''; } catch(e){ return ''; } }
@@ -83,6 +84,11 @@
   function igUrl(username){ const u=cleanIgUsername(username); return u?`https://www.instagram.com/${u}/`:''; }
   function toDateInput(d){ const x=new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); }
   function fmtDate(s){ try { const [y,m,d]=String(s).split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'}).replace('.',''); } catch(e){ return s; } }
+  function parseLocalDate(s){ const [y,m,d]=String(s||toDateInput(new Date())).split('-').map(Number); return new Date(y,m-1,d); }
+  function addDaysISO(s,days){ const d=parseLocalDate(s); d.setDate(d.getDate()+Number(days||0)); return toDateInput(d); }
+  function weekStartISO(s){ const d=parseLocalDate(s); const day=d.getDay(); d.setDate(d.getDate()-day); return toDateInput(d); }
+  function weekDatesISO(s){ const start=weekStartISO(s); return Array.from({length:7},(_,i)=>addDaysISO(start,i)); }
+  function fmtWeekCardDate(s){ try { const [y,m,d]=String(s).split('-').map(Number); const dt=new Date(y,m-1,d); const wd=dt.toLocaleDateString('pt-BR',{weekday:'short'}).replace('.',''); return `${wd}, ${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}`; } catch(e){ return s; } }
   function statusVisual(s){ s=String(s||'queued').toLowerCase(); if(['sent','enviado'].includes(s)) return 'Enviada'; if(['error','failed','erro'].includes(s)) return 'Erro'; return 'Em fila'; }
   function statusClass(s){ s=String(s||'queued').toLowerCase(); if(['sent','enviado'].includes(s)) return 'ok'; if(['error','failed','erro'].includes(s)) return 'err'; return 'queue'; }
   function leadTypeOf(lead,item){
@@ -155,6 +161,52 @@
     }
     return queueCache;
   }
+  async function loadWeekCounts(){
+    const c=sb(), user=uid(); if(!c||!user){ weekCountsCache={}; return {}; }
+    const dates=weekDatesISO(activeDate);
+    const start=dates[0], end=addDaysISO(start,7);
+    const {data,error}=await c.from('instagram_dispatch_items')
+      .select('scheduled_date,status')
+      .eq('user_id',user)
+      .gte('scheduled_date',start)
+      .lt('scheduled_date',end);
+    if(error){ console.warn('[v112][week-counts]',error.message); weekCountsCache={}; return {}; }
+    const m={};
+    dates.forEach(d=>m[d]={total:0,queued:0,sent:0,error:0});
+    (data||[]).forEach(r=>{
+      const d=String(r.scheduled_date||'').slice(0,10);
+      if(!m[d]) m[d]={total:0,queued:0,sent:0,error:0};
+      const st=String(r.status||'queued').toLowerCase();
+      m[d].total++;
+      if(['sent','enviado'].includes(st)) m[d].sent++;
+      else if(['error','failed','erro'].includes(st)) m[d].error++;
+      else m[d].queued++;
+    });
+    weekCountsCache=m;
+    return m;
+  }
+
+  function renderWeekCards(){
+    const el=document.getElementById('igV112Week'); if(!el) return;
+    const dates=weekDatesISO(activeDate);
+    const totalLimit=(profilesCache||[]).reduce((acc,p)=>acc+Number(p.daily_limit||60),0) || 60;
+    el.innerHTML=dates.map(d=>{
+      const c=weekCountsCache[d] || {total:0,queued:0,sent:0,error:0};
+      const active=d===activeDate;
+      return `<button class="ig-v112-week-card ${active?'active':''}" onclick="window.instagramV112SetDate('${esc(d)}')" style="text-align:left;border:1px solid ${active?'var(--accent)':'var(--border2)'};background:${active?'rgba(164,255,64,.06)':'var(--card)'};border-radius:12px;padding:13px 12px;min-height:68px;cursor:pointer;color:var(--text)">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;color:${active?'var(--accent)':'var(--muted)'};margin-bottom:8px">${esc(fmtWeekCardDate(d))}</div>
+        <div style="font-size:18px;font-weight:900">${c.total}/${totalLimit}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);margin-top:4px">fila ${c.queued} · env ${c.sent} · erro ${c.error}</div>
+      </button>`;
+    }).join('');
+  }
+
+  window.instagramV112SetDate=function(date){
+    activeDate=String(date||toDateInput(new Date())).slice(0,10);
+    const input=document.getElementById('igV94Date'); if(input) input.value=activeDate;
+    refreshInstagramV94();
+  };
+
   function getProfile(id){ return profilesCache.find(p=>String(p.id)===String(id)); }
   function getItemLead(item){ return leadsById[String(item.lead_id)] || {}; }
   function counters(status){
@@ -181,6 +233,7 @@
           <button class="btn btn-ghost" id="igV94Refresh">Atualizar</button>
         </div>
       </div>
+      <div id="igV112Week" style="flex-shrink:0;display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:10px;margin:10px 0 14px 0"></div>
       <div class="status-tabs" id="igV94Tabs" style="flex-shrink:0"></div>
       <div class="stats-row" id="igV94Stats" style="flex-shrink:0"></div>
       <div id="igV94Content" class="stretch-list" style="flex:1;min-height:0;overflow:auto"></div>
@@ -215,7 +268,7 @@
     return [...map.values()];
   }
   function renderQueue(){
-    renderTabs(); renderStats();
+    renderWeekCards(); renderTabs(); renderStats();
     const el=document.getElementById('igV94Content'); if(!el) return;
     if(!profilesCache.length){
       el.innerHTML=`<div class="stretch-card" style="text-align:center;color:var(--muted);font-family:'DM Mono',monospace;font-size:10px;padding:28px">// nenhum perfil Instagram configurado. Vá em Configurações → Perfis Instagram.</div>`;
@@ -298,6 +351,7 @@
   async function refreshInstagramV94(){
     ensureInstagramPanel();
     await loadProfiles();
+    await loadWeekCounts();
     await loadQueue();
     renderQueue();
     try{ if(typeof window.updateBadges==='function') window.updateBadges(); }catch(e){}
@@ -328,38 +382,108 @@
     notify('✓ Marcado como erro'); await refreshInstagramV94();
   };
   async function upsertBaseInstagramSent(lead,item,when){
-    const c=sb(), user=uid(); if(!c||!user||!lead) return;
-    const phone=lead.normalized_phone||lead.phone||null;
+    const c=sb(), user=uid(); if(!c||!user||!item) return;
+    lead = lead || {};
+    const phoneRaw=lead.normalized_phone||lead.phone||'';
+    const phone=String(phoneRaw||'').replace(/\D/g,'');
     const ig=cleanIgUsername(item?.instagram_username||lead.instagram_username||lead.instagram_url||lead.instagram||item?.instagram_url);
     if(!phone && !ig) return;
-    const payload={
+    const basePayload={
       user_id:user,
-      company_name:lead.company_name||item?.company_name||'',
+      company_name:lead.company_name||item?.company_name||'Lead Instagram',
       phone:lead.phone||null,
-      normalized_phone:lead.normalized_phone||phone,
+      normalized_phone:phone||null,
       website:lead.website||null,
-      instagram_url: ig?igUrl(ig):(lead.instagram_url||null),
+      website_domain:lead.website_domain||null,
+      instagram_url: ig?igUrl(ig):(lead.instagram_url||item?.instagram_url||null),
       instagram_username: ig||lead.instagram_username||null,
       category:lead.category||null,
       category_name:lead.category_name||item?.parent_category||null,
-      categories:lead.categories||null,
+      categories:Array.isArray(lead.categories)?lead.categories:(lead.categories||[]),
       city:lead.city||null,
       state:lead.state||null,
       country_code:lead.country_code||'BR',
       rating:lead.rating||null,
       reviews_count:lead.reviews_count||null,
       maps_url:lead.maps_url||null,
-      raw_payload:lead.raw_payload||null,
-      source:'instagram_extension_v1',
+      raw_payload:{...(lead.raw_payload||{}), instagram_dispatch_item_id:item.id||null, lead_id:item.lead_id||lead.id||null},
+      source:'instagram_fila_manual',
       last_channel:'instagram',
       last_event_type:'instagram_sent',
       last_event_status:'sent',
       instagram_sent_at:when,
       last_contact_at:when,
       status:'instagram_sent',
+      sent_channels:['instagram'],
       updated_at:new Date().toISOString()
     };
-    await c.from('base_permanente').upsert(payload,{onConflict: phone?'user_id,normalized_phone':'user_id,instagram_username'});
+    try{
+      const ors=[];
+      if(phone) ors.push(`normalized_phone.eq.${phone}`);
+      if(ig) ors.push(`instagram_username.eq.${ig}`);
+      let existing=[];
+      if(ors.length){
+        const r=await c.from('base_permanente').select('id').eq('user_id',user).or(ors.join(',')).limit(1);
+        if(!r.error) existing=r.data||[];
+      }
+      let baseId=null;
+      if(existing[0]?.id){
+        baseId=existing[0].id;
+        const {error}=await c.from('base_permanente').update(basePayload).eq('user_id',user).eq('id',baseId);
+        if(error) throw error;
+      }else{
+        const {data,error}=await c.from('base_permanente').insert({...basePayload,created_at:new Date().toISOString()}).select('id').maybeSingle();
+        if(error) throw error;
+        baseId=data?.id||null;
+      }
+      await c.from('contact_events').insert({
+        user_id:user,
+        lead_id:String(item.lead_id||lead.id||''),
+        base_permanente_id:baseId,
+        company_name:basePayload.company_name,
+        normalized_phone:phone||null,
+        website:basePayload.website,
+        instagram_url:basePayload.instagram_url,
+        maps_url:basePayload.maps_url,
+        channel:'instagram',
+        source_account:item.profile_username||null,
+        source_instance:item.profile_id||null,
+        event_type:'sent',
+        status:'sent',
+        message_template:item.template_id||null,
+        sent_at:when,
+        metadata:{instagram_dispatch_item_id:item.id||null, message_1:item.message_1||null, message_2:item.message_2||null}
+      });
+    }catch(e){ console.warn('[v112][base/contact-events]', e?.message||e); }
+
+    if(phone){
+      try{
+        await c.from('sent_contacts').upsert({
+          user_id:user,
+          lead_id:String(item.lead_id||lead.id||''),
+          company_name:basePayload.company_name,
+          phone:lead.phone||phone,
+          normalized_phone:phone,
+          block_type:'already_sent',
+          source:'instagram_fila',
+          reason:'instagram_sent',
+          active:true,
+          dispatched_at:when,
+          raw_payload:{instagram_dispatch_item_id:item.id||null, instagram_username:ig||null}
+        },{onConflict:'user_id,normalized_phone'});
+      }catch(e){ console.warn('[v112][sent_contacts-instagram]', e?.message||e); }
+    }
+    try{
+      if(item.lead_id){
+        await c.from('leads').update({
+          current_stage:'archived',
+          current_status:'instagram_sent',
+          status:'Enviada Instagram',
+          archived_at:when,
+          updated_at:new Date().toISOString()
+        }).eq('user_id',user).eq('id',String(item.lead_id));
+      }
+    }catch(e){ console.warn('[v112][lead-instagram-sent]', e?.message||e); }
   }
 
 

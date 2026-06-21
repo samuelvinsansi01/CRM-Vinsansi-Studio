@@ -316,7 +316,7 @@ async function upsertBase(userId, item, lead, when) {
     instagram_url: ig ? `https://www.instagram.com/${ig}/` : (lead && lead.instagram_url || null),
     instagram_username: ig || (lead && lead.instagram_username) || null,
     category: lead && lead.category || null,
-    category_name: lead && lead.category_name || null,
+    category_name: lead && lead.category_name || item.parent_category || null,
     categories: lead && lead.categories || null,
     city: lead && lead.city || null,
     state: lead && lead.state || null,
@@ -324,7 +324,7 @@ async function upsertBase(userId, item, lead, when) {
     rating: lead && lead.rating || null,
     reviews_count: lead && lead.reviews_count || null,
     maps_url: lead && lead.maps_url || null,
-    raw_payload: lead && lead.raw_payload || null,
+    raw_payload: { ...((lead && lead.raw_payload) || {}), instagram_dispatch_item_id: item.id || null, lead_id: item.lead_id || (lead && lead.id) || null },
     source: 'instagram_extension_api',
     last_channel: 'instagram',
     last_event_type: 'instagram_sent',
@@ -332,6 +332,7 @@ async function upsertBase(userId, item, lead, when) {
     instagram_sent_at: when,
     last_contact_at: when,
     status: 'instagram_sent',
+    sent_channels: ['instagram'],
     updated_at: new Date().toISOString()
   };
 
@@ -342,11 +343,68 @@ async function upsertBase(userId, item, lead, when) {
   if (or.length) {
     existing = await sbRest(`base_permanente?select=id&user_id=eq.${encodeURIComponent(userId)}&or=(${or.join(',')})&limit=1`, { method:'GET', prefer:'return=minimal' });
   }
+  let baseId = null;
   if (Array.isArray(existing) && existing[0] && existing[0].id) {
-    return sbRest(`base_permanente?id=eq.${encodeURIComponent(existing[0].id)}`, { method:'PATCH', body: JSON.stringify(payload) });
+    baseId = existing[0].id;
+    await sbRest(`base_permanente?id=eq.${encodeURIComponent(baseId)}&user_id=eq.${encodeURIComponent(userId)}`, { method:'PATCH', body: JSON.stringify(payload) });
+  } else {
+    payload.created_at = new Date().toISOString();
+    const inserted = await sbRest('base_permanente', { method:'POST', body: JSON.stringify(payload) });
+    baseId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : null;
   }
-  payload.created_at = new Date().toISOString();
-  return sbRest('base_permanente', { method:'POST', body: JSON.stringify(payload) });
+
+  try {
+    await sbRest('contact_events', { method:'POST', body: JSON.stringify({
+      user_id: userId,
+      lead_id: String(item.lead_id || (lead && lead.id) || ''),
+      base_permanente_id: baseId,
+      company_name: payload.company_name,
+      normalized_phone: phone || null,
+      website: payload.website,
+      instagram_url: payload.instagram_url,
+      maps_url: payload.maps_url,
+      channel: 'instagram',
+      source_account: item.profile_username || null,
+      source_instance: item.profile_id || null,
+      event_type: 'sent',
+      status: 'sent',
+      message_template: item.template_id || null,
+      sent_at: when,
+      metadata: { instagram_dispatch_item_id: item.id || null, message_1: item.message_1 || null, message_2: item.message_2 || null }
+    }) });
+  } catch (e) { console.warn('[instagram-api][contact_events]', e.message || e); }
+
+  if (phone) {
+    try {
+      await sbRest('sent_contacts', { method:'POST', body: JSON.stringify({
+        user_id: userId,
+        lead_id: String(item.lead_id || (lead && lead.id) || ''),
+        company_name: payload.company_name,
+        phone: lead && lead.phone || phone,
+        normalized_phone: phone,
+        block_type: 'already_sent',
+        source: 'instagram_fila',
+        reason: 'instagram_sent',
+        active: true,
+        dispatched_at: when,
+        raw_payload: { instagram_dispatch_item_id: item.id || null, instagram_username: ig || null }
+      }), headers: { Prefer: 'resolution=merge-duplicates,return=representation' } });
+    } catch (e) { console.warn('[instagram-api][sent_contacts]', e.message || e); }
+  }
+
+  if (item.lead_id) {
+    try {
+      await sbRest(`leads?id=eq.${encodeURIComponent(item.lead_id)}&user_id=eq.${encodeURIComponent(userId)}`, { method:'PATCH', body: JSON.stringify({
+        current_stage: 'archived',
+        current_status: 'instagram_sent',
+        status: 'Enviada Instagram',
+        archived_at: when,
+        updated_at: new Date().toISOString()
+      }) });
+    } catch (e) { console.warn('[instagram-api][lead-update]', e.message || e); }
+  }
+
+  return { id: baseId };
 }
 
 async function instagramUpdate(input) {
