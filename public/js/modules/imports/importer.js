@@ -617,6 +617,18 @@ async function importarLeads() {
   const existingInstagramKeys = new Set();
 
   for (const analysis of analyses) {
+    if (!isApprovedImportRouteV31(analysis.route) && String(analysis.reason||'').toLowerCase().includes('fora do ramo')) {
+      try {
+        const leadInvalid = buildImportedLeadV430(analysis, analysis.route || 'invalid_out_of_profile');
+        if (typeof window.recordOutOfBranchImportV149 === 'function') {
+          await window.recordOutOfBranchImportV149(leadInvalid);
+        }
+      } catch (err) {
+        console.warn('[import][out-of-branch-base]', err?.message || err);
+      }
+      skipped++;
+      continue;
+    }
     if (analysis?.alreadyImported) {
       await enrichBasePermanenteMissingFieldsV35(
         buildImportedLeadV430(analysis, analysis.route || 'attribution_whatsapp'),

@@ -111,6 +111,17 @@
     // o lead fica marcado como fora do ramo e não pode gerar slot de imagem/disparo.
     return {id:'__fora_do_ramo__', nome:'Fora do ramo', unknown:true, raw:cats[0]||''};
   }
+
+  function isWithinConfiguredRamoV149(lead){
+    try{ if(typeof window.isLeadWithinConfiguredRamoV86==='function') return window.isLeadWithinConfiguredRamoV86(lead); }catch(_){ }
+    const ramo=resolveRamo(lead||{});
+    return !ramo.unknown;
+  }
+  async function invalidateOutOfBranchV149(lead,itemId){
+    try{ if(typeof window.invalidateOutOfBranchLeadV149==='function') return await window.invalidateOutOfBranchLeadV149(lead,'whatsapp_queue',itemId); }catch(e){ console.warn('[fila-zap branch invalid]',e?.message||e); }
+    return false;
+  }
+
   function typeKey(l,r){
     const lt=normalize(r?.lead_type||l?.lead_type||l?.current_stage||'');
     const wt=normalize(l?.website_type||'');
@@ -243,8 +254,14 @@
       const repairIds=[...new Set(finalRows.filter(r=>['ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending'].includes(String(r.status||'').toLowerCase())).map(r=>r.lead_id).filter(id=>{const l=leads[id]||{};return String(l.current_stage||'').toLowerCase()!=='dispatch_queue';}))];
       if(repairIds.length) c.from('leads').update({current_stage:'dispatch_queue',current_status:'queued',status:'Em fila',updated_at:new Date().toISOString()}).eq('user_id',uid()).in('id',repairIds).then(()=>{});
     }catch(_){ }
-    finalRows.forEach(r=>{if(!chips.some(ch=>chipKey(ch)===rowChipKey(r)||chipTitle(ch)===rowChipTitle(r))) chips.push({id:rowChipKey(r)||rowChipTitle(r),instance:rowChipKey(r),label:rowChipTitle(r),daily_limit:120,block_size:60,active:true});});
-    const items=finalRows.map(r=>({...r,lead:leads[r.lead_id]||{}}));
+    const validRows=[];
+    for(const r of finalRows){
+      const lead=leads[r.lead_id]||{};
+      if(!isWithinConfiguredRamoV149(lead)){ await invalidateOutOfBranchV149(lead,r.id); continue; }
+      validRows.push(r);
+    }
+    validRows.forEach(r=>{if(!chips.some(ch=>chipKey(ch)===rowChipKey(r)||chipTitle(ch)===rowChipTitle(r))) chips.push({id:rowChipKey(r)||rowChipTitle(r),instance:rowChipKey(r),label:rowChipTitle(r),daily_limit:120,block_size:60,active:true});});
+    const items=validRows.map(r=>({...r,lead:leads[r.lead_id]||{}}));
     return {items,chips,error:ch.error||null};
   }
 

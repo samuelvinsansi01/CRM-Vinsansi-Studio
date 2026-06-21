@@ -91,6 +91,18 @@
   }
   function isApprovedLead(l){return String(l?.pipeline_status||'')==='approved_for_queue'||String(l?.current_status||'')==='approved_for_queue'||String(l?.current_stage||'').endsWith('_approved');}
 
+  function isWithinConfiguredRamo(lead){
+    try{ if(typeof window.isLeadWithinConfiguredRamoV86==='function') return window.isLeadWithinConfiguredRamoV86(lead); }catch(_){ }
+    return true;
+  }
+  async function invalidateOutOfBranch(lead,itemId){
+    try{ if(typeof window.invalidateOutOfBranchLeadV149==='function') return await window.invalidateOutOfBranchLeadV149(lead,'pre_dispatch',itemId); }catch(e){ console.warn('[pre-final branch invalid]',e?.message||e); }
+    return false;
+  }
+  async function sweepBranchGuard(){
+    try{ if(typeof window.sweepOutOfBranchLeadsV149==='function') return await window.sweepOutOfBranchLeadsV149('attribution'); }catch(_){ }
+  }
+
   async function getChips(){
     const c=db(), user=uid(); if(!c||!user)return [];
     const {data,error}=await c.from('whatsapp_instances').select('id,instance,label,name,chip_id,daily_limit,block_size,active,status,created_at').eq('user_id',user).eq('active',true).order('created_at',{ascending:true});
@@ -110,7 +122,14 @@
     let q=c.from('pre_dispatch_items').select('id,lead_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,validation_status,invalid_reason,raw_payload,created_at,updated_at,leads(*)').eq('user_id',user).eq('scheduled_date',date).in('status',listStatuses).order('chip_label',{ascending:true}).order('position',{ascending:true});
     if(chip&&chip!=='all') q=q.eq('chip_instance',chip);
     const {data,error}=await q; if(error){notify('Erro ao carregar Pré-envio: '+error.message,'err');return [];}
-    return data||[];
+    const rows=data||[];
+    const valid=[];
+    for(const item of rows){
+      const lead=item.leads||{};
+      if(!isWithinConfiguredRamo(lead)){ await invalidateOutOfBranch(lead,item.id); continue; }
+      valid.push(item);
+    }
+    return valid;
   }
   async function fetchAlreadyBlockedIds(){
     const c=db(), user=uid(); const ids=new Set(); if(!c||!user)return ids;
@@ -125,7 +144,15 @@
       if(lim<=0)return [];
       const {data,error}=await c.from('leads').select('id,company_name,phone,normalized_phone,website,has_own_site,website_type,maps_url,current_stage,current_status,status,pipeline_status,created_at,lead_score,rating,reviews_count,lead_type').eq('user_id',user).in('current_stage',stages).order('lead_score',{ascending:false}).order('created_at',{ascending:true}).limit(lim+150);
       if(error){console.warn('[pre-final leads]',stages,error.message);return [];}      
-      return (data||[]).filter(l=>!excluded.has(String(l.id))).filter(l=>!approvedOnly||isApprovedLead(l)).slice(0,lim);
+      const accepted=[];
+      for(const l of (data||[])){
+        if(excluded.has(String(l.id))) continue;
+        if(approvedOnly && !isApprovedLead(l)) continue;
+        if(!isWithinConfiguredRamo(l)){ await invalidateOutOfBranch(l,null); excluded.add(String(l.id)); continue; }
+        accepted.push(l);
+        if(accepted.length>=lim) break;
+      }
+      return accepted;
     }
     async function add(rows){for(const r of rows){if(out.length>=limit)break;const id=String(r.id);if(!excluded.has(id)){out.push(r);excluded.add(id);}}}
     if(mode==='whatsapp'){
@@ -143,6 +170,7 @@
 
   async function fillByMode(mode){
     const c=db(), user=uid(); if(!c||!user)return notify('Supabase/auth indisponível.','err');
+    await sweepBranchGuard();
     const chips=await getChips(); if(!chips.length)return notify('Nenhum chip ativo encontrado.','warn');
     const use=state.chip&&state.chip!=='all'?chips.filter(x=>x.instance===state.chip):chips;
     if(!use.length)return notify('Chip selecionado não encontrado.','warn');
@@ -200,14 +228,22 @@
     // item E o lead como dispatch_queue. Antes só o item mudava para ready_to_dispatch,
     // enquanto o lead continuava como pre_send/pre_dispatch_review, por isso não aparecia.
     let q=c.from('pre_dispatch_items')
-      .select('id,lead_id')
+      .select('id,lead_id,leads(*)')
       .eq('user_id',user)
       .eq('scheduled_date',state.date)
       .eq('status','approved');
     if(state.chip&&state.chip!=='all')q=q.eq('chip_instance',state.chip);
     const {data,error}=await q; if(error)return notify('Erro: '+error.message,'err');
-    const rows=data||[];
-    if(!rows.length)return notify('Nenhum aprovado para enviar à fila.','warn');
+    const rawRows=data||[];
+    if(!rawRows.length)return notify('Nenhum aprovado para enviar à fila.','warn');
+    const rows=[];
+    let blocked=0;
+    for(const row of rawRows){
+      const lead=row.leads||{};
+      if(!isWithinConfiguredRamo(lead)){ blocked++; await invalidateOutOfBranch(lead,row.id); continue; }
+      rows.push(row);
+    }
+    if(!rows.length)return notify(`Nenhum aprovado válido para enviar. ${blocked} fora do perfil foram invalidados.`,'warn');
     const ids=rows.map(x=>x.id);
     const leadIds=[...new Set(rows.map(x=>x.lead_id).filter(Boolean))];
     const now=new Date().toISOString();
@@ -223,7 +259,7 @@
         .in('id',leadIds);
       if(upLeads.error)return notify('Itens enviados, mas houve erro ao atualizar leads: '+upLeads.error.message,'err');
     }
-    notify('✓ Leads enviados para a Fila WhatsApp do chip selecionado.'); await render();
+    notify('✓ Leads válidos enviados para a Fila WhatsApp do chip selecionado.'+(typeof blocked!=='undefined'&&blocked?` ${blocked} fora do perfil foram invalidados.`:'')); await render();
     try{ if(typeof window.renderFilaZapV73==='function') window.renderFilaZapV73(); }catch(_){ }
   }
 
