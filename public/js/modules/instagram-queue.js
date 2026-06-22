@@ -20,6 +20,38 @@
   function sb(){ try { return window.sbClient || window.supabaseClient || window.supabase || null; } catch(e){ return null; } }
   function uid(){ try { return window.currentUser?.id || window.authUser?.id || ''; } catch(e){ return ''; } }
   function notify(msg,type){ try { if(typeof window.notify==='function') window.notify(msg,type); else console.log(msg); } catch(e){} }
+
+  async function safePersistSentContact(row){
+    const c=sb(); if(!c || !row?.user_id || !row?.normalized_phone) return;
+    try{
+      const {data:existing,error:selErr}=await c.from('sent_contacts')
+        .select('id,raw_payload')
+        .eq('user_id',row.user_id)
+        .eq('normalized_phone',row.normalized_phone)
+        .eq('active',true)
+        .limit(1);
+      if(selErr) throw selErr;
+      if(existing && existing[0]?.id){
+        const prev=existing[0].raw_payload && typeof existing[0].raw_payload==='object' ? existing[0].raw_payload : {};
+        const patch={
+          lead_id:row.lead_id||null,
+          company_name:row.company_name||null,
+          phone:row.phone||row.normalized_phone,
+          block_type:row.block_type||'already_sent',
+          source:row.source||'instagram',
+          reason:row.reason||'instagram_sent',
+          active:true,
+          dispatched_at:row.dispatched_at||new Date().toISOString(),
+          raw_payload:{...prev,...(row.raw_payload||{})}
+        };
+        const {error:upErr}=await c.from('sent_contacts').update(patch).eq('id',existing[0].id).eq('user_id',row.user_id);
+        if(upErr) throw upErr;
+      }else{
+        const {error:insErr}=await c.from('sent_contacts').insert({...row,created_at:new Date().toISOString()});
+        if(insErr) throw insErr;
+      }
+    }catch(e){ console.warn('[instagram][sent_contacts-safe]', e?.message||e); }
+  }
   async function apiInstagram(action, payload={}){
     const res=await fetch('/api/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,user_id:uid(),...payload})});
     const data=await res.json().catch(()=>({}));
@@ -850,7 +882,7 @@
 
     if(phone){
       try{
-        await c.from('sent_contacts').upsert({
+        await safePersistSentContact({
           user_id:user,
           lead_id:String(item.lead_id||lead.id||''),
           company_name:basePayload.company_name,
@@ -862,7 +894,7 @@
           active:true,
           dispatched_at:when,
           raw_payload:{instagram_dispatch_item_id:item.id||null, instagram_username:ig||null}
-        },{onConflict:'user_id,normalized_phone'});
+        });
       }catch(e){ console.warn('[v112][sent_contacts-instagram]', e?.message||e); }
     }
     try{
@@ -1419,7 +1451,7 @@
     }catch(e){ console.warn('[v121][contact_events]', e?.message||e); }
     if(phone){
       try{
-        await c.from('sent_contacts').upsert({
+        await safePersistSentContact({
           user_id:user,
           lead_id:String(item?.lead_id || lead?.id || ''),
           company_name:payload.company_name,
@@ -1431,7 +1463,7 @@
           active:true,
           dispatched_at:when,
           raw_payload:{instagram_dispatch_item_id:item?.id||null, instagram_username:ig||null, backfill:true}
-        },{onConflict:'user_id,normalized_phone'});
+        });
       }catch(e){ console.warn('[v121][sent_contacts]', e?.message||e); }
     }
     return baseId;

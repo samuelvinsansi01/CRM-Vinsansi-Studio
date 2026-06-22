@@ -4,7 +4,7 @@
 function renderImportarPanel() {
   renderRamoSelect();
   importPreview();
-  renderManualValChips();
+  if (typeof renderManualValChips === 'function') renderManualValChips();
 }
 
 function parseApifyJson(raw) {

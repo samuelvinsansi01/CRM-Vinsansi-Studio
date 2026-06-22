@@ -5,7 +5,7 @@ function renderConfiguracoes() {
   renderChipsConfig();
   renderRamosConfig();
   renderTemplatesConfig();
-  renderInstaTemplatesConfig();
+  if (typeof renderInstaTemplatesConfig === 'function') renderInstaTemplatesConfig();
 }
 
 /* CHIPS */
