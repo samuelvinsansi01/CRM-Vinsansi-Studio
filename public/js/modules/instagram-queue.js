@@ -6,7 +6,7 @@
 */
 (function(){
   'use strict';
-  const VERSION='20260621-V150-INSTAGRAM-TEMPLATE-FROZEN';
+  const VERSION='20260622-V154-INSTAGRAM-CARRYOVER-20H';
   const DEFAULTS={daily_limit:60,blocks:4,block_size:15,interval_minutes:120};
   let activeStatus='queued';
   let activeDate=toDateInput(new Date());
@@ -222,10 +222,95 @@
     return m;
   }
 
+
+  function instagramCarryoverTargetDateV154(){
+    const now=new Date();
+    const today=toDateInput(now);
+    if(now.getHours()>=20) return addDaysISO(today,1);
+    return today;
+  }
+
+  async function carryoverInstagramPending20hV154(){
+    const c=sb(), user=uid();
+    if(!c||!user) return {ok:false, reason:'no_client'};
+    const target=instagramCarryoverTargetDateV154();
+    const lockKey='lead_certo_ig_carryover_'+target;
+    try{
+      const last=Number(sessionStorage.getItem(lockKey)||0);
+      if(Date.now()-last < 45000) return {ok:true, skipped:true, target};
+      sessionStorage.setItem(lockKey,String(Date.now()));
+    }catch(_){ }
+
+    // Move apenas itens realmente pendentes/em fila de dias anteriores ao dia-alvo.
+    // Antes das 20h: dia-alvo = hoje, então corrige pendentes de ontem para hoje.
+    // A partir das 20h: dia-alvo = amanhã, então prepara a operação do próximo dia.
+    const {data:oldItems,error:oldErr}=await c.from('instagram_dispatch_items')
+      .select('*')
+      .eq('user_id',user)
+      .lt('scheduled_date',target)
+      .order('scheduled_date',{ascending:true})
+      .order('profile_username',{ascending:true})
+      .order('block_number',{ascending:true})
+      .order('position',{ascending:true})
+      .limit(1000);
+    if(oldErr){ console.warn('[instagram][carryover-old]',oldErr.message); return {ok:false,error:oldErr}; }
+    const pending=(oldItems||[]).filter(x=>isActiveQueueStatus(x.status));
+    if(!pending.length) return {ok:true,count:0,target};
+
+    if(!profilesCache.length) await loadProfiles();
+    const profilesById=new Map((profilesCache||[]).map(p=>[String(p.id),p]));
+    const profileByUser=new Map((profilesCache||[]).map(p=>[cleanIgUsername(p.username),p]));
+
+    const {data:targetItems,error:targetErr}=await c.from('instagram_dispatch_items')
+      .select('id,profile_id,profile_username,status,block_number,position')
+      .eq('user_id',user)
+      .eq('scheduled_date',target)
+      .order('profile_username',{ascending:true})
+      .order('position',{ascending:true});
+    if(targetErr){ console.warn('[instagram][carryover-target]',targetErr.message); return {ok:false,error:targetErr}; }
+
+    const byProfile=new Map();
+    for(const item of (targetItems||[])){
+      const p=profilesById.get(String(item.profile_id||'')) || profileByUser.get(cleanIgUsername(item.profile_username||'')) || defaultInstagramProfile();
+      const key=String(p?.id || item.profile_id || cleanIgUsername(item.profile_username||'') || 'sem-perfil');
+      if(!byProfile.has(key)) byProfile.set(key,{profile:p||DEFAULTS, items:[]});
+      byProfile.get(key).items.push(item);
+    }
+
+    let moved=0, skipped=0;
+    for(const item of pending){
+      const p=profilesById.get(String(item.profile_id||'')) || profileByUser.get(cleanIgUsername(item.profile_username||'')) || defaultInstagramProfile();
+      if(!p){ skipped++; continue; }
+      const key=String(p.id || cleanIgUsername(p.username));
+      if(!byProfile.has(key)) byProfile.set(key,{profile:p, items:[]});
+      const bucket=byProfile.get(key);
+      let slot;
+      try{ slot=computeNextInstagramSlot(bucket.profile,bucket.items); }
+      catch(e){ skipped++; continue; }
+      const patch={
+        scheduled_date:target,
+        profile_id:p.id || item.profile_id || null,
+        profile_username:p.username || item.profile_username || null,
+        block_number:slot.block_number,
+        block_size:slot.block_size,
+        position:slot.position,
+        updated_at:new Date().toISOString()
+      };
+      const {error:upErr}=await c.from('instagram_dispatch_items').update(patch).eq('user_id',user).eq('id',item.id);
+      if(upErr){ console.warn('[instagram][carryover-update]',item.id,upErr.message); skipped++; continue; }
+      moved++;
+      bucket.items.push({...item,...patch});
+    }
+    if(moved) notify(`✓ ${moved} pendentes do Instagram movidos para ${fmtDate(target)}`);
+    if(skipped) console.warn('[instagram][carryover] itens sem capacidade ou perfil:', skipped);
+    return {ok:true,count:moved,skipped,target};
+  }
+
   async function refreshInstagramV94(){
     try{
       ensureInstagramPanel();
       await loadProfiles();
+      await carryoverInstagramPending20hV154();
       await loadQueue();
       await loadBacklog();
       await loadWeekCounts();
@@ -1205,6 +1290,7 @@
   };
   window.renderInstagram=refreshInstagramV94;
   window.renderInstagramQueuePanel=refreshInstagramV94;
+  window.instagramCarryoverPending20hV154=carryoverInstagramPending20hV154;
 
   document.addEventListener('DOMContentLoaded',()=>{
     setTimeout(()=>{ ensureInstagramPanel(); ensureInstagramConfig(); refreshInstagramV94(); ensureInstagramApprovalButtons(); },900);
