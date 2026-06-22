@@ -4,6 +4,9 @@
 */
 (function(){
   'use strict';
+  function num(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+  function effectiveLeadScore(l){ const saved=num(l.lead_score); const rating=num(l.rating); const reviews=num(l.reviews_count); return Math.max(saved,(reviews*2)+(rating*20)); }
+  function sortByLeadQuality(rows){ return [...(rows||[])].sort((a,b)=>{ const d=effectiveLeadScore(b)-effectiveLeadScore(a); if(d) return d; const r=num(b.reviews_count)-num(a.reviews_count); if(r) return r; const rat=num(b.rating)-num(a.rating); if(rat) return rat; return new Date(a.created_at||0)-new Date(b.created_at||0); }); }
   const VERSION='20260621-PRE-DISPATCH-FINAL';
   let state={date:new Date().toISOString().slice(0,10), chip:'all', loading:false};
   const operationalStatuses=['review','approved','validation_retry','invalid','invalid_whatsapp','ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending','sent','enviado'];
@@ -226,10 +229,10 @@
     const excluded=exclude||new Set(); const out=[];
     async function grab(stages,approvedOnly,lim){
       if(lim<=0)return [];
-      const {data,error}=await c.from('leads').select('id,company_name,phone,normalized_phone,website,has_own_site,website_type,maps_url,current_stage,current_status,status,pipeline_status,created_at,lead_score,rating,reviews_count,lead_type').eq('user_id',user).in('current_stage',stages).order('lead_score',{ascending:false}).order('created_at',{ascending:true}).limit(lim+150);
+      const {data,error}=await c.from('leads').select('id,company_name,phone,normalized_phone,website,has_own_site,website_type,maps_url,current_stage,current_status,status,pipeline_status,created_at,lead_score,rating,reviews_count,lead_type').eq('user_id',user).in('current_stage',stages).order('lead_score',{ascending:false}).order('reviews_count',{ascending:false}).order('rating',{ascending:false}).order('created_at',{ascending:true}).limit(lim+150);
       if(error){console.warn('[pre-final leads]',stages,error.message);return [];}      
       const accepted=[];
-      for(const l of (data||[])){
+      for(const l of sortByLeadQuality(data||[])){
         if(excluded.has(String(l.id))) continue;
         if(approvedOnly && !isApprovedLead(l)) continue;
         if(!isWithinConfiguredRamo(l)){ await invalidateOutOfBranch(l,null); excluded.add(String(l.id)); continue; }
@@ -274,7 +277,7 @@
         lead_type:leadType(lead),
         status:initialPreDispatchStatus(lead),
         position:current+i+1,
-        raw_payload:{origin_stage:lead.current_stage,source_filter:mode,approved_in_attribution:isApprovedLead(lead),auto_approved_no_site:isNoSiteLead(lead),origin:VERSION}
+        raw_payload:{origin_stage:lead.current_stage,source_filter:mode,approved_in_attribution:isApprovedLead(lead),auto_approved_no_site:isNoSiteLead(lead),lead_score:effectiveLeadScore(lead),reviews_count:lead.reviews_count||0,rating:lead.rating||null,origin:VERSION}
       }));
       const {error}=await c.from('pre_dispatch_items').insert(rows); if(error){console.warn('[pre-final insert]',error.message);continue;}
       await c.from('leads').update({current_stage:'pre_send',current_status:'pre_dispatch_review',updated_at:new Date().toISOString()}).eq('user_id',user).in('id',leads.map(l=>l.id));

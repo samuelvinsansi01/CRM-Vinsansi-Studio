@@ -275,6 +275,10 @@
   function isApproved(l){ return String(l.pipeline_status||'')==='approved_for_queue' || String(l.current_stage||'').endsWith('_approved'); }
   function approvedStageFor(tab){ return tab==='agregadores' ? 'attribution_agregadores_approved' : 'attribution_site_approved'; }
   function sourceLabel(tab){ return tab==='agregadores'?'Agregadores':tab==='com-site'?'Com site':tab==='insta'?'Instagram':'WhatsApp'; }
+  function num(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+  function effectiveLeadScore(l){ const saved=num(l.lead_score); const rating=num(l.rating); const reviews=num(l.reviews_count); const calc=(reviews*2)+(rating*20); return Math.max(saved,calc); }
+  function priorityBadge(l){ const rating=num(l.rating), reviews=num(l.reviews_count), score=effectiveLeadScore(l); let label=''; if(rating>=4.7 && reviews>=50) label='🔥 Prioridade alta'; else if(rating>=4.5 && reviews>=25) label='⭐ Boa reputação'; else if(reviews>=50) label='📈 Muitas avaliações'; return `${label?`<span class="atrib-priority-badge">${esc(label)}</span>`:''}<span class="atrib-score-badge">Score ${Math.round(score)}</span>`; }
+  function sortByLeadQuality(rows){ return [...(rows||[])].sort((a,b)=>{ const d=effectiveLeadScore(b)-effectiveLeadScore(a); if(d) return d; const r=num(b.reviews_count)-num(a.reviews_count); if(r) return r; const rat=num(b.rating)-num(a.rating); if(rat) return rat; return new Date(a.created_at||0)-new Date(b.created_at||0); }); }
 
   function ensureAggregatorTab(){
     const com=document.getElementById('atribTabComSite');
@@ -316,18 +320,18 @@
     const c=db(), uid=userId(); if(!c||!uid) return {rows:[],total:0};
     const qv=(document.getElementById(tab==='insta'?'atribInstaBusca':'atribBusca')?.value||'').trim().replaceAll('%','');
     let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,website_type,maps_url,instagram_url,instagram_username,instagram,city,state,rating,reviews_count,lead_score,current_stage,current_status,pipeline_status,created_at,category,category_name,parent_category',{count:'exact'})
-      .eq('user_id',uid).in('current_stage',stageSets(tab)).order('lead_score',{ascending:false}).order('created_at',{ascending:true});
+      .eq('user_id',uid).in('current_stage',stageSets(tab)).order('lead_score',{ascending:false}).order('reviews_count',{ascending:false}).order('rating',{ascending:false}).order('created_at',{ascending:true});
     if(qv){
       const safe=qv.replace(/[(),]/g,' ').trim();
       q=q.or(`company_name.ilike.%${safe}%,phone.ilike.%${safe}%,normalized_phone.ilike.%${safe}%,website.ilike.%${safe}%,instagram_url.ilike.%${safe}%,instagram_username.ilike.%${safe}%,city.ilike.%${safe}%,state.ilike.%${safe}%`);
     }
     const from=(page-1)*PER_PAGE;
     const {data,count,error}=await q.range(from,from+PER_PAGE-1);
-    return {rows:data||[],total:count||0,error};
+    return {rows:sortByLeadQuality(data||[]),total:count||0,error};
   }
 
   function metaCommon(l){
-    return `${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}`;
+    return `${l.city||l.state?`<span>${esc([l.city,l.state].filter(Boolean).join('/'))}</span>`:''}${l.rating?`<span>⭐ ${esc(l.rating)} · ${esc(l.reviews_count||0)} avaliações</span>`:''}${priorityBadge(l)}`;
   }
   function renderNormalCard(l,tab){
     const approved=isApproved(l);
@@ -432,6 +436,7 @@
       .atrib-clean-badge{display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-size:8px!important;background:rgba(255,255,255,.04);border:1px solid var(--border2);border-radius:4px;padding:2px 7px}.atrib-clean-badge.insta{color:var(--insta)!important;border-color:rgba(225,48,108,.3)!important;background:rgba(225,48,108,.08)!important}.atrib-clean-badge.agg{color:#d6a8ff!important;border-color:rgba(214,168,255,.35)!important;background:rgba(214,168,255,.08)!important}.atrib-clean-badge.site{color:#5bb8f5!important;border-color:rgba(91,184,245,.35)!important;background:rgba(91,184,245,.08)!important}.atrib-clean-badge.zap{color:var(--ok)!important;border-color:rgba(78,203,113,.35)!important;background:rgba(78,203,113,.08)!important}
       .v130-actions{display:flex!important;gap:8px!important;align-items:center!important;flex-wrap:nowrap!important}.v130-actions .btn{font-size:9px!important;padding:7px 12px!important;white-space:nowrap!important}.v130-approved-pill{font-family:'DM Mono',monospace;font-size:9px;color:var(--accent);border:1px solid var(--accent-border);background:var(--accent-dim);border-radius:999px;padding:6px 10px;white-space:nowrap}
       .atrib-insta-input-wrap{min-width:260px;max-width:420px;flex:0 0 36%}.atrib-insta-url-input{width:100%;background:rgba(225,48,108,.06);border:1px solid rgba(225,48,108,.28);border-radius:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:10px;padding:8px 10px;outline:none}.atrib-insta-url-input:focus{border-color:var(--insta);box-shadow:0 0 0 1px rgba(225,48,108,.14)}
+      .atrib-priority-badge{font-family:'DM Mono',monospace;font-size:8px;border:1px solid rgba(184,240,89,.32);background:rgba(184,240,89,.08);color:var(--accent);border-radius:999px;padding:2px 7px;white-space:nowrap}.atrib-score-badge{font-family:'DM Mono',monospace;font-size:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);color:var(--text2);border-radius:999px;padding:2px 7px;white-space:nowrap}
       #panel-atribuicao{overflow-x:hidden!important}#atribList,#atribInstaList{overflow-x:hidden!important}.atrib-v130-list{overflow-x:hidden!important}
     `; document.head.appendChild(st);
   }
