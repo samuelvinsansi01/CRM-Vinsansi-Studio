@@ -11,6 +11,8 @@
   const USER_ID_FALLBACK='c02fe973-4eb5-4036-9f8d-8787937e8b11';
   const runtime={chips:{},log:[],lastData:null,startedAt:null,manualImage:null};
   const LS_KEY='vs_dispatch_runtime_v80';
+  let wakeLockV155=null;
+  let v155Tick=null;
 
   function sb(){try{return window.sbClient||(typeof sbClient!=='undefined'?sbClient:null);}catch(_){return null;}}
   function uid(){try{return window.currentUser?.id||(typeof currentUser!=='undefined'&&currentUser?.id)||localStorage.getItem('vs_auth_local_user_v423')||USER_ID_FALLBACK;}catch(_){return USER_ID_FALLBACK;}}
@@ -35,6 +37,47 @@
   function addLog(msg){const line=`${new Date().toLocaleTimeString('pt-BR')} · ${msg}`; runtime.log.unshift(line); runtime.log=runtime.log.slice(0,80); saveRuntime(); renderV80Log();}
   function saveRuntime(){try{localStorage.setItem(LS_KEY,JSON.stringify({chips:runtime.chips,log:runtime.log.slice(0,20),startedAt:runtime.startedAt,updatedAt:new Date().toISOString()}));}catch(_){}}
   function hydrateRuntime(){try{const r=JSON.parse(localStorage.getItem(LS_KEY)||'{}'); if(r&&typeof r==='object'){runtime.log=Array.isArray(r.log)?r.log:[]; runtime.startedAt=r.startedAt||null;}}catch(_){}}
+
+  async function requestWakeLockV155(){
+    try{
+      if('wakeLock' in navigator && !wakeLockV155){
+        wakeLockV155=await navigator.wakeLock.request('screen');
+        wakeLockV155.addEventListener?.('release',()=>{wakeLockV155=null;});
+        addLog('Wake Lock ativo: a aba tentará manter o computador acordado durante o disparo.');
+      }
+    }catch(e){
+      addLog('Aviso: Wake Lock indisponível. Se o computador dormir, o navegador pode pausar os timers.');
+    }
+  }
+  async function releaseWakeLockV155(){try{await wakeLockV155?.release?.();}catch(_){} wakeLockV155=null;}
+  document.addEventListener('visibilitychange',()=>{try{if(document.visibilityState==='visible' && Object.values(runtime.chips).some(r=>r.running&&!r.stopped)) requestWakeLockV155();}catch(_){}});
+
+  function updateTimerV155(run,total,label){
+    const left=Math.max(0,Number(total||0));
+    run.timerLeft=left;
+    run.timerTotal=Math.max(1,Number(run.timerTotal||total||1));
+    run.timerLabel=label||'Aguardando';
+    run.state=`${run.timerLabel} ${left}s`;
+    saveRuntime();
+    renderV80Controls();
+  }
+  async function waitWithTimerV155(seconds,run,label){
+    const total=Math.max(0,Number(seconds||0));
+    run.timerTotal=Math.max(1,total);
+    for(let left=total; left>0 && !run.stopped; left--){
+      while(run.paused && !run.stopped){run.state='Pausado'; saveRuntime(); renderV80Controls(); await sleep(1000);}
+      updateTimerV155(run,left,label);
+      await sleep(1000);
+    }
+    run.timerLeft=0; run.timerLabel=''; saveRuntime(); renderV80Controls();
+  }
+  function loteStateV155(row,ch,index){
+    const size=Math.max(1,blockSize(ch));
+    const pos=Number(row?.position||index+1)||index+1;
+    const lote=Math.floor((pos-1)/size)+1;
+    const inLote=((pos-1)%size)+1;
+    return {size,pos,lote,inLote};
+  }
 
   function currentDate(){const btn=document.querySelector('#panel-fila-zap .day-tab.active'); const on=btn?.getAttribute('onclick')||''; const m=on.match(/['"](\d{4}-\d{2}-\d{2})['"]/); return m?m[1]:todayIso();}
   function currentStatus(){const btn=document.querySelector('#panel-fila-zap .status-tab.active'); const on=btn?.getAttribute('onclick')||''; const m=on.match(/['"]([^'"]+)['"]/); return m?m[1]:'queue';}
@@ -145,17 +188,18 @@
 
   async function chipLoop(ch,rows){
     const key=chipKey(ch); const run=runtime.chips[key]||(runtime.chips[key]={});
-    run.running=true; run.paused=false; run.stopped=false; run.total=rows.length; run.sent=run.sent||0; run.errors=run.errors||0; run.current=run.current||0; run.label=chipTitle(ch); saveRuntime(); renderV80Controls();
+    run.running=true; run.paused=false; run.stopped=false; run.total=rows.length; run.sent=run.sent||0; run.errors=run.errors||0; run.current=run.current||0; run.label=chipTitle(ch); run.loteSize=blockSize(ch); saveRuntime(); renderV80Controls();
     addLog(`Chip ${chipTitle(ch)} iniciado com ${rows.length} lead(s).`);
     for(let i=run.current||0;i<rows.length;i++){
       if(run.stopped)break;
       while(run.paused && !run.stopped){run.state='Pausado'; renderV80Controls(); await sleep(1000);}
       if(run.stopped)break;
-      const row=rows[i]; run.current=i; run.lead=leadName(row.lead); run.state='Enviando'; saveRuntime(); renderV80Controls();
+      const row=rows[i]; const ls=loteStateV155(row,ch,i);
+      run.current=i; run.currentIndex=i+1; run.lote=ls.lote; run.loteProgress=ls.inLote; run.loteSize=ls.size; run.lead=leadName(row.lead); run.state=`Lote ${ls.lote} · ${ls.inLote}/${ls.size} · enviando`; run.timerLeft=0; saveRuntime(); renderV80Controls();
       try{
         if(!isConnected(ch)) throw new Error('chip desconectado');
         const res=await sendOne(row,ch);
-        if(res?.skipped){addLog(`${chipTitle(ch)} · pulado: ${leadName(row.lead)} (${res.reason})`);} else {run.sent=(run.sent||0)+1; addLog(`${chipTitle(ch)} · enviado: ${leadName(row.lead)}`);}
+        if(res?.skipped){addLog(`${chipTitle(ch)} · pulado: ${leadName(row.lead)} (${res.reason})`);} else {run.sent=(run.sent||0)+1; run.loteDone=ls.inLote; addLog(`${chipTitle(ch)} · lote ${ls.lote} · ${ls.inLote}/${ls.size} enviado: ${leadName(row.lead)}`);}
       }catch(e){
         run.errors=(run.errors||0)+1; addLog(`${chipTitle(ch)} · erro em ${leadName(row.lead)}: ${e.message}`);
         const msg=String(e?.message||'');
@@ -164,11 +208,18 @@
         }
         await setStatus(row.id,'error');
       }
+      const isLast=i>=rows.length-1;
+      const next=rows[i+1];
+      const nextLs=next?loteStateV155(next,ch,i+1):null;
       const sec=Math.max(10,Number(ch?.interval_seconds||ch?.intervalSeconds||120)||120);
-      run.nextAt=new Date(Date.now()+sec*1000).toISOString(); run.state=`Aguardando ${sec}s`; saveRuntime(); renderV80Controls();
-      for(let s=0;s<sec && !run.stopped;s++){while(run.paused && !run.stopped){run.state='Pausado'; renderV80Controls(); await sleep(1000);} await sleep(1000);}
+      if(!isLast){
+        const label=nextLs && nextLs.lote!==ls.lote ? `Delay do lote ${ls.lote} concluído` : `Delay lead ${ls.inLote}/${ls.size}`;
+        run.nextAt=new Date(Date.now()+sec*1000).toISOString();
+        await waitWithTimerV155(sec,run,label);
+      }
     }
-    run.running=false; run.state=run.stopped?'Parado':'Finalizado'; saveRuntime(); renderV80Controls(); addLog(`Chip ${chipTitle(ch)} ${run.state.toLowerCase()}.`);
+    run.running=false; run.timerLeft=0; run.state=run.stopped?'Parado':'Finalizado'; saveRuntime(); renderV80Controls(); addLog(`Chip ${chipTitle(ch)} ${run.state.toLowerCase()}.`);
+    if(!Object.values(runtime.chips).some(r=>r.running&&!r.stopped)) releaseWakeLockV155();
     try{if(typeof window.renderFilaZapV74==='function')window.renderFilaZapV74(); else if(typeof window.renderFilaZap==='function')window.renderFilaZap();}catch(_){ }
   }
 
@@ -183,13 +234,14 @@
     blocked.forEach(g=>addLog(`Chip ${chipTitle(g.chip)} ignorado: ${!hasConfig(g.chip)?'não configurado':'desconectado'}`));
     if(!runnable.length)return notify('Nenhum chip conectado/configurado para disparar.','warn');
     runtime.startedAt=new Date().toISOString();
+    requestWakeLockV155();
     runnable.forEach(g=>{const key=chipKey(g.chip); runtime.chips[key]={label:chipTitle(g.chip),running:true,paused:false,stopped:false,current:0,total:g.rows.length,sent:0,errors:0,state:'Iniciando'}; chipLoop(g.chip,g.rows);});
     notify(`Disparo iniciado em ${runnable.length} chip(s).`);
     injectControls();
   }
   function pauseAllV80(){Object.values(runtime.chips).forEach(r=>{if(r.running)r.paused=true;}); saveRuntime(); renderV80Controls(); addLog('Disparo pausado.');}
   function resumeAllV80(){Object.values(runtime.chips).forEach(r=>{if(r.running){r.paused=false;r.stopped=false;}}); saveRuntime(); renderV80Controls(); addLog('Disparo retomado.');}
-  function stopAllV80(){Object.values(runtime.chips).forEach(r=>{r.stopped=true;r.paused=false;r.running=false;r.state='Parado';}); saveRuntime(); renderV80Controls(); addLog('Disparo parado.');}
+  function stopAllV80(){Object.values(runtime.chips).forEach(r=>{r.stopped=true;r.paused=false;r.running=false;r.state='Parado';r.timerLeft=0;}); releaseWakeLockV155(); saveRuntime(); renderV80Controls(); addLog('Disparo parado.');}
   function pauseChipV80(key){const r=runtime.chips[key]; if(r){r.paused=true;saveRuntime();renderV80Controls();}}
   function resumeChipV80(key){const r=runtime.chips[key]; if(r){r.paused=false;r.stopped=false;saveRuntime();renderV80Controls();}}
   function stopChipV80(key){const r=runtime.chips[key]; if(r){r.stopped=true;r.paused=false;r.running=false;r.state='Parado';saveRuntime();renderV80Controls();addLog(`Chip ${key} parado.`);}}
@@ -301,7 +353,7 @@
 
   function applyStyle(){if(document.getElementById('v80-dispatch-style'))return; const st=document.createElement('style'); st.id='v80-dispatch-style'; st.textContent=`
     .v80-dispatch-box{border:1px solid var(--border2);background:rgba(255,255,255,.024);border-radius:12px;padding:12px;margin:0 0 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;flex-shrink:0}
-    .v80-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:900;color:var(--text);margin-bottom:4px}.v80-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.55}.v80-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.v80-btn{border:1px solid var(--border2);background:rgba(255,255,255,.025);border-radius:8px;color:var(--text2);font-family:'DM Mono',monospace;font-size:8px;padding:7px 9px;cursor:pointer;white-space:nowrap}.v80-btn:hover{border-color:var(--accent);color:var(--accent)}.v80-btn.primary{background:var(--accent);color:#111;border-color:var(--accent);font-weight:900}.v80-btn.blue{border-color:rgba(74,179,255,.45);color:#4ab3ff}.v80-btn.danger{border-color:rgba(255,80,80,.45);color:#ff6b6b}.v80-chip-run{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)}.v80-pill{display:inline-flex;border:1px solid var(--border2);border-radius:999px;padding:3px 7px;gap:5px;align-items:center}.v80-pill.run{color:var(--accent);border-color:rgba(184,240,89,.35)}.v80-pill.pause{color:#ffd166;border-color:rgba(255,209,102,.35)}.v80-pill.done{color:var(--ok);border-color:rgba(78,203,113,.35)}.v80-pill.err{color:var(--error);border-color:rgba(255,80,80,.35)}.v80-test{grid-column:1/-1;border-top:1px dashed var(--border2);padding-top:9px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}.v80-test input,.v80-test select{background:var(--bg);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:7px 9px;font-family:'DM Mono',monospace;font-size:9px;min-width:160px}.v80-test.real{align-items:flex-end}.v80-test.real select{min-width:280px;max-width:520px}.v80-field{display:flex;flex-direction:column;gap:4px}.v80-field label{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.v80-log{grid-column:1/-1;max-height:74px;overflow:auto;border-top:1px dashed var(--border2);padding-top:8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.55}.v83-manual{align-items:flex-end}.v83-manual .v80-field{min-width:150px}.v83-test-head{width:100%;display:flex;justify-content:space-between;align-items:flex-start}.v83-preview{width:100%;border:1px solid var(--border2);border-radius:10px;background:rgba(0,0,0,.18);padding:9px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.5}.v83-preview-title{font-family:'Syne',sans-serif;font-weight:900;color:var(--text);font-size:12px;margin-bottom:4px}.v83-preview-meta{color:var(--accent);margin-bottom:7px}.v83-preview-msg{border-top:1px dashed var(--border2);padding-top:7px;margin-top:7px;white-space:pre-wrap}.v83-preview-msg b{display:block;color:var(--text2);font-size:8px;margin-bottom:3px}.v83-img-mini img{width:64px;height:64px;border-radius:9px;object-fit:cover;border:1px solid var(--border2)}@media(max-width:900px){.v80-dispatch-box{grid-template-columns:1fr}.v80-actions{justify-content:flex-start}}
+    .v80-title{font-family:'Syne',sans-serif;font-size:14px;font-weight:900;color:var(--text);margin-bottom:4px}.v80-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);line-height:1.55}.v80-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.v80-btn{border:1px solid var(--border2);background:rgba(255,255,255,.025);border-radius:8px;color:var(--text2);font-family:'DM Mono',monospace;font-size:8px;padding:7px 9px;cursor:pointer;white-space:nowrap}.v80-btn:hover{border-color:var(--accent);color:var(--accent)}.v80-btn.primary{background:var(--accent);color:#111;border-color:var(--accent);font-weight:900}.v80-btn.blue{border-color:rgba(74,179,255,.45);color:#4ab3ff}.v80-btn.danger{border-color:rgba(255,80,80,.45);color:#ff6b6b}.v80-chip-run{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted)}.v80-pill{display:inline-flex;border:1px solid var(--border2);border-radius:999px;padding:3px 7px;gap:5px;align-items:center}.v80-pill.run{color:var(--accent);border-color:rgba(184,240,89,.35)}.v80-pill.pause{color:#ffd166;border-color:rgba(255,209,102,.35)}.v80-pill.done{color:var(--ok);border-color:rgba(78,203,113,.35)}.v80-pill.err{color:var(--error);border-color:rgba(255,80,80,.35)}.v80-test{grid-column:1/-1;border-top:1px dashed var(--border2);padding-top:9px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}.v80-test input,.v80-test select{background:var(--bg);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:7px 9px;font-family:'DM Mono',monospace;font-size:9px;min-width:160px}.v80-test.real{align-items:flex-end}.v80-test.real select{min-width:280px;max-width:520px}.v80-field{display:flex;flex-direction:column;gap:4px}.v80-field label{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.v80-log{grid-column:1/-1;max-height:74px;overflow:auto;border-top:1px dashed var(--border2);padding-top:8px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.55}.v83-manual{align-items:flex-end}.v83-manual .v80-field{min-width:150px}.v83-test-head{width:100%;display:flex;justify-content:space-between;align-items:flex-start}.v83-preview{width:100%;border:1px solid var(--border2);border-radius:10px;background:rgba(0,0,0,.18);padding:9px;font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);line-height:1.5}.v83-preview-title{font-family:'Syne',sans-serif;font-weight:900;color:var(--text);font-size:12px;margin-bottom:4px}.v83-preview-meta{color:var(--accent);margin-bottom:7px}.v83-preview-msg{border-top:1px dashed var(--border2);padding-top:7px;margin-top:7px;white-space:pre-wrap}.v83-preview-msg b{display:block;color:var(--text2);font-size:8px;margin-bottom:3px}.v83-img-mini img{width:64px;height:64px;border-radius:9px;object-fit:cover;border:1px solid var(--border2)}.v155-run-pill{flex-wrap:wrap}.v155-timer{display:inline-block;width:72px;height:5px;border:1px solid var(--border2);border-radius:999px;overflow:hidden;background:rgba(255,255,255,.04);vertical-align:middle}.v155-timer span{display:block;height:100%;background:var(--accent)}@media(max-width:900px){.v80-dispatch-box{grid-template-columns:1fr}.v80-actions{justify-content:flex-start}}
   `; document.head.appendChild(st);}
   function renderV80Log(){const el=document.getElementById('v80DispatchLog'); if(el)el.innerHTML=runtime.log.length?runtime.log.slice(0,8).map(esc).join('<br>'):'// nenhum evento ainda';}
   async function renderV80Controls(){
@@ -311,8 +363,8 @@
     const chips=(data.chips||[]).filter(hasConfig);
     const leadOptions=rows.slice(0,300).map(r=>{const ramo=resolveRamo(r.lead||{}); const tipo=String(r.lead_type||r.lead?.lead_type||'sem-site').replace(/_/g,' '); return `<option value="${esc(r.id)}">${esc(rowChipTitle(r))} · ${esc(leadName(r.lead))} · ${esc(ramo.nome||ramo.id)} · ${esc(tipo)}</option>`;}).join('');
     const running=Object.values(runtime.chips).some(r=>r.running&&!r.stopped);
-    const chipLines=Object.entries(runtime.chips).map(([key,r])=>{const cls=r.paused?'pause':r.running?'run':r.errors?'err':'done'; return `<span class="v80-pill ${cls}">${esc(r.label||key)} · ${esc(r.state||'parado')} · ${Number(r.current||0)+1}/${r.total||0} · ok ${r.sent||0} · erro ${r.errors||0} ${r.running?`<button class="v80-btn" style="padding:2px 5px" onclick="pauseChipV80('${esc(key)}')">Pausar</button><button class="v80-btn" style="padding:2px 5px" onclick="resumeChipV80('${esc(key)}')">Retomar</button>`:''}</span>`;}).join('');
-    holder.innerHTML=`<div><div class="v80-title">Disparo operacional</div><div class="v80-sub">Dia: <b>${esc(date)}</b> · Prontos: <b>${rows.length}</b> · Regra: cada chip envia 1 lead por ciclo e aguarda o intervalo configurado. Sequência: Msg1 → 10s → Msg2 → 5s → imagem do ramo.</div><div class="v80-chip-run">${chipLines||'<span class="v80-pill">Nenhum disparo em execução</span>'}</div></div><div class="v80-actions"><button class="v80-btn" onclick="previewDispatchV80()">Prévia</button><button class="v80-btn primary" onclick="startDispatchV80('all')" ${running?'disabled style="opacity:.5"':''}>Disparar</button><button class="v80-btn blue" onclick="pauseDispatchV80()">Pausar</button><button class="v80-btn blue" onclick="resumeDispatchV80()">Retomar</button><button class="v80-btn danger" onclick="stopDispatchV80()">Parar</button></div><div class="v80-test v83-manual"><div class="v83-test-head"><div><div class="v80-title" style="margin:0">Lead teste com atributos</div><div class="v80-sub">Simula um lead verdadeiro usando telefone seu. Não cria lead, não altera fila, não conta limite e não salva Base Permanente.</div></div></div><div class="v80-field"><label>Telefone de teste</label><input id="v83TestPhone" placeholder="+55 DDD número" inputmode="tel" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Nome simulado</label><input id="v83TestCompany" placeholder="Empresa Teste" value="Empresa Teste" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Chip</label><select id="v83TestChip">${chips.map(ch=>`<option value="${esc(chipKey(ch))}">${esc(chipTitle(ch))} ${isConnected(ch)?'✓':'(desconectado)'}</option>`).join('')}</select></div><div class="v80-field"><label>Ramo</label><select id="v83TestRamo" onchange="previewManualLeadTestV83()">${ramosOptionsV83().map(r=>`<option value="${esc(r.id)}">${esc(r.nome)}</option>`).join('')}</select></div><div class="v80-field"><label>Tipo do lead</label><select id="v83TestTipo" onchange="previewManualLeadTestV83()"><option value="sem-site">Sem site</option><option value="com-site">Com site</option><option value="agregador">Agregador</option></select></div><div class="v80-field"><label>Site opcional</label><input id="v83TestSite" placeholder="https://empresa.com.br" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Imagem do teste</label><input id="v83ManualImageInput" type="file" accept="image/*" onchange="onManualLeadTestImageV83(this)"></div><button class="v80-btn primary" onclick="sendManualLeadTestV83()">Enviar lead teste</button><div class="v83-img-mini"><img id="v83ManualImagePreview" src="" style="display:none"></div><div id="v83ManualPreview" class="v83-preview"></div></div><div class="v80-log" id="v80DispatchLog">${runtime.log.length?runtime.log.slice(0,8).map(esc).join('<br>'):'// nenhum evento ainda'}</div>`;
+    const chipLines=Object.entries(runtime.chips).map(([key,r])=>{const cls=r.paused?'pause':r.running?'run':r.errors?'err':'done'; const pct=r.timerTotal?Math.max(0,Math.min(100,Math.round(((r.timerTotal-(r.timerLeft||0))/r.timerTotal)*100))):0; const loteTxt=r.lote?`Lote ${r.lote}: ${r.loteProgress||0}/${r.loteSize||0}`:`Lote: —`; const timerHtml=(r.timerLeft&&r.running)?`<span class="v155-timer"><span style="width:${pct}%"></span></span><b>${r.timerLeft}s</b>`:''; return `<span class="v80-pill ${cls} v155-run-pill">${esc(r.label||key)} · ${esc(loteTxt)} · ${esc(r.state||'parado')} ${timerHtml} · total ${r.sent||0}/${r.total||0} · erro ${r.errors||0} ${r.running?`<button class="v80-btn" style="padding:2px 5px" onclick="pauseChipV80('${esc(key)}')">Pausar</button><button class="v80-btn" style="padding:2px 5px" onclick="resumeChipV80('${esc(key)}')">Retomar</button>`:''}</span>`;}).join('');
+    holder.innerHTML=`<div><div class="v80-title">Disparo operacional</div><div class="v80-sub">Dia: <b>${esc(date)}</b> · Prontos: <b>${rows.length}</b> · Regra: progresso por lote e temporizador por lead/delay. Sequência: Msg1 → 10s → Msg2 → 5s → imagem do ramo.</div><div class="v80-chip-run">${chipLines||'<span class="v80-pill">Nenhum disparo em execução</span>'}</div></div><div class="v80-actions"><button class="v80-btn" onclick="previewDispatchV80()">Prévia</button><button class="v80-btn primary" onclick="startDispatchV80('all')" ${running?'disabled style="opacity:.5"':''}>Disparar</button><button class="v80-btn blue" onclick="pauseDispatchV80()">Pausar</button><button class="v80-btn blue" onclick="resumeDispatchV80()">Retomar</button><button class="v80-btn danger" onclick="stopDispatchV80()">Parar</button></div><div class="v80-test v83-manual"><div class="v83-test-head"><div><div class="v80-title" style="margin:0">Lead teste com atributos</div><div class="v80-sub">Simula um lead verdadeiro usando telefone seu. Não cria lead, não altera fila, não conta limite e não salva Base Permanente.</div></div></div><div class="v80-field"><label>Telefone de teste</label><input id="v83TestPhone" placeholder="+55 DDD número" inputmode="tel" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Nome simulado</label><input id="v83TestCompany" placeholder="Empresa Teste" value="Empresa Teste" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Chip</label><select id="v83TestChip">${chips.map(ch=>`<option value="${esc(chipKey(ch))}">${esc(chipTitle(ch))} ${isConnected(ch)?'✓':'(desconectado)'}</option>`).join('')}</select></div><div class="v80-field"><label>Ramo</label><select id="v83TestRamo" onchange="previewManualLeadTestV83()">${ramosOptionsV83().map(r=>`<option value="${esc(r.id)}">${esc(r.nome)}</option>`).join('')}</select></div><div class="v80-field"><label>Tipo do lead</label><select id="v83TestTipo" onchange="previewManualLeadTestV83()"><option value="sem-site">Sem site</option><option value="com-site">Com site</option><option value="agregador">Agregador</option></select></div><div class="v80-field"><label>Site opcional</label><input id="v83TestSite" placeholder="https://empresa.com.br" oninput="previewManualLeadTestV83()"></div><div class="v80-field"><label>Imagem do teste</label><input id="v83ManualImageInput" type="file" accept="image/*" onchange="onManualLeadTestImageV83(this)"></div><button class="v80-btn primary" onclick="sendManualLeadTestV83()">Enviar lead teste</button><div class="v83-img-mini"><img id="v83ManualImagePreview" src="" style="display:none"></div><div id="v83ManualPreview" class="v83-preview"></div></div><div class="v80-log" id="v80DispatchLog">${runtime.log.length?runtime.log.slice(0,8).map(esc).join('<br>'):'// nenhum evento ainda'}</div>`;
   }
   function injectControls(){
     applyStyle(); const body=document.querySelector('#panel-fila-zap .zapLeft-body'); if(!body)return; let box=document.getElementById('v80DispatchBox'); if(!box){box=document.createElement('div'); box.id='v80DispatchBox'; box.className='v80-dispatch-box'; const stats=body.querySelector('.stats-row'); if(stats&&stats.parentNode)stats.parentNode.insertBefore(box,stats.nextSibling); else body.insertBefore(box,body.firstChild);} renderV80Controls();
