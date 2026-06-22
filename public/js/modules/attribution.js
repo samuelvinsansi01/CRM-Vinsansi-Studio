@@ -317,7 +317,10 @@
     const qv=(document.getElementById(tab==='insta'?'atribInstaBusca':'atribBusca')?.value||'').trim().replaceAll('%','');
     let q=c.from('leads').select('id,company_name,phone,normalized_phone,website,website_type,maps_url,instagram_url,instagram_username,instagram,city,state,rating,reviews_count,lead_score,current_stage,current_status,pipeline_status,created_at,category,category_name,parent_category',{count:'exact'})
       .eq('user_id',uid).in('current_stage',stageSets(tab)).order('lead_score',{ascending:false}).order('created_at',{ascending:true});
-    if(qv) q=q.or(`company_name.ilike.%${qv}%,phone.ilike.%${qv}%,normalized_phone.ilike.%${qv}%,website.ilike.%${qv}%,instagram_url.ilike.%${qv}%`);
+    if(qv){
+      const safe=qv.replace(/[(),]/g,' ').trim();
+      q=q.or(`company_name.ilike.%${safe}%,phone.ilike.%${safe}%,normalized_phone.ilike.%${safe}%,website.ilike.%${safe}%,instagram_url.ilike.%${safe}%,instagram_username.ilike.%${safe}%,city.ilike.%${safe}%,state.ilike.%${safe}%`);
+    }
     const from=(page-1)*PER_PAGE;
     const {data,count,error}=await q.range(from,from+PER_PAGE-1);
     return {rows:data||[],total:count||0,error};
@@ -438,14 +441,31 @@
   window.renderAtribuicao=render;
   window.renderAtribuicaoPanelV31=render;
   window.renderAtribuicaoPanelFinalV130=render;
+  // Compatibilidade limpa: o HTML antigo chama renderAtribInstaFila() no input de busca.
+  // Sem este alias, a busca do Instagram quebra e parece não funcionar.
+  window.renderAtribInstaFila=function(){ currentTab='insta'; page=1; return render(); };
+  window.renderAtribZapFila=function(){ currentTab='zap'; page=1; return render(); };
+
+  function bindSearchInputs(){
+    const normal=document.getElementById('atribBusca');
+    const insta=document.getElementById('atribInstaBusca');
+    if(normal && !normal.dataset.v130SearchBound){
+      normal.dataset.v130SearchBound='1';
+      normal.addEventListener('input',()=>{ if(currentTab!=='insta'){ page=1; render(); } });
+    }
+    if(insta && !insta.dataset.v130SearchBound){
+      insta.dataset.v130SearchBound='1';
+      insta.addEventListener('input',()=>{ currentTab='insta'; page=1; render(); });
+    }
+  }
 
   // Lead Certo v139: navegação pertence somente ao core/router-final.js.
   // Este módulo só exporta renderAtribuicao/renderAtribuicaoPanelV31.
 
   document.addEventListener('click',handleClick,true);
-  document.addEventListener('DOMContentLoaded',()=>{ style(); ensureAggregatorTab(); setTimeout(()=>{ refreshCounts(); if(panel()?.classList.contains('active')) render(); },450); setTimeout(()=>{ refreshCounts(); if(panel()?.classList.contains('active')) render(); },1300); });
-  try{ new MutationObserver(()=>{ style(); ensureAggregatorTab(); updateTabsVisual(); }).observe(document.documentElement,{childList:true,subtree:true}); }catch(_){ }
+  document.addEventListener('DOMContentLoaded',()=>{ style(); ensureAggregatorTab(); bindSearchInputs(); setTimeout(()=>{ refreshCounts(); if(panel()?.classList.contains('active')) render(); },450); setTimeout(()=>{ refreshCounts(); if(panel()?.classList.contains('active')) render(); },1300); });
+  try{ new MutationObserver(()=>{ style(); ensureAggregatorTab(); bindSearchInputs(); updateTabsVisual(); }).observe(document.documentElement,{childList:true,subtree:true}); }catch(_){ }
   setInterval(()=>{ refreshCounts(); if(panel()?.classList.contains('active')) updateTabsVisual(); },2500);
-  if(document.readyState!=='loading') setTimeout(()=>{ style(); ensureAggregatorTab(); refreshCounts(); if(panel()?.classList.contains('active')) render(); },80);
+  if(document.readyState!=='loading') setTimeout(()=>{ style(); ensureAggregatorTab(); bindSearchInputs(); refreshCounts(); if(panel()?.classList.contains('active')) render(); },80);
   console.log('[v130] ativo',VERSION);
 })();

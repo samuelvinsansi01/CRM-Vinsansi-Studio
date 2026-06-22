@@ -185,6 +185,22 @@
     for(const r of data||[]){const d=r.scheduled_date;if(!out[d])continue;const s=String(r.status||'');out[d].total++; if(s==='approved')out[d].approved++; else if(s.includes('retry'))out[d].retry++; else if(s.includes('invalid'))out[d].invalid++; else if(s==='ready_to_dispatch')out[d].ready++; else out[d].review++;}
     return out;
   }
+  async function getChipOccupancyMap(date){
+    const c=db(), user=uid(); const out={};
+    if(!c||!user||!date) return out;
+    const {data,error}=await c.from('pre_dispatch_items')
+      .select('chip_instance,chip_label,status')
+      .eq('user_id',user)
+      .eq('scheduled_date',date)
+      .in('status',PRE_CAPACITY_STATUSES);
+    if(error){ console.warn('[pre-final chip occupancy]',error.message); return out; }
+    for(const r of data||[]){
+      const keys=[r.chip_instance,r.chip_label].filter(Boolean).map(String);
+      for(const k of keys) out[k]=(out[k]||0)+1;
+    }
+    return out;
+  }
+
   async function getItems(date,chip){
     const c=db(), user=uid(); if(!c||!user)return [];
     let q=c.from('pre_dispatch_items').select('id,lead_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,validation_status,invalid_reason,raw_payload,created_at,updated_at,leads(*)').eq('user_id',user).eq('scheduled_date',date).in('status',listStatuses).order('chip_label',{ascending:true}).order('position',{ascending:true});
@@ -357,10 +373,11 @@
       await carryPendingWhatsappAfter20();
       const base=planningBaseDate();
       const dates=Array.from({length:7},(_,i)=>addDays(base,i)); if(!dates.includes(state.date)) state.date=dates[0];
-      const [counts,chips,items]=await Promise.all([getCounts(dates),getChips(),getItems(state.date,state.chip)]);
+      const [counts,chips,items,chipOccupancy]=await Promise.all([getCounts(dates),getChips(),getItems(state.date,state.chip),getChipOccupancyMap(state.date)]);
       const selectedChip = chips.find(ch=>ch.instance===state.chip);
       const cardLimit = selectedChip ? chipDailyLimit(selectedChip) : (chips.reduce((sum,ch)=>sum+chipDailyLimit(ch),0)||120);
-      const chipOptions=`<button class="pre-chip ${state.chip==='all'?'active':''}" data-chip="all">Todos</button>`+chips.map(ch=>`<button class="pre-chip ${state.chip===ch.instance?'active':''}" data-chip="${esc(ch.instance)}">${esc(ch.label)} <small>${esc(chipDailyLimit(ch))}/dia</small></button>`).join('');
+      const totalOccupied = chips.reduce((sum,ch)=>sum+Number(chipOccupancy[ch.instance]||chipOccupancy[ch.label]||0),0);
+      const chipOptions=`<button class="pre-chip ${state.chip==='all'?'active':''}" data-chip="all">Todos <small>${esc(totalOccupied)}/${esc(chips.reduce((sum,ch)=>sum+chipDailyLimit(ch),0)||120)}</small></button>`+chips.map(ch=>{const limit=chipDailyLimit(ch); const occupied=Number(chipOccupancy[ch.instance]||chipOccupancy[ch.label]||0); return `<button class="pre-chip ${state.chip===ch.instance?'active':''}" data-chip="${esc(ch.instance)}">${esc(ch.label)} <small>${esc(occupied)}/${esc(limit)}</small></button>`;}).join('');
       r.innerHTML=`<div class="pre-final">
         <div class="page-head"><div><div class="page-title">Pré-envio <span>semanal.</span></div><div class="page-subtitle">Fila por dia e chip, sem código legado.</div></div></div>
         <div id="preWeekCards" class="pre-week-cards-v129">${dates.map(d=>{const c=counts[d]||{};return `<button class="pre-day-card ${state.date===d?'active':''} ${d===today()?'today':''}" data-date="${d}"><span>${weekday(d)}, ${brDate(d)}</span><strong>${c.total||0}/${cardLimit}</strong><small>rev ${c.review||0} · ok ${c.approved||0} · retry ${c.retry||0} · inv ${c.invalid||0}</small>${d===today()?'<em>HOJE</em>':''}</button>`;}).join('')}</div>
