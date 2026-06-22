@@ -191,6 +191,69 @@
     return 'sem-site';
   }
   function typeLabel(l,r){return ({'sem-site':'Sem site','com-site':'Com site','agregador':'Agregador'})[typeKey(l,r)]||'Sem site';}
+
+  function applyLeadVarsV159(text,lead){
+    const company=String(lead?.company_name||'empresa').trim();
+    return String(text||'')
+      .replace(/\{EMPRESA\}/g,company)
+      .replace(/\{empresa\}/g,company)
+      .replace(/\{NOME_EMPRESA\}/g,company)
+      .replace(/\{nome_empresa\}/g,company);
+  }
+  function ramoCandidatesForTemplateV159(lead){
+    const cats=categoriesOf(lead);
+    const out=[];
+    cats.forEach(c=>{out.push(c,slug(c));});
+    try{
+      const ramos=getRamosSafe();
+      const hay=normalize(cats.join(' '));
+      ramos.forEach(r=>{
+        const keys=[r?.id,r?.nome,...(Array.isArray(r?.keywords)?r.keywords:[])].filter(Boolean).map(normalize);
+        if(keys.some(k=>k&&(hay.includes(k)||k.includes(hay)))){
+          if(r?.id) out.push(String(r.id));
+          if(r?.nome) out.push(String(r.nome),slug(r.nome));
+        }
+      });
+    }catch(_){}
+    const hay=normalize(cats.join(' '));
+    if(MOVEIS_PLANEJADOS_KEYS_V75.map(normalize).some(k=>hay.includes(k))){
+      out.push('marcenaria','moveis-planejados','móveis-planejados','Móveis Planejados','moveis planejados');
+    }
+    return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
+  }
+  async function freezeWhatsappQueueTemplateV159(c,row,lead){
+    const current=row.raw_payload||{};
+    if(String(current.message_1||'').trim() && String(current.message_2||'').trim()) return true;
+    const tipo=typeKey(lead,row);
+    const candidates=ramoCandidatesForTemplateV159(lead);
+    const {data,error}=await c.from('message_templates')
+      .select('id,name,ramo_id,template_type,part_1,part_2,active')
+      .eq('user_id',uid())
+      .eq('active',true)
+      .eq('template_type',tipo);
+    if(error){ console.warn('[fila-zap template freeze]',error.message); return false; }
+    const list=(data||[]).filter(t=>String(t.part_1||'').trim()&&String(t.part_2||'').trim());
+    if(!list.length) return false;
+    const candNorm=candidates.map(normalize);
+    let tpl=list.find(t=>candNorm.includes(normalize(t.ramo_id))||candNorm.includes(slug(t.ramo_id)));
+    if(!tpl) tpl=list.find(t=>{const rn=normalize(t.ramo_id); return candNorm.some(cn=>cn&&(rn.includes(cn)||cn.includes(rn)));});
+    if(!tpl && list.length===1) tpl=list[0];
+    if(!tpl) return false;
+    const nextPayload={...current,
+      message_1:applyLeadVarsV159(tpl.part_1,lead),
+      message_2:applyLeadVarsV159(tpl.part_2,lead),
+      template_id:tpl.id,
+      template_name:tpl.name||'',
+      template_type:tipo,
+      template_ramo_id:tpl.ramo_id||'',
+      template_frozen_at:new Date().toISOString()
+    };
+    const upd=await c.from('pre_dispatch_items').update({raw_payload:nextPayload,updated_at:new Date().toISOString()}).eq('user_id',uid()).eq('id',row.id);
+    if(upd.error){ console.warn('[fila-zap template freeze update]',upd.error.message); return false; }
+    row.raw_payload=nextPayload;
+    return true;
+  }
+
   function imgKey(chipId,loteNum,ramoId){return `chip-${chipId}-lote-${loteNum}-ramo-${ramoId||'geral'}`;}
 
   function openDb(){if(_db)return Promise.resolve(_db); return new Promise((res,rej)=>{const req=indexedDB.open(IDB_NAME,1);req.onupgradeneeded=e=>{try{e.target.result.createObjectStore(IDB_STORE);}catch(_){}};req.onsuccess=e=>{_db=e.target.result;res(_db);};req.onerror=e=>rej(e.target.error);});}
@@ -324,6 +387,15 @@
       const lead=leads[r.lead_id]||{};
       if(!isWithinConfiguredRamoV149(lead)){ await invalidateOutOfBranchV149(lead,r.id); continue; }
       validRows.push(r);
+    }
+    // v159: fonte da verdade do worker. Se algum item antigo entrou na Fila WhatsApp
+    // sem message_1/message_2 congeladas, tentamos reparar aqui usando o template correto
+    // por ramo + tipo. Se não houver template, o worker continuará bloqueando com segurança.
+    for(const r of validRows){
+      const st=String(r.status||'').toLowerCase();
+      if(['ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending','error','erro','failed'].includes(st)){
+        try{ await freezeWhatsappQueueTemplateV159(c,r,leads[r.lead_id]||{}); }catch(e){ console.warn('[fila-zap freeze v159]',e?.message||e); }
+      }
     }
     validRows.forEach(r=>{if(!chips.some(ch=>chipKey(ch)===rowChipKey(r)||chipTitle(ch)===rowChipTitle(r))) chips.push({id:rowChipKey(r)||rowChipTitle(r),instance:rowChipKey(r),label:rowChipTitle(r),daily_limit:120,block_size:60,active:true});});
     const items=validRows.map(r=>({...r,lead:leads[r.lead_id]||{}}));

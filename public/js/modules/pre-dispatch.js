@@ -174,6 +174,115 @@
     try{ if(typeof window.sweepOutOfBranchLeadsV149==='function') return await window.sweepOutOfBranchLeadsV149('attribution'); }catch(_){ }
   }
 
+  function normalizeTextLC(v){
+    return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+  }
+  function slugLC(v){
+    return normalizeTextLC(v).replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  }
+  function templateTypeForLead(item,lead){
+    const t=leadType(lead||{});
+    if(String(t).includes('agreg')) return 'agregador';
+    if(String(t).includes('com')) return 'com-site';
+    return 'sem-site';
+  }
+  function categoriesForTemplate(lead){
+    const out=[];
+    ['parent_category','category_name','category','categoria'].forEach(k=>{ if(lead&&lead[k]) out.push(String(lead[k])); });
+    const cats=lead?.categories;
+    if(Array.isArray(cats)) cats.forEach(c=>out.push(String(c)));
+    else if(typeof cats==='string'){
+      try{ const p=JSON.parse(cats); if(Array.isArray(p)) p.forEach(c=>out.push(String(c))); else out.push(cats); }
+      catch(_){ cats.split(/[;,|]/).forEach(c=>out.push(c)); }
+    }
+    const raw=lead?.raw_payload||{};
+    ['parent_category','category','category_name','categoria','categories','ramo','ramo_id'].forEach(k=>{
+      const v=raw[k]; if(Array.isArray(v)) v.forEach(x=>out.push(String(x))); else if(v) out.push(String(v));
+    });
+    return [...new Set(out.map(x=>x.trim()).filter(Boolean))];
+  }
+  function ramoCandidatesForTemplate(lead){
+    const cats=categoriesForTemplate(lead);
+    const out=[];
+    cats.forEach(c=>{ out.push(c, slugLC(c)); });
+    try{
+      const ramos=(typeof window.getRamos==='function'?window.getRamos():[])||[];
+      const hay=normalizeTextLC(cats.join(' '));
+      ramos.forEach(r=>{
+        const keys=[r?.id,r?.nome,...(Array.isArray(r?.keywords)?r.keywords:[])].filter(Boolean).map(normalizeTextLC);
+        if(keys.some(k=>k && (hay.includes(k)||k.includes(hay)))){
+          if(r?.id) out.push(String(r.id));
+          if(r?.nome) out.push(String(r.nome), slugLC(r.nome));
+        }
+      });
+    }catch(_){}
+    const hay=normalizeTextLC(cats.join(' '));
+    if(['marcenaria','marceneiro','moveleiro','movelaria','moveis planejados','moveis sob medida','móveis planejados','móveis sob medida'].some(k=>hay.includes(normalizeTextLC(k)))){
+      out.push('marcenaria','moveis-planejados','móveis-planejados','Móveis Planejados','moveis planejados');
+    }
+    return [...new Set(out.map(x=>String(x||'').trim()).filter(Boolean))];
+  }
+  function applyLeadVars(text,lead){
+    const company=String(lead?.company_name||'empresa').trim();
+    return String(text||'')
+      .replace(/\{EMPRESA\}/g,company)
+      .replace(/\{empresa\}/g,company)
+      .replace(/\{NOME_EMPRESA\}/g,company)
+      .replace(/\{nome_empresa\}/g,company);
+  }
+  async function resolveWhatsappTemplateForQueue(item,lead){
+    const c=db(), user=uid(); if(!c||!user) return {error:'Supabase indisponível'};
+    const tipo=templateTypeForLead(item,lead);
+    const candidates=ramoCandidatesForTemplate(lead);
+    const {data,error}=await c.from('message_templates')
+      .select('id,name,ramo_id,template_type,part_1,part_2,active')
+      .eq('user_id',user)
+      .eq('active',true)
+      .eq('template_type',tipo);
+    if(error) return {error:error.message};
+    const list=(data||[]).filter(t=>String(t.part_1||'').trim() && String(t.part_2||'').trim());
+    if(!list.length) return {error:`template_missing:${tipo}`};
+    const candNorm=candidates.map(normalizeTextLC);
+    let tpl=list.find(t=>candNorm.includes(normalizeTextLC(t.ramo_id)) || candNorm.includes(slugLC(t.ramo_id)));
+    if(!tpl){
+      tpl=list.find(t=>{
+        const rn=normalizeTextLC(t.ramo_id);
+        return candNorm.some(cn=>cn && (rn.includes(cn)||cn.includes(rn)));
+      });
+    }
+    if(!tpl && list.length===1) tpl=list[0];
+    if(!tpl) return {error:`template_missing:${tipo}:${candidates[0]||'sem-ramo'}`};
+    return {
+      template:tpl,
+      payload:{
+        message_1:applyLeadVars(tpl.part_1,lead),
+        message_2:applyLeadVars(tpl.part_2,lead),
+        template_id:tpl.id,
+        template_name:tpl.name||'',
+        template_type:tipo,
+        template_ramo_id:tpl.ramo_id||'',
+        template_frozen_at:new Date().toISOString()
+      }
+    };
+  }
+  async function freezeWhatsappTemplateOnItem(row){
+    const c=db(), user=uid(); if(!c||!user||!row?.id) return {ok:false,error:'Supabase indisponível'};
+    const lead=row.leads||row.lead||{};
+    const current=row.raw_payload||{};
+    if(String(current.message_1||'').trim() && String(current.message_2||'').trim()) return {ok:true,payload:current};
+    const resolved=await resolveWhatsappTemplateForQueue(row,lead);
+    if(resolved.error) return {ok:false,error:resolved.error};
+    const nextPayload={...current,...resolved.payload};
+    const {error}=await c.from('pre_dispatch_items')
+      .update({raw_payload:nextPayload,updated_at:new Date().toISOString()})
+      .eq('user_id',user)
+      .eq('id',row.id);
+    if(error) return {ok:false,error:error.message};
+    row.raw_payload=nextPayload;
+    return {ok:true,payload:nextPayload};
+  }
+
+
   async function getChips(){
     const c=db(), user=uid(); if(!c||!user)return [];
     const {data,error}=await c.from('whatsapp_instances').select('id,instance,label,name,chip_id,daily_limit,block_size,active,status,created_at').eq('user_id',user).eq('active',true).order('created_at',{ascending:true});
@@ -331,8 +440,18 @@
       rows.push(row);
     }
     if(!rows.length)return notify(`Nenhum aprovado válido para enviar. ${blocked} fora do perfil foram invalidados.`,'warn');
-    const ids=rows.map(x=>x.id);
-    const leadIds=[...new Set(rows.map(x=>x.lead_id).filter(Boolean))];
+    const readyRows=[];
+    const templateErrors=[];
+    for(const row of rows){
+      const frozen=await freezeWhatsappTemplateOnItem(row);
+      if(frozen.ok) readyRows.push(row);
+      else templateErrors.push({row,error:frozen.error});
+    }
+    if(!readyRows.length){
+      return notify(`Nenhum lead foi enviado para a fila: templates ausentes/inválidos (${templateErrors.length}). Corrija os templates por ramo/tipo antes de disparar.`,'err');
+    }
+    const ids=readyRows.map(x=>x.id);
+    const leadIds=[...new Set(readyRows.map(x=>x.lead_id).filter(Boolean))];
     const now=new Date().toISOString();
     const upItems=await c.from('pre_dispatch_items')
       .update({status:'ready_to_dispatch',updated_at:now})
@@ -346,7 +465,7 @@
         .in('id',leadIds);
       if(upLeads.error)return notify('Itens enviados, mas houve erro ao atualizar leads: '+upLeads.error.message,'err');
     }
-    notify('✓ Leads válidos enviados para a Fila WhatsApp do chip selecionado.'+(typeof blocked!=='undefined'&&blocked?` ${blocked} fora do perfil foram invalidados.`:'')); await render();
+    notify('✓ Leads válidos enviados para a Fila WhatsApp com template congelado.'+(templateErrors.length?` ${templateErrors.length} sem template ficaram no Pré-envio.`:'')+(typeof blocked!=='undefined'&&blocked?` ${blocked} fora do perfil foram invalidados.`:'')); await render();
     try{ if(typeof window.renderFilaZapV73==='function') window.renderFilaZapV73(); }catch(_){ }
   }
 
