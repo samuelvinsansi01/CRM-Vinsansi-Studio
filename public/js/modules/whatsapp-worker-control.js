@@ -4,7 +4,7 @@
 (function(){
   'use strict';
   const SCOPE='whatsapp_worker_control';
-  const VERSION='20260622-WHATSAPP-WORKER-CONTROL-V2-TEST-PHONE';
+  const VERSION='20260622-WHATSAPP-WORKER-CONTROL-V3-SAFE-START';
   const DEFAULT_TEST_PHONE='5511962420764';
   let lastPayload=null;
   let injecting=false;
@@ -76,7 +76,7 @@
         <button type="button" class="btn btn-ghost" data-worker-control="save-test-phone">Salvar número teste</button>
         <button type="button" class="btn btn-ghost" data-worker-control="test-once">Enviar teste</button>
       </div>
-      <div class="worker-control-note">Segurança: abrir o Docker não dispara nada. O worker só envia quando o status aqui estiver <b>Rodando</b>. Em <b>Teste</b>, o destino será o número configurado neste card e o worker pausa depois do teste.</div>
+      <div class="worker-control-note">Segurança: abrir o Docker não dispara nada. O worker só envia quando o controle estiver <b>enabled=true</b> e <b>Rodando</b>. Em <b>Teste</b>, o destino será o número configurado neste card e o worker pausa depois do teste.</div>
     </div>`;
   }
 
