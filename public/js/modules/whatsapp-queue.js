@@ -37,6 +37,13 @@
   function normalize(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();}
   function slug(v){return normalize(v).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'geral';}
 
+  const WA_OCCUPY_STATUSES=['ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending','sent','enviado'];
+  const WA_PENDING_ROLLOVER_STATUSES=['ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled'];
+  let waCarryoverRunning=false;
+  function localIsoV151(d=new Date()){const x=new Date(d); x.setHours(0,0,0,0); return x.toLocaleDateString('sv-SE');}
+  function addDaysV151(iso,n){const [y,m,d]=String(iso).split('-').map(Number);const x=new Date(y,m-1,d);x.setDate(x.getDate()+n);return x.toLocaleDateString('sv-SE');}
+  function isAfter20V151(){return new Date().getHours()>=20;}
+
   function statusKey(s){
     const raw=String(s||'').toLowerCase();
     if(['sent','enviado','enviada'].includes(raw))return 'sent';
@@ -70,6 +77,57 @@
     const cfgLimit=blockSize(ch)*blockCount();
     return cfgLimit>0?cfgLimit:(Number(ch?.daily_limit||120)||120);
   }
+  async function countOccupiedV151(c,date,chip){
+    const key=chipKey(chip), title=chipTitle(chip);
+    let q=c.from('pre_dispatch_items').select('id,chip_instance,chip_label').eq('user_id',uid()).eq('scheduled_date',date).in('status',WA_OCCUPY_STATUSES);
+    const {data,error}=await q;
+    if(error){console.warn('[fila-zap carryover count]',error.message);return 0;}
+    return (data||[]).filter(r=>rowChipKey(r)===key||rowChipTitle(r)===title||rowChipKey(r)===title||rowChipTitle(r)===key).length;
+  }
+  async function maxPositionV151(c,date,chip){
+    const key=chipKey(chip), title=chipTitle(chip);
+    const {data,error}=await c.from('pre_dispatch_items').select('position,chip_instance,chip_label').eq('user_id',uid()).eq('scheduled_date',date).order('position',{ascending:false}).limit(250);
+    if(error)return 0;
+    return Math.max(0,...(data||[]).filter(r=>rowChipKey(r)===key||rowChipTitle(r)===title||rowChipKey(r)===title||rowChipTitle(r)===key).map(r=>Number(r.position||0)||0));
+  }
+  async function autoMovePendingAfter20V151(c,chips){
+    if(waCarryoverRunning||!isAfter20V151()||!c)return 0;
+    waCarryoverRunning=true;
+    try{
+      const today=localIsoV151(new Date());
+      const {data,error}=await c.from('pre_dispatch_items')
+        .select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position')
+        .eq('user_id',uid())
+        .lte('scheduled_date',today)
+        .in('status',WA_PENDING_ROLLOVER_STATUSES)
+        .order('scheduled_date',{ascending:true})
+        .order('position',{ascending:true});
+      if(error){console.warn('[fila-zap carryover fetch]',error.message);return 0;}
+      const rows=data||[]; if(!rows.length)return 0;
+      let moved=0;
+      for(const chip of chips||[]){
+        let list=rows.filter(r=>chipMatches(chip,r));
+        if(!list.length)continue;
+        let target=addDaysV151(today,1);
+        for(let guard=0; list.length && guard<14; guard++){
+          const available=Math.max(0,dailyLimit(chip)-await countOccupiedV151(c,target,chip));
+          if(available>0){
+            const batch=list.splice(0,available);
+            let pos=await maxPositionV151(c,target,chip);
+            for(const item of batch){
+              pos+=1;
+              const {error:upErr}=await c.from('pre_dispatch_items').update({scheduled_date:target,position:pos,updated_at:new Date().toISOString()}).eq('user_id',uid()).eq('id',item.id);
+              if(upErr) console.warn('[fila-zap carryover update]',upErr.message); else moved++;
+            }
+          }
+          target=addDaysV151(target,1);
+        }
+      }
+      if(moved) console.log(`[Lead Certo] ${moved} pendente(s) de WhatsApp movidos às 20h para o próximo dia disponível.`);
+      return moved;
+    }finally{waCarryoverRunning=false;}
+  }
+
   function leadLinkHtml(l){const m=mapsUrl(l);const name=esc(leadName(l));return m?`<a href="${esc(m)}" target="_blank" rel="noopener" class="v73-name-link">${name}</a>`:name;}
   function getMsg(r,n){const raw=r.raw_payload||{}; const l=r.lead||{}; return raw[`message_${n}`]||raw[`mensagem${n}`]||raw[`msg${n}`]||l[`message_${n}`]||l[`mensagem${n}`]||'';}
 
@@ -242,7 +300,14 @@
     const leads={};
     if(ids.length){const {data,error}=await c.from('leads').select('id,company_name,phone,normalized_phone,website,website_type,current_stage,lead_type,city,state,rating,reviews_count,category,category_name,categories,maps_url,raw_payload').eq('user_id',uid()).in('id',ids); if(error)console.warn('[v73][fila-leads]',error.message); (data||[]).forEach(l=>leads[l.id]=l);}
     const chips=(ch.data||[]).filter(x=>x.active!==false && x.instance);
-    const finalRows=rows.filter(r=>{
+    await autoMovePendingAfter20V151(c,chips);
+    // Se houve carryover, refazemos a consulta para refletir imediatamente o novo dia.
+    let effectiveRows=rows;
+    if(isAfter20V151()){
+      const refetch=await c.from('pre_dispatch_items').select('id,lead_id,user_id,chip_instance,chip_label,scheduled_date,lead_type,status,position,raw_payload,updated_at').eq('user_id',uid()).in('status',statuses).order('scheduled_date',{ascending:true}).order('chip_label',{ascending:true}).order('position',{ascending:true});
+      if(!refetch.error) effectiveRows=refetch.data||rows;
+    }
+    const finalRows=effectiveRows.filter(r=>{
       const st=String(r.status||'').toLowerCase();
       // Regra oficial: a tabela pre_dispatch_items é a fonte da Fila WhatsApp.
       // Se o item foi enviado pelo Pré-envio para a fila, ele deve aparecer mesmo que

@@ -6,7 +6,7 @@
   'use strict';
   const VERSION='20260621-PRE-DISPATCH-FINAL';
   let state={date:new Date().toISOString().slice(0,10), chip:'all', loading:false};
-  const operationalStatuses=['review','approved','validation_retry','invalid','invalid_whatsapp','ready_to_dispatch'];
+  const operationalStatuses=['review','approved','validation_retry','invalid','invalid_whatsapp','ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending','sent','enviado'];
   const listStatuses=['review','approved','validation_retry','invalid','invalid_whatsapp'];
 
   function db(){return window.sbClient||window.supabaseClient||window.supabase||null;}
@@ -63,6 +63,74 @@
     if(cfgLimit>0 && cfgLimit!==120) return cfgLimit;
     return dbLimit>0 ? dbLimit : (localLimit>0 ? localLimit : (cfgLimit>0 ? cfgLimit : 120));
   }
+  const PRE_CAPACITY_STATUSES=['review','approved','validation_retry','ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending','sent','enviado'];
+  const PRE_BLOCKED_STATUSES=['review','approved','validation_retry','ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled','sending','sent','enviado'];
+  const PRE_PENDING_ROLLOVER_STATUSES=['ready_to_dispatch','dispatch_queue','queued','not_sent','waiting','scheduled'];
+  let carryoverRunning=false;
+  function localIso(d=new Date()){const x=new Date(d); x.setHours(0,0,0,0); return x.toLocaleDateString('sv-SE');}
+  function planningBaseDate(){const n=new Date(); return n.getHours()>=20 ? addDays(localIso(n),1) : localIso(n);}
+  function canRunCarryover(){const n=new Date(); return n.getHours()>=20;}
+  async function countOccupancyForChip(date, chipInstance){
+    const c=db(), user=uid(); if(!c||!user||!date||!chipInstance)return 0;
+    const {data,error}=await c.from('pre_dispatch_items').select('id').eq('user_id',user).eq('scheduled_date',date).eq('chip_instance',chipInstance).in('status',PRE_CAPACITY_STATUSES);
+    if(error){console.warn('[pre-final capacity count]',error.message);return 0;}
+    return (data||[]).length;
+  }
+  async function maxPositionForChip(date, chipInstance){
+    const c=db(), user=uid(); if(!c||!user||!date||!chipInstance)return 0;
+    const {data,error}=await c.from('pre_dispatch_items').select('position').eq('user_id',user).eq('scheduled_date',date).eq('chip_instance',chipInstance).order('position',{ascending:false}).limit(1);
+    if(error)return 0;
+    return Number(data?.[0]?.position||0)||0;
+  }
+  async function movePendingGroupToNextSlots(chip, rows){
+    const c=db(), user=uid(); if(!c||!user||!chip||!rows?.length)return 0;
+    let moved=0;
+    let remaining=[...rows];
+    let target=addDays(localIso(new Date()),1);
+    // Se amanhã estiver cheio, empurra o excedente para os dias seguintes, sempre respeitando o limite diário do chip.
+    for(let guard=0; remaining.length && guard<14; guard++){
+      const occupied=await countOccupancyForChip(target, chip.instance);
+      const limit=chipDailyLimit(chip);
+      const available=Math.max(0, limit-occupied);
+      if(available>0){
+        const batch=remaining.splice(0, available);
+        let pos=await maxPositionForChip(target, chip.instance);
+        for(const item of batch){
+          pos += 1;
+          const {error}=await c.from('pre_dispatch_items').update({scheduled_date:target,position:pos,updated_at:new Date().toISOString()}).eq('user_id',user).eq('id',item.id);
+          if(error) console.warn('[pre-final carryover item]',error.message); else moved++;
+        }
+      }
+      target=addDays(target,1);
+    }
+    return moved;
+  }
+  async function carryPendingWhatsappAfter20(){
+    if(carryoverRunning||!canRunCarryover())return 0;
+    const c=db(), user=uid(); if(!c||!user)return 0;
+    carryoverRunning=true;
+    try{
+      const chips=await getChips(); if(!chips.length)return 0;
+      const todayLocal=localIso(new Date());
+      const {data,error}=await c.from('pre_dispatch_items')
+        .select('id,lead_id,chip_instance,chip_label,scheduled_date,status,position')
+        .eq('user_id',user)
+        .lte('scheduled_date',todayLocal)
+        .in('status',PRE_PENDING_ROLLOVER_STATUSES)
+        .order('scheduled_date',{ascending:true})
+        .order('position',{ascending:true});
+      if(error){console.warn('[pre-final carryover fetch]',error.message);return 0;}
+      const rows=data||[]; if(!rows.length)return 0;
+      let total=0;
+      for(const chip of chips){
+        const list=rows.filter(r=>String(r.chip_instance||r.chip_label||'')===String(chip.instance)||String(r.chip_label||'')===String(chip.label));
+        if(list.length) total += await movePendingGroupToNextSlots(chip,list);
+      }
+      if(total) console.log(`[Lead Certo] ${total} pendente(s) da Fila WhatsApp movidos para o próximo dia às 20h.`);
+      return total;
+    }finally{carryoverRunning=false;}
+  }
+
   function leadType(lead){
     const stage=String(lead?.current_stage||'').toLowerCase();
     const wt=String(lead?.website_type||'').toLowerCase();
@@ -133,7 +201,7 @@
   }
   async function fetchAlreadyBlockedIds(){
     const c=db(), user=uid(); const ids=new Set(); if(!c||!user)return ids;
-    try{const {data}=await c.from('pre_dispatch_items').select('lead_id').eq('user_id',user).in('status',['review','approved','ready_to_dispatch','validation_retry']);(data||[]).forEach(x=>ids.add(String(x.lead_id)));}catch(_){ }
+    try{const {data}=await c.from('pre_dispatch_items').select('lead_id').eq('user_id',user).in('status',PRE_BLOCKED_STATUSES);(data||[]).forEach(x=>ids.add(String(x.lead_id)));}catch(_){ }
     try{const {data}=await c.from('instagram_dispatch_items').select('lead_id').eq('user_id',user).in('status',['scheduled','queued','sent']);(data||[]).forEach(x=>ids.add(String(x.lead_id)));}catch(_){ }
     return ids;
   }
@@ -176,7 +244,7 @@
     if(!use.length)return notify('Chip selecionado não encontrado.','warn');
     const blocked=await fetchAlreadyBlockedIds(); let total=0;
     for(const chip of use){
-      const {data:existing,error:exErr}=await c.from('pre_dispatch_items').select('lead_id').eq('user_id',user).eq('scheduled_date',state.date).eq('chip_instance',chip.instance).in('status',listStatuses.concat(['ready_to_dispatch']));
+      const {data:existing,error:exErr}=await c.from('pre_dispatch_items').select('lead_id').eq('user_id',user).eq('scheduled_date',state.date).eq('chip_instance',chip.instance).in('status',PRE_CAPACITY_STATUSES);
       if(exErr){console.warn('[pre-final existing]',exErr.message);continue;}
       const current=(existing||[]).length; (existing||[]).forEach(x=>blocked.add(String(x.lead_id)));
       const need=Math.max(0,chipDailyLimit(chip)-current); if(need<=0)continue;
@@ -286,7 +354,9 @@
   async function render(){
     const r=root(); if(!r)return; if(state.loading)return; state.loading=true;
     try{
-      const dates=Array.from({length:7},(_,i)=>addDays(today(),i)); if(!dates.includes(state.date)) state.date=dates[0];
+      await carryPendingWhatsappAfter20();
+      const base=planningBaseDate();
+      const dates=Array.from({length:7},(_,i)=>addDays(base,i)); if(!dates.includes(state.date)) state.date=dates[0];
       const [counts,chips,items]=await Promise.all([getCounts(dates),getChips(),getItems(state.date,state.chip)]);
       const selectedChip = chips.find(ch=>ch.instance===state.chip);
       const cardLimit = selectedChip ? chipDailyLimit(selectedChip) : (chips.reduce((sum,ch)=>sum+chipDailyLimit(ch),0)||120);
