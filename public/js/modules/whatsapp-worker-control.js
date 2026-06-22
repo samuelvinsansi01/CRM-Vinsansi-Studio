@@ -4,7 +4,8 @@
 (function(){
   'use strict';
   const SCOPE='whatsapp_worker_control';
-  const VERSION='20260622-WHATSAPP-WORKER-CONTROL-V1';
+  const VERSION='20260622-WHATSAPP-WORKER-CONTROL-V2-TEST-PHONE';
+  const DEFAULT_TEST_PHONE='5511962420764';
   let lastPayload=null;
   let injecting=false;
 
@@ -53,7 +54,7 @@
   }
 
   function cardHtml(p){
-    const testPhone=normPhone(p?.test_phone||p?.testPhone||'');
+    const testPhone=normPhone(p?.test_phone||p?.testPhone||DEFAULT_TEST_PHONE||'');
     return `<div id="workerControlCard" class="worker-control-card ${statusClass(p)}">
       <div class="worker-control-head">
         <div>
@@ -72,9 +73,10 @@
         <button type="button" class="btn btn-ghost" data-worker-control="pause">Pausar</button>
         <button type="button" class="btn btn-ghost" data-worker-control="stop">Parar</button>
         <input id="workerTestPhone" placeholder="+55 DDD número de teste" value="${testPhone?`+${esc(testPhone)}`:''}">
+        <button type="button" class="btn btn-ghost" data-worker-control="save-test-phone">Salvar número teste</button>
         <button type="button" class="btn btn-ghost" data-worker-control="test-once">Enviar teste</button>
       </div>
-      <div class="worker-control-note">Segurança: abrir o Docker não dispara nada. O worker só envia quando o status aqui estiver <b>Rodando</b>. O botão antigo “Disparar” agora apenas inicia o worker.</div>
+      <div class="worker-control-note">Segurança: abrir o Docker não dispara nada. O worker só envia quando o status aqui estiver <b>Rodando</b>. Em <b>Teste</b>, o destino será o número configurado neste card e o worker pausa depois do teste.</div>
     </div>`;
   }
 
@@ -110,7 +112,7 @@
   }
 
   async function startLive(){
-    await setControl({enabled:true,status:'running',mode:'live',started_at:nowIso(),last_command:'start_live'});
+    await setControl({enabled:true,status:'running',mode:'live',test_mode:false,testMode:false,started_at:nowIso(),last_command:'start_live'});
     notify('Worker autorizado. O Docker local assumirá os disparos.','ok');
   }
   async function pause(){
@@ -121,10 +123,18 @@
     await setControl({enabled:false,status:'idle',stopped_at:nowIso(),last_command:'stop'});
     notify('Worker parado.','ok');
   }
+  async function saveTestPhone(){
+    const phone=normPhone(document.getElementById('workerTestPhone')?.value||DEFAULT_TEST_PHONE||'');
+    if(!phone){notify('Informe um número de teste.','err');return null;}
+    const payload=await setControl({test_phone:phone,testMode:false,test_mode:false,last_command:'save_test_phone'});
+    if(payload)notify('Número de teste salvo.','ok');
+    return phone;
+  }
+
   async function testOnce(){
-    const phone=normPhone(document.getElementById('workerTestPhone')?.value||'');
+    const phone=normPhone(document.getElementById('workerTestPhone')?.value||DEFAULT_TEST_PHONE||'');
     if(!phone){notify('Informe um número de teste.','err');return;}
-    await setControl({enabled:true,status:'running',mode:'test',test_phone:phone,started_at:nowIso(),last_command:'test_once'});
+    await setControl({enabled:true,status:'running',mode:'test',test_mode:true,testMode:true,test_phone:phone,started_at:nowIso(),last_command:'test_once'});
     notify('Teste autorizado. O worker enviará para o número informado e pausará depois.','ok');
   }
 
@@ -137,6 +147,7 @@
       if(action==='start-live')startLive();
       if(action==='pause')pause();
       if(action==='stop')stop();
+      if(action==='save-test-phone')saveTestPhone();
       if(action==='test-once')testOnce();
       return;
     }
