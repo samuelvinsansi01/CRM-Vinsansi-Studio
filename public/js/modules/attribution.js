@@ -441,6 +441,110 @@
     `; document.head.appendChild(st);
   }
 
+
+  function showInlineForm(kind, show){
+    const isInsta = kind === 'insta';
+    const form = document.getElementById(isInsta ? 'instaLeadForm' : 'zapLeadForm');
+    if(!form) return false;
+    const next = typeof show === 'boolean' ? show : form.style.display === 'none' || !form.style.display;
+    form.style.display = next ? 'block' : 'none';
+    if(next){
+      setTimeout(()=>{
+        const input = document.getElementById(isInsta ? 'instaLeadNome' : 'zapLeadNome');
+        try{ input?.focus?.(); }catch(_){ }
+      },30);
+    }
+    return next;
+  }
+
+  window.toggleAtribForm=function(kind){
+    const k = kind === 'insta' ? 'insta' : 'zap';
+    if(k === 'insta') setTab('insta');
+    else if(currentTab === 'insta') setTab('zap');
+    setTimeout(()=>showInlineForm(k),60);
+  };
+
+  function newManualId(){
+    try{ if(window.crypto?.randomUUID) return window.crypto.randomUUID(); }catch(_){ }
+    return 'manual-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+  }
+
+  async function insertManualLead(payload){
+    const c=db(), uid=userId();
+    if(!c||!uid){ notify('// Supabase não conectado ou usuário ausente.','err'); return null; }
+    const row={
+      id:newManualId(),
+      user_id:uid,
+      company_name:payload.company_name,
+      phone:payload.phone || '',
+      normalized_phone:payload.normalized_phone || null,
+      website:payload.website || '',
+      instagram:payload.instagram || '',
+      instagram_url:payload.instagram_url || '',
+      instagram_username:payload.instagram_username || '',
+      current_stage:payload.current_stage,
+      current_status:'awaiting_attribution',
+      pipeline_status:'awaiting_attribution',
+      status:'Aguardando atribuição',
+      lead_channel:payload.lead_channel,
+      source:'manual',
+      import_source:'manual',
+      lead_score:0,
+      rating:null,
+      reviews_count:null,
+      created_at:new Date().toISOString(),
+      updated_at:new Date().toISOString()
+    };
+    const {data,error}=await c.from('leads').insert(row).select('id').single();
+    if(error){ notify('// erro ao adicionar lead: '+error.message,'err'); return null; }
+    return data;
+  }
+
+  window.salvarZapLeadManual=async function(){
+    const nome=(document.getElementById('zapLeadNome')?.value||'').trim();
+    const phoneRaw=(document.getElementById('zapLeadWpp')?.value||'').trim();
+    if(!nome){ notify('// informe o nome da empresa.','err'); document.getElementById('zapLeadNome')?.focus?.(); return; }
+    const normalized=normPhone(phoneRaw);
+    const c=db(), uid=userId();
+    if(c&&uid&&normalized){
+      try{
+        const {data:dup}=await c.from('leads').select('id,company_name').eq('user_id',uid).eq('normalized_phone',normalized).limit(1);
+        if(dup?.[0]){ notify('// telefone já existe em: '+(dup[0].company_name||dup[0].id),'err'); return; }
+      }catch(_){ }
+    }
+    const saved=await insertManualLead({company_name:nome,phone:phoneRaw,normalized_phone:normalized||null,current_stage:'attribution_whatsapp',lead_channel:'whatsapp'});
+    if(!saved) return;
+    document.getElementById('zapLeadNome').value='';
+    document.getElementById('zapLeadWpp').value='';
+    showInlineForm('zap',false);
+    currentTab='zap'; page=1;
+    notify('✓ Lead manual adicionado em WhatsApp.');
+    await render();
+  };
+
+  window.salvarInstaLeadInline=async function(){
+    const nome=(document.getElementById('instaLeadNome')?.value||'').trim();
+    const raw=(document.getElementById('instaLeadLink')?.value||'').trim();
+    if(!nome){ notify('// informe o nome da empresa.','err'); document.getElementById('instaLeadNome')?.focus?.(); return; }
+    const username=cleanIg(raw);
+    const url=username ? `https://www.instagram.com/${username}/` : '';
+    const c=db(), uid=userId();
+    if(c&&uid&&username){
+      try{
+        const {data:dup}=await c.from('leads').select('id,company_name').eq('user_id',uid).eq('instagram_username',username).limit(1);
+        if(dup?.[0]){ notify('// Instagram já existe em: '+(dup[0].company_name||dup[0].id),'err'); return; }
+      }catch(_){ }
+    }
+    const saved=await insertManualLead({company_name:nome,instagram:raw,instagram_url:url,instagram_username:username,current_stage:'attribution_instagram',lead_channel:'instagram'});
+    if(!saved) return;
+    document.getElementById('instaLeadNome').value='';
+    document.getElementById('instaLeadLink').value='';
+    showInlineForm('insta',false);
+    currentTab='insta'; page=1;
+    notify('✓ Lead manual adicionado em Instagram.');
+    await render();
+  };
+
   window.setAtribTab=setTab;
   window.atribGoPageV31=function(p){ page=Math.max(1,Number(p)||1); render(); };
   window.renderAtribuicao=render;

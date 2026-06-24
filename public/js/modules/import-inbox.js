@@ -1,6 +1,3 @@
-function safeHasStaticFinalSidebarV414(sidebar) {
-  try { return typeof window.hasStaticFinalSidebarV414 === 'function' ? window.hasStaticFinalSidebarV414(sidebar) : false; } catch(_) { return false; }
-}
 /* ════════════════════════════
    V41 — IMPORTAÇÃO + MENU + INBOX + CONVERSAS
 ════════════════════════════ */
@@ -201,7 +198,7 @@ function createMenuGroupV41(title, items = []) {
   return frag;
 }
 function rebuildSidebarGroupedV41() {
-  const sidebar = document.querySelector('.sidebar'); if (!sidebar || safeHasStaticFinalSidebarV414(sidebar) || sidebar.dataset.v41Grouped === 'true') return;
+  const sidebar = document.querySelector('.sidebar'); if (!sidebar || hasStaticFinalSidebarV414(sidebar) || sidebar.dataset.v41Grouped === 'true') return;
   sidebar.innerHTML = '';
   const header=document.createElement('div'); header.className='sidebar-v41-header'; header.innerHTML='<div class="sidebar-v41-hello">Olá, Samuel 👋</div><div class="sidebar-v41-sub">CRM de Prospecção</div>'; sidebar.appendChild(header);
   sidebar.appendChild(createMenuItemV41('busca','🔎','Busca'));
@@ -302,7 +299,7 @@ function createExpandableMenuGroupV411(title, icon, items = [], open = false) {
 
 function rebuildSidebarGroupedV41() {
   const sidebar = document.querySelector('.sidebar');
-  if (!sidebar || safeHasStaticFinalSidebarV414(sidebar) || sidebar.dataset.v411Grouped === 'true') return;
+  if (!sidebar || hasStaticFinalSidebarV414(sidebar) || sidebar.dataset.v411Grouped === 'true') return;
 
   sidebar.innerHTML = '';
 
