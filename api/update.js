@@ -260,18 +260,23 @@ async function instagramNext(input) {
   const userId = String(input.user_id || input.userId || '').trim();
   const profileUsername = cleanUsername(input.profile_username || input.profileUsername || input.profile || '');
   const scheduledDate = String(input.scheduled_date || input.scheduledDate || todayISO()).slice(0, 10);
+  const blockNumber = Number(input.block_number || input.blockNumber || input.batch_number || input.batchNumber || 0);
   if (!userId) throw new Error('user_id ausente');
   if (!profileUsername) throw new Error('profile_username ausente');
 
-  const path = [
+  const pathParts = [
     'instagram_dispatch_items?select=*',
     `user_id=eq.${encodeURIComponent(userId)}`,
     `profile_username=eq.${encodeURIComponent(profileUsername)}`,
     `scheduled_date=eq.${encodeURIComponent(scheduledDate)}`,
-    'status=eq.queued',
+    'status=in.(queued,ready_to_dispatch,scheduled)',
     'order=block_number.asc,position.asc',
     'limit=1'
-  ].join('&');
+  ];
+  if (Number.isFinite(blockNumber) && blockNumber > 0) {
+    pathParts.splice(pathParts.length - 2, 0, `block_number=eq.${encodeURIComponent(String(blockNumber))}`);
+  }
+  const path = pathParts.join('&');
   const rows = await sbRest(path, { method:'GET', prefer:'return=minimal' });
   const enriched = await enrichInstagramItemsWithTemplates(userId, Array.isArray(rows) ? rows : []);
   return enriched[0] || null;
@@ -282,6 +287,7 @@ async function instagramQueue(input) {
   const userId = String(input.user_id || input.userId || '').trim();
   const profileUsername = cleanUsername(input.profile_username || input.profileUsername || input.profile || '');
   const scheduledDate = String(input.scheduled_date || input.scheduledDate || todayISO()).slice(0, 10);
+  const blockNumber = Number(input.block_number || input.blockNumber || input.batch_number || input.batchNumber || 0);
   if (!userId) throw new Error('user_id ausente');
   if (!profileUsername) throw new Error('profile_username ausente');
 
@@ -291,14 +297,18 @@ async function instagramQueue(input) {
   );
   const profile = Array.isArray(profileRows) ? profileRows[0] || null : null;
 
-  const path = [
+  const pathParts = [
     'instagram_dispatch_items?select=*',
     `user_id=eq.${encodeURIComponent(userId)}`,
     `profile_username=eq.${encodeURIComponent(profileUsername)}`,
     `scheduled_date=eq.${encodeURIComponent(scheduledDate)}`,
-    'status=in.(queued,sending,error)',
+    'status=in.(queued,ready_to_dispatch,scheduled)',
     'order=block_number.asc,position.asc'
-  ].join('&');
+  ];
+  if (Number.isFinite(blockNumber) && blockNumber > 0) {
+    pathParts.splice(pathParts.length - 1, 0, `block_number=eq.${encodeURIComponent(String(blockNumber))}`);
+  }
+  const path = pathParts.join('&');
   const rows = await sbRest(path, { method:'GET', prefer:'return=minimal' });
   const items = await enrichInstagramItemsWithTemplates(userId, Array.isArray(rows) ? rows : []);
   return { profile, items };
