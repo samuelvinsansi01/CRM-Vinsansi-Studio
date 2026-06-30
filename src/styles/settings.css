@@ -1,0 +1,209 @@
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-16);
+}
+
+.settings-card {
+  min-height: 620px;
+  padding: 0 var(--space-20) var(--space-20);
+}
+
+.settings-card .segmented {
+  margin-bottom: var(--space-24);
+}
+
+.settings-card .segmented__item {
+  padding: 0 var(--space-08);
+}
+
+.settings-card .field {
+  margin-bottom: var(--space-24);
+}
+
+.settings-card .field__control {
+  height: var(--space-64);
+}
+
+.settings-card__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settings-page {
+  width: 100%;
+}
+
+.settings-page .page-header {
+  margin-bottom: var(--space-20);
+}
+
+.settings-page .settings-grid {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 760px), 1fr));
+  align-items: stretch;
+}
+
+.settings-page .settings-card {
+  display: flex;
+  min-width: 0;
+  min-height: 792px;
+  flex-direction: column;
+  padding: 0 var(--space-28) var(--space-24);
+  border-radius: var(--radius-12);
+}
+
+.settings-page .settings-card .panel__header {
+  align-items: flex-start;
+  min-height: var(--space-88);
+  padding: var(--space-32) 0 0;
+}
+
+.settings-page .settings-card .panel__header h2 {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 28px;
+}
+
+.settings-page .settings-card .segmented {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  height: var(--space-56);
+  min-width: 0;
+  margin-bottom: var(--space-28);
+  padding: var(--space-04);
+  border-radius: var(--radius-12);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.settings-page .settings-card .segmented__item {
+  flex: 0 0 auto;
+  height: var(--space-48);
+  padding: 0 var(--space-16);
+  border-radius: var(--radius-08);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.settings-page .settings-card .field {
+  min-width: 0;
+  gap: var(--space-12);
+  margin-bottom: var(--space-28);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.settings-page .settings-card .field__label {
+  font-weight: 500;
+}
+
+.settings-page .settings-card .field__control {
+  height: var(--space-72);
+  padding: 0 var(--space-20);
+  border-radius: var(--radius-12);
+}
+
+.settings-page .settings-card .field:last-of-type {
+  margin-bottom: 0;
+}
+
+.settings-page .settings-card .field input {
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.settings-page .settings-card__actions {
+  margin-top: auto;
+  padding-top: var(--space-24);
+}
+
+.settings-page .settings-card__actions .button {
+  height: var(--space-56);
+  padding: 0 var(--space-24);
+  border-radius: var(--radius-12);
+  font-size: 16px;
+  line-height: 24px;
+}
+.import-settings-page .page-header {
+  align-items: center;
+}
+
+.import-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  justify-content: flex-end;
+}
+
+.import-settings-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)) !important;
+}
+
+.import-settings-card {
+  min-height: 0 !important;
+  padding-bottom: var(--space-28) !important;
+}
+
+.import-settings-card .panel__header {
+  min-height: var(--space-72) !important;
+  padding-top: var(--space-24) !important;
+}
+
+.import-settings-card .field__control {
+  height: var(--space-56) !important;
+}
+
+.settings-toggle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: var(--space-16);
+  align-items: center;
+  padding: var(--space-12) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+}
+
+.settings-toggle-row:last-child {
+  border-bottom: 0;
+}
+
+.settings-toggle-row strong {
+  display: block;
+  color: var(--color-pure-white);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.settings-toggle-row span {
+  display: block;
+  margin-top: var(--space-02);
+  color: color-mix(in srgb, var(--color-pure-white) 62%, transparent);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.settings-toggle-row .select-field {
+  width: 100%;
+}
+
+.settings-note {
+  margin: var(--space-16) 0 0;
+  color: color-mix(in srgb, var(--color-pure-white) 62%, transparent);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+@media (max-width: 1440px) {
+  .settings-toggle-row {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-toggle-row .select-field-wrap {
+    width: 100%;
+    max-width: 220px;
+  }
+}
