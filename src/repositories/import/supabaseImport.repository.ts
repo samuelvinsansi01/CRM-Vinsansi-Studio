@@ -172,6 +172,9 @@ function rowToLead(row: Record<string, unknown>, branchRules: BranchRule[]): Imp
     normalizedSite: String(row.website_domain ?? data.normalizedSite ?? normalizeDomain(website)),
     normalizedInstagram: String(row.instagram_username ?? data.normalizedInstagram ?? normalizeInstagramUsername(instagram)),
     normalizedMapsUrl: String(row.maps_url ?? data.normalizedMapsUrl ?? ''),
+    returned_from_queue: Boolean(row.returned_from_queue ?? (data as Record<string, unknown>).returned_from_queue ?? false),
+    returned_at: String(row.returned_at ?? (data as Record<string, unknown>).returned_at ?? ''),
+    return_reason: String(row.return_reason ?? (data as Record<string, unknown>).return_reason ?? ''),
   };
 }
 
@@ -319,6 +322,9 @@ function dbLeadPayload(lead: ImportLead, userId: string) {
     instagram_override_reason: lead.instagram_override_reason,
     override_by: lead.override_by,
     override_at: lead.override_at || null,
+    returned_from_queue: lead.returned_from_queue ?? false,
+    returned_at: lead.returned_at || null,
+    return_reason: lead.return_reason || null,
     updated_at: nowIso(),
     created_at: nowIso(),
   };

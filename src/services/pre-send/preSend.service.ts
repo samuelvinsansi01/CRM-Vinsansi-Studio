@@ -655,12 +655,27 @@ export const preSendService = {
       repositories.preSend.listLeads({ channel: 'Instagram', dayId: instagramDayId, queueFilter: 'Geral' }),
     ]);
     const leads = [...whatsapp, ...instagram].filter((lead) =>
-      (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'review')) && Boolean(lead.sourceImportId),
+      (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'review') || isStatusGroup(lead.status, 'queued')) && Boolean(lead.sourceImportId),
     );
 
     if (!leads.length) throw new Error('Nenhum lead disponivel para retornar ao Inicio no dia selecionado.');
 
-    await Promise.all(leads.map((lead) => repositories.import.update(lead.sourceImportId!, { status: 'pending' })));
+    const returnedAt = new Date().toISOString();
+    await Promise.all(leads.map((lead) => repositories.import.update(lead.sourceImportId!, {
+      status: 'approved',
+      destino: lead.destination,
+      destination: lead.destination,
+      original_destination: lead.original_destination ?? lead.destination,
+      destination_override: lead.destination_override,
+      send_instagram: lead.send_instagram,
+      instagram_url: lead.instagram_url,
+      instagram_override_reason: lead.instagram_override_reason,
+      override_by: lead.override_by,
+      override_at: lead.override_at,
+      returned_from_queue: true,
+      returned_at: returnedAt,
+      return_reason: 'manual',
+    })));
     await Promise.all(leads.map((lead) => repositories.preSend.archiveLead(lead.id)));
     eventBus.emit('import:changed', { source: 'update' });
     eventBus.emit('pre-send:changed', { action: 'update' });

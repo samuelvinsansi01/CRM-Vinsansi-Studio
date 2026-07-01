@@ -26,6 +26,9 @@ export type LeadScoreInput = {
   estado?: string;
   created_at?: string;
   createdAt?: string;
+  returned_from_queue?: boolean;
+  returned_at?: string;
+  return_reason?: string;
 };
 
 const AGGREGATOR_DOMAINS = /(^|[/.])(linktr\.ee|linktree|beacons\.ai|carrd\.co|taplink|bio\.link|lnk\.bio)([/.]|$)/i;
@@ -61,6 +64,15 @@ function hasLocation(lead: LeadScoreInput) {
   return Boolean(text(lead.city, lead.cidade) && normalizeBrazilState(text(lead.state, lead.estado)));
 }
 
+function isReturnedFromQueue(lead: LeadScoreInput) {
+  return Boolean(lead.returned_from_queue || text(lead.return_reason).trim());
+}
+
+function returnedAt(lead: LeadScoreInput) {
+  const timestamp = Date.parse(text(lead.returned_at));
+  return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
+}
+
 export function calculateLeadScore(lead: LeadScoreInput) {
   let score = 0;
   if (hasValidCategory(lead)) score += 500;
@@ -79,6 +91,13 @@ export function leadCreatedAt(lead: LeadScoreInput) {
 }
 
 export function compareByLeadScore<T extends LeadScoreInput>(a: T, b: T) {
+  const aReturned = isReturnedFromQueue(a);
+  const bReturned = isReturnedFromQueue(b);
+  if (aReturned !== bReturned) return aReturned ? -1 : 1;
+  if (aReturned && bReturned) {
+    const returnedDiff = returnedAt(a) - returnedAt(b);
+    if (returnedDiff !== 0) return returnedDiff;
+  }
   const scoreDiff = calculateLeadScore(b) - calculateLeadScore(a);
   if (scoreDiff !== 0) return scoreDiff;
   const createdDiff = leadCreatedAt(a) - leadCreatedAt(b);

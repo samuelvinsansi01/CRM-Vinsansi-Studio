@@ -51,6 +51,9 @@ export type ImportLead = {
   normalizedSite?: string;
   normalizedInstagram?: string;
   normalizedMapsUrl?: string;
+  returned_from_queue?: boolean;
+  returned_at?: string;
+  return_reason?: string;
 };
 
 export type ImportLeadInput = Omit<ImportLead, 'id'>;

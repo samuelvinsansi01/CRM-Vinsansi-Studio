@@ -90,7 +90,13 @@ export const supabasePreSendRepository: PreSendRepository = {
 
   async addLeads(inputLeads: CreatePreSendLeadInput[]) {
     const existing = await allLeads();
-    const existingKeys = new Set(existing.map(leadKey).filter(Boolean));
+    const blockingExisting = existing.filter((lead) =>
+      !isStatusGroup(lead.status, 'archived') &&
+      !isStatusGroup(lead.status, 'sent') &&
+      !isStatusGroup(lead.status, 'deleted') &&
+      !isStatusGroup(lead.status, 'invalid'),
+    );
+    const existingKeys = new Set(blockingExisting.map(leadKey).filter(Boolean));
     const created: PreSendLead[] = [];
     const userId = await getCurrentUserId();
     for (const input of inputLeads) {

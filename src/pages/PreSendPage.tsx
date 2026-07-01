@@ -491,7 +491,7 @@ export function PreSendPage() {
         whatsappDayId: dayIdForChannel('WhatsApp'),
         instagramDayId: dayIdForChannel('Instagram'),
       });
-      pushToast({ title: 'Leads retornaram ao Inicio', description: 'Leads ainda nao enfileirados voltaram para em aguarde.', tone: 'info' });
+      pushToast({ title: 'Leads retornaram ao Inicio', description: 'Leads do dia selecionado voltaram ao Inicio como aprovados.', tone: 'info' });
     } catch (err) {
       pushToast({ title: 'Nao foi possivel retornar leads', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
