@@ -61,9 +61,10 @@ export function usePreSend() {
   const defaultDayId = useMemo(() => dayCards.find((day) => day.queued > 0)?.id ?? dayCards[0]?.id ?? '', [dayCards]);
 
   const moveToQueue = useCallback(
-    async (ids: string[]) => {
-      await preSendService.moveToQueue(ids);
+    async (ids: string[], options?: Parameters<typeof preSendService.moveToQueue>[1]) => {
+      const moved = await preSendService.moveToQueue(ids, options);
       refresh();
+      return moved;
     },
     [refresh],
   );

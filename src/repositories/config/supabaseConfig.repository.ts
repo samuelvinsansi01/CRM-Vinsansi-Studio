@@ -216,7 +216,7 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
   const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
   const active = toBoolean(inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active, true);
   const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
-  const level = String(row.level ?? data.level ?? 'estabilizado');
+  const level = String(data.level ?? 'estabilizado');
   const levelDefaults = chipLevelDefaults(level);
   const blocks = row.blocks;
   const batches = Array.isArray(data.batches)
@@ -410,7 +410,6 @@ async function upsertChip(record: ChipConfigRecord) {
     block_size: record.blockSize || levelDefaults.blockSize,
     interval_seconds: record.intervalSeconds || levelDefaults.intervalSeconds,
     blocks: record.batches?.length ? record.batches : levelDefaults.batches,
-    level: record.level,
     priority: record.priority,
     start_time: record.startTime || levelDefaults.startTime,
     end_time: record.endTime || levelDefaults.endTime,

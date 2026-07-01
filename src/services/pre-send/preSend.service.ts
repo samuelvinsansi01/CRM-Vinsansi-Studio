@@ -14,6 +14,11 @@ import { assertTransition } from '../state-machine';
 import type { CreateWhatsAppQueueLeadInput } from '../whatsapp-queue/types';
 import type { CreatePreSendLeadInput, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead } from './types';
 
+type QueueAssignmentOptions = {
+  whatsappProfile?: string;
+  instagramProfile?: string;
+};
+
 const WEEK_DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
@@ -105,6 +110,21 @@ function isActivePreSendStatus(status: PreSendLead['status']) {
 function assertStatusPatch(current: PreSendLead, input: Partial<PreSendLead>) {
   if (input.status === undefined || normalizeStatusGroup(input.status) === normalizeStatusGroup(current.status)) return;
   assertTransition({ entity: 'pre-send', fromStatus: current.status, toStatus: input.status, action: 'status_update' });
+}
+
+function isUnassignedProfile(value: unknown) {
+  const profile = normalize(value);
+  return !profile || ['geral', 'todos', 'default', 'sem chip ativo', 'sem perfil'].includes(profile);
+}
+
+function matchesSelectedProfile(lead: PreSendLead, profile?: string) {
+  if (!profile) return true;
+  return lead.profile === profile || isUnassignedProfile(lead.profile);
+}
+
+async function listFilteredLeads(filters: PreSendFilters) {
+  const leads = await repositories.preSend.listLeads({ ...filters, profile: undefined });
+  return sortByLeadScore(leads.filter((lead) => matchesSelectedProfile(lead, filters.profile)));
 }
 
 async function listAllLeads() {
@@ -297,6 +317,67 @@ async function activeChipByInstance(instance: string) {
   return chips.find((chip) => chipInstance(chip) === instance);
 }
 
+async function assignProfilesAndLimitCapacity(leads: PreSendLead[], options: QueueAssignmentOptions = {}): Promise<PreSendLead[]> {
+  const settings = await settingsService.getDispatchSettings();
+  const [chips, instagramProfiles, whatsappBatches, instagramBatches] = await Promise.all([
+    loadActiveChips(),
+    loadActiveInstagramProfiles(),
+    repositories.whatsappQueue.listBatches({}),
+    repositories.instagramQueue.listBatches({}),
+  ]);
+  const whatsappUsage = new Map<string, number>();
+  const instagramUsage = new Map<string, number>();
+
+  for (const batch of whatsappBatches) {
+    for (const lead of batch.leads) {
+      const key = `${batch.chip}:${lead.scheduled_date}`;
+      whatsappUsage.set(key, (whatsappUsage.get(key) ?? 0) + 1);
+    }
+  }
+
+  for (const batch of instagramBatches) {
+    for (const lead of batch.leads) {
+      const key = `${batch.profile}:${lead.scheduled_date}`;
+      instagramUsage.set(key, (instagramUsage.get(key) ?? 0) + 1);
+    }
+  }
+
+  const assigned: PreSendLead[] = [];
+
+  for (const lead of leads) {
+    const selectedDate = scheduledDateForDayId(lead.dayId);
+
+    if (lead.channel === 'WhatsApp') {
+      if (!chips.length) throw new Error('Nenhum chip ativo configurado.');
+      const requestedProfile = options.whatsappProfile || (isUnassignedProfile(lead.profile) ? '' : lead.profile);
+      const chip = requestedProfile ? chips.find((item) => chipInstance(item) === requestedProfile) : chips[0];
+      if (!chip) throw new Error(`Chip ${requestedProfile || 'selecionado'} inativo, offline ou indisponivel.`);
+      const instance = chipInstance(chip);
+      const key = `${instance}:${selectedDate}`;
+      const current = whatsappUsage.get(key) ?? 0;
+      if (current >= chip.dailyLimit) continue;
+      whatsappUsage.set(key, current + 1);
+      assigned.push(lead.profile === instance ? lead : { ...lead, profile: instance });
+      continue;
+    }
+
+    if (!instagramProfiles.length) throw new Error('Nenhum perfil Instagram ativo configurado.');
+    const requestedProfile = options.instagramProfile || (isUnassignedProfile(lead.profile) ? '' : lead.profile);
+    const profile = requestedProfile
+      ? instagramProfiles.find((item) => item.username === normalizeInstagramUsername(requestedProfile))
+      : instagramProfiles[0];
+    if (!profile) throw new Error(`Perfil Instagram ${requestedProfile || 'selecionado'} inativo ou indisponivel.`);
+    const username = profile.username;
+    const key = `${username}:${selectedDate}`;
+    const current = instagramUsage.get(key) ?? 0;
+    if (current >= settings.instagram.dailyLimit) continue;
+    instagramUsage.set(key, current + 1);
+    assigned.push(lead.profile === username ? lead : { ...lead, profile: username });
+  }
+
+  return assigned;
+}
+
 async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAppQueueLeadInput[]> {
   const chips = await loadActiveChips();
   if (!chips.length) throw new Error('Nenhum chip ativo configurado.');
@@ -441,7 +522,7 @@ export const preSendService = {
   },
 
   async listLeads(filters: PreSendFilters) {
-    return sortByLeadScore(await repositories.preSend.listLeads(filters));
+    return listFilteredLeads(filters);
   },
 
   async addFromImport(leads: ImportLead[]) {
@@ -458,22 +539,31 @@ export const preSendService = {
     return created;
   },
 
-  async moveToQueue(ids: string[]) {
-    await assertQueueLimits(ids);
+  async moveToQueue(ids: string[], options: QueueAssignmentOptions = {}) {
     const allLeads = await listAllLeads();
     const selected = sortByLeadScore(allLeads.filter((lead) => ids.includes(lead.id) && isStatusGroup(lead.status, 'approved')));
     if (ids.length && !selected.length) throw new Error('Apenas leads aprovados podem ir para a fila.');
-    selected.forEach((lead) => assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'queued', action: 'queue' }));
-    const whatsapp = selected.filter((lead) => lead.channel === 'WhatsApp');
-    const instagram = selected.filter((lead) => lead.channel === 'Instagram');
+    const assigned = await assignProfilesAndLimitCapacity(selected, options);
+    if (!assigned.length) throw new Error('Limite diario atingido para o chip/perfil selecionado.');
+    assigned.forEach((lead) => assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'queued', action: 'queue' }));
+
+    await Promise.all(assigned.map((lead) => {
+      const original = selected.find((item) => item.id === lead.id);
+      return original && original.profile !== lead.profile ? repositories.preSend.updateLead(lead.id, { profile: lead.profile }) : Promise.resolve();
+    }));
+
+    const whatsapp = assigned.filter((lead) => lead.channel === 'WhatsApp');
+    const instagram = assigned.filter((lead) => lead.channel === 'Instagram');
+    const movedIds = assigned.map((lead) => lead.id);
 
     if (whatsapp.length) await repositories.whatsappQueue.enqueue(await toWhatsAppQueueLeads(whatsapp));
     if (instagram.length) await repositories.instagramQueue.enqueue(await toInstagramQueueLeads(instagram));
 
-    await repositories.preSend.moveToQueue(ids);
+    await repositories.preSend.moveToQueue(movedIds);
     eventBus.emit('pre-send:changed', { action: 'move-to-queue' });
     if (whatsapp.length) eventBus.emit('whatsapp-queue:changed', { action: 'update' });
     if (instagram.length) eventBus.emit('instagram-queue:changed', { action: 'update' });
+    return movedIds.length;
   },
 
   async moveDayToQueue({
@@ -491,20 +581,20 @@ export const preSendService = {
   }) {
     const [whatsapp, instagram] = await Promise.all([
       whatsappProfile
-        ? repositories.preSend.listLeads({ channel: 'WhatsApp', dayId: whatsappDayId, profile: whatsappProfile, queueFilter })
+        ? listFilteredLeads({ channel: 'WhatsApp', dayId: whatsappDayId, profile: whatsappProfile, queueFilter })
         : Promise.resolve([]),
-      repositories.preSend.listLeads({ channel: 'Instagram', dayId: instagramDayId, profile: instagramProfile, queueFilter: 'Geral' }),
+      listFilteredLeads({ channel: 'Instagram', dayId: instagramDayId, profile: instagramProfile, queueFilter: 'Geral' }),
     ]);
     const ids = sortByLeadScore([...whatsapp, ...instagram].filter((lead) => isStatusGroup(lead.status, 'approved'))).map((lead) => lead.id);
     if (!ids.length) throw new Error('Nenhum lead aprovado no dia selecionado.');
-    await this.moveToQueue(ids);
+    return this.moveToQueue(ids, { whatsappProfile, instagramProfile });
   },
 
   async moveInstagramDayToQueue({ instagramDayId, instagramProfile }: { instagramDayId: string; instagramProfile?: string }) {
-    const leads = await repositories.preSend.listLeads({ channel: 'Instagram', dayId: instagramDayId, profile: instagramProfile, queueFilter: 'Geral' });
+    const leads = await listFilteredLeads({ channel: 'Instagram', dayId: instagramDayId, profile: instagramProfile, queueFilter: 'Geral' });
     const ids = sortByLeadScore(leads.filter((lead) => isStatusGroup(lead.status, 'approved'))).map((lead) => lead.id);
     if (!ids.length) throw new Error('Nenhum retorno Instagram aprovado no dia selecionado.');
-    await this.moveToQueue(ids);
+    return this.moveToQueue(ids, { instagramProfile });
   },
 
   async returnDayToImport({ whatsappDayId, instagramDayId }: { whatsappDayId: string; instagramDayId: string }) {

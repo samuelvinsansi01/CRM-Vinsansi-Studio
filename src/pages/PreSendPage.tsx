@@ -120,7 +120,7 @@ function ValidationQueue({
   activeDayId: string;
   onToast: (toast: Omit<ToastItem, 'id'>) => void;
   onRefreshSummary: () => void;
-  moveToQueue: (ids: string[]) => Promise<void>;
+  moveToQueue: (ids: string[], options?: { whatsappProfile?: string; instagramProfile?: string }) => Promise<number>;
   validateLead: (id: string) => Promise<void>;
   archiveLead: (id: string) => Promise<void>;
   updateLead: (id: string, input: Partial<PreSendLead>) => Promise<void>;
@@ -160,7 +160,7 @@ function ValidationQueue({
   const pageRows = useMemo(() => leads.slice((currentPage - 1) * 10, currentPage * 10), [leads, currentPage]);
   const selectedIds = selectedRows.map((rowIndex) => pageRows[rowIndex]?.id).filter(Boolean);
   const selectedLeads = selectedRows.map((rowIndex) => pageRows[rowIndex]).filter((lead): lead is PreSendLead => Boolean(lead));
-  const queueableIds = useMemo(() => pageRows.filter((lead) => permissionsFor('pre-send', lead.status).canQueue()).map((lead) => lead.id), [pageRows]);
+  const queueableIds = useMemo(() => leads.filter((lead) => permissionsFor('pre-send', lead.status).canQueue()).map((lead) => lead.id), [leads]);
   const approvableIds = useMemo(() => pageRows.filter((lead) => permissionsFor('pre-send', lead.status).canApprove()).map((lead) => lead.id), [pageRows]);
   const canQueueSelection = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('pre-send', lead.status).canQueue());
   const canApproveSelection = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('pre-send', lead.status).canApprove());
@@ -279,10 +279,10 @@ function ValidationQueue({
 
     setSaving(true);
     try {
-      await moveToQueue(ids);
+      const moved = await moveToQueue(ids, channel === 'WhatsApp' ? { whatsappProfile: activeProfile } : { instagramProfile: activeProfile });
       setSelectedRows([]);
       refreshQueue();
-      onToast({ title: 'Fila preenchida', description: `${ids.length} lead(s) movido(s) para fila local.`, tone: 'success' });
+      onToast({ title: 'Fila preenchida', description: `${moved} lead(s) movido(s) para fila local.`, tone: 'success' });
     } catch (err) {
       onToast({ title: 'Erro ao preencher fila', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
