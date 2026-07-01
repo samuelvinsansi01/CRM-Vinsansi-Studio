@@ -305,17 +305,49 @@ async function listInstagramProfiles() {
   return (data ?? []).map((row) => rowToInstagramProfile(row));
 }
 
+async function findRowById(table: string, id: unknown) {
+  const text = String(id ?? '').trim();
+  if (!text) return null;
+  const { data, error } = await getSupabaseClient().from(table).select('*').eq('id', text).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as Record<string, unknown> | null;
+}
+
 async function upsertTemplate(record: TemplateConfigRecord) {
   const userId = await getCurrentUserId();
+  const table = tableForKind('templates');
   const branches = await listBranches();
   const branch =
     branches.find((item) => item.id === record.branchId) ??
     branches.find((item) => normalizeComparable(item.name) === normalizeComparable(record.branchName));
+  const branchId = branchIdOrNull(branch?.id ?? record.branchId);
+  const existingById = await findRowById(table, record.id);
+  let existingByNatural: Record<string, unknown> | null = null;
+
+  if (record.name.trim()) {
+    let query = getSupabaseClient()
+      .from(table)
+      .select('*')
+      .eq('user_id', userId)
+      .eq('name', record.name)
+      .eq('template_type', record.type)
+      .eq('channel', record.channel);
+    query = branchId ? query.eq('branch_id', branchId) : query.eq('branch_name', branch?.name || record.branchName);
+    const response = await query.maybeSingle();
+    if (response.error) throw new Error(response.error.message);
+    existingByNatural = response.data as Record<string, unknown> | null;
+  }
+
+  if (existingById && existingByNatural && String(existingById.id) !== String(existingByNatural.id)) {
+    throw new Error('Ja existe um template com este nome, ramo, canal e tipo.');
+  }
+
+  const targetId = String(existingByNatural?.id ?? existingById?.id ?? record.id ?? createUuid());
   const payload = {
-    id: record.id || createUuid(),
+    id: targetId,
     user_id: userId,
     name: record.name,
-    branch_id: branchIdOrNull(branch?.id ?? record.branchId),
+    branch_id: branchId,
     ramo_id: null,
     branch_name: branch?.name || record.branchName,
     template_type: record.type,
@@ -330,17 +362,39 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     data: { ...record, branchId: branch?.id ?? record.branchId, branchName: branch?.name ?? record.branchName },
     updated_at: nowIso(),
   };
-  const { error } = await getSupabaseClient().from(tableForKind('templates')).upsert(payload, { onConflict: 'id' });
-  if (error) throw new Error(error.message);
-  return { ...record, id: String(payload.id) };
+  const response = existingByNatural || existingById
+    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select('*').single()
+    : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
+  if (response.error) throw new Error(response.error.message);
+  return rowToTemplate(response.data ?? payload, branches);
 }
 
 async function upsertChip(record: ChipConfigRecord) {
   const userId = await getCurrentUserId();
+  const table = tableForKind('chips');
   const instance = String(record.instance || record.name || record.id).trim();
   const levelDefaults = chipLevelDefaults(record.level);
+  const existingById = await findRowById(table, record.id);
+  let existingByInstance: Record<string, unknown> | null = null;
+
+  if (instance) {
+    const response = await getSupabaseClient()
+      .from(table)
+      .select('*')
+      .eq('user_id', userId)
+      .eq('instance', instance)
+      .maybeSingle();
+    if (response.error) throw new Error(response.error.message);
+    existingByInstance = response.data as Record<string, unknown> | null;
+  }
+
+  if (existingById && existingByInstance && String(existingById.id) !== String(existingByInstance.id)) {
+    throw new Error('Ja existe um chip com esta instancia.');
+  }
+
+  const targetId = String(existingByInstance?.id ?? existingById?.id ?? record.id ?? createUuid());
   const payload = {
-    id: record.id || createUuid(),
+    id: targetId,
     user_id: userId,
     instance,
     label: record.name,
@@ -366,18 +420,41 @@ async function upsertChip(record: ChipConfigRecord) {
     data: { ...record, instance },
     updated_at: nowIso(),
   };
-  const { error } = await getSupabaseClient().from(tableForKind('chips')).upsert(payload, { onConflict: 'id' });
-  if (error) throw new Error(error.message);
-  return { ...record, id: String(payload.id) };
+  const response = existingByInstance || existingById
+    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select('*').single()
+    : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
+  if (response.error) throw new Error(response.error.message);
+  return rowToChip(response.data ?? payload);
 }
 
 async function upsertInstagramProfile(record: InstagramConfigRecord) {
   const userId = await getCurrentUserId();
+  const table = tableForKind('instagram');
   const instagramDefaults = defaultDispatchSettings.instagram;
+  const username = normalizeInstagramUsername(record.username);
+  const existingById = await findRowById(table, record.id);
+  let existingByUsername: Record<string, unknown> | null = null;
+
+  if (username) {
+    const response = await getSupabaseClient()
+      .from(table)
+      .select('*')
+      .eq('user_id', userId)
+      .eq('username', username)
+      .maybeSingle();
+    if (response.error) throw new Error(response.error.message);
+    existingByUsername = response.data as Record<string, unknown> | null;
+  }
+
+  if (existingById && existingByUsername && String(existingById.id) !== String(existingByUsername.id)) {
+    throw new Error('Ja existe um perfil Instagram com este usuario.');
+  }
+
+  const targetId = String(existingByUsername?.id ?? existingById?.id ?? uuidOrNull(record.id) ?? createUuid());
   const payload = {
-    id: uuidOrNull(record.id) ?? createUuid(),
+    id: targetId,
     user_id: userId,
-    username: normalizeInstagramUsername(record.username),
+    username,
     display_name: record.name,
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
@@ -387,17 +464,38 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
     interval_minutes: instagramDefaults.delayMinutes,
     updated_at: nowIso(),
   };
-  const { error } = await getSupabaseClient().from(tableForKind('instagram')).upsert(payload, { onConflict: 'id' });
-  if (error) throw new Error(error.message);
-  return rowToInstagramProfile({ ...payload, created_at: record.createdAt });
+  const response = existingByUsername || existingById
+    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select('*').single()
+    : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
+  if (response.error) throw new Error(response.error.message);
+  return rowToInstagramProfile(response.data ?? { ...payload, created_at: record.createdAt });
 }
 
 async function upsertBranch(record: BranchConfigRecord) {
   const userId = await getCurrentUserId();
+  const table = tableForKind('branches');
   const numericId = branchIdOrNull(record.id);
+  const slug = record.slug || branchSlug(record.name);
+  const existingById = numericId ? await findRowById(table, numericId) : null;
+  let existingBySlug: Record<string, unknown> | null = null;
+
+  if (slug) {
+    const response = await getSupabaseClient()
+      .from(table)
+      .select('*')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (response.error) throw new Error(response.error.message);
+    existingBySlug = response.data as Record<string, unknown> | null;
+  }
+
+  if (existingById && existingBySlug && String(existingById.id) !== String(existingBySlug.id)) {
+    throw new Error('Ja existe um ramo com este slug.');
+  }
+
   const payload = {
     user_id: userId,
-    slug: record.slug || branchSlug(record.name),
+    slug,
     name: record.name,
     category: record.category || record.name,
     subcategories: record.subcategories,
@@ -409,16 +507,14 @@ async function upsertBranch(record: BranchConfigRecord) {
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
     kind: 'branches',
-    data: { ...record, id: numericId ? String(numericId) : record.id, slug: record.slug || branchSlug(record.name), imageName: record.imageName },
+    data: { ...record, id: String(existingBySlug?.id ?? existingById?.id ?? numericId ?? record.id), slug, imageName: record.imageName },
     updated_at: nowIso(),
   };
-  const queryPayload = numericId ? { ...payload, id: numericId } : payload;
-  const conflictTarget = numericId ? 'id' : 'user_id,slug';
-  const response = await getSupabaseClient()
-    .from(tableForKind('branches'))
-    .upsert(queryPayload, { onConflict: conflictTarget })
-    .select('*')
-    .single();
+  const targetId = existingBySlug?.id ?? existingById?.id ?? numericId;
+  const queryPayload = targetId ? { ...payload, id: targetId } : payload;
+  const response = targetId
+    ? await getSupabaseClient().from(table).update(queryPayload).eq('id', targetId).select('*').single()
+    : await getSupabaseClient().from(table).insert({ ...queryPayload, created_at: record.createdAt || nowIso() }).select('*').single();
 
   if (response.error) throw new Error(response.error.message);
   return rowToBranch((response.data ?? { ...queryPayload, created_at: record.createdAt }) as Record<string, unknown>);

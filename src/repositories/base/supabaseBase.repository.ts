@@ -267,11 +267,11 @@ async function loadBranchRules(): Promise<BranchRule[]> {
     .filter((rule): rule is BranchRule => Boolean(rule));
 }
 
-async function allRecords() {
+async function allRecords(includeDeleted = false) {
   const branchRules = await loadBranchRules();
   const { data, error } = await getSupabaseClient().from(baseTable()).select('*');
   if (error) throw new Error(error.message);
-  return (data ?? []).filter((row) => !isDeletedRow(row)).map((row) => rowToBaseLead(row, branchRules));
+  return (data ?? []).filter((row) => includeDeleted || !isDeletedRow(row)).map((row) => rowToBaseLead(row, branchRules));
 }
 
 function dbPayload(lead: BaseLead, userId: string) {
@@ -325,8 +325,9 @@ async function rememberSentContact(lead: BaseLead, userId: string) {
   const instagram = lead.normalizedInstagram ?? normalizeInstagram(lead.instagram);
   const mapsUrl = normalize(lead.mapsUrl);
   const leadId = await resolveExistingLeadId(lead.sourceLeadId);
+  const existingId = await findExistingSentContactId(userId, { phone, site, instagram, mapsUrl });
   const payload = {
-    id: lead.id,
+    id: existingId ?? lead.id,
     user_id: userId,
     lead_id: leadId,
     company_name: lead.company,
@@ -348,6 +349,32 @@ async function rememberSentContact(lead: BaseLead, userId: string) {
 
   const { error } = await getSupabaseClient().from(sentTable()).upsert(payload, { onConflict: 'id' });
   if (error) throw new Error(error.message);
+}
+
+async function findExistingSentContactId(
+  userId: string,
+  identities: { phone: string; site: string; instagram: string; mapsUrl: string },
+) {
+  const checks: Array<[string, string]> = [
+    ['normalized_phone', identities.phone],
+    ['site_normalized', identities.site],
+    ['instagram_username', identities.instagram],
+    ['maps_url', identities.mapsUrl],
+  ];
+
+  for (const [column, value] of checks) {
+    if (!value) continue;
+    const { data, error } = await getSupabaseClient()
+      .from(sentTable())
+      .select('id')
+      .eq('user_id', userId)
+      .eq(column, value)
+      .limit(1);
+    if (error) throw new Error(error.message);
+    if (data?.[0]?.id) return String(data[0].id);
+  }
+
+  return null;
 }
 
 async function resolveExistingLeadId(candidate: unknown) {
@@ -397,7 +424,7 @@ export const supabaseBaseRepository: BaseRepository = {
   },
 
   async upsertSent(input) {
-    const records = await allRecords();
+    const records = await allRecords(true);
     const normalizedInput = normalizeInput(input);
     const existing = records.find(
       (lead) =>

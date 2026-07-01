@@ -208,7 +208,23 @@ function idMap(records: ImportLead[], key: 'normalizedPhone' | 'normalizedSite' 
   return map;
 }
 
-async function allLeads() {
+function findDuplicateLead(records: ImportLead[], lead: ImportLead) {
+  const identities: Array<keyof Pick<ImportLead, 'normalizedPhone' | 'normalizedSite' | 'normalizedInstagram' | 'normalizedMapsUrl'>> = [
+    'normalizedPhone',
+    'normalizedSite',
+    'normalizedInstagram',
+    'normalizedMapsUrl',
+  ];
+
+  return records.find((record) =>
+    identities.some((key) => {
+      const current = String(lead[key] ?? '').trim();
+      return current && current === String(record[key] ?? '').trim();
+    }),
+  );
+}
+
+async function allLeads(includeDeleted = false) {
   const branchRules = await loadBranchRules();
   const pageSize = 1000;
   const rows: Record<string, unknown>[] = [];
@@ -220,7 +236,7 @@ async function allLeads() {
     if (!data || data.length < pageSize) break;
   }
 
-  return rows.map((row) => rowToLead(row, branchRules)).filter((lead) => !isTestLead(lead) && !isStatusGroup(lead.status, 'deleted'));
+  return rows.map((row) => rowToLead(row, branchRules)).filter((lead) => !isTestLead(lead) && (includeDeleted || !isStatusGroup(lead.status, 'deleted')));
 }
 
 function isTestConfigLike(record: Record<string, unknown>) {
@@ -389,7 +405,7 @@ export const supabaseImportRepository: ImportRepository = {
       throw new Error('JSON invalido. Revise o conteudo colado e tente novamente.');
     }
 
-    const existing = await allLeads();
+    const existing = await allLeads(true);
     const startedAt = performance.now?.() ?? Date.now();
     const normalized = await normalizeImportItems(extractImportItems(parsed), {
       existingPhones: new Set(existing.map((lead) => normalizePhone(lead.whatsapp)).filter(Boolean)),
@@ -452,6 +468,8 @@ export const supabaseImportRepository: ImportRepository = {
 
   async create(input) {
     const lead = { id: createId('lead'), ...normalizeLeadInput(input) } as ImportLead;
+    const existing = findDuplicateLead(await allLeads(true), lead);
+    if (existing) return existing;
     const userId = await getCurrentUserId();
     const { error } = await getSupabaseClient().from(table()).insert(dbLeadPayload(lead, userId));
     if (error) throw new Error(error.message);
