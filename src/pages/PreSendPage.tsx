@@ -110,6 +110,7 @@ function ValidationQueue({
   onToast,
   onRefreshSummary,
   moveToQueue,
+  moveApprovedImportsToQueue,
   validateLead,
   archiveLead,
   updateLead,
@@ -121,6 +122,7 @@ function ValidationQueue({
   onToast: (toast: Omit<ToastItem, 'id'>) => void;
   onRefreshSummary: () => void;
   moveToQueue: (ids: string[], options?: { whatsappProfile?: string; instagramProfile?: string }) => Promise<number>;
+  moveApprovedImportsToQueue: (input: { channel: PreSendChannel; dayId: string; profile?: string; queueFilter?: PreSendQueueFilter }) => Promise<number>;
   validateLead: (id: string) => Promise<void>;
   archiveLead: (id: string) => Promise<void>;
   updateLead: (id: string, input: Partial<PreSendLead>) => Promise<void>;
@@ -167,6 +169,7 @@ function ValidationQueue({
   const selectedQueueableIds = canQueueSelection ? selectedIds : [];
   const selectedApprovableIds = canApproveSelection ? selectedIds : [];
   const emptyProfileLabel = channel === 'WhatsApp' ? 'Sem chip ativo' : 'Sem perfil';
+  const hasOperationalProfile = profiles.length > 0 && Boolean(activeProfile || profiles[0]);
 
   const refreshQueue = () => {
     setRefreshToken((current) => current + 1);
@@ -272,14 +275,11 @@ function ValidationQueue({
       return;
     }
     const ids = selectedQueueableIds.length ? selectedQueueableIds : queueableIds;
-    if (!ids.length) {
-      onToast({ title: 'Nada para enfileirar', description: 'Selecione leads aprovados ou ajuste os filtros.', tone: 'warning' });
-      return;
-    }
-
     setSaving(true);
     try {
-      const moved = await moveToQueue(ids, channel === 'WhatsApp' ? { whatsappProfile: activeProfile } : { instagramProfile: activeProfile });
+      const moved = ids.length
+        ? await moveToQueue(ids, channel === 'WhatsApp' ? { whatsappProfile: activeProfile } : { instagramProfile: activeProfile })
+        : await moveApprovedImportsToQueue({ channel, dayId: activeDayId, profile: activeProfile || profiles[0] || '', queueFilter });
       setSelectedRows([]);
       refreshQueue();
       onToast({ title: 'Fila preenchida', description: `${moved} lead(s) movido(s) para fila local.`, tone: 'success' });
@@ -333,7 +333,7 @@ function ValidationQueue({
         {title ? <h3>{title}</h3> : null}
         {channel === 'WhatsApp' ? <SelectField options={queueFilterOptions} value={queueFilter} placeholder="Destino" onChange={(value) => setQueueFilter(value as PreSendQueueFilter)} /> : null}
         <SelectField options={profiles.length ? profiles : [emptyProfileLabel]} value={activeProfile || profiles[0] || emptyProfileLabel} placeholder={channel === 'WhatsApp' ? 'Chip' : 'Perfil'} onChange={setActiveProfile} />
-        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={saving} disabled={selectedRows.length ? !canQueueSelection : !queueableIds.length} onClick={fillQueue}>Preencher fila</Button>
+        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={saving} disabled={selectedRows.length ? !canQueueSelection : !hasOperationalProfile} onClick={fillQueue}>Preencher fila</Button>
         {channel === 'WhatsApp' ? <Button size="sm" loading={saving} disabled={selectedRows.length ? !canApproveSelection : !approvableIds.length} onClick={validateSelected}>Validar leads</Button> : null}
       </div>
       {selectedLeads.length && !canQueueSelection && !canApproveSelection ? (
@@ -435,7 +435,7 @@ export function PreSendPage() {
   const [whatsappScope, setWhatsAppScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [instagramScope, setInstagramScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const { dayCards, summary, loading, error, defaultDayId, refresh, moveToQueue, moveDayToQueue, moveInstagramDayToQueue, returnDayToImport, validateLead, archiveLead, updateLead } = usePreSend();
+  const { dayCards, summary, loading, error, defaultDayId, refresh, moveToQueue, moveDayToQueue, moveInstagramDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, archiveLead, updateLead } = usePreSend();
 
   useEffect(() => {
     const defaultKey = daySelectionKey(defaultDayId);
@@ -528,6 +528,7 @@ export function PreSendPage() {
             onToast={pushToast}
             onRefreshSummary={refresh}
             moveToQueue={moveToQueue}
+            moveApprovedImportsToQueue={moveApprovedImportsToQueue}
             validateLead={validateLead}
             archiveLead={archiveLead}
             updateLead={updateLead}
@@ -542,6 +543,7 @@ export function PreSendPage() {
             onToast={pushToast}
             onRefreshSummary={refresh}
             moveToQueue={moveToQueue}
+            moveApprovedImportsToQueue={moveApprovedImportsToQueue}
             validateLead={validateLead}
             archiveLead={archiveLead}
             updateLead={updateLead}

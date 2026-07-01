@@ -12,11 +12,17 @@ import type { CreateInstagramQueueLeadInput } from '../instagram-queue/types';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { assertTransition } from '../state-machine';
 import type { CreateWhatsAppQueueLeadInput } from '../whatsapp-queue/types';
-import type { CreatePreSendLeadInput, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead } from './types';
+import type { CreatePreSendLeadInput, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead, PreSendQueueFilter } from './types';
 
 type QueueAssignmentOptions = {
   whatsappProfile?: string;
   instagramProfile?: string;
+};
+
+type ImportToPreSendOverrides = {
+  dayId?: string;
+  profile?: string;
+  forceApproved?: boolean;
 };
 
 const WEEK_DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -203,6 +209,7 @@ function importToPreSendLead(
   settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>,
   defaultWhatsAppChip = '',
   defaultInstagramProfile = '',
+  overrides: ImportToPreSendOverrides = {},
 ): CreatePreSendLeadInput | null {
   const channel = importDestinationToChannel(lead);
   if (!channel) return null;
@@ -230,8 +237,6 @@ function importToPreSendLead(
     throw new Error('Lead sem Instagram valido');
   }
 
-  const requiresReview = channel === 'WhatsApp' && (destination === 'Com site' || destination === 'Agregadores');
-
   return {
     sourceImportId: lead.id,
     company: lead.empresa,
@@ -247,9 +252,9 @@ function importToPreSendLead(
     instagram_override_reason: lead.instagram_override_reason,
     override_by: lead.override_by,
     override_at: lead.override_at,
-    profile: channel === 'Instagram' ? defaultInstagramProfile : defaultWhatsAppChip,
-    dayId: firstDayId(channel, settings),
-    status: requiresReview ? 'review' : 'approved',
+    profile: overrides.profile ?? (channel === 'Instagram' ? defaultInstagramProfile : defaultWhatsAppChip),
+    dayId: overrides.dayId ?? firstDayId(channel, settings),
+    status: 'approved',
     phone: lead.whatsapp,
     instagram: lead.instagram,
     site: lead.site,
@@ -262,6 +267,18 @@ function importToPreSendLead(
 function destinationToTemplateType(destination: PreSendLead['destination']) {
   if (destination === 'Com site' || destination === 'Agregadores') return 'com-site';
   return 'sem-site';
+}
+
+function importLeadMatchesQueueFilter(lead: ImportLead, filter?: PreSendQueueFilter) {
+  if (!filter || filter === 'Geral') return true;
+  const destination = importFinalDestination(lead);
+  if (filter === 'WhatsApp') return destination === 'WhatsApp';
+  return destination === 'Com site' || destination === 'Agregadores';
+}
+
+async function approvedImportsForPreSend(channel: PreSendChannel, queueFilter?: PreSendQueueFilter) {
+  const approved = await repositories.import.list({ status: 'approved' });
+  return sortByLeadScore(approved.filter((lead) => importDestinationToChannel(lead) === channel && importLeadMatchesQueueFilter(lead, queueFilter)));
 }
 
 async function loadTemplate(lead: PreSendLead) {
@@ -537,6 +554,41 @@ export const preSendService = {
     const created = await repositories.preSend.addLeads(payload);
     eventBus.emit('pre-send:changed', { action: 'update' });
     return created;
+  },
+
+  async moveApprovedImportsToQueue({
+    channel,
+    dayId,
+    profile,
+    queueFilter = 'Geral',
+  }: {
+    channel: PreSendChannel;
+    dayId: string;
+    profile?: string;
+    queueFilter?: PreSendQueueFilter;
+  }) {
+    const settings = await settingsService.getDispatchSettings();
+    const imports = await approvedImportsForPreSend(channel, queueFilter);
+    if (!imports.length) throw new Error('Nenhum lead aprovado disponivel no Inicio para este canal/filtro.');
+
+    const [firstChip, firstInstagramProfile] = await Promise.all([
+      loadActiveChips().then((chips) => chips[0]),
+      loadActiveInstagramProfiles().then((profiles) => profiles[0]),
+    ]);
+    const defaultWhatsAppChip = firstChip ? chipInstance(firstChip) : '';
+    const defaultInstagramProfile = firstInstagramProfile?.username ?? '';
+    const targetProfile = profile || (channel === 'Instagram' ? defaultInstagramProfile : defaultWhatsAppChip);
+    if (!targetProfile) throw new Error(channel === 'WhatsApp' ? 'Nenhum chip ativo/conectado selecionado.' : 'Nenhum perfil Instagram ativo selecionado.');
+
+    const payload = imports
+      .map((lead) => importToPreSendLead(lead, settings, defaultWhatsAppChip, defaultInstagramProfile, { dayId, profile: targetProfile, forceApproved: true }))
+      .filter((lead): lead is CreatePreSendLeadInput => Boolean(lead));
+
+    await repositories.preSend.addLeads(payload);
+    const available = await listFilteredLeads({ channel, dayId, profile: targetProfile, queueFilter });
+    const ids = sortByLeadScore(available.filter((lead) => isStatusGroup(lead.status, 'approved'))).map((lead) => lead.id);
+    if (!ids.length) throw new Error('Os aprovados do Inicio ja foram usados, estao em outro dia/chip/perfil ou nao possuem dados suficientes.');
+    return this.moveToQueue(ids, channel === 'WhatsApp' ? { whatsappProfile: targetProfile } : { instagramProfile: targetProfile });
   },
 
   async moveToQueue(ids: string[], options: QueueAssignmentOptions = {}) {

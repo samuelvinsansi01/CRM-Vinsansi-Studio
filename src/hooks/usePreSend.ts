@@ -85,6 +85,15 @@ export function usePreSend() {
     [refresh],
   );
 
+  const moveApprovedImportsToQueue = useCallback(
+    async (input: Parameters<typeof preSendService.moveApprovedImportsToQueue>[0]) => {
+      const moved = await preSendService.moveApprovedImportsToQueue(input);
+      refresh();
+      return moved;
+    },
+    [refresh],
+  );
+
   const returnDayToImport = useCallback(
     async (input: Parameters<typeof preSendService.returnDayToImport>[0]) => {
       await preSendService.returnDayToImport(input);
@@ -127,6 +136,7 @@ export function usePreSend() {
     moveToQueue,
     moveDayToQueue,
     moveInstagramDayToQueue,
+    moveApprovedImportsToQueue,
     returnDayToImport,
     validateLead,
     archiveLead,
