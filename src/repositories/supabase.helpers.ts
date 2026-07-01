@@ -79,8 +79,3 @@ export async function updateJsonRecord<T extends { id: string }>(table: string, 
   if (error) throw new Error(error.message);
   return record;
 }
-
-export async function deleteJsonRecord(table: string, id: string) {
-  const { error } = await getSupabaseClient().from(table).delete().eq('id', id);
-  if (error) throw new Error(error.message);
-}

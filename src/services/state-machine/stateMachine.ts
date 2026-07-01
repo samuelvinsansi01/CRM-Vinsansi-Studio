@@ -142,6 +142,7 @@ function canBase(request: TransitionRequest): TransitionResult {
 
   if (request.action === 'edit') return allowed(request);
   if (request.action === 'archive') return to === 'archived' && from !== 'archived' ? allowed(request) : denied(request, 'Registro ja esta arquivado.');
+  if (request.action === 'restore') return from === 'archived' ? allowed(request) : denied(request, 'Somente registros arquivados podem ser restaurados.');
   if (isDirectStatusUpdate(request) && from === to) return allowed(request);
   return denied(request, 'Status da Base Permanente deve mudar apenas por acao operacional.');
 }

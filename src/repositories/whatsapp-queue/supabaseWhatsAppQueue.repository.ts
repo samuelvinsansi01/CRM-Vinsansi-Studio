@@ -93,10 +93,15 @@ function rowToLead(row: Record<string, unknown>): WhatsAppQueueLead {
   };
 }
 
+function isDeletedRow(row: Record<string, unknown>) {
+  const data = (row.data && typeof row.data === 'object' ? row.data : row.raw_payload && typeof row.raw_payload === 'object' ? row.raw_payload : {}) as Partial<WhatsAppQueueLead>;
+  return isStatusGroup(row.status ?? data.status, 'deleted');
+}
+
 async function allLeads() {
   const { data, error } = await getSupabaseClient().from(table()).select('*');
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => rowToLead(row)).filter((lead) => !isSanitizedLegacyWhatsAppItem(lead));
+  return (data ?? []).filter((row) => !isDeletedRow(row)).map((row) => rowToLead(row)).filter((lead) => !isSanitizedLegacyWhatsAppItem(lead));
 }
 
 function calculateSummary(leads: WhatsAppQueueLead[]): WhatsAppQueueSummary {

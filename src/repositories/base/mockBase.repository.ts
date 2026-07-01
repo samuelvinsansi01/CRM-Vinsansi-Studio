@@ -46,7 +46,7 @@ function normalizeInstagram(value: unknown) {
 function filterRecords(filters: BaseFilters = {}) {
   const query = normalize(filters.search);
 
-  return records.filter((lead) => {
+  return records.filter((lead) => !isStatusGroup(lead.status, 'deleted')).filter((lead) => {
     const searchable = normalize(`${lead.company} ${lead.branch} ${lead.state} ${lead.city} ${lead.phone} ${lead.site} ${lead.instagram ?? ''} ${lead.mapsUrl ?? ''} ${lead.origin} ${lead.destination} ${lead.original_destination ?? ''} ${lead.destination_override ?? ''} ${lead.status}`);
     const matchesSearch = !query || searchable.includes(query);
     const matchesOrigin = !filters.origin || filters.origin === 'Todos' || lead.origin === filters.origin;
@@ -61,20 +61,21 @@ function filterRecords(filters: BaseFilters = {}) {
 }
 
 function calculateSummary(list: BaseLead[]): BaseSummary {
-  const sent = list.filter((lead) => isStatusGroup(lead.status, 'sent'));
+  const activeList = list.filter((lead) => !isStatusGroup(lead.status, 'deleted'));
+  const sent = activeList.filter((lead) => isStatusGroup(lead.status, 'sent'));
   return {
-    total: list.length,
+    total: activeList.length,
     sent: sent.length,
     sentWhatsApp: sent.filter((lead) => lead.origin === 'WhatsApp' || lead.destination === 'WhatsApp' || lead.destination === 'Com site').length,
     sentInstagram: sent.filter((lead) => lead.origin === 'Instagram' || lead.destination === 'Instagram').length,
-    archived: list.filter((lead) => isStatusGroup(lead.status, 'archived')).length,
-    invalid: list.filter((lead) => isStatusGroup(lead.status, 'invalid')).length,
-    errors: list.filter((lead) => isStatusGroup(lead.status, 'error')).length,
+    archived: activeList.filter((lead) => isStatusGroup(lead.status, 'archived')).length,
+    invalid: activeList.filter((lead) => isStatusGroup(lead.status, 'invalid')).length,
+    errors: activeList.filter((lead) => isStatusGroup(lead.status, 'error')).length,
   };
 }
 
 function uniqueBy(key: keyof BaseLead) {
-  return Array.from(new Set(records.map((lead) => (key === 'state' ? normalizeBrazilState(lead[key]) : String(lead[key] ?? '')).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return Array.from(new Set(records.filter((lead) => !isStatusGroup(lead.status, 'deleted')).map((lead) => (key === 'state' ? normalizeBrazilState(lead[key]) : String(lead[key] ?? '')).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
 function createId() {
@@ -233,5 +234,13 @@ export const mockBaseRepository: BaseRepository = {
 
   async archive(id: string) {
     return mockBaseRepository.setStatus(id, 'archived');
+  },
+
+  async restore(id: string) {
+    return mockBaseRepository.setStatus(id, 'sent');
+  },
+
+  async remove(id: string) {
+    await mockBaseRepository.setStatus(id, 'deleted');
   },
 };

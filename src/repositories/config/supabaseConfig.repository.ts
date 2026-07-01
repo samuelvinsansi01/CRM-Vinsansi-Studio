@@ -67,6 +67,14 @@ function isArchived(record: ConfigRecord) {
   return normalizeComparable(record.status) === 'arquivado';
 }
 
+function isDeletedStatus(value: unknown) {
+  return normalizeComparable(value) === 'deleted' || normalizeComparable(value).startsWith('excluido') || normalizeComparable(value).startsWith('deletado');
+}
+
+function isDeleted(record: ConfigRecord) {
+  return isDeletedStatus(record.status);
+}
+
 function isTestConfigRecord(record: ConfigRecord) {
   const signature = normalizeComparable(JSON.stringify(record));
   return signature.includes('teste supabase') || signature.includes('supabase real') || signature.includes('codex') || signature.includes('template fake');
@@ -78,6 +86,7 @@ function applyFilter(records: ConfigRecord[], search?: string, status?: string) 
 
   return records.filter((record) => {
     if (isTestConfigRecord(record)) return false;
+    if (isDeleted(record)) return false;
     const matchesQuery = !query || JSON.stringify(record).toLowerCase().includes(query);
     const matchesStatus =
       !normalizedStatus ||
@@ -93,6 +102,8 @@ function applyFilter(records: ConfigRecord[], search?: string, status?: string) 
 function normalizeBranch(input: Record<string, unknown>, fallback?: BranchConfigRecord): BranchConfigRecord {
   const timestamp = nowIso();
   const active = toBoolean(input.active ?? input.status, fallback?.active ?? true);
+  const rawStatus = input.status ?? fallback?.status;
+  const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
   const name = textFrom(input.name, fallback?.name, 'Novo ramo');
   const slug = textFrom(input.slug, fallback?.slug, branchSlug(name));
   const sourceId = normalizeBranchId(textFrom(input.id));
@@ -114,7 +125,7 @@ function normalizeBranch(input: Record<string, unknown>, fallback?: BranchConfig
     minReviews: Number(input.minReviews ?? fallback?.minReviews ?? 10),
     imageName: String(input.imageName ?? input.image_name ?? fallback?.imageName ?? ''),
     active,
-    status: statusFromActive(active),
+    status,
     createdAt: String(fallback?.createdAt ?? input.createdAt ?? timestamp),
     updatedAt: timestamp,
   } as BranchConfigRecord;
@@ -122,6 +133,8 @@ function normalizeBranch(input: Record<string, unknown>, fallback?: BranchConfig
 
 function rowToBranch(row: Record<string, unknown>): BranchConfigRecord {
   const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<BranchConfigRecord>;
+  const rawStatus = row.status ?? data.status;
+  const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
   const sourceId = normalizeBranchId(textFrom(row.id, data.id)) || textFrom(row.id, data.id);
   const name = textFrom(row.name, data.name, row.category, data.category, 'Novo ramo');
   const slug = textFrom(row.slug, data.slug, branchSlug(name));
@@ -138,7 +151,7 @@ function rowToBranch(row: Record<string, unknown>): BranchConfigRecord {
       minRating: row.min_rating ?? data.minRating,
       minReviews: row.min_reviews ?? data.minReviews,
       imageName: row.image_name ?? data.imageName,
-      active: row.active ?? data.active,
+      active: inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active,
       status: row.status ?? data.status,
       createdAt: row.created_at ?? data.createdAt,
       updatedAt: row.updated_at ?? data.updatedAt,
@@ -169,7 +182,10 @@ function resolveTemplateBranch(row: Record<string, unknown>, data: Partial<Templ
 
 function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecord[] = []): TemplateConfigRecord {
   const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<TemplateConfigRecord>;
-  const active = toBoolean(row.active ?? data.active, true);
+  const rawStatus = row.status ?? data.status;
+  const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
+  const active = toBoolean(inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active, true);
+  const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
   const message1 = String(row.part_1 ?? row.message1 ?? data.message1 ?? '');
   const message2 = String(row.part_2 ?? row.message2 ?? data.message2 ?? '');
   const branch = resolveTemplateBranch(row, data, branches);
@@ -186,8 +202,9 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
     preview: String(data.preview ?? message1),
     variables: Array.isArray(row.variables) ? row.variables.map(String) : Array.isArray(data.variables) ? data.variables : ['{EMPRESA}'],
     order: Number(row.order ?? data.order ?? 1),
+    archivedPreviousActive: (data as Record<string, unknown>).archivedPreviousActive,
     active,
-    status: (row.status ?? data.status ?? statusFromActive(active)) as ConfigStatus,
+    status: status as ConfigStatus,
     createdAt: String(row.created_at ?? data.createdAt ?? nowIso()),
     updatedAt: String(row.updated_at ?? data.updatedAt ?? nowIso()),
   };
@@ -195,7 +212,10 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
 
 function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
   const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<ChipConfigRecord>;
-  const active = toBoolean(row.active ?? data.active, true);
+  const rawStatus = data.status ?? row.status;
+  const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
+  const active = toBoolean(inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active, true);
+  const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
   const level = String(row.level ?? data.level ?? 'estabilizado');
   const levelDefaults = chipLevelDefaults(level);
   const blocks = row.blocks;
@@ -223,9 +243,10 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
     intervalSeconds: Number(row.interval_seconds ?? row.intervalSeconds ?? data.intervalSeconds ?? levelDefaults.intervalSeconds),
     blockSize: Number(row.block_size ?? row.blockSize ?? data.blockSize ?? levelDefaults.blockSize),
     batches,
+    archivedPreviousActive: (data as Record<string, unknown>).archivedPreviousActive,
     paused: toBoolean(row.paused, data.paused ?? false),
     active,
-    status: (data.status === 'Arquivado' ? 'Arquivado' : statusFromActive(active)) as ConfigStatus,
+    status: status as ConfigStatus,
     createdAt: String(row.created_at ?? data.createdAt ?? nowIso()),
     updatedAt: String(row.updated_at ?? data.updatedAt ?? nowIso()),
   };
@@ -244,14 +265,16 @@ function rowToInstagramProfile(row: Record<string, unknown>): InstagramConfigRec
   const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<InstagramConfigRecord>;
   const active = toBoolean(row.active ?? data.active, true);
   const archived = normalizeComparable(row.status ?? data.status) === 'arquivado';
+  const deleted = isDeletedStatus(row.status ?? data.status);
   const username = normalizeInstagramUsername(row.username ?? data.username ?? row.profile_username ?? data.instagram);
   return {
     id: String(row.id),
     kind: 'instagram',
     name: String((row.display_name ?? row.name ?? data.name ?? username) || 'Perfil Instagram'),
     username,
-    active: archived ? false : active,
-    status: (archived ? 'Arquivado' : statusFromActive(active)) as ConfigStatus,
+    archivedPreviousActive: (data as Record<string, unknown>).archivedPreviousActive,
+    active,
+    status: (deleted ? 'deleted' : archived ? 'Arquivado' : statusFromActive(active)) as ConfigStatus,
     createdAt: String(row.created_at ?? data.createdAt ?? nowIso()),
     updatedAt: String(row.updated_at ?? data.updatedAt ?? nowIso()),
   };
@@ -301,7 +324,7 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     part_1: record.message1,
     part_2: record.message2,
     variables: record.variables,
-    active: record.active,
+    active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
     kind: 'templates',
     data: { ...record, branchId: branch?.id ?? record.branchId, branchName: branch?.name ?? record.branchName },
@@ -327,7 +350,7 @@ async function upsertChip(record: ChipConfigRecord) {
     evolution_url: record.url,
     url: record.url,
     api_key: record.apiKey,
-    active: record.active,
+    active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.connectionStatus || 'inactive',
     daily_limit: record.dailyLimit || levelDefaults.dailyLimit,
     block_size: record.blockSize || levelDefaults.blockSize,
@@ -356,7 +379,7 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
     user_id: userId,
     username: normalizeInstagramUsername(record.username),
     display_name: record.name,
-    active: record.active && record.status !== 'Arquivado',
+    active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
     daily_limit: instagramDefaults.dailyLimit,
     blocks: instagramDefaults.batches,
@@ -383,7 +406,7 @@ async function upsertBranch(record: BranchConfigRecord) {
     min_rating: record.minRating,
     min_reviews: record.minReviews,
     image_name: record.imageName,
-    active: record.active,
+    active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
     kind: 'branches',
     data: { ...record, id: numericId ? String(numericId) : record.id, slug: record.slug || branchSlug(record.name), imageName: record.imageName },
@@ -428,22 +451,27 @@ export const supabaseConfigRepository: ConfigRepository = {
   },
 
   async remove(kind, id) {
-    if (kind === 'instagram') {
-      const { error } = await getSupabaseClient().from(tableForKind('instagram')).delete().eq('id', id);
-      if (error) throw new Error(error.message);
-      return;
-    }
-    await this.update(kind, id, { active: false, status: 'Inativo' });
+    const existing = (await this.list(kind, {})).find((record) => record.id === id);
+    if (!existing) throw new Error('Registro nao encontrado.');
+    await this.update(kind, id, {
+      ...existing,
+      active: false,
+      status: 'deleted',
+      deletedAt: nowIso(),
+    });
   },
 
   async toggleArchive(kind, id) {
     const existing = (await this.list(kind, {})).find((record) => record.id === id);
     if (!existing) throw new Error('Registro nao encontrado.');
     const archived = isArchived(existing);
-    const nextActive = archived;
+    const metadata = existing as ConfigRecord & { archivedPreviousActive?: unknown };
+    const restoredActive = typeof metadata.archivedPreviousActive === 'boolean' ? metadata.archivedPreviousActive : true;
     return this.update(kind, id, {
-      active: nextActive,
-      status: archived ? 'Ativo' : 'Arquivado',
+      ...existing,
+      active: archived ? restoredActive : existing.active,
+      archivedPreviousActive: archived ? undefined : existing.active,
+      status: archived ? statusFromActive(restoredActive) : 'Arquivado',
     });
   },
 };

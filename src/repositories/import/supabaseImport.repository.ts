@@ -220,7 +220,7 @@ async function allLeads() {
     if (!data || data.length < pageSize) break;
   }
 
-  return rows.map((row) => rowToLead(row, branchRules)).filter((lead) => !isTestLead(lead));
+  return rows.map((row) => rowToLead(row, branchRules)).filter((lead) => !isTestLead(lead) && !isStatusGroup(lead.status, 'deleted'));
 }
 
 function isTestConfigLike(record: Record<string, unknown>) {

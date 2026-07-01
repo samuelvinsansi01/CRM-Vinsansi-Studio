@@ -6,11 +6,13 @@ export const baseStatusLabel: Record<BaseLeadStatus, string> = {
   archived: statusLabel('archived'),
   invalid: statusLabel('invalid'),
   error: statusLabel('error'),
+  deleted: statusLabel('deleted'),
 };
 
-export const baseStatusTone: Record<BaseLeadStatus, 'success' | 'warning' | 'danger'> = {
+export const baseStatusTone: Record<BaseLeadStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   sent: 'success',
   archived: 'warning',
   invalid: statusTone('invalid') as 'danger',
   error: statusTone('error') as 'danger',
+  deleted: 'neutral',
 };

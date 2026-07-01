@@ -59,6 +59,11 @@ function isArchived(record: ConfigRecord) {
   return normalizeComparable(record.status) === 'arquivado';
 }
 
+function isDeleted(record: ConfigRecord) {
+  const status = normalizeComparable(record.status);
+  return status === 'deleted' || status.startsWith('excluido') || status.startsWith('deletado');
+}
+
 function isTestConfigRecord(record: ConfigRecord) {
   const signature = normalizeComparable(JSON.stringify(record));
   return signature.includes('teste supabase') || signature.includes('supabase real') || signature.includes('codex') || signature.includes('template fake');
@@ -70,6 +75,7 @@ function applyFilters(records: ConfigRecord[], filters?: ConfigListFilters) {
 
   return records.filter((record) => {
     if (isTestConfigRecord(record)) return false;
+    if (isDeleted(record)) return false;
     const matchesQuery = !query || recordText(record).includes(query);
     const matchesStatus =
       statusFilter === 'todos' ||
@@ -121,18 +127,7 @@ export const mockConfigRepository: ConfigRepository = {
 
   async remove(kind, id) {
     assertId(id);
-    if (kind === 'instagram') {
-      writeStore(
-        kind,
-        readStore(kind).filter((record) => record.id !== id),
-      );
-      return;
-    }
-
-    writeStore(
-      kind,
-      readStore(kind).filter((record) => record.id !== id),
-    );
+    writeStore(kind, readStore(kind).map((record) => (record.id === id ? { ...record, active: false, status: 'deleted', updatedAt: new Date().toISOString() } : record)));
   },
 
   async toggleArchive(kind, id) {
@@ -141,11 +136,13 @@ export const mockConfigRepository: ConfigRepository = {
     const records = readStore(kind).map((record) => {
       if (record.id !== id) return record;
       const archived = isArchived(record);
-      const active = archived;
+      const metadata = record as ConfigRecord & { archivedPreviousActive?: unknown };
+      const active = archived ? (typeof metadata.archivedPreviousActive === 'boolean' ? metadata.archivedPreviousActive : true) : record.active;
       updated = {
         ...record,
         active,
-        status: archived ? 'Ativo' : 'Arquivado',
+        archivedPreviousActive: archived ? undefined : record.active,
+        status: archived ? (active ? 'Ativo' : 'Inativo') : 'Arquivado',
         updatedAt: new Date().toISOString(),
       };
       return updated;

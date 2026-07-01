@@ -72,7 +72,7 @@ function isInstagramProfile(record: ConfigRecord): record is InstagramConfigReco
 async function activeInstagramProfiles() {
   return (await repositories.config.list('instagram'))
     .filter(isInstagramProfile)
-    .filter((profile) => profile.active && profile.status !== 'Arquivado' && profile.username.trim())
+    .filter((profile) => profile.active && profile.status !== 'Arquivado' && profile.status !== 'deleted' && profile.username.trim())
     .map((profile) => profile.username);
 }
 

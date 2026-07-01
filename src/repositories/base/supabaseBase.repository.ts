@@ -176,6 +176,11 @@ function rowToBaseLead(row: Record<string, unknown>, branchRules: BranchRule[]):
   };
 }
 
+function isDeletedRow(row: Record<string, unknown>) {
+  const data = (row.data && typeof row.data === 'object' ? row.data : row.raw_payload && typeof row.raw_payload === 'object' ? row.raw_payload : {}) as Partial<BaseLead>;
+  return isStatusGroup(row.status ?? data.status, 'deleted');
+}
+
 function normalizeInput(input: CreateBaseLeadInput): CreateBaseLeadInput {
   return {
     ...input,
@@ -266,7 +271,7 @@ async function allRecords() {
   const branchRules = await loadBranchRules();
   const { data, error } = await getSupabaseClient().from(baseTable()).select('*');
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => rowToBaseLead(row, branchRules));
+  return (data ?? []).filter((row) => !isDeletedRow(row)).map((row) => rowToBaseLead(row, branchRules));
 }
 
 function dbPayload(lead: BaseLead, userId: string) {
@@ -440,5 +445,13 @@ export const supabaseBaseRepository: BaseRepository = {
 
   async archive(id) {
     return this.setStatus(id, 'archived');
+  },
+
+  async restore(id) {
+    return this.setStatus(id, 'sent');
+  },
+
+  async remove(id) {
+    await this.update(id, { status: 'deleted' });
   },
 };

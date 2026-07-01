@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Archive, Instagram, MessageCircle, Save, Send, Users, X } from 'lucide-react';
+import { Archive, Instagram, MessageCircle, RotateCcw, Save, Send, Trash2, Users, X } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -24,7 +24,7 @@ import { useBaseRecords } from '../hooks/useBaseRecords';
 import { permissionsFor } from '../services/permissions';
 import { baseStatusLabel } from '../services/base/status.mapper';
 import type { BaseFilters, BaseLead, BaseLeadDestination, BaseLeadOrigin, BaseLeadStatus, UpdateBaseLeadInput } from '../services/base/types';
-import { statusLabel, statusTone } from '../services/status/status.mapper';
+import { isStatusGroup, statusLabel, statusTone } from '../services/status/status.mapper';
 
 type BaseLeadDraft = Pick<
   BaseLead,
@@ -137,7 +137,8 @@ const columns: TableColumn<BaseTableRow>[] = [
   },
 ];
 
-const tableActions: TableAction[] = ['view', 'archive'];
+const tableActions: TableAction[] = ['view', 'archive', 'restore', 'delete'];
+type ConfirmAction = 'archive' | 'restore' | 'delete';
 
 export function BasePage() {
   const [search, setSearch] = useState('');
@@ -148,12 +149,12 @@ export function BasePage() {
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit' | null>(null);
   const [activeLead, setActiveLead] = useState<BaseLead | null>(null);
-  const [confirmLead, setConfirmLead] = useState<BaseLead | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ lead: BaseLead; action: ConfirmAction } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
 
   const effectiveFilters = useMemo<BaseFilters>(() => ({ ...filters, search }), [filters, search]);
-  const { records, summary, options, loading, error, updateLead, archiveLead, archiveMany } = useBaseRecords(effectiveFilters);
+  const { records, summary, options, loading, error, updateLead, archiveLead, archiveMany, restoreLead, restoreMany, removeLead, removeMany } = useBaseRecords(effectiveFilters);
 
   const visibleRecords = useMemo(() => records.filter((lead) => matchesDateFilter(lead.sentAt, dateFilter)), [dateFilter, records]);
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / rowsPerPage));
@@ -180,6 +181,9 @@ export function BasePage() {
   const selectedLeads = selectedRows.map((rowIndex) => pagedRecords[rowIndex]).filter((lead): lead is BaseLead => Boolean(lead));
   const selectedIds = selectedLeads.map((lead) => lead.id);
   const canBulkArchive = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('base', lead.status).canArchive());
+  const canBulkRestore = selectedLeads.length > 0 && selectedLeads.every((lead) => isStatusGroup(lead.status, 'archived'));
+  const canBulkRemove = selectedLeads.length > 0 && selectedLeads.every((lead) => isStatusGroup(lead.status, 'archived'));
+  const hasBulkAction = canBulkArchive || canBulkRestore || canBulkRemove;
 
   const pushToast = (toast: Omit<ToastItem, 'id'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -217,7 +221,25 @@ export function BasePage() {
         pushToast({ title: 'Acao bloqueada', description: 'Este registro nao pode ser arquivado neste estado.', tone: 'warning' });
         return;
       }
-      setConfirmLead(lead);
+      setConfirmAction({ lead, action: 'archive' });
+      return;
+    }
+
+    if (action === 'restore') {
+      if (!isStatusGroup(lead.status, 'archived')) {
+        pushToast({ title: 'Acao bloqueada', description: 'Somente registros arquivados podem ser restaurados.', tone: 'warning' });
+        return;
+      }
+      setConfirmAction({ lead, action: 'restore' });
+      return;
+    }
+
+    if (action === 'delete') {
+      if (!isStatusGroup(lead.status, 'archived')) {
+        pushToast({ title: 'Acao bloqueada', description: 'Exclusao definitiva exige registro arquivado.', tone: 'warning' });
+        return;
+      }
+      setConfirmAction({ lead, action: 'delete' });
     }
   };
 
@@ -231,12 +253,20 @@ export function BasePage() {
     pushToast({ title: 'Lead atualizado', description: 'Alterações salvas localmente na Base Permanente.', tone: 'success' });
   };
 
-  const handleArchive = async () => {
-    if (!confirmLead) return;
-    await archiveLead(confirmLead);
-    setConfirmLead(null);
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { lead, action } = confirmAction;
+    if (action === 'archive') await archiveLead(lead);
+    if (action === 'restore') await restoreLead(lead);
+    if (action === 'delete') await removeLead(lead);
+    setConfirmAction(null);
     setSelectedRows([]);
-    pushToast({ title: 'Lead arquivado', description: `${confirmLead.company} foi arquivado localmente.`, tone: 'warning' });
+    const messages: Record<ConfirmAction, Omit<ToastItem, 'id'>> = {
+      archive: { title: 'Lead arquivado', description: `${lead.company} foi arquivado.`, tone: 'warning' },
+      restore: { title: 'Lead restaurado', description: `${lead.company} voltou para a Base Permanente.`, tone: 'success' },
+      delete: { title: 'Lead excluido', description: `${lead.company} saiu da listagem operacional.`, tone: 'danger' },
+    };
+    pushToast(messages[action]);
   };
 
   const handleBulkArchive = async () => {
@@ -248,6 +278,48 @@ export function BasePage() {
       pushToast({ title: 'Acao em massa bloqueada', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
   };
+
+  const handleBulkRestore = async () => {
+    try {
+      await restoreMany(selectedIds);
+      setSelectedRows([]);
+      pushToast({ title: 'Leads restaurados', description: `${selectedIds.length} lead(s) restaurado(s).`, tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Acao em massa bloqueada', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
+  const handleBulkRemove = async () => {
+    try {
+      await removeMany(selectedIds);
+      setSelectedRows([]);
+      pushToast({ title: 'Leads excluidos', description: `${selectedIds.length} lead(s) removido(s) da listagem operacional.`, tone: 'danger' });
+    } catch (err) {
+      pushToast({ title: 'Acao em massa bloqueada', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
+  const confirmCopy: Record<ConfirmAction, { title: string; description: string; confirmLabel: string; danger: boolean }> = {
+    archive: {
+      title: 'Arquivar lead?',
+      description: 'Essa acao muda o status do lead para arquivado.',
+      confirmLabel: 'Arquivar',
+      danger: true,
+    },
+    restore: {
+      title: 'Restaurar lead?',
+      description: 'Essa acao devolve o lead arquivado para a Base Permanente.',
+      confirmLabel: 'Restaurar',
+      danger: false,
+    },
+    delete: {
+      title: 'Excluir lead definitivamente?',
+      description: 'Essa acao remove o lead arquivado das listagens operacionais via soft delete.',
+      confirmLabel: 'Excluir',
+      danger: true,
+    },
+  };
+  const activeConfirm = confirmAction ? confirmCopy[confirmAction.action] : null;
 
   return (
     <div className="dashboard-table-page lead-list-page lead-list-page--base">
@@ -288,7 +360,10 @@ export function BasePage() {
         {selectedLeads.length ? (
           <div className="lead-bulk-actions">
             <span>{selectedLeads.length} selecionado(s)</span>
-            {canBulkArchive ? <Button size="sm" variant="danger" iconLeft={Archive} onClick={handleBulkArchive}>Arquivar</Button> : <small>Nenhuma acao disponivel para a selecao atual.</small>}
+            {canBulkArchive ? <Button size="sm" variant="danger" iconLeft={Archive} onClick={handleBulkArchive}>Arquivar</Button> : null}
+            {canBulkRestore ? <Button size="sm" variant="secondary" iconLeft={RotateCcw} onClick={handleBulkRestore}>Restaurar</Button> : null}
+            {canBulkRemove ? <Button size="sm" variant="danger" iconLeft={Trash2} onClick={handleBulkRemove}>Excluir</Button> : null}
+            {!hasBulkAction ? <small>Nenhuma acao disponivel para a selecao atual.</small> : null}
           </div>
         ) : null}
         {error ? <div className="table-message">{error}</div> : null}
@@ -304,7 +379,11 @@ export function BasePage() {
               if (!lead) return [];
               return [
                 'view' as TableAction,
-                ...(permissionsFor('base', lead.status).canArchive() ? ['archive' as TableAction] : []),
+                ...(isStatusGroup(lead.status, 'archived')
+                  ? ['restore' as TableAction, 'delete' as TableAction]
+                  : permissionsFor('base', lead.status).canArchive()
+                    ? ['archive' as TableAction]
+                    : []),
               ];
             }}
             selectedRows={selectedRows}
@@ -324,14 +403,16 @@ export function BasePage() {
       />
 
       <ConfirmDialog
-        open={Boolean(confirmLead)}
-        title="Arquivar lead?"
-        description="Essa ação muda o status do lead para arquivado localmente."
-        confirmLabel="Arquivar"
-        danger
-        onClose={() => setConfirmLead(null)}
-        onConfirm={handleArchive}
-      />
+        open={Boolean(confirmAction)}
+        title={activeConfirm?.title ?? ''}
+        description={activeConfirm?.description ?? ''}
+        confirmLabel={activeConfirm?.confirmLabel ?? 'Confirmar'}
+        danger={activeConfirm?.danger}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={handleConfirmAction}
+      >
+        {confirmAction ? <strong>{confirmAction.lead.company}</strong> : null}
+      </ConfirmDialog>
 
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     </div>

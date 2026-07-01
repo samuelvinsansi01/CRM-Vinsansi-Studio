@@ -1,5 +1,5 @@
 export type PreSendChannel = 'WhatsApp' | 'Instagram';
-export type PreSendStatus = 'review' | 'approved' | 'queued' | 'rejected' | 'invalid' | 'archived' | 'sent';
+export type PreSendStatus = 'review' | 'approved' | 'queued' | 'rejected' | 'invalid' | 'archived' | 'sent' | 'deleted';
 export type PreSendQueueFilter = 'Geral' | 'WhatsApp' | 'Com site + Agregadores';
 
 export type PreSendDayCard = {

@@ -1,9 +1,9 @@
-import { getSupabaseConfig } from '../../lib/supabase';
+import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
 import { branchIdOrNull } from '../../services/config/branchIdentity';
 import { normalizeBrazilState } from '../../services/geo/brazilState';
 import type { CreatePreSendLeadInput, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead, PreSendQueueFilter, PreSendSummary } from '../../services/pre-send/types';
 import { isStatusGroup, normalizePreSendStatus } from '../../services/status/status.mapper';
-import { createId, getCurrentUserId, insertJsonRecord, selectJsonRecords, updateJsonRecord } from '../supabase.helpers';
+import { createId, getCurrentUserId, insertJsonRecord, updateJsonRecord } from '../supabase.helpers';
 import type { PreSendRepository } from './preSend.repository';
 
 function table() {
@@ -37,11 +37,18 @@ function leadFlatExtra(lead: PreSendLead) {
 }
 
 async function allLeads() {
-  return (await selectJsonRecords<PreSendLead>(table())).map((lead) => ({
+  const { data, error } = await getSupabaseClient().from(table()).select('id,data,status,active,kind,channel,created_at,updated_at');
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => {
+    const lead = (row.data ?? {}) as PreSendLead;
+    return {
     ...lead,
+    id: lead.id ?? String(row.id),
     state: normalizeBrazilState(lead.state),
-    status: normalizePreSendStatus(lead.status),
-  }));
+    status: normalizePreSendStatus(row.status ?? lead.status),
+    };
+  }).filter((lead) => !isStatusGroup(lead.status, 'deleted'));
 }
 
 export const supabasePreSendRepository: PreSendRepository = {

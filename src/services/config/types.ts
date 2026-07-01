@@ -1,6 +1,6 @@
 export type ConfigKind = 'chips' | 'instagram' | 'branches' | 'templates';
 
-export type ConfigStatus = 'Ativo' | 'Inativo' | 'Arquivado';
+export type ConfigStatus = 'Ativo' | 'Inativo' | 'Arquivado' | 'deleted';
 
 export type TemplateType = 'sem-site' | 'com-site';
 export type TemplateChannel = 'WhatsApp' | 'Instagram' | 'Geral';

@@ -16,4 +16,6 @@ export interface BaseRepository {
   update(id: string, input: UpdateBaseLeadInput): Promise<BaseLead>;
   setStatus(id: string, status: BaseLeadStatus): Promise<BaseLead>;
   archive(id: string): Promise<BaseLead>;
+  restore(id: string): Promise<BaseLead>;
+  remove(id: string): Promise<void>;
 }

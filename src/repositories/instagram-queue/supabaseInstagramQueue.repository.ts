@@ -85,10 +85,15 @@ function rowToLead(row: Record<string, unknown>): InstagramQueueLead {
   };
 }
 
+function isDeletedRow(row: Record<string, unknown>) {
+  const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<InstagramQueueLead>;
+  return isStatusGroup(row.status ?? data.status, 'deleted');
+}
+
 async function allLeads() {
   const { data, error } = await getSupabaseClient().from(table()).select('*');
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => rowToLead(row));
+  return (data ?? []).filter((row) => !isDeletedRow(row)).map((row) => rowToLead(row));
 }
 
 function calculateSummary(leads: InstagramQueueLead[]): InstagramQueueSummary {

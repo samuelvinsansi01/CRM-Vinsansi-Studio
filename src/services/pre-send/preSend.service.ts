@@ -248,7 +248,7 @@ async function loadTemplate(lead: PreSendLead) {
   const templates = (await repositories.config.list('templates')).filter(isTemplate);
   const type = destinationToTemplateType(lead.destination);
   return templates
-    .filter((template) => template.active)
+    .filter((template) => template.active && template.status !== 'Arquivado' && template.status !== 'deleted')
     .filter((template) => template.channel === lead.channel || template.channel === 'Geral')
     .filter((template) => template.type === type)
     .filter((template) =>
@@ -288,7 +288,7 @@ async function loadActiveChips() {
 async function loadActiveInstagramProfiles() {
   return (await repositories.config.list('instagram'))
     .filter(isInstagramProfile)
-    .filter((profile) => profile.active && profile.status !== 'Arquivado' && profile.username.trim())
+    .filter((profile) => profile.active && profile.status !== 'Arquivado' && profile.status !== 'deleted' && profile.username.trim())
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 }
 

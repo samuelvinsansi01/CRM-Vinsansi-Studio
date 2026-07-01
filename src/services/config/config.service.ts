@@ -299,8 +299,9 @@ function isArchivedConfig(record: ConfigRecord) {
   return normalizeText(record.status) === 'arquivado';
 }
 
-function isInactiveConfig(record: ConfigRecord) {
-  return !record.active && !isArchivedConfig(record);
+function isDeletedConfig(record: ConfigRecord) {
+  const status = normalizeText(record.status);
+  return status === 'deleted' || status.startsWith('excluido') || status.startsWith('deletado');
 }
 
 async function selectedRecords(kind: ConfigKind, ids: string[]) {
@@ -349,7 +350,7 @@ async function assertCanRemoveTemplate(id: string) {
 
 export const configService = {
   async list(kind: ConfigKind, filters?: ConfigListFilters) {
-    return (await repositories.config.list(kind, filters)).filter((record) => !isTestConfigRecord(record));
+    return (await repositories.config.list(kind, filters)).filter((record) => !isTestConfigRecord(record) && !isDeletedConfig(record));
   },
 
   async create(kind: ConfigKind, input: CreateConfigRecordInput) {
@@ -376,6 +377,10 @@ export const configService = {
   },
 
   async remove(kind: ConfigKind, id: string) {
+    const selected = await selectedRecords(kind, [id]);
+    if (!selected.every(isArchivedConfig)) {
+      throw new Error('Excluir exige que o registro esteja arquivado.');
+    }
     if (kind === 'templates') await assertCanRemoveTemplate(id);
 
     await repositories.config.remove(kind, id);
@@ -392,8 +397,8 @@ export const configService = {
 
   async bulkArchive(kind: ConfigKind, ids: string[]) {
     const selected = await selectedRecords(kind, ids);
-    if (!selected.every((record) => record.active && !isArchivedConfig(record))) {
-      throw new Error('Arquivar exige que todos os registros selecionados estejam ativos.');
+    if (!selected.every((record) => !isArchivedConfig(record) && !isDeletedConfig(record))) {
+      throw new Error('Arquivar exige apenas registros ativos ou inativos.');
     }
     const updated = await Promise.all(selected.map((record) => repositories.config.toggleArchive(kind, record.id)));
     eventBus.emit('config:changed', { kind });
@@ -403,10 +408,10 @@ export const configService = {
 
   async bulkRestore(kind: ConfigKind, ids: string[]) {
     const selected = await selectedRecords(kind, ids);
-    if (!selected.every((record) => isArchivedConfig(record) || isInactiveConfig(record))) {
-      throw new Error('Restaurar exige apenas registros arquivados ou inativos.');
+    if (!selected.every(isArchivedConfig)) {
+      throw new Error('Restaurar exige apenas registros arquivados.');
     }
-    const updated = await Promise.all(selected.map((record) => repositories.config.update(kind, record.id, { ...record, active: true, status: 'Ativo' })));
+    const updated = await Promise.all(selected.map((record) => repositories.config.toggleArchive(kind, record.id)));
     eventBus.emit('config:changed', { kind });
     if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
     return updated;

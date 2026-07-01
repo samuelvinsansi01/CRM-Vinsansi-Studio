@@ -82,11 +82,11 @@ function idMap(key: 'normalizedPhone' | 'normalizedSite' | 'normalizedInstagram'
 
 export const mockImportRepository: ImportRepository = {
   async list(filters: ImportListFilters) {
-    return applyFilters(memoryStore, filters);
+    return applyFilters(memoryStore.filter((lead) => !isStatusGroup(lead.status, 'deleted')), filters);
   },
 
   async summary() {
-    return calculateSummary(memoryStore);
+    return calculateSummary(memoryStore.filter((lead) => !isStatusGroup(lead.status, 'deleted')));
   },
 
   async importFromJson(jsonText: string, options: ImportExecutionOptions = {}): Promise<ImportParseResult> {

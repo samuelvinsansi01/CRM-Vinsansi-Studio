@@ -12,6 +12,7 @@ export type StatusGroup =
   | 'paused'
   | 'following'
   | 'dm_opened'
+  | 'deleted'
   | 'unknown';
 
 export type CanonicalStatus =
@@ -28,6 +29,7 @@ export type CanonicalStatus =
   | 'PAUSED'
   | 'FOLLOWING'
   | 'DM_OPENED'
+  | 'DELETED'
   | 'UNKNOWN';
 
 export type StatusTone = 'neutral' | 'success' | 'warning' | 'danger' | 'primary';
@@ -118,6 +120,12 @@ const STATUS_GROUPS: Record<StatusGroup, { canonical: CanonicalStatus; label: st
     tone: 'warning',
     aliases: ['dm_opened', 'dm opened', 'dm aberta', 'dm aberto'],
   },
+  deleted: {
+    canonical: 'DELETED',
+    label: 'Excluido',
+    tone: 'neutral',
+    aliases: ['deleted', 'deletado', 'deletada', 'excluido', 'excluida', 'excluido definitivo', 'excluida definitiva', 'removed', 'soft deleted'],
+  },
   unknown: {
     canonical: 'UNKNOWN',
     label: 'Status desconhecido',
@@ -179,14 +187,14 @@ export function isStatusGroup(value: unknown, group: StatusGroup) {
   return normalizeStatusGroup(value) === group;
 }
 
-export type NormalizedPreSendStatus = 'review' | 'approved' | 'queued' | 'rejected' | 'invalid' | 'archived' | 'sent';
+export type NormalizedPreSendStatus = 'review' | 'approved' | 'queued' | 'rejected' | 'invalid' | 'archived' | 'sent' | 'deleted';
 export type NormalizedWhatsAppQueueStatus = 'queued' | 'sending' | 'sent' | 'paused' | 'error' | 'invalid';
 export type NormalizedInstagramQueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'error' | 'invalid';
-export type NormalizedBaseStatus = 'sent' | 'archived' | 'invalid' | 'error';
+export type NormalizedBaseStatus = 'sent' | 'archived' | 'invalid' | 'error' | 'deleted';
 
 export function normalizePreSendStatus(value: unknown, fallback: NormalizedPreSendStatus = 'review'): NormalizedPreSendStatus {
   const group = normalizeStatusGroup(value);
-  if (group === 'approved' || group === 'queued' || group === 'rejected' || group === 'invalid' || group === 'archived' || group === 'sent') return group;
+  if (group === 'approved' || group === 'queued' || group === 'rejected' || group === 'invalid' || group === 'archived' || group === 'sent' || group === 'deleted') return group;
   if (group === 'pending' || group === 'review' || group === 'error') return 'review';
   return fallback;
 }
@@ -207,11 +215,11 @@ export function normalizeInstagramQueueStatus(value: unknown, fallback: Normaliz
 
 export function normalizeBaseStatus(value: unknown, fallback: NormalizedBaseStatus = 'sent'): NormalizedBaseStatus {
   const group = normalizeStatusGroup(value);
-  if (group === 'sent' || group === 'archived' || group === 'invalid' || group === 'error') return group;
+  if (group === 'sent' || group === 'archived' || group === 'invalid' || group === 'error' || group === 'deleted') return group;
   return fallback;
 }
 
 export function isFinalStatus(value: unknown) {
   const group = normalizeStatusGroup(value);
-  return group === 'sent' || group === 'archived' || group === 'invalid';
+  return group === 'sent' || group === 'archived' || group === 'invalid' || group === 'deleted';
 }

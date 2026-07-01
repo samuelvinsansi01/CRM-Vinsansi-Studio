@@ -172,8 +172,8 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
       emptyMessage: 'Nenhum ramo configurado ainda.',
       metrics: [
         { icon: List, label: 'Total', tone: 'neutral', getValue: (records) => records.length },
-        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter((record) => record.active).length },
-        { icon: Archive, label: 'Inativos', tone: 'warning', getValue: (records) => records.filter((record) => !record.active).length },
+        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter((record) => record.active && !isArchivedConfig(record)).length },
+        { icon: Archive, label: 'Inativos', tone: 'warning', getValue: (records) => records.filter((record) => !record.active && !isArchivedConfig(record)).length },
       ],
       columns: [
         { key: 'name', label: 'Ramo', width: '24%' },
@@ -201,8 +201,8 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
       emptyMessage: 'Nenhum template configurado ainda.',
       metrics: [
         { icon: MessageSquare, label: 'Total', tone: 'neutral', getValue: (records) => records.length },
-        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter((record) => record.active).length },
-        { icon: Archive, label: 'Inativos', tone: 'warning', getValue: (records) => records.filter((record) => !record.active).length },
+        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter((record) => record.active && !isArchivedConfig(record)).length },
+        { icon: Archive, label: 'Inativos', tone: 'warning', getValue: (records) => records.filter((record) => !record.active && !isArchivedConfig(record)).length },
       ],
       columns: [
         { key: 'branch', label: 'Ramo', width: '22%' },
@@ -371,7 +371,7 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
       minRating: String(record.minRating),
       minReviews: String(record.minReviews),
       imageName: record.imageName,
-      active: record.active ? 'Ativo' : 'Inativo',
+      active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
     };
   }
 
@@ -385,7 +385,7 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
       message2: record.message2,
       variables: toCsv(record.variables),
       order: String(record.order),
-      active: record.active ? 'Ativo' : 'Inativo',
+      active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
     };
   }
 
@@ -411,7 +411,7 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
     blockSize: String(record.blockSize),
     intervalSeconds: String(record.intervalSeconds),
     batches: toCsv(record.batches),
-    active: record.active ? 'Ativo' : 'Inativo',
+    active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
   };
 }
 
@@ -517,8 +517,8 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
     [pageRows, recordById, selectedRows],
   );
   const selectedIds = selectedRecords.map((record) => record.id);
-  const canBulkArchive = selectedRecords.length > 0 && selectedRecords.every((record) => record.active && !isArchivedConfig(record));
-  const canBulkRestore = selectedRecords.length > 0 && selectedRecords.every((record) => isArchivedConfig(record) || !record.active);
+  const canBulkArchive = selectedRecords.length > 0 && selectedRecords.every((record) => !isArchivedConfig(record));
+  const canBulkRestore = selectedRecords.length > 0 && selectedRecords.every(isArchivedConfig);
   const canBulkRemove = selectedRecords.length > 0 && selectedRecords.every(isArchivedConfig);
   const hasBulkAction = canBulkArchive || canBulkRestore || canBulkRemove;
 
@@ -773,7 +773,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
       <ConfirmDialog
         open={deleteId !== null}
         title={`Excluir ${screen.singular}?`}
-        description="Essa acao remove definitivamente apenas registros inativos ou arquivados."
+        description="Essa acao remove definitivamente apenas registros arquivados."
         confirmLabel="Excluir"
         danger
         onClose={() => setDeleteId(null)}

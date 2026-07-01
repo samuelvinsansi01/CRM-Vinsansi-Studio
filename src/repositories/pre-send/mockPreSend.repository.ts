@@ -18,7 +18,7 @@ function matchesQueueFilter(lead: PreSendLead, filter?: PreSendQueueFilter) {
 function refreshDayCounters() {
   dayCards = dayCards.map((day) => ({
     ...day,
-    queued: leads.filter((lead) => lead.dayId === day.id && (isStatusGroup(lead.status, 'review') || isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'queued'))).length,
+    queued: leads.filter((lead) => !isStatusGroup(lead.status, 'deleted') && lead.dayId === day.id && (isStatusGroup(lead.status, 'review') || isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'queued'))).length,
   }));
 }
 
@@ -46,7 +46,7 @@ export const mockPreSendRepository: PreSendRepository = {
 
   async summary(): Promise<PreSendSummary> {
     await delay();
-    const validLeads = leads.filter((lead) => !isStatusGroup(lead.status, 'archived') && !isStatusGroup(lead.status, 'sent'));
+    const validLeads = leads.filter((lead) => !isStatusGroup(lead.status, 'deleted') && !isStatusGroup(lead.status, 'archived') && !isStatusGroup(lead.status, 'sent'));
     return {
       whatsapp: validLeads.filter((lead) => lead.channel === 'WhatsApp' && isStatusGroup(lead.status, 'approved')).length,
       instagram: validLeads.filter((lead) => lead.channel === 'Instagram' && isStatusGroup(lead.status, 'approved')).length,
@@ -57,7 +57,7 @@ export const mockPreSendRepository: PreSendRepository = {
 
   async listProfiles(channel: PreSendChannel) {
     await delay();
-    return Array.from(new Set(leads.filter((lead) => lead.channel === channel && !isStatusGroup(lead.status, 'archived') && !isStatusGroup(lead.status, 'sent')).map((lead) => lead.profile)));
+    return Array.from(new Set(leads.filter((lead) => lead.channel === channel && !isStatusGroup(lead.status, 'deleted') && !isStatusGroup(lead.status, 'archived') && !isStatusGroup(lead.status, 'sent')).map((lead) => lead.profile)));
   },
 
   async listLeads(filters: PreSendFilters) {
@@ -68,7 +68,7 @@ export const mockPreSendRepository: PreSendRepository = {
       const matchesDay = !filters.dayId || lead.dayId === filters.dayId;
       const matchesProfile = !filters.profile || lead.profile === filters.profile;
       const matchesFilter = matchesQueueFilter(lead, filters.queueFilter);
-      return matchesChannel && matchesDay && matchesProfile && matchesFilter && !isStatusGroup(lead.status, 'archived') && !isStatusGroup(lead.status, 'sent');
+      return matchesChannel && matchesDay && matchesProfile && matchesFilter && !isStatusGroup(lead.status, 'deleted') && !isStatusGroup(lead.status, 'archived') && !isStatusGroup(lead.status, 'sent');
     });
   },
 
