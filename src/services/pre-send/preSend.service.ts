@@ -276,6 +276,19 @@ function importLeadMatchesQueueFilter(lead: ImportLead, filter?: PreSendQueueFil
   return destination === 'Com site' || destination === 'Agregadores';
 }
 
+
+async function releasePreSendLinksForImports(imports: ImportLead[], channel: PreSendChannel) {
+  const sourceIds = new Set(imports.map((lead) => lead.id).filter(Boolean));
+  if (!sourceIds.size) return;
+  const existing = await repositories.preSend.listLeads({ channel, queueFilter: 'Geral' });
+  const stale = existing.filter((lead) =>
+    lead.sourceImportId &&
+    sourceIds.has(lead.sourceImportId) &&
+    (isStatusGroup(lead.status, 'review') || isStatusGroup(lead.status, 'approved')),
+  );
+  await Promise.all(stale.map((lead) => repositories.preSend.archiveLead(lead.id)));
+}
+
 async function approvedImportsForPreSend(channel: PreSendChannel, queueFilter?: PreSendQueueFilter) {
   const approved = await repositories.import.list({ status: 'approved' });
   return sortByLeadScore(approved.filter((lead) => importDestinationToChannel(lead) === channel && importLeadMatchesQueueFilter(lead, queueFilter)));
@@ -570,6 +583,7 @@ export const preSendService = {
     const settings = await settingsService.getDispatchSettings();
     const imports = await approvedImportsForPreSend(channel, queueFilter);
     if (!imports.length) throw new Error('Nenhum lead aprovado disponivel no Inicio para este canal/filtro.');
+    await releasePreSendLinksForImports(imports, channel);
 
     const [firstChip, firstInstagramProfile] = await Promise.all([
       loadActiveChips().then((chips) => chips[0]),
