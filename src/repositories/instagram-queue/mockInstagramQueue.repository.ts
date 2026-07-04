@@ -142,7 +142,7 @@ export const mockInstagramQueueRepository: InstagramQueueRepository = {
       const lead: InstagramQueueLead = {
         ...input,
         id,
-        lead_id: input.sourcePreSendId ?? id,
+        lead_id: input.lead_id ?? '',
         order: batch.leads.length + 1,
         position: batch.leads.length + 1,
         company_name: input.company,

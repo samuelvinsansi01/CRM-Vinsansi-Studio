@@ -35,7 +35,7 @@ function rowToLead(row: Record<string, unknown>): InstagramQueueLead {
     ...(row.block_size ? { block_size: Number(row.block_size) } : {}),
     ...(row.batch_limit ? { batch_limit: Number(row.batch_limit) } : {}),
     id: String(row.id),
-    lead_id: String(row.lead_id ?? data.lead_id ?? data.sourcePreSendId ?? row.id),
+    lead_id: String(row.lead_id ?? data.lead_id ?? ''),
     sourcePreSendId: String(data.sourcePreSendId ?? row.lead_id ?? ''),
     order: position,
     position,
@@ -177,7 +177,7 @@ function buildLead(input: CreateInstagramQueueLeadInput, batch: InstagramQueueBa
   return {
     ...input,
     id,
-    lead_id: input.sourcePreSendId ?? id,
+    lead_id: input.lead_id ?? '',
     order: batch.leads.length + 1,
     position: batch.leads.length + 1,
     company_name: input.company,
@@ -208,7 +208,7 @@ function dbPayload(lead: InstagramQueueLead, userId: string) {
   return {
     id: lead.id,
     user_id: userId,
-    lead_id: lead.lead_id,
+    lead_id: lead.lead_id || null,
     scheduled_date: lead.scheduled_date,
     status: lead.status,
     position: lead.position,

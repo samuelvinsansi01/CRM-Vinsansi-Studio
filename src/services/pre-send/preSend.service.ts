@@ -502,6 +502,7 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
       if (!selectedProfile) throw new Error('Nenhum perfil Instagram ativo configurado.');
 
       return {
+        lead_id: lead.sourceImportId ?? '',
         sourcePreSendId: lead.id,
         company: lead.company,
         instagram,

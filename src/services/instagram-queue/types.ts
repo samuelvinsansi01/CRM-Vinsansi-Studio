@@ -73,6 +73,7 @@ export type CreateInstagramQueueLeadInput = Omit<
   | 'created_at'
   | 'updated_at'
 > & {
+  lead_id?: string;
   batchLimit?: number;
   scheduled_date?: string;
   template_id?: string;
