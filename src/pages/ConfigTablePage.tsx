@@ -205,7 +205,7 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
       title: 'Templates',
       singular: 'template',
       action: 'Adicionar novo template',
-      table: 'Templates por ramo e tipo',
+      table: 'Templates por ramo e canal',
       emptyMessage: 'Nenhum template configurado ainda.',
       metrics: [
         { icon: MessageSquare, label: 'Total', tone: 'neutral', getValue: (records) => records.length },

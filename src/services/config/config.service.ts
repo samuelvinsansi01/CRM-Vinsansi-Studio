@@ -76,6 +76,8 @@ function statusFromActive(active: boolean): ConfigStatus {
   return active ? 'Ativo' : 'Inativo';
 }
 
+const TEMPLATE_LIMIT_PER_BRANCH_CHANNEL = 10;
+
 function splitList(value: unknown) {
   const rawItems = Array.isArray(value) ? value : String(value ?? '').split(/[,;\n]/);
   const seen = new Set<string>();
@@ -334,18 +336,17 @@ async function normalizeByKind(kind: ConfigKind, input: CreateConfigRecordInput 
 
 async function assertTemplateContract(template: TemplateConfigRecord, editingId?: string) {
   const templates = (await repositories.config.list('templates')).filter(isTemplate);
-  const duplicate = templates.find(
+  const activeGroupCount = templates.filter(
     (item) =>
       item.id !== editingId &&
       item.status !== 'deleted' &&
       !isArchivedConfig(item) &&
       item.branchId === template.branchId &&
-      item.channel === template.channel &&
-      item.type === template.type,
-  );
+      item.channel === template.channel,
+  ).length;
 
-  if (duplicate) {
-    throw new Error('Ja existe um template para este ramo, canal e tipo. Edite o template existente.');
+  if (activeGroupCount >= TEMPLATE_LIMIT_PER_BRANCH_CHANNEL) {
+    throw new Error(`Limite de ${TEMPLATE_LIMIT_PER_BRANCH_CHANNEL} templates para este ramo e canal atingido.`);
   }
 }
 

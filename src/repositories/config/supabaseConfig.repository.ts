@@ -37,6 +37,8 @@ function statusFromActive(active: boolean): ConfigStatus {
   return active ? 'Ativo' : 'Inativo';
 }
 
+const TEMPLATE_LIMIT_PER_BRANCH_CHANNEL = 10;
+
 function toBoolean(value: unknown, fallback = true) {
   if (value === undefined || value === null || value === '') return fallback;
   if (typeof value === 'boolean') return value;
@@ -359,20 +361,19 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     .from(table)
     .select(TEMPLATE_SELECT)
     .eq('user_id', userId)
-    .eq('template_type', record.type)
     .eq('channel', record.channel)
     .limit(50);
   naturalQuery = branchId ? naturalQuery.eq('branch_id', branchId) : naturalQuery.eq('branch_name', branch?.name || record.branchName);
   const naturalResponse = await naturalQuery;
   if (naturalResponse.error) throw new Error(naturalResponse.error.message);
-  const existingByNatural = ((naturalResponse.data ?? []) as unknown as Record<string, unknown>[]).find((row) => {
+  const activeGroupCount = ((naturalResponse.data ?? []) as unknown as Record<string, unknown>[]).filter((row) => {
     const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Record<string, unknown>;
     const status = row.status ?? data.status;
     return String(row.id) !== String(existingById?.id) && !isDeletedStatus(status) && normalizeComparable(status) !== 'arquivado';
-  }) ?? null;
+  }).length;
 
-  if (existingByNatural) {
-    throw new Error('Ja existe um template para este ramo, canal e tipo. Edite o template existente.');
+  if (activeGroupCount >= TEMPLATE_LIMIT_PER_BRANCH_CHANNEL) {
+    throw new Error(`Limite de ${TEMPLATE_LIMIT_PER_BRANCH_CHANNEL} templates para este ramo e canal atingido.`);
   }
 
   const targetId = String(existingById?.id ?? record.id ?? createUuid());

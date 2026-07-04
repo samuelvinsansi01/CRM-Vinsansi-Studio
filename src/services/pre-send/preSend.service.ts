@@ -78,11 +78,6 @@ function isInstagramProfile(record: ConfigRecord): record is InstagramConfigReco
   return record.kind === 'instagram';
 }
 
-function timestampValue(value: unknown) {
-  const time = Date.parse(String(value ?? ''));
-  return Number.isFinite(time) ? time : 0;
-}
-
 function channelLimit(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
   return channel === 'WhatsApp' ? settings.whatsapp.dailyLimit : settings.instagram.dailyLimit;
 }
@@ -270,11 +265,6 @@ function importToPreSendLead(
   };
 }
 
-function destinationToTemplateType(destination: PreSendLead['destination']) {
-  if (destination === 'Com site' || destination === 'Agregadores') return 'com-site';
-  return 'sem-site';
-}
-
 function importLeadMatchesQueueFilter(lead: ImportLead, filter?: PreSendQueueFilter) {
   if (!filter || filter === 'Geral') return true;
   const destination = importFinalDestination(lead);
@@ -302,17 +292,17 @@ async function approvedImportsForPreSend(channel: PreSendChannel, queueFilter?: 
 
 async function loadTemplate(lead: PreSendLead) {
   const templates = (await repositories.config.list('templates')).filter(isTemplate);
-  const type = destinationToTemplateType(lead.destination);
-  return templates
+  const candidates = templates
     .filter((template) => template.active && template.status !== 'Arquivado' && template.status !== 'deleted')
     .filter((template) => template.channel === lead.channel || template.channel === 'Geral')
-    .filter((template) => template.type === type)
     .filter((template) =>
       (lead.branch_id && template.branchId === lead.branch_id) ||
       normalize(template.branchName) === normalize(lead.branch) ||
       normalize(template.branchId) === normalize(lead.branch),
-    )
-    .sort((a, b) => timestampValue(b.updatedAt || b.createdAt) - timestampValue(a.updatedAt || a.createdAt))[0];
+    );
+
+  if (!candidates.length) return undefined;
+  return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 async function loadBranches() {
@@ -328,7 +318,7 @@ function branchImageForLead(lead: PreSendLead, branches: BranchConfigRecord[]) {
 
 function assertTemplate(lead: PreSendLead, template: TemplateConfigRecord | undefined): asserts template is TemplateConfigRecord {
   if (!template || !template.message1.trim()) {
-    throw new Error(`Template valido ausente para ${lead.channel} / ${lead.branch} / ${lead.destination}.`);
+    throw new Error(`Template valido ausente para ${lead.channel} / ${lead.branch}.`);
   }
 }
 
