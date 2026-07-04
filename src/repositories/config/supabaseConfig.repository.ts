@@ -14,6 +14,25 @@ function tableForKind(kind: ConfigKind) {
   return tables.templates;
 }
 
+const TEMPLATE_SELECT = [
+  'id',
+  'user_id',
+  'branch_id',
+  'ramo_id',
+  'branch_name',
+  'template_type',
+  'type',
+  'channel',
+  'part_1',
+  'part_2',
+  'active',
+  'status',
+  'kind',
+  'data',
+  'created_at',
+  'updated_at',
+].join(',');
+
 function statusFromActive(active: boolean): ConfigStatus {
   return active ? 'Ativo' : 'Inativo';
 }
@@ -167,9 +186,16 @@ function normalizeTemplateType(value: unknown): TemplateType {
   return 'sem-site';
 }
 
+function normalizeTemplateChannel(value: unknown): TemplateConfigRecord['channel'] {
+  const normalized = normalizeComparable(value);
+  if (normalized.includes('instagram')) return 'Instagram';
+  if (normalized.includes('geral')) return 'Geral';
+  return 'WhatsApp';
+}
+
 function resolveTemplateBranch(row: Record<string, unknown>, data: Partial<TemplateConfigRecord>, branches: BranchConfigRecord[]) {
-  const branchId = textFrom(row.branch_id, data.branchId);
-  const branchName = textFrom(row.branch_name, data.branchName);
+  const branchId = textFrom(row.branch_id, row.branchId, row.ramo_id, row.ramoId, data.branchId);
+  const branchName = textFrom(row.branch_name, row.branchName, row.ramo, data.branchName);
   const match =
     branches.find((branch) => branch.id === branchId) ??
     branches.find((branch) => normalizeComparable(branch.name) === normalizeComparable(branchName));
@@ -189,19 +215,18 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
   const message1 = String(row.part_1 ?? row.message1 ?? data.message1 ?? '');
   const message2 = String(row.part_2 ?? row.message2 ?? data.message2 ?? '');
   const branch = resolveTemplateBranch(row, data, branches);
+  const channel = normalizeTemplateChannel(row.channel ?? data.channel);
+  const type = normalizeTemplateType(row.template_type ?? row.type ?? data.type);
   return {
     id: String(row.id),
     kind: 'templates',
-    name: String(row.name ?? data.name ?? 'Template'),
     branchId: branch.branchId,
     branchName: branch.branchName,
-    channel: (row.channel ?? data.channel ?? 'WhatsApp') as TemplateConfigRecord['channel'],
-    type: normalizeTemplateType(row.template_type ?? row.type ?? data.type),
+    channel,
+    type,
     message1,
     message2,
     preview: String(data.preview ?? message1),
-    variables: Array.isArray(row.variables) ? row.variables.map(String) : Array.isArray(data.variables) ? data.variables : ['{EMPRESA}'],
-    order: Number(row.order ?? data.order ?? 1),
     archivedPreviousActive: (data as Record<string, unknown>).archivedPreviousActive,
     active,
     status: status as ConfigStatus,
@@ -282,9 +307,9 @@ function rowToInstagramProfile(row: Record<string, unknown>): InstagramConfigRec
 
 async function listTemplates() {
   const branches = await listBranches();
-  const { data, error } = await getSupabaseClient().from(tableForKind('templates')).select('*');
+  const { data, error } = await getSupabaseClient().from(tableForKind('templates')).select(TEMPLATE_SELECT);
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => rowToTemplate(row, branches));
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => rowToTemplate(row, branches));
 }
 
 async function listBranches() {
@@ -313,6 +338,14 @@ async function findRowById(table: string, id: unknown) {
   return data as Record<string, unknown> | null;
 }
 
+async function findTemplateRowById(table: string, id: unknown) {
+  const text = String(id ?? '').trim();
+  if (!text) return null;
+  const { data, error } = await getSupabaseClient().from(table).select(TEMPLATE_SELECT).eq('id', text).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as Record<string, unknown> | null;
+}
+
 async function upsertTemplate(record: TemplateConfigRecord) {
   const userId = await getCurrentUserId();
   const table = tableForKind('templates');
@@ -321,32 +354,46 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     branches.find((item) => item.id === record.branchId) ??
     branches.find((item) => normalizeComparable(item.name) === normalizeComparable(record.branchName));
   const branchId = branchIdOrNull(branch?.id ?? record.branchId);
-  const existingById = await findRowById(table, record.id);
-  let existingByNatural: Record<string, unknown> | null = null;
+  const existingById = await findTemplateRowById(table, record.id);
+  let naturalQuery = getSupabaseClient()
+    .from(table)
+    .select(TEMPLATE_SELECT)
+    .eq('user_id', userId)
+    .eq('template_type', record.type)
+    .eq('channel', record.channel)
+    .limit(50);
+  naturalQuery = branchId ? naturalQuery.eq('branch_id', branchId) : naturalQuery.eq('branch_name', branch?.name || record.branchName);
+  const naturalResponse = await naturalQuery;
+  if (naturalResponse.error) throw new Error(naturalResponse.error.message);
+  const existingByNatural = ((naturalResponse.data ?? []) as unknown as Record<string, unknown>[]).find((row) => {
+    const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Record<string, unknown>;
+    const status = row.status ?? data.status;
+    return String(row.id) !== String(existingById?.id) && !isDeletedStatus(status) && normalizeComparable(status) !== 'arquivado';
+  }) ?? null;
 
-  if (record.name.trim()) {
-    let query = getSupabaseClient()
-      .from(table)
-      .select('*')
-      .eq('user_id', userId)
-      .eq('name', record.name)
-      .eq('template_type', record.type)
-      .eq('channel', record.channel);
-    query = branchId ? query.eq('branch_id', branchId) : query.eq('branch_name', branch?.name || record.branchName);
-    const response = await query.maybeSingle();
-    if (response.error) throw new Error(response.error.message);
-    existingByNatural = response.data as Record<string, unknown> | null;
+  if (existingByNatural) {
+    throw new Error('Ja existe um template para este ramo, canal e tipo. Edite o template existente.');
   }
 
-  if (existingById && existingByNatural && String(existingById.id) !== String(existingByNatural.id)) {
-    throw new Error('Ja existe um template com este nome, ramo, canal e tipo.');
-  }
-
-  const targetId = String(existingByNatural?.id ?? existingById?.id ?? record.id ?? createUuid());
+  const targetId = String(existingById?.id ?? record.id ?? createUuid());
+  const dataPayload: Record<string, unknown> = {
+    id: targetId,
+    kind: 'templates',
+    branchId: branch?.id ?? record.branchId,
+    branchName: branch?.name ?? record.branchName,
+    channel: record.channel,
+    type: record.type,
+    message1: record.message1,
+    message2: record.message2,
+    preview: record.preview,
+    active: record.active,
+    status: record.status,
+    createdAt: record.createdAt,
+    updatedAt: nowIso(),
+  };
   const payload = {
     id: targetId,
     user_id: userId,
-    name: record.name,
     branch_id: branchId,
     ramo_id: null,
     branch_name: branch?.name || record.branchName,
@@ -355,18 +402,17 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     channel: record.channel,
     part_1: record.message1,
     part_2: record.message2,
-    variables: record.variables,
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
     kind: 'templates',
-    data: { ...record, branchId: branch?.id ?? record.branchId, branchName: branch?.name ?? record.branchName },
+    data: dataPayload,
     updated_at: nowIso(),
   };
-  const response = existingByNatural || existingById
-    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select('*').single()
-    : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
+  const response = existingById
+    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select(TEMPLATE_SELECT).single()
+    : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select(TEMPLATE_SELECT).single();
   if (response.error) throw new Error(response.error.message);
-  return rowToTemplate(response.data ?? payload, branches);
+  return rowToTemplate((response.data ?? payload) as unknown as Record<string, unknown>, branches);
 }
 
 async function upsertChip(record: ChipConfigRecord) {

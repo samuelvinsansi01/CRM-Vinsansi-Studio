@@ -1,11 +1,13 @@
 import { defaultImportSettings } from '../../services/import-settings/importSettings.seed';
 import type { ImportSettings, UpdateImportSettingsInput } from '../../services/import-settings/types';
+import type { ExtensionRuntimeConfig } from '../../services/platform-config/types';
 import { DEFAULT_ACTIVE_DAYS, defaultDispatchSettings } from '../../services/settings/settings.seed';
 import type { DispatchSettings, UpdateDispatchSettingsInput } from '../../services/settings/types';
 import type { SettingsRepository } from './settings.repository';
 
 const IMPORT_STORAGE_KEY = 'lead-certo:import-settings:v1';
 const DISPATCH_STORAGE_KEY = 'lead-certo:dispatch-settings:v1';
+const EXTENSION_RUNTIME_STORAGE_KEY = 'lead-certo:extension-runtime:v1';
 
 function isBrowser() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -188,5 +190,14 @@ export const mockSettingsRepository: SettingsRepository = {
   async resetDispatchSettings() {
     writeJson(DISPATCH_STORAGE_KEY, defaultDispatchSettings);
     return defaultDispatchSettings;
+  },
+
+  async getExtensionRuntimeConfig() {
+    return readJson<ExtensionRuntimeConfig | null>(EXTENSION_RUNTIME_STORAGE_KEY, null, (raw) => (raw && typeof raw === 'object' ? raw as ExtensionRuntimeConfig : null));
+  },
+
+  async updateExtensionRuntimeConfig(input) {
+    writeJson(EXTENSION_RUNTIME_STORAGE_KEY, input);
+    return input;
   },
 };

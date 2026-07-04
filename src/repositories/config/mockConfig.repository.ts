@@ -89,6 +89,10 @@ function applyFilters(records: ConfigRecord[], filters?: ConfigListFilters) {
 
 function sortRecords(records: ConfigRecord[]) {
   return [...records].sort((a, b) => {
+    if (a.kind === 'templates' && b.kind === 'templates') {
+      return [a.branchName, a.channel, a.type].join(' ').localeCompare([b.branchName, b.channel, b.type].join(' '), 'pt-BR');
+    }
+
     const orderA = typeof a.order === 'number' ? a.order : Number.MAX_SAFE_INTEGER;
     const orderB = typeof b.order === 'number' ? b.order : Number.MAX_SAFE_INTEGER;
     if (orderA !== orderB) return orderA - orderB;

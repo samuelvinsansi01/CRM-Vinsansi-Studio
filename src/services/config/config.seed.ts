@@ -24,7 +24,6 @@ export const DEFAULT_CHIP_INTERVAL_SECONDS = 120;
 
 export const TEMPLATE_TYPES = ['sem-site', 'com-site'] as const;
 export const TEMPLATE_CHANNELS = ['WhatsApp', 'Instagram', 'Geral'] as const;
-export const MAX_TEMPLATES_PER_BRANCH_TYPE = 10;
 
 export const DEFAULT_TEMPLATE_MESSAGE_1 = 'Ola, {EMPRESA}! Tudo bem?';
 export const DEFAULT_TEMPLATE_MESSAGE_2 = 'Passando para conversar sobre uma oportunidade para sua empresa.';

@@ -9,6 +9,7 @@ import { isValidInstagram, normalizeInstagramUsername } from '../instagram/insta
 import { sortByLeadScore } from '../lead-score/leadScore.service';
 import type { ImportLead } from '../import/types';
 import type { CreateInstagramQueueLeadInput } from '../instagram-queue/types';
+import type { CreateBaseLeadInput } from '../base/types';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { assertTransition } from '../state-machine';
 import type { CreateWhatsAppQueueLeadInput } from '../whatsapp-queue/types';
@@ -75,6 +76,11 @@ function isTemplate(record: ConfigRecord): record is TemplateConfigRecord {
 
 function isInstagramProfile(record: ConfigRecord): record is InstagramConfigRecord {
   return record.kind === 'instagram';
+}
+
+function timestampValue(value: unknown) {
+  const time = Date.parse(String(value ?? ''));
+  return Number.isFinite(time) ? time : 0;
 }
 
 function channelLimit(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
@@ -306,7 +312,7 @@ async function loadTemplate(lead: PreSendLead) {
       normalize(template.branchName) === normalize(lead.branch) ||
       normalize(template.branchId) === normalize(lead.branch),
     )
-    .sort((a, b) => a.order - b.order)[0];
+    .sort((a, b) => timestampValue(b.updatedAt || b.createdAt) - timestampValue(a.updatedAt || a.createdAt))[0];
 }
 
 async function loadBranches() {
@@ -534,6 +540,50 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
   );
 }
 
+function baseDestinationFromPreSend(destination: PreSendLead['destination']): CreateBaseLeadInput['destination'] {
+  if (destination === 'Agregadores') return 'Agregador';
+  if (destination === 'Com site') return 'Com site';
+  if (destination === 'Instagram') return 'Instagram';
+  return 'WhatsApp';
+}
+
+function preSendLeadToBaseInput(lead: PreSendLead, sentAt: string, reason: string): CreateBaseLeadInput {
+  return {
+    sourceLeadId: lead.sourceImportId,
+    company: lead.company,
+    branch: lead.branch,
+    branch_id: lead.branch_id,
+    branch_slug: lead.branch_slug,
+    state: lead.state ?? '',
+    city: lead.city ?? '',
+    phone: lead.phone ?? '',
+    site: lead.site ?? '',
+    instagram: lead.instagram_url ?? lead.instagram ?? '',
+    mapsUrl: lead.mapsUrl ?? '',
+    origin: lead.channel,
+    destination: baseDestinationFromPreSend(lead.destination),
+    original_destination: lead.original_destination ?? lead.destination,
+    destination_override: lead.destination_override,
+    send_instagram: lead.send_instagram,
+    instagram_override_reason: lead.instagram_override_reason,
+    override_by: lead.override_by,
+    override_at: lead.override_at,
+    status: 'sent',
+    sentAt,
+    template: '',
+    chipOrProfile: lead.profile,
+    notes: reason,
+    history: [
+      {
+        id: `history-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        date: sentAt.slice(0, 10),
+        title: 'Marcado como ja enviado',
+        description: reason,
+      },
+    ],
+  };
+}
+
 export const preSendService = {
   async listDayCards() {
     return scheduledDayCards();
@@ -702,6 +752,63 @@ export const preSendService = {
     selected.forEach((lead) => assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'sent', action: 'mark_sent' }));
     await repositories.preSend.markSent(ids);
     eventBus.emit('pre-send:changed', { action: 'sent' });
+  },
+
+  async markAlreadySent(ids: string[], reason = 'Marcado manualmente como ja enviado no Pre-Envio.') {
+    const uniqueIds = Array.from(new Set(ids));
+    if (!uniqueIds.length) throw new Error('Selecione pelo menos um lead.');
+    const allLeads = await listAllLeads();
+    const selected = sortByLeadScore(allLeads.filter((lead) => uniqueIds.includes(lead.id)));
+    if (!selected.length) throw new Error('Nenhum lead encontrado no pre-envio.');
+    selected.forEach((lead) => assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'sent', action: 'mark_sent' }));
+
+    const sentAt = new Date().toISOString();
+
+    for (const lead of selected) {
+      await repositories.base.upsertSent(preSendLeadToBaseInput(lead, sentAt, reason));
+      if (lead.sourceImportId) {
+        await repositories.import.update(lead.sourceImportId, {
+          status: 'sent',
+          motivo: reason,
+          destino: lead.destination,
+          destination: lead.destination,
+          original_destination: lead.original_destination ?? lead.destination,
+          destination_override: lead.destination_override,
+          send_instagram: lead.send_instagram,
+          instagram_url: lead.instagram_url,
+          instagram_override_reason: lead.instagram_override_reason,
+          override_by: lead.override_by,
+          override_at: lead.override_at,
+        });
+      }
+      await repositories.events.append({
+        source: 'pre-send',
+        action: 'manual_mark_sent',
+        channel: lead.channel === 'Instagram' ? 'instagram' : 'whatsapp',
+        leadId: lead.sourceImportId ?? lead.id,
+        status: 'sent',
+        message: reason,
+        metadata: {
+          pre_send_id: lead.id,
+          company_name: lead.company,
+          normalized_phone: normalizePhone(lead.phone),
+          instagram_url: lead.instagram_url ?? lead.instagram,
+          website: lead.site,
+          maps_url: lead.mapsUrl,
+          destination: lead.destination,
+          original_destination: lead.original_destination,
+          destination_override: lead.destination_override,
+          manual: true,
+          sent_at: sentAt,
+        },
+      });
+    }
+
+    await repositories.preSend.markSent(selected.map((lead) => lead.id));
+    eventBus.emit('pre-send:changed', { action: 'sent' });
+    eventBus.emit('base:changed', { action: 'update' });
+    eventBus.emit('import:changed', { source: 'update' });
+    return selected.length;
   },
 
   async validateLead(id: string) {

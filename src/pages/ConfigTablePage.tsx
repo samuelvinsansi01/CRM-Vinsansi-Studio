@@ -160,6 +160,14 @@ function branchDisplayName(branches: BranchConfigRecord[], branchId?: string, fa
   return match?.name ?? fallback ?? '-';
 }
 
+function configRecordLabel(record: ConfigRecord | null | undefined, branches: BranchConfigRecord[]) {
+  if (!record) return '';
+  if (isTemplate(record)) {
+    return `${branchDisplayName(branches, record.branchId, record.branchName)} - ${record.channel} - ${formatTemplateType(record.type)}`;
+  }
+  return 'name' in record && record.name ? String(record.name) : record.id;
+}
+
 function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDefinition {
   const branchSelectOptions = branchOptions(branches);
 
@@ -208,18 +216,15 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
         { key: 'branch', label: 'Ramo', width: '22%' },
         { key: 'channel', label: 'Canal', width: '14%' },
         { key: 'type', label: 'Tipo', width: '14%' },
-        { key: 'template', label: 'Template', width: '18%' },
+        { key: 'messages', label: 'Mensagens', width: '30%' },
         { key: 'status', label: 'Status', width: '10%' },
       ],
       fields: [
-        { key: 'name', label: 'Nome', placeholder: 'Template 01' },
         { key: 'branchId', label: 'Ramo', type: 'select', options: branchSelectOptions },
         { key: 'channel', label: 'Canal', type: 'select', options: templateChannelOptions },
         { key: 'type', label: 'Tipo', type: 'select', options: templateTypeOptions },
-        { key: 'order', label: 'Ordem do template', placeholder: '1' },
         { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1 },
         { key: 'message2', label: 'Mensagem 2', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_2 },
-        { key: 'variables', label: 'Variaveis', placeholder: '{EMPRESA}' },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
       ],
     };
@@ -321,14 +326,11 @@ function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[]): Reco
 
   if (kind === 'templates') {
     return {
-      name: '',
       branchId: branches[0]?.id ?? '',
       channel: 'WhatsApp',
       type: 'sem-site',
       message1: DEFAULT_TEMPLATE_MESSAGE_1,
       message2: DEFAULT_TEMPLATE_MESSAGE_2,
-      variables: '{EMPRESA}',
-      order: '1',
       active: 'Ativo',
     };
   }
@@ -377,14 +379,11 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
 
   if (isTemplate(record)) {
     return {
-      name: record.name,
       branchId: record.branchId,
       channel: record.channel,
       type: record.type,
       message1: record.message1,
       message2: record.message2,
-      variables: toCsv(record.variables),
-      order: String(record.order),
       active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
     };
   }
@@ -454,7 +453,7 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
       branch: branchDisplayName(branches, record.branchId, record.branchName),
       channel: record.channel,
       type: formatTemplateType(record.type),
-      template: record.name || `Template ${record.order}`,
+      messages: [previewMessage(record.message1), record.message2 ? previewMessage(record.message2) : ''].filter(Boolean).join(' / '),
       status: statusTag(record),
     }));
   }
@@ -656,7 +655,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
     }
   };
 
-  const selectedDeleteRow = deleteId ? recordById.get(deleteId) : null;
+  const selectedDeleteRecord = deleteId ? recordById.get(deleteId) : null;
   const editingRecord = editingId ? recordById.get(editingId) : undefined;
 
   return (
@@ -779,7 +778,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
         onClose={() => setDeleteId(null)}
         onConfirm={confirmDelete}
       >
-        {selectedDeleteRow ? <strong>{String(selectedDeleteRow.name ?? selectedDeleteRow.id)}</strong> : null}
+        {selectedDeleteRecord ? <strong>{configRecordLabel(selectedDeleteRecord, branches)}</strong> : null}
       </ConfirmDialog>
 
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />

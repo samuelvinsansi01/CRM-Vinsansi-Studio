@@ -21,7 +21,7 @@ import { usePreSend, usePreSendQueue } from '../hooks/usePreSend';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
 import { permissionsFor } from '../services/permissions';
 import type { PreSendChannel, PreSendDayCard, PreSendLead, PreSendQueueFilter } from '../services/pre-send/types';
-import { statusLabel, statusTone } from '../services/status/status.mapper';
+import { normalizeStatusGroup, statusLabel, statusTone } from '../services/status/status.mapper';
 
 type PreSendForm = {
   company: string;
@@ -45,6 +45,7 @@ type QueueTableRow = Record<string, ReactNode> & {
 };
 
 const queueFilterOptions: PreSendQueueFilter[] = ['Geral', 'WhatsApp', 'Com site + Agregadores'];
+const defaultManualSentReason = 'Marcado manualmente como ja enviado no Pre-Envio.';
 
 function silentLink(label: string, href?: string) {
   if (!href) return label;
@@ -85,6 +86,10 @@ function toForm(lead: PreSendLead): PreSendForm {
   };
 }
 
+function canMarkAlreadySent(lead: PreSendLead) {
+  return ['review', 'approved', 'pending', 'rejected', 'invalid'].includes(normalizeStatusGroup(lead.status));
+}
+
 function daySelectionKey(dayId: string) {
   return dayId.replace(/^whatsapp-/, '').replace(/^instagram-/, '');
 }
@@ -113,6 +118,7 @@ function ValidationQueue({
   moveApprovedImportsToQueue,
   validateLead,
   archiveLead,
+  markAlreadySent,
   updateLead,
   onScopeChange,
 }: {
@@ -125,6 +131,7 @@ function ValidationQueue({
   moveApprovedImportsToQueue: (input: { channel: PreSendChannel; dayId: string; profile?: string; queueFilter?: PreSendQueueFilter }) => Promise<number>;
   validateLead: (id: string) => Promise<void>;
   archiveLead: (id: string) => Promise<void>;
+  markAlreadySent: (ids: string[], reason?: string) => Promise<number>;
   updateLead: (id: string, input: Partial<PreSendLead>) => Promise<void>;
   onScopeChange?: (scope: { profile: string; queueFilter: PreSendQueueFilter }) => void;
 }) {
@@ -138,6 +145,8 @@ function ValidationQueue({
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
   const [leadForm, setLeadForm] = useState<PreSendForm | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<PreSendLead | null>(null);
+  const [sentTarget, setSentTarget] = useState<PreSendLead | null>(null);
+  const [sentReason, setSentReason] = useState(defaultManualSentReason);
 
   const { profiles, leads, loading, error } = usePreSendQueue(channel, activeDayId, activeProfile, queueFilter, refreshToken);
 
@@ -258,6 +267,16 @@ function ValidationQueue({
       return;
     }
 
+    if (action === 'sent') {
+      if (!canMarkAlreadySent(lead)) {
+        onToast({ title: 'Acao bloqueada', description: 'Este lead nao pode ser marcado como enviado neste estado.', tone: 'warning' });
+        return;
+      }
+      setSentTarget(lead);
+      setSentReason(defaultManualSentReason);
+      return;
+    }
+
     if (action === 'approve') {
       if (!permissionsFor('pre-send', lead.status).canApprove()) {
         onToast({ title: 'Acao bloqueada', description: 'Este lead nao pode ser validado neste estado.', tone: 'warning' });
@@ -327,6 +346,20 @@ function ValidationQueue({
     }
   };
 
+  const confirmMarkAlreadySent = async () => {
+    if (!sentTarget) return;
+
+    try {
+      const marked = await markAlreadySent([sentTarget.id], sentReason.trim() || defaultManualSentReason);
+      setSentTarget(null);
+      setSentReason(defaultManualSentReason);
+      refreshQueue();
+      onToast({ title: 'Lead marcado como enviado', description: `${marked} lead(s) removido(s) do fluxo ativo.`, tone: 'success' });
+    } catch (err) {
+      onToast({ title: 'Erro ao marcar como enviado', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
   return (
     <div className="validation-list">
       <div className="validation-list__header">
@@ -357,6 +390,7 @@ function ValidationQueue({
             return [
               'view',
               ...(permissions.canApprove() ? ['approve' as TableAction] : []),
+              ...(canMarkAlreadySent(lead) ? ['sent' as TableAction] : []),
               ...(permissions.canArchive() ? ['archive' as TableAction] : []),
             ];
           }}
@@ -426,6 +460,19 @@ function ValidationQueue({
         onConfirm={confirmArchive}
         onClose={() => setArchiveTarget(null)}
       />
+      <ConfirmDialog
+        open={Boolean(sentTarget)}
+        title="Marcar como ja enviado?"
+        description="O lead sera enviado para a Base Permanente, registrado em sent_contacts e removido do fluxo ativo."
+        confirmLabel="Marcar como enviado"
+        onConfirm={confirmMarkAlreadySent}
+        onClose={() => {
+          setSentTarget(null);
+          setSentReason(defaultManualSentReason);
+        }}
+      >
+        <Field label="Motivo" value={sentReason} onChange={setSentReason} />
+      </ConfirmDialog>
     </div>
   );
 }
@@ -435,7 +482,7 @@ export function PreSendPage() {
   const [whatsappScope, setWhatsAppScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [instagramScope, setInstagramScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const { dayCards, summary, loading, error, defaultDayId, refresh, moveToQueue, moveDayToQueue, moveInstagramDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, archiveLead, updateLead } = usePreSend();
+  const { dayCards, summary, loading, error, defaultDayId, refresh, moveToQueue, moveDayToQueue, moveInstagramDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, archiveLead, markAlreadySent, updateLead } = usePreSend();
 
   useEffect(() => {
     const defaultKey = daySelectionKey(defaultDayId);
@@ -531,6 +578,7 @@ export function PreSendPage() {
             moveApprovedImportsToQueue={moveApprovedImportsToQueue}
             validateLead={validateLead}
             archiveLead={archiveLead}
+            markAlreadySent={markAlreadySent}
             updateLead={updateLead}
             onScopeChange={setWhatsAppScope}
           />
@@ -546,6 +594,7 @@ export function PreSendPage() {
             moveApprovedImportsToQueue={moveApprovedImportsToQueue}
             validateLead={validateLead}
             archiveLead={archiveLead}
+            markAlreadySent={markAlreadySent}
             updateLead={updateLead}
             onScopeChange={setInstagramScope}
           />

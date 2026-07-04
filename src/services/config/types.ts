@@ -30,7 +30,6 @@ export type BranchConfigRecord = ConfigBaseRecord & {
 
 export type TemplateConfigRecord = ConfigBaseRecord & {
   kind: 'templates';
-  name: string;
   branchId: string;
   branchName: string;
   channel: TemplateChannel;
@@ -38,8 +37,6 @@ export type TemplateConfigRecord = ConfigBaseRecord & {
   message1: string;
   message2: string;
   preview: string;
-  variables: string[];
-  order: number;
 };
 
 export type ChipConfigRecord = ConfigBaseRecord & {

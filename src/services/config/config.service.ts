@@ -1,12 +1,12 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
+import { platformConfigService } from '../platform-config/platformConfig.service';
 import { branchSlug, normalizeBranchId } from './branchIdentity';
 import {
   DEFAULT_BRANCH_MIN_RATING,
   DEFAULT_BRANCH_MIN_REVIEWS,
   DEFAULT_TEMPLATE_MESSAGE_1,
   DEFAULT_TEMPLATE_MESSAGE_2,
-  MAX_TEMPLATES_PER_BRANCH_TYPE,
   MOVEIS_PLANEJADOS_KEYWORDS,
 } from './config.seed';
 import { chipLevelDefaults } from './chipOperational';
@@ -93,14 +93,22 @@ function splitList(value: unknown) {
 }
 
 function isTestConfigRecord(record: ConfigRecord) {
+  const displayName =
+    record.kind === 'branches' || record.kind === 'chips' || record.kind === 'instagram'
+      ? record.name
+      : '';
   const source = [
     record.id,
-    record.name,
+    displayName,
     'slug' in record ? record.slug : '',
     'username' in record ? record.username : '',
     'instance' in record ? record.instance : '',
     'number' in record ? record.number : '',
     'branchName' in record ? record.branchName : '',
+    record.kind === 'templates' ? record.channel : '',
+    record.kind === 'templates' ? record.type : '',
+    record.kind === 'templates' ? record.message1 : '',
+    record.kind === 'templates' ? record.message2 : '',
   ]
     .map((value) => normalizeText(value))
     .join(' ');
@@ -182,6 +190,7 @@ function normalizeTemplateChannel(value: unknown, fallback: TemplateChannel): Te
   const normalized = normalizeText(value);
   if (normalized.includes('instagram')) return 'Instagram';
   if (normalized.includes('whatsapp')) return 'WhatsApp';
+  if (normalized.includes('geral')) return 'Geral';
   return fallback;
 }
 
@@ -207,7 +216,6 @@ function normalizeTemplateInput(
   return {
     id: String(existing?.id ?? source.id ?? fallbackId('templates')),
     kind: 'templates',
-    name: firstString(source, ['name', 'template'], existing?.name ?? `Template ${toInteger(source.order, existing?.order ?? 1, 1)}`),
     branchId: branch?.id ?? branchId,
     branchName,
     channel: normalizeTemplateChannel(source.channel ?? source.canal ?? source.tipo, existing?.channel ?? 'WhatsApp'),
@@ -215,8 +223,6 @@ function normalizeTemplateInput(
     message1,
     message2,
     preview: renderPreview(message1),
-    variables: splitList(source.variables ?? source.variaveis ?? existing?.variables ?? ['{EMPRESA}']),
-    order: toInteger(source.order ?? source.idx ?? source.ordem, existing?.order ?? 1, 1),
     active,
     status: statusFromActive(active),
     createdAt,
@@ -326,26 +332,27 @@ async function normalizeByKind(kind: ConfigKind, input: CreateConfigRecordInput 
   return normalizeTemplateInput(input, existing && isTemplate(existing) ? existing : undefined, await getBranches());
 }
 
-async function assertTemplateLimit(template: TemplateConfigRecord, editingId?: string) {
+async function assertTemplateContract(template: TemplateConfigRecord, editingId?: string) {
   const templates = (await repositories.config.list('templates')).filter(isTemplate);
-  const groupCount = templates.filter(
-    (item) => item.id !== editingId && item.branchId === template.branchId && item.type === template.type,
-  ).length;
+  const duplicate = templates.find(
+    (item) =>
+      item.id !== editingId &&
+      item.status !== 'deleted' &&
+      !isArchivedConfig(item) &&
+      item.branchId === template.branchId &&
+      item.channel === template.channel &&
+      item.type === template.type,
+  );
 
-  if (groupCount >= MAX_TEMPLATES_PER_BRANCH_TYPE) {
-    throw new Error('O legado limita cada ramo e tipo a 10 templates.');
+  if (duplicate) {
+    throw new Error('Ja existe um template para este ramo, canal e tipo. Edite o template existente.');
   }
 }
 
-async function assertCanRemoveTemplate(id: string) {
-  const templates = (await repositories.config.list('templates')).filter(isTemplate);
-  const selected = templates.find((item) => item.id === id);
-  if (!selected) return;
-
-  const groupCount = templates.filter((item) => item.branchId === selected.branchId && item.type === selected.type).length;
-  if (groupCount <= 1) {
-    throw new Error('O legado mantem pelo menos um template por ramo e tipo.');
-  }
+async function emitConfigChanged(kind: ConfigKind) {
+  await platformConfigService.publishExtensionRuntimeConfig();
+  eventBus.emit('config:changed', { kind });
+  if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
 }
 
 export const configService = {
@@ -355,11 +362,10 @@ export const configService = {
 
   async create(kind: ConfigKind, input: CreateConfigRecordInput) {
     const normalized = await normalizeByKind(kind, input);
-    if (normalized.kind === 'templates') await assertTemplateLimit(normalized);
+    if (normalized.kind === 'templates') await assertTemplateContract(normalized);
 
     const record = await repositories.config.create(kind, normalized);
-    eventBus.emit('config:changed', { kind });
-    if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
+    await emitConfigChanged(kind);
     return record;
   },
 
@@ -368,11 +374,10 @@ export const configService = {
     if (!current) throw new Error('Registro nao encontrado.');
 
     const normalized = await normalizeByKind(kind, input, current);
-    if (normalized.kind === 'templates') await assertTemplateLimit(normalized, id);
+    if (normalized.kind === 'templates') await assertTemplateContract(normalized, id);
 
     const record = await repositories.config.update(kind, id, normalized);
-    eventBus.emit('config:changed', { kind });
-    if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
+    await emitConfigChanged(kind);
     return record;
   },
 
@@ -381,17 +386,14 @@ export const configService = {
     if (!selected.every(isArchivedConfig)) {
       throw new Error('Excluir exige que o registro esteja arquivado.');
     }
-    if (kind === 'templates') await assertCanRemoveTemplate(id);
 
     await repositories.config.remove(kind, id);
-    eventBus.emit('config:changed', { kind });
-    if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
+    await emitConfigChanged(kind);
   },
 
   async toggleArchive(kind: ConfigKind, id: string) {
     const record = await repositories.config.toggleArchive(kind, id);
-    eventBus.emit('config:changed', { kind });
-    if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
+    await emitConfigChanged(kind);
     return record;
   },
 
@@ -401,8 +403,7 @@ export const configService = {
       throw new Error('Arquivar exige apenas registros ativos ou inativos.');
     }
     const updated = await Promise.all(selected.map((record) => repositories.config.toggleArchive(kind, record.id)));
-    eventBus.emit('config:changed', { kind });
-    if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
+    await emitConfigChanged(kind);
     return updated;
   },
 
@@ -412,8 +413,7 @@ export const configService = {
       throw new Error('Restaurar exige apenas registros arquivados.');
     }
     const updated = await Promise.all(selected.map((record) => repositories.config.toggleArchive(kind, record.id)));
-    eventBus.emit('config:changed', { kind });
-    if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
+    await emitConfigChanged(kind);
     return updated;
   },
 
@@ -422,11 +422,7 @@ export const configService = {
     if (!selected.every(isArchivedConfig)) {
       throw new Error('Excluir exige que todos os registros selecionados estejam arquivados.');
     }
-    if (kind === 'templates') {
-      await Promise.all(selected.map((record) => assertCanRemoveTemplate(record.id)));
-    }
     await Promise.all(selected.map((record) => repositories.config.remove(kind, record.id)));
-    eventBus.emit('config:changed', { kind });
-    if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
+    await emitConfigChanged(kind);
   },
 };

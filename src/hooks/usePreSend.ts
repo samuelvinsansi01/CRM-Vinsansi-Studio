@@ -118,6 +118,15 @@ export function usePreSend() {
     [refresh],
   );
 
+  const markAlreadySent = useCallback(
+    async (ids: string[], reason?: string) => {
+      const marked = await preSendService.markAlreadySent(ids, reason);
+      refresh();
+      return marked;
+    },
+    [refresh],
+  );
+
   const updateLead = useCallback(
     async (id: string, input: Partial<PreSendLead>) => {
       await preSendService.updateLead(id, input);
@@ -140,6 +149,7 @@ export function usePreSend() {
     returnDayToImport,
     validateLead,
     archiveLead,
+    markAlreadySent,
     updateLead,
   };
 }

@@ -1,12 +1,13 @@
 import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
 import { defaultImportSettings } from '../../services/import-settings/importSettings.seed';
 import type { ImportSettings, UpdateImportSettingsInput } from '../../services/import-settings/types';
+import type { ExtensionRuntimeConfig } from '../../services/platform-config/types';
 import { defaultDispatchSettings } from '../../services/settings/settings.seed';
 import type { DispatchSettings, UpdateDispatchSettingsInput } from '../../services/settings/types';
 import { createUuid, getCurrentUserId, nowIso } from '../supabase.helpers';
 import type { SettingsRepository } from './settings.repository';
 
-type SettingsKey = 'import' | 'dispatch';
+type SettingsKey = 'import' | 'dispatch' | 'extension_runtime';
 
 async function readSetting<T>(key: SettingsKey, fallback: T): Promise<T> {
   const table = getSupabaseConfig().tables.settings;
@@ -38,6 +39,14 @@ async function writeSetting<T>(key: SettingsKey, value: T): Promise<T> {
     : await client.from(table).insert(payload);
   if (error) throw new Error(error.message);
   return value;
+}
+
+async function readExtensionRuntimeConfig(): Promise<ExtensionRuntimeConfig | null> {
+  const table = getSupabaseConfig().tables.settings;
+  const userId = await getCurrentUserId();
+  const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', 'extension_runtime').maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.value ?? null) as ExtensionRuntimeConfig | null;
 }
 
 function mergeImportSettings(current: ImportSettings, input: UpdateImportSettingsInput): ImportSettings {
@@ -82,5 +91,13 @@ export const supabaseSettingsRepository: SettingsRepository = {
 
   async resetDispatchSettings() {
     return writeSetting('dispatch', defaultDispatchSettings);
+  },
+
+  async getExtensionRuntimeConfig() {
+    return readExtensionRuntimeConfig();
+  },
+
+  async updateExtensionRuntimeConfig(input) {
+    return writeSetting('extension_runtime', input);
   },
 };
