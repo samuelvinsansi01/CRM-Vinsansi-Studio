@@ -76,7 +76,7 @@ function statusFromActive(active: boolean): ConfigStatus {
   return active ? 'Ativo' : 'Inativo';
 }
 
-const TEMPLATE_LIMIT_PER_BRANCH_CHANNEL = 10;
+const TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE = 10;
 
 function splitList(value: unknown) {
   const rawItems = Array.isArray(value) ? value : String(value ?? '').split(/[,;\n]/);
@@ -342,11 +342,12 @@ async function assertTemplateContract(template: TemplateConfigRecord, editingId?
       item.status !== 'deleted' &&
       !isArchivedConfig(item) &&
       item.branchId === template.branchId &&
-      item.channel === template.channel,
+      item.channel === template.channel &&
+      item.type === template.type,
   ).length;
 
-  if (activeGroupCount >= TEMPLATE_LIMIT_PER_BRANCH_CHANNEL) {
-    throw new Error(`Limite de ${TEMPLATE_LIMIT_PER_BRANCH_CHANNEL} templates para este ramo e canal atingido.`);
+  if (activeGroupCount >= TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE) {
+    throw new Error(`Limite de ${TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE} templates para este ramo, canal e tipo atingido.`);
   }
 }
 

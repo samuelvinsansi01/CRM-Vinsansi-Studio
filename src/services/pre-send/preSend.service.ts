@@ -272,6 +272,10 @@ function importLeadMatchesQueueFilter(lead: ImportLead, filter?: PreSendQueueFil
   return destination === 'Com site' || destination === 'Agregadores';
 }
 
+function destinationToTemplateType(destination: PreSendLead['destination']) {
+  if (destination === 'Com site' || destination === 'Agregadores') return 'com-site';
+  return 'sem-site';
+}
 
 async function releasePreSendLinksForImports(imports: ImportLead[], channel: PreSendChannel) {
   const sourceIds = new Set(imports.map((lead) => lead.id).filter(Boolean));
@@ -292,9 +296,11 @@ async function approvedImportsForPreSend(channel: PreSendChannel, queueFilter?: 
 
 async function loadTemplate(lead: PreSendLead) {
   const templates = (await repositories.config.list('templates')).filter(isTemplate);
+  const type = destinationToTemplateType(lead.destination);
   const candidates = templates
     .filter((template) => template.active && template.status !== 'Arquivado' && template.status !== 'deleted')
     .filter((template) => template.channel === lead.channel || template.channel === 'Geral')
+    .filter((template) => template.type === type)
     .filter((template) =>
       (lead.branch_id && template.branchId === lead.branch_id) ||
       normalize(template.branchName) === normalize(lead.branch) ||
@@ -318,7 +324,7 @@ function branchImageForLead(lead: PreSendLead, branches: BranchConfigRecord[]) {
 
 function assertTemplate(lead: PreSendLead, template: TemplateConfigRecord | undefined): asserts template is TemplateConfigRecord {
   if (!template || !template.message1.trim()) {
-    throw new Error(`Template valido ausente para ${lead.channel} / ${lead.branch}.`);
+    throw new Error(`Template valido ausente para ${lead.channel} / ${lead.branch} / ${lead.destination}.`);
   }
 }
 

@@ -1,5 +1,5 @@
--- Lead Certo V2 - contrato de templates por canal.
--- Objetivo: permitir ate 10 templates por ramo/canal no app.
+-- Lead Certo V2 - contrato de templates por canal e tipo.
+-- Objetivo: permitir ate 10 templates por ramo/canal/tipo no app.
 -- Seguro para rodar no SQL Editor: nao apaga templates nem altera mensagens.
 
 do $$
@@ -46,6 +46,8 @@ begin
   end loop;
 end $$;
 
-create index if not exists message_templates_branch_channel_idx
-  on public.message_templates(user_id, branch_id, channel)
+drop index if exists public.message_templates_branch_channel_idx;
+
+create index if not exists message_templates_branch_channel_type_idx
+  on public.message_templates(user_id, branch_id, channel, template_type)
   where coalesce(status, '') not in ('deleted', 'Arquivado');

@@ -92,9 +92,9 @@ const templateTypeOptions: SelectOption[] = [
 ];
 
 const templateChannelOptions: SelectOption[] = [
+  { label: 'Geral', value: 'Geral' },
   { label: 'WhatsApp', value: 'WhatsApp' },
   { label: 'Instagram', value: 'Instagram' },
-  { label: 'Geral', value: 'Geral' },
 ];
 
 function isBranch(record: ConfigRecord): record is BranchConfigRecord {
@@ -205,7 +205,7 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
       title: 'Templates',
       singular: 'template',
       action: 'Adicionar novo template',
-      table: 'Templates por ramo e canal',
+      table: 'Templates por ramo, canal e tipo',
       emptyMessage: 'Nenhum template configurado ainda.',
       metrics: [
         { icon: MessageSquare, label: 'Total', tone: 'neutral', getValue: (records) => records.length },

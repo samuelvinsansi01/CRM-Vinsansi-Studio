@@ -37,7 +37,7 @@ function statusFromActive(active: boolean): ConfigStatus {
   return active ? 'Ativo' : 'Inativo';
 }
 
-const TEMPLATE_LIMIT_PER_BRANCH_CHANNEL = 10;
+const TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE = 10;
 
 function toBoolean(value: unknown, fallback = true) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -361,6 +361,7 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     .from(table)
     .select(TEMPLATE_SELECT)
     .eq('user_id', userId)
+    .eq('template_type', record.type)
     .eq('channel', record.channel)
     .limit(50);
   naturalQuery = branchId ? naturalQuery.eq('branch_id', branchId) : naturalQuery.eq('branch_name', branch?.name || record.branchName);
@@ -372,8 +373,8 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     return String(row.id) !== String(existingById?.id) && !isDeletedStatus(status) && normalizeComparable(status) !== 'arquivado';
   }).length;
 
-  if (activeGroupCount >= TEMPLATE_LIMIT_PER_BRANCH_CHANNEL) {
-    throw new Error(`Limite de ${TEMPLATE_LIMIT_PER_BRANCH_CHANNEL} templates para este ramo e canal atingido.`);
+  if (activeGroupCount >= TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE) {
+    throw new Error(`Limite de ${TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE} templates para este ramo, canal e tipo atingido.`);
   }
 
   const targetId = String(existingById?.id ?? record.id ?? createUuid());
