@@ -1,9 +1,12 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { preSendService } from '../pre-send/preSend.service';
+import { normalizeDomain, normalizePhone } from './importValidation';
 import { isValidInstagram } from '../instagram/instagram.utils';
+import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
+import type { CreateBaseLeadInput } from '../base/types';
 import type { ImportExecutionOptions, ImportLead, ImportLeadInput, ImportListFilters } from './types';
 
 type BulkImportAction = 'approve' | 'reject' | 'unapprove' | 'invalidate' | 'archive';
@@ -32,6 +35,59 @@ function bulkTarget(action: BulkImportAction): BulkTarget {
   if (action === 'unapprove') return { status: 'pending' as const, transition: 'unapprove' as const, input: { status: 'pending' } };
   if (action === 'invalidate') return { status: 'invalid' as const, transition: 'invalidate' as const, input: { status: 'invalid', motivo: 'Outros' } };
   return { status: 'archived' as const, transition: 'archive' as const, input: { status: 'archived' } };
+}
+
+function baseDestinationFromImport(lead: ImportLead): CreateBaseLeadInput['destination'] {
+  const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
+  if (destination === 'Instagram') return 'Instagram';
+  if (destination === 'Com site') return 'Com site';
+  if (destination === 'Agregadores') return 'Agregador';
+  return 'WhatsApp';
+}
+
+function baseOriginFromImport(lead: ImportLead): CreateBaseLeadInput['origin'] {
+  return (lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino) === 'Instagram' ? 'Instagram' : 'WhatsApp';
+}
+
+function importLeadToBaseInput(lead: ImportLead, sentAt: string, reason: string): CreateBaseLeadInput {
+  const instagram = lead.instagram_url ?? lead.instagram ?? '';
+  return {
+    sourceLeadId: lead.id,
+    company: lead.empresa,
+    branch: lead.ramo,
+    branch_id: lead.branch_id,
+    branch_slug: lead.branch_slug,
+    state: lead.estado ?? '',
+    city: lead.cidade ?? '',
+    phone: lead.whatsapp ?? '',
+    site: lead.site ?? '',
+    normalizedPhone: normalizePhone(lead.whatsapp),
+    normalizedSite: normalizeDomain(lead.site),
+    instagram,
+    normalizedInstagram: normalizeInstagramUsername(instagram),
+    mapsUrl: lead.normalizedMapsUrl ?? '',
+    origin: baseOriginFromImport(lead),
+    destination: baseDestinationFromImport(lead),
+    original_destination: lead.original_destination,
+    destination_override: lead.destination_override,
+    send_instagram: lead.send_instagram,
+    instagram_override_reason: lead.instagram_override_reason,
+    override_by: lead.override_by,
+    override_at: lead.override_at,
+    status: 'sent',
+    sentAt,
+    template: '',
+    chipOrProfile: '',
+    notes: reason,
+    history: [
+      {
+        id: `history-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        date: sentAt.slice(0, 10),
+        title: 'Marcado como ja enviado',
+        description: reason,
+      },
+    ],
+  };
 }
 
 async function bulkUpdate(ids: string[], action: BulkImportAction) {
@@ -171,5 +227,48 @@ export const importService = {
 
   async archiveMany(ids: string[]) {
     return bulkUpdate(ids, 'archive');
+  },
+
+  async markAlreadySent(ids: string[], reason = 'Marcado manualmente como ja enviado no Inicio.') {
+    const uniqueIds = Array.from(new Set(ids));
+    if (!uniqueIds.length) throw new Error('Selecione pelo menos um lead.');
+    const leads = await listOperationalLeads();
+    const byId = new Map(leads.map((lead) => [lead.id, lead]));
+    const selected = uniqueIds.map((id) => byId.get(id));
+    if (selected.some((lead) => !lead)) throw new Error('Um ou mais leads nao foram encontrados.');
+
+    const sentAt = new Date().toISOString();
+    const selectedLeads = selected as ImportLead[];
+
+    for (const lead of selectedLeads) {
+      if (isStatusGroup(lead.status, 'sent')) continue;
+      await repositories.base.upsertSent(importLeadToBaseInput(lead, sentAt, reason));
+      await repositories.import.update(lead.id, {
+        status: 'sent',
+        motivo: reason,
+      });
+      await repositories.events.append({
+        source: 'import',
+        action: 'manual_mark_sent',
+        channel: baseOriginFromImport(lead) === 'Instagram' ? 'instagram' : 'whatsapp',
+        leadId: lead.id,
+        status: 'sent',
+        message: reason,
+        metadata: {
+          company_name: lead.empresa,
+          normalized_phone: normalizePhone(lead.whatsapp),
+          instagram_url: lead.instagram_url ?? lead.instagram,
+          website: lead.site,
+          maps_url: lead.normalizedMapsUrl,
+          destination: lead.destination ?? lead.destino,
+          manual: true,
+          sent_at: sentAt,
+        },
+      });
+    }
+
+    eventBus.emit('base:changed', { action: 'update' });
+    eventBus.emit('import:changed', { source: 'mark-sent' });
+    return selectedLeads.length;
   },
 };

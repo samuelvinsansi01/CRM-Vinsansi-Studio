@@ -324,7 +324,6 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
       const scheduledDate = input.scheduled_date ?? todayIsoDate();
       const batch = nextBatch(working, input.chip, limit, scheduledDate);
       const lead = buildLead(input, batch);
-      delete (lead as { batchLimit?: number }).batchLimit;
       const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
       if (error) throw new Error(error.message);
       working.push(lead);

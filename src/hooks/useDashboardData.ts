@@ -15,6 +15,7 @@ export type HomeFilters = {
   state: string;
   destination: string;
   instagram: string;
+  site: string;
   situation: HomeSituationFilter;
 };
 
@@ -50,9 +51,7 @@ function leadSituation(lead: ImportLead) {
 function includesSearch(lead: ImportLead, search: string) {
   const query = search.trim().toLowerCase();
   if (!query) return true;
-  return `${lead.empresa} ${lead.ramo} ${lead.estado ?? ''} ${lead.cidade ?? ''} ${lead.whatsapp ?? ''} ${lead.instagram ?? ''} ${lead.site ?? ''}`
-    .toLowerCase()
-    .includes(query);
+  return lead.empresa.toLowerCase().includes(query);
 }
 
 function calculateMetrics(leads: ImportLead[]): Record<keyof typeof emptyDestinationMetrics, DestinationMetric> {
@@ -151,6 +150,7 @@ export function useDashboardData(filters: HomeFilters) {
       states: unique(operationalLeads.map((lead) => lead.estado), normalizeBrazilState),
       destinations: ['Todos', 'WhatsApp', 'Com site', 'Agregadores', 'Instagram'],
       instagram: ['Todos', 'Com Instagram', 'Sem Instagram'],
+      sites: ['Todos', 'Com site', 'Sem site'],
       situations: ['Todos', 'Em aguarde', 'Aprovado'],
     }),
     [operationalLeads],
@@ -169,8 +169,13 @@ export function useDashboardData(filters: HomeFilters) {
           filters.instagram === 'Todos' ||
           (filters.instagram === 'Com Instagram' && hasInstagram) ||
           (filters.instagram === 'Sem Instagram' && !hasInstagram);
+        const hasSite = Boolean(lead.site?.trim());
+        const matchesSite =
+          filters.site === 'Todos' ||
+          (filters.site === 'Com site' && hasSite) ||
+          (filters.site === 'Sem site' && !hasSite);
         const matchesSituation = filters.situation === 'Todos' || filters.situation === situation || (filters.situation === 'Aprovado' && isStatusGroup(lead.status, 'approved'));
-        return matchesBranch && matchesState && matchesDestination && matchesInstagram && matchesSituation && includesSearch(lead, filters.search);
+        return matchesBranch && matchesState && matchesDestination && matchesInstagram && matchesSite && matchesSituation && includesSearch(lead, filters.search);
       }),
     [operationalLeads, filters],
   );
@@ -252,6 +257,12 @@ export function useDashboardData(filters: HomeFilters) {
     refresh();
   }, [refresh]);
 
+  const markAlreadySent = useCallback(async (ids: string[]) => {
+    const marked = await importService.markAlreadySent(ids);
+    refresh();
+    return marked;
+  }, [refresh]);
+
   return {
     metrics,
     options,
@@ -269,5 +280,6 @@ export function useDashboardData(filters: HomeFilters) {
     unapproveMany,
     invalidateMany,
     archiveMany,
+    markAlreadySent,
   };
 }

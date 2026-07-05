@@ -96,6 +96,19 @@ async function allLeads() {
   return (data ?? []).filter((row) => !isDeletedRow(row)).map((row) => rowToLead(row));
 }
 
+async function loadValidLeadIds(ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  if (!uniqueIds.length) return new Set<string>();
+
+  const { data, error } = await getSupabaseClient()
+    .from(getSupabaseConfig().tables.importLeads)
+    .select('id')
+    .in('id', uniqueIds);
+
+  if (error) return new Set<string>();
+  return new Set((data ?? []).map((row) => String(row.id)));
+}
+
 function calculateSummary(leads: InstagramQueueLead[]): InstagramQueueSummary {
   return {
     total: leads.length,
@@ -298,19 +311,20 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
     const persisted = await allLeads();
     const existingSources = new Set(persisted.map((lead) => lead.sourcePreSendId).filter(Boolean));
     const existingInstagrams = new Set(persisted.map((lead) => lead.instagram_username || normalizeInstagramUsername(lead.instagram_url ?? lead.instagram)).filter(Boolean));
+    const validLeadIds = await loadValidLeadIds(inputLeads.map((lead) => lead.lead_id ?? ''));
     const working = [...persisted];
     const userId = await getCurrentUserId();
 
     for (const input of inputLeads) {
-      const username = normalizeInstagramUsername(input.instagram_url ?? input.instagram);
-      if (input.sourcePreSendId && existingSources.has(input.sourcePreSendId)) continue;
+      const safeInput = input.lead_id && !validLeadIds.has(input.lead_id) ? { ...input, lead_id: undefined } : input;
+      const username = normalizeInstagramUsername(safeInput.instagram_url ?? safeInput.instagram);
+      if (safeInput.sourcePreSendId && existingSources.has(safeInput.sourcePreSendId)) continue;
       if (username && existingInstagrams.has(username)) continue;
 
-      const limit = input.batchLimit ?? 15;
-      const scheduledDate = input.scheduled_date ?? todayIsoDate();
-      const batch = nextBatch(working, input.profile, limit, scheduledDate);
-      const lead = buildLead(input, batch);
-      delete (lead as { batchLimit?: number }).batchLimit;
+      const limit = safeInput.batchLimit ?? 15;
+      const scheduledDate = safeInput.scheduled_date ?? todayIsoDate();
+      const batch = nextBatch(working, safeInput.profile, limit, scheduledDate);
+      const lead = buildLead(safeInput, batch);
       const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
       if (error) throw new Error(error.message);
       working.push(lead);

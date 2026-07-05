@@ -2,8 +2,8 @@ export type LeadCertoEventMap = {
   'config:changed': { kind: 'chips' | 'instagram' | 'branches' | 'templates' };
   'import-settings:changed': { source: 'settings' | 'reset' | 'branches' };
   'dispatch-settings:changed': { source: 'settings' | 'reset' };
-  'import:changed': { source: 'manual' | 'json' | 'move' | 'remove' | 'update' };
-  'pre-send:changed': { action: 'move-to-queue' | 'validate' | 'archive' | 'update' | 'sent' };
+  'import:changed': { source: 'manual' | 'json' | 'move' | 'remove' | 'update' | 'pre-send' | 'mark-sent' };
+  'pre-send:changed': { action: 'move-to-queue' | 'validate' | 'archive' | 'update' | 'sent' | 'rollover' | 'fill' | 'whatsapp-invalid-return' };
   'whatsapp-queue:changed': { action: 'send' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'update' | 'sending' | 'worker-sent' | 'error' };
   'instagram-queue:changed': { action: 'send' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'update' | 'sending' | 'worker-sent' | 'error' };
   'base:changed': { action: 'update' | 'archive' | 'restore' | 'remove' | 'status' };

@@ -159,7 +159,6 @@ export const mockWhatsAppQueueRepository: WhatsAppQueueRepository = {
         created_at: now,
         updated_at: now,
       };
-      delete (lead as { batchLimit?: number }).batchLimit;
       const storageBatch = batches.find((item) => item.id === batch.id) ?? { ...batch, leads: [] };
       if (!batches.some((item) => item.id === storageBatch.id)) batches.push(storageBatch);
       storageBatch.leads.push(lead);

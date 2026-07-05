@@ -1,4 +1,4 @@
-import { Archive, Check, Globe2, Instagram, Link2, MessageCircle, RefreshCcw, RotateCcw, Users, X } from 'lucide-react';
+import { Archive, Check, Globe2, Instagram, Link2, MessageCircle, RefreshCcw, RotateCcw, Send, Users, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import {
@@ -39,6 +39,7 @@ const defaultFilters: HomeFilters = {
   state: 'Todos',
   destination: 'Todos',
   instagram: 'Todos',
+  site: 'Todos',
   situation: 'Em aguarde',
 };
 
@@ -156,7 +157,8 @@ export function HomePage() {
     !isStatusGroup(lead.status, 'invalid')
   );
   const canBulkArchive = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('import', lead.status).canArchive());
-  const hasBulkAction = canBulkApprove || canBulkUnapprove || canBulkInvalidate || canBulkArchive;
+  const canBulkSent = selectedLeads.length > 0 && selectedLeads.every((lead) => !isStatusGroup(lead.status, 'sent'));
+  const hasBulkAction = canBulkApprove || canBulkUnapprove || canBulkInvalidate || canBulkArchive || canBulkSent;
 
   const pushToast = (toast: Omit<ToastItem, 'id'>) => {
     const id = crypto.randomUUID?.() ?? String(Date.now());
@@ -263,6 +265,12 @@ export function HomePage() {
         return;
       }
 
+      if (action === 'sent') {
+        await dashboard.markAlreadySent([lead.id]);
+        pushToast({ title: 'Lead marcado como enviado', description: `${lead.empresa} saiu do fluxo ativo.`, tone: 'success' });
+        return;
+      }
+
       if (action === 'invalidate') {
         await dashboard.invalidateLead(lead);
         pushToast({ title: 'Lead invalidado', description: `${lead.empresa} saiu da lista operacional. Motivo: Outros.`, tone: 'warning' });
@@ -296,8 +304,9 @@ export function HomePage() {
         <SelectField value={filters.state} options={dashboard.options.states} placeholder="Estado" onChange={(value) => updateFilter('state', value)} />
         <SelectField value={filters.destination} options={dashboard.options.destinations} placeholder="Destino" onChange={(value) => updateFilter('destination', value)} />
         <SelectField value={filters.instagram} options={dashboard.options.instagram} placeholder="Instagram" onChange={(value) => updateFilter('instagram', value)} />
+        <SelectField value={filters.site} options={dashboard.options.sites} placeholder="Site" onChange={(value) => updateFilter('site', value)} />
         <SelectField value={filters.situation} options={dashboard.options.situations} placeholder="Status" onChange={(value) => updateFilter('situation', value as HomeFilters['situation'])} />
-        <SearchInput value={filters.search} onChange={(value) => updateFilter('search', value)} placeholder="Buscar" />
+        <SearchInput value={filters.search} onChange={(value) => updateFilter('search', value)} placeholder="Buscar empresa" />
       </FiltersBar>
 
       <TableCard
@@ -313,6 +322,7 @@ export function HomePage() {
             <span>{selectedLeads.length} selecionado(s)</span>
             {canBulkApprove ? <Button size="sm" iconLeft={Check} onClick={() => runBulkAction('aprovados', () => dashboard.approveMany(selectedIds))}>Aprovar</Button> : null}
             {canBulkUnapprove ? <Button size="sm" variant="secondary" iconLeft={RotateCcw} onClick={() => runBulkAction('voltaram para em aguarde', () => dashboard.unapproveMany(selectedIds))}>Desaprovar</Button> : null}
+            {canBulkSent ? <Button size="sm" variant="secondary" iconLeft={Send} onClick={() => runBulkAction('marcados como ja enviados', async () => { await dashboard.markAlreadySent(selectedIds); })}>Já enviado</Button> : null}
             {canBulkInvalidate ? <Button size="sm" variant="secondary" iconLeft={X} onClick={() => runBulkAction('invalidados com motivo Outros', () => dashboard.invalidateMany(selectedIds))}>Invalidar</Button> : null}
             {canBulkArchive ? <Button size="sm" variant="danger" iconLeft={Archive} onClick={() => runBulkAction('arquivados', () => dashboard.archiveMany(selectedIds))}>Arquivar</Button> : null}
             {!hasBulkAction ? <small>Nenhuma acao em massa disponivel para a selecao atual.</small> : null}
@@ -325,7 +335,7 @@ export function HomePage() {
           <DataTable
             columns={columns}
             rows={pagedRows}
-            actions={['view', 'whatsapp', 'instagram', 'approve', 'unapprove', 'invalidate', 'archive']}
+            actions={['view', 'whatsapp', 'instagram', 'approve', 'unapprove', 'sent', 'invalidate', 'archive']}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
             getRowActions={(row) => {
@@ -338,6 +348,7 @@ export function HomePage() {
                 ...(channel === 'Instagram' && hasPhone(lead) ? ['whatsapp' as TableAction] : []),
                 ...(permissionsFor('import', lead.status).canApprove() && !isStatusGroup(lead.status, 'approved') ? ['approve' as TableAction] : []),
                 ...(isStatusGroup(lead.status, 'approved') ? ['unapprove' as TableAction] : []),
+                'sent' as TableAction,
                 ...(permissionsFor('import', lead.status).canInvalidate() ? ['invalidate' as TableAction] : []),
                 'archive' as TableAction,
               ];

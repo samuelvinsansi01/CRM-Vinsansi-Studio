@@ -1,4 +1,5 @@
 import type { WhatsAppGateway, WhatsAppGatewayResult } from './whatsapp.gateway';
+import type { WhatsAppValidationGateway, WhatsAppValidationRequest, WhatsAppValidationResult } from '../whatsapp-validation/whatsappValidation.gateway';
 import type { WhatsAppQueueLead } from './types';
 
 function envFlag(value: unknown, defaultValue = false) {
@@ -28,6 +29,7 @@ function evolutionConfig() {
     apiKey,
     instancePrefix: processEnvValueAny('EVOLUTION_INSTANCE_PREFIX'),
     delayMs: Number(processEnvValueAny('EVOLUTION_MESSAGE_DELAY_MS') || 0),
+    validationDelayMs: Number(processEnvValueAny('EVOLUTION_VALIDATION_DELAY_MS') || processEnvValueAny('EVOLUTION_MESSAGE_DELAY_MS') || 0),
     testMode: envFlag(processEnvValueAny('WORKER_TEST_MODE'), false),
     testPhone: processEnvValueAny('TEST_PHONE').replace(/\D/g, ''),
     dryRun: envFlag(processEnvValueAny('DRY_RUN'), false),
@@ -48,6 +50,18 @@ function phoneForEvolution(lead: WhatsAppQueueLead) {
 
 function instanceForLead(lead: WhatsAppQueueLead) {
   return String(lead.chip_instance || lead.chip || '').trim();
+}
+
+function phoneForValidation(lead: WhatsAppValidationRequest) {
+  const config = evolutionConfig();
+  const original = (lead.normalizedPhone || lead.phone || '').replace(/\D/g, '');
+  if (!config.testMode) return original;
+  if (!config.testPhone) throw new Error('WORKER_TEST_MODE ativo sem TEST_PHONE configurado.');
+  return config.testPhone;
+}
+
+function instanceForValidation(lead: WhatsAppValidationRequest) {
+  return String(lead.chipInstance || '').trim();
 }
 
 async function requestEvolution(path: string, init: RequestInit = {}) {
@@ -128,6 +142,75 @@ async function sendImage(instance: string, lead: WhatsAppQueueLead) {
   });
 }
 
+function validationItems(payload: unknown): Array<Record<string, unknown>> {
+  const record = payload as Record<string, unknown>;
+  const value = Array.isArray(payload)
+    ? payload
+    : Array.isArray(record?.response)
+      ? record.response
+      : Array.isArray(record?.data)
+        ? record.data
+        : Array.isArray(record?.result)
+          ? record.result
+          : [];
+
+  return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
+}
+
+function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: unknown): WhatsAppValidationResult {
+  const number = phoneForValidation(lead);
+  const [item] = validationItems(payload).filter((candidate) => {
+    const candidateNumber = String(candidate.number ?? candidate.phone ?? candidate.jid ?? candidate.exists ?? '').replace(/\D/g, '');
+    return !candidateNumber || candidateNumber.includes(number) || number.includes(candidateNumber);
+  });
+
+  if (!item) {
+    return {
+      leadId: lead.id,
+      status: 'error',
+      valid: false,
+      errorMessage: 'Evolution nao retornou resultado para o numero.',
+    };
+  }
+
+  const exists = item.exists ?? item.valid ?? item.isWhatsapp ?? item.is_whatsapp ?? item.hasWhatsapp ?? item.has_whatsapp;
+  const jid = String(item.jid ?? item.id ?? item._serialized ?? item.remoteJid ?? '');
+  const valid = exists === true || Boolean(jid.includes('@s.whatsapp.net'));
+  const invalid = exists === false;
+
+  if (!valid && !invalid) {
+    return {
+      leadId: lead.id,
+      status: 'error',
+      valid: false,
+      errorMessage: 'Evolution retornou resposta sem campo exists/valid reconhecido.',
+    };
+  }
+
+  return {
+    leadId: lead.id,
+    status: valid ? 'valid' : 'invalid',
+    valid,
+  };
+}
+
+async function validateWhatsAppNumber(lead: WhatsAppValidationRequest): Promise<WhatsAppValidationResult> {
+  const config = evolutionConfig();
+  if (!config.enabled) throw new Error('Evolution nao configurada no worker/backend.');
+  const instance = instanceForValidation(lead);
+  if (!instance) throw new Error(`Lead sem instancia/chip para validacao: ${lead.company}.`);
+  const number = phoneForValidation(lead);
+  if (!number) throw new Error(`Lead sem telefone normalizado para validacao: ${lead.company}.`);
+  await assertConnected(instance);
+  if (config.dryRun) return { leadId: lead.id, status: 'valid', valid: true };
+
+  const payload = await requestEvolution(`/chat/whatsappNumbers/${encodeURIComponent(instance)}`, {
+    method: 'POST',
+    body: JSON.stringify({ numbers: [number] }),
+  });
+  return validationResultFromPayload(lead, payload);
+}
+
 export const evolutionWhatsAppGateway: WhatsAppGateway = {
   async send(leads) {
     const config = evolutionConfig();
@@ -157,6 +240,30 @@ export const evolutionWhatsAppGateway: WhatsAppGateway = {
         if (isConnectionFailure(error)) stoppedInstances.add(instance);
         results.push({ leadId: lead.id, status: 'error', errorMessage });
       }
+    }
+
+    return results;
+  },
+};
+
+export const evolutionWhatsAppValidationGateway: WhatsAppValidationGateway = {
+  async validate(leads) {
+    const config = evolutionConfig();
+    const results: WhatsAppValidationResult[] = [];
+
+    for (const lead of leads) {
+      try {
+        results.push(await validateWhatsAppNumber(lead));
+      } catch (error) {
+        results.push({
+          leadId: lead.id,
+          status: 'error',
+          valid: false,
+          errorMessage: error instanceof Error ? error.message : 'Erro ao validar WhatsApp.',
+        });
+      }
+
+      if (config.validationDelayMs) await delay(config.validationDelayMs);
     }
 
     return results;

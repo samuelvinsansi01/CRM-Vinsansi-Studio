@@ -48,12 +48,12 @@ function instagramHandle(lead: InstagramQueueLead) {
   const raw = lead.instagram_username || lead.instagram || lead.instagram_url || '';
   const withoutUrl = raw.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').split(/[/?#]/)[0];
   const username = withoutUrl.replace(/^@/, '').trim();
-  return username ? `@${username}` : '@';
+  return username;
 }
 
 function instagramHref(lead: InstagramQueueLead) {
   if (/^https?:\/\//i.test(lead.instagram_url ?? '')) return lead.instagram_url;
-  const handle = instagramHandle(lead).replace(/^@/, '');
+  const handle = instagramHandle(lead);
   return handle ? `https://instagram.com/${handle}` : undefined;
 }
 
@@ -521,15 +521,12 @@ function InstagramBatch({
         <div className="batch__rows">
           {batch.leads.map((lead) => (
             <div className={`batch-row ${openRow === lead.id ? 'batch-row--open' : ''}`} key={lead.id}>
-              <div className="batch-row__summary">
+              <div className="batch-row__summary batch-row__summary--instagram">
                 <span className="batch-row__company">
-                  {lead.company}
-                </span>
-                <span>
                   {instagramHref(lead) ? (
-                    <a href={instagramHref(lead)} target="_blank" rel="noreferrer">{instagramHandle(lead)}</a>
+                    <a href={instagramHref(lead)} target="_blank" rel="noreferrer">{lead.company}</a>
                   ) : (
-                    instagramHandle(lead)
+                    lead.company
                   )}
                 </span>
                 <span className="batch-row__tags">

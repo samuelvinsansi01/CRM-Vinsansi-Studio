@@ -35,15 +35,20 @@ function activeQueueStatus(status: unknown) {
   return isStatusGroup(status, 'queued') || isStatusGroup(status, 'paused') || isStatusGroup(status, 'sending');
 }
 
-async function rolloverOverdueWhatsAppItems() {
+function queueRolloverTargetDate() {
   const today = toLocalDateInputValue();
+  return new Date().getHours() >= 22 ? dateInputAddDays(today, 1) : today;
+}
+
+async function rolloverOverdueWhatsAppItems() {
+  const targetDate = queueRolloverTargetDate();
   const chips = (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
   const chipMap = new Map(chips.map((chip) => [chipInstance(chip), chip]));
   if (!chipMap.size) return;
 
   const allLeads = (await repositories.whatsappQueue.listBatches({})).flatMap((batch) => batch.leads);
   const candidates = allLeads
-    .filter((lead) => (isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')) && lead.scheduled_date < today)
+    .filter((lead) => (isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')) && lead.scheduled_date < targetDate)
     .filter((lead) => chipMap.has(lead.chip_instance || lead.chip))
     .sort((a, b) => `${a.scheduled_date}:${a.batch_number}:${a.position}:${a.created_at}`.localeCompare(`${b.scheduled_date}:${b.batch_number}:${b.position}:${b.created_at}`));
 
@@ -67,7 +72,7 @@ async function rolloverOverdueWhatsAppItems() {
     if (!chip) continue;
     const dailyLimit = Math.max(1, chip.dailyLimit);
     const batchLimit = Math.max(1, chip.blockSize);
-    let scheduledDate = today;
+    let scheduledDate = targetDate;
     let key = `${instance}:${scheduledDate}`;
 
     while ((occupancy.get(key) ?? 0) >= dailyLimit) {

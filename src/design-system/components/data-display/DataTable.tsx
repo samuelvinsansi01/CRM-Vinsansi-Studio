@@ -1,4 +1,4 @@
-import { Archive, Check, Edit2, Eye, Instagram, MessageCircle, RefreshCcw, RotateCcw, Trash2, X } from 'lucide-react';
+import { Archive, Check, Edit2, Eye, Instagram, MessageCircle, RefreshCcw, RotateCcw, Send, Trash2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { IconButton } from '../action/IconButton';
@@ -36,7 +36,7 @@ const actionIcon = {
   restore: RotateCcw,
   approve: Check,
   unapprove: X,
-  sent: Check,
+  sent: Send,
 };
 
 const actionLabel = {

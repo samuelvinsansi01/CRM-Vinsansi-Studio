@@ -1,6 +1,6 @@
 import type { StatusGroup } from '../status/status.mapper';
 
-export type ImportLeadStatus = 'pending' | 'approved' | 'rejected';
+export type ImportLeadStatus = 'pending' | 'approved' | 'rejected' | 'queued' | 'sent';
 
 export type ImportLeadDestination = 'WhatsApp' | 'Com site' | 'Agregadores' | 'Instagram' | 'Recusado' | 'Já no banco';
 

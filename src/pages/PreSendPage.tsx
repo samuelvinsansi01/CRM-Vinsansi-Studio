@@ -20,7 +20,8 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { usePreSend, usePreSendQueue } from '../hooks/usePreSend';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
 import { permissionsFor } from '../services/permissions';
-import type { PreSendChannel, PreSendDayCard, PreSendLead, PreSendQueueFilter } from '../services/pre-send/types';
+import { preSendService } from '../services/pre-send/preSend.service';
+import type { PreSendChannel, PreSendDayCard, PreSendLead, PreSendQueueFilter, PreSendSummary, PreSendValidationSummary } from '../services/pre-send/types';
 import { normalizeStatusGroup, statusLabel, statusTone } from '../services/status/status.mapper';
 
 type PreSendForm = {
@@ -114,9 +115,9 @@ function ValidationQueue({
   activeDayId,
   onToast,
   onRefreshSummary,
-  moveToQueue,
   moveApprovedImportsToQueue,
   validateLead,
+  validateLeads,
   archiveLead,
   markAlreadySent,
   updateLead,
@@ -127,9 +128,9 @@ function ValidationQueue({
   activeDayId: string;
   onToast: (toast: Omit<ToastItem, 'id'>) => void;
   onRefreshSummary: () => void;
-  moveToQueue: (ids: string[], options?: { whatsappProfile?: string; instagramProfile?: string }) => Promise<number>;
   moveApprovedImportsToQueue: (input: { channel: PreSendChannel; dayId: string; profile?: string; queueFilter?: PreSendQueueFilter }) => Promise<number>;
   validateLead: (id: string) => Promise<void>;
+  validateLeads: (ids: string[]) => Promise<PreSendValidationSummary>;
   archiveLead: (id: string) => Promise<void>;
   markAlreadySent: (ids: string[], reason?: string) => Promise<number>;
   updateLead: (id: string, input: Partial<PreSendLead>) => Promise<void>;
@@ -141,6 +142,8 @@ function ValidationQueue({
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [refreshToken, setRefreshToken] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [fillSaving, setFillSaving] = useState(false);
+  const [validateSaving, setValidateSaving] = useState(false);
   const [editingLead, setEditingLead] = useState<PreSendLead | null>(null);
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
   const [leadForm, setLeadForm] = useState<PreSendForm | null>(null);
@@ -171,11 +174,8 @@ function ValidationQueue({
   const pageRows = useMemo(() => leads.slice((currentPage - 1) * 10, currentPage * 10), [leads, currentPage]);
   const selectedIds = selectedRows.map((rowIndex) => pageRows[rowIndex]?.id).filter(Boolean);
   const selectedLeads = selectedRows.map((rowIndex) => pageRows[rowIndex]).filter((lead): lead is PreSendLead => Boolean(lead));
-  const queueableIds = useMemo(() => leads.filter((lead) => permissionsFor('pre-send', lead.status).canQueue()).map((lead) => lead.id), [leads]);
-  const approvableIds = useMemo(() => pageRows.filter((lead) => permissionsFor('pre-send', lead.status).canApprove()).map((lead) => lead.id), [pageRows]);
-  const canQueueSelection = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('pre-send', lead.status).canQueue());
+  const approvableIds = useMemo(() => leads.filter((lead) => permissionsFor('pre-send', lead.status).canApprove()).map((lead) => lead.id), [leads]);
   const canApproveSelection = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('pre-send', lead.status).canApprove());
-  const selectedQueueableIds = canQueueSelection ? selectedIds : [];
   const selectedApprovableIds = canApproveSelection ? selectedIds : [];
   const emptyProfileLabel = channel === 'WhatsApp' ? 'Sem chip ativo' : 'Sem perfil';
   const hasOperationalProfile = profiles.length > 0 && Boolean(activeProfile || profiles[0]);
@@ -289,27 +289,22 @@ function ValidationQueue({
   };
 
   const fillQueue = async () => {
-    if (selectedRows.length && !canQueueSelection) {
-      onToast({ title: 'Selecao incompativel', description: 'Preencher fila exige que todos os selecionados estejam aprovados.', tone: 'warning' });
-      return;
-    }
-    const ids = selectedQueueableIds.length ? selectedQueueableIds : queueableIds;
-    setSaving(true);
+    if (fillSaving || validateSaving) return;
+    setFillSaving(true);
     try {
-      const moved = ids.length
-        ? await moveToQueue(ids, channel === 'WhatsApp' ? { whatsappProfile: activeProfile } : { instagramProfile: activeProfile })
-        : await moveApprovedImportsToQueue({ channel, dayId: activeDayId, profile: activeProfile || profiles[0] || '', queueFilter });
+      const moved = await moveApprovedImportsToQueue({ channel, dayId: activeDayId, profile: activeProfile || profiles[0] || '', queueFilter });
       setSelectedRows([]);
       refreshQueue();
-      onToast({ title: 'Fila preenchida', description: `${moved} lead(s) movido(s) para fila local.`, tone: 'success' });
+      onToast({ title: 'Pre-envio preenchido', description: `${moved} lead(s) adicionado(s) para validacao.`, tone: 'success' });
     } catch (err) {
       onToast({ title: 'Erro ao preencher fila', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
-      setSaving(false);
+      setFillSaving(false);
     }
   };
 
   const validateSelected = async () => {
+    if (fillSaving || validateSaving) return;
     if (selectedRows.length && !canApproveSelection) {
       onToast({ title: 'Selecao incompativel', description: 'Validar exige que todos os selecionados possam ser aprovados.', tone: 'warning' });
       return;
@@ -320,16 +315,20 @@ function ValidationQueue({
       return;
     }
 
-    setSaving(true);
+    setValidateSaving(true);
     try {
-      await Promise.all(ids.map((id) => validateLead(id)));
+      const result = await validateLeads(ids);
       setSelectedRows([]);
       refreshQueue();
-      onToast({ title: 'Leads validados', description: `${ids.length} lead(s) atualizado(s) localmente.`, tone: 'success' });
+      onToast({
+        title: 'Leads validados',
+        description: `${result.approved} aprovado(s), ${result.returned} retorno(s) para Instagram${result.errors ? `, ${result.errors} erro(s)` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}.`,
+        tone: result.errors ? 'warning' : 'success',
+      });
     } catch (err) {
       onToast({ title: 'Erro ao validar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
-      setSaving(false);
+      setValidateSaving(false);
     }
   };
 
@@ -366,10 +365,10 @@ function ValidationQueue({
         {title ? <h3>{title}</h3> : null}
         {channel === 'WhatsApp' ? <SelectField options={queueFilterOptions} value={queueFilter} placeholder="Destino" onChange={(value) => setQueueFilter(value as PreSendQueueFilter)} /> : null}
         <SelectField options={profiles.length ? profiles : [emptyProfileLabel]} value={activeProfile || profiles[0] || emptyProfileLabel} placeholder={channel === 'WhatsApp' ? 'Chip' : 'Perfil'} onChange={setActiveProfile} />
-        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={saving} disabled={selectedRows.length ? !canQueueSelection : !hasOperationalProfile} onClick={fillQueue}>Preencher fila</Button>
-        {channel === 'WhatsApp' ? <Button size="sm" loading={saving} disabled={selectedRows.length ? !canApproveSelection : !approvableIds.length} onClick={validateSelected}>Validar leads</Button> : null}
+        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={fillSaving} disabled={!hasOperationalProfile || validateSaving} onClick={fillQueue}>Preencher fila</Button>
+        {channel === 'WhatsApp' ? <Button size="sm" loading={validateSaving} disabled={fillSaving || (selectedRows.length ? !canApproveSelection : !approvableIds.length)} onClick={validateSelected}>Validar leads</Button> : null}
       </div>
-      {selectedLeads.length && !canQueueSelection && !canApproveSelection ? (
+      {selectedLeads.length && !canApproveSelection ? (
         <div className="lead-bulk-actions"><span>{selectedLeads.length} selecionado(s)</span><small>Nenhuma acao disponivel para a selecao atual.</small></div>
       ) : null}
       {error ? <div className="table-message">{error}</div> : null}
@@ -482,7 +481,9 @@ export function PreSendPage() {
   const [whatsappScope, setWhatsAppScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [instagramScope, setInstagramScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const { dayCards, summary, loading, error, defaultDayId, refresh, moveToQueue, moveDayToQueue, moveInstagramDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, archiveLead, markAlreadySent, updateLead } = usePreSend();
+  const [summaryRefreshToken, setSummaryRefreshToken] = useState(0);
+  const { dayCards, summary, loading, error, defaultDayId, refresh, moveDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, validateLeads, archiveLead, markAlreadySent, updateLead } = usePreSend();
+  const [daySummary, setDaySummary] = useState<PreSendSummary>(summary);
 
   useEffect(() => {
     const defaultKey = daySelectionKey(defaultDayId);
@@ -495,6 +496,36 @@ export function PreSendPage() {
     return dayCards.find((day) => day.channel === channel && daySelectionKey(day.id) === activeDayKey)?.id ??
       dayCards.find((day) => day.channel === channel)?.id ??
       defaultDayId;
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    if (!dayCards.length) {
+      setDaySummary(summary);
+      return () => {
+        active = false;
+      };
+    }
+
+    async function loadDaySummary() {
+      const nextSummary = await preSendService.summary({
+        whatsappDayId: dayIdForChannel('WhatsApp'),
+        instagramDayId: dayIdForChannel('Instagram'),
+      });
+      if (active) setDaySummary(nextSummary);
+    }
+
+    void loadDaySummary();
+
+    return () => {
+      active = false;
+    };
+  }, [activeDayKey, dayCards, defaultDayId, summary, summaryRefreshToken]);
+
+  const refreshAll = () => {
+    refresh();
+    setSummaryRefreshToken((current) => current + 1);
   };
 
   const pushToast = (toast: Omit<ToastItem, 'id'>) => {
@@ -514,21 +545,10 @@ export function PreSendPage() {
         instagramProfile: instagramScope.profile,
         queueFilter: whatsappScope.queueFilter,
       });
+      refreshAll();
       pushToast({ title: 'Leads enviados para as filas', description: 'Filas montadas conforme dia, chip e perfil selecionados.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Nao foi possivel enviar para as filas', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    }
-  };
-
-  const sendInstagramReturnsToQueue = async () => {
-    try {
-      await moveInstagramDayToQueue({
-        instagramDayId: dayIdForChannel('Instagram'),
-        instagramProfile: instagramScope.profile,
-      });
-      pushToast({ title: 'Instagram destinado para fila', description: 'Retornos Instagram aprovados foram enviados para a fila do dia selecionado.', tone: 'success' });
-    } catch (err) {
-      pushToast({ title: 'Nao foi possivel destinar Instagram', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
   };
 
@@ -538,6 +558,7 @@ export function PreSendPage() {
         whatsappDayId: dayIdForChannel('WhatsApp'),
         instagramDayId: dayIdForChannel('Instagram'),
       });
+      refreshAll();
       pushToast({ title: 'Leads retornaram ao Inicio', description: 'Leads do dia selecionado voltaram ao Inicio como aprovados.', tone: 'info' });
     } catch (err) {
       pushToast({ title: 'Nao foi possivel retornar leads', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
@@ -551,7 +572,6 @@ export function PreSendPage() {
         action={
           <div className="pre-send-header-actions">
             <Button variant="secondary" iconLeft={RotateCcw} onClick={returnSelectedDayToImport}>Retornar leads para inicio</Button>
-            <Button variant="secondary" iconLeft={Instagram} onClick={sendInstagramReturnsToQueue}>Destinar leads para Instagram</Button>
             <Button iconLeft={Send} onClick={sendPreparedToQueues}>Enviar leads para as filas</Button>
           </div>
         }
@@ -560,11 +580,11 @@ export function PreSendPage() {
       {!error && loading ? <div className="table-message">Carregando semana de pre-envio...</div> : null}
       <DayLimitGrid dayCards={dayCards} activeDayKey={activeDayKey || daySelectionKey(defaultDayId)} onDayChange={(dayId) => setActiveDayKey(daySelectionKey(dayId))} />
       <section className="metric-grid metric-grid--2 pre-send-summary">
-        <MetricCard icon={PhoneCall} value={String(summary.whatsapp)} label="Numeros validados" tone="success" />
-        <MetricCard icon={Instagram} value={String(summary.instagram)} label="Retornos Instagram" />
+        <MetricCard icon={PhoneCall} value={String(daySummary.whatsapp)} label={`Numeros validados${daySummary.dateLabel ? ` - ${daySummary.dateLabel}` : ''}`} tone="success" />
+        <MetricCard icon={Instagram} value={String(daySummary.instagram)} label={`Retornos Instagram${daySummary.dateLabel ? ` - ${daySummary.dateLabel}` : ''}`} />
       </section>
       <div className="pre-send-action">
-        <Button iconLeft={RefreshCcw} onClick={() => { refresh(); pushToast({ title: 'Pré-envio atualizado', description: 'Dados locais recarregados.', tone: 'info' }); }}>Atualizar pré-envio</Button>
+        <Button iconLeft={RefreshCcw} onClick={() => { refreshAll(); pushToast({ title: 'Pré-envio atualizado', description: 'Dados locais recarregados.', tone: 'info' }); }}>Atualizar pré-envio</Button>
       </div>
       <section className="queue-grid">
         <Panel className="queue-card-shell">
@@ -573,10 +593,10 @@ export function PreSendPage() {
             channel="WhatsApp"
             activeDayId={dayIdForChannel('WhatsApp')}
             onToast={pushToast}
-            onRefreshSummary={refresh}
-            moveToQueue={moveToQueue}
+            onRefreshSummary={refreshAll}
             moveApprovedImportsToQueue={moveApprovedImportsToQueue}
             validateLead={validateLead}
+            validateLeads={validateLeads}
             archiveLead={archiveLead}
             markAlreadySent={markAlreadySent}
             updateLead={updateLead}
@@ -589,10 +609,10 @@ export function PreSendPage() {
             channel="Instagram"
             activeDayId={dayIdForChannel('Instagram')}
             onToast={pushToast}
-            onRefreshSummary={refresh}
-            moveToQueue={moveToQueue}
+            onRefreshSummary={refreshAll}
             moveApprovedImportsToQueue={moveApprovedImportsToQueue}
             validateLead={validateLead}
+            validateLeads={validateLeads}
             archiveLead={archiveLead}
             markAlreadySent={markAlreadySent}
             updateLead={updateLead}

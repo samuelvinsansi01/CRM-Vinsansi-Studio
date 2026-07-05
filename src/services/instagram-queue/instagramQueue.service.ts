@@ -76,14 +76,19 @@ async function activeInstagramProfiles() {
     .map((profile) => profile.username);
 }
 
-async function rolloverOverdueInstagramItems() {
+function queueRolloverTargetDate() {
   const today = toLocalDateInputValue();
+  return new Date().getHours() >= 22 ? dateInputAddDays(today, 1) : today;
+}
+
+async function rolloverOverdueInstagramItems() {
+  const targetDate = queueRolloverTargetDate();
   const settings = await settingsService.getDispatchSettings();
   const dailyLimit = Math.max(1, settings.instagram.dailyLimit);
   const batchLimit = Math.max(1, settings.instagram.perBatch);
   const allLeads = (await repositories.instagramQueue.listBatches({})).flatMap((batch) => batch.leads);
   const candidates = allLeads
-    .filter((lead) => (isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')) && lead.scheduled_date < today)
+    .filter((lead) => (isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')) && lead.scheduled_date < targetDate)
     .sort((a, b) => `${a.scheduled_date}:${a.batch_number}:${a.position}:${a.created_at}`.localeCompare(`${b.scheduled_date}:${b.batch_number}:${b.position}:${b.created_at}`));
 
   if (!candidates.length) return;
@@ -99,7 +104,7 @@ async function rolloverOverdueInstagramItems() {
   }
 
   for (const lead of candidates) {
-    let scheduledDate = today;
+    let scheduledDate = targetDate;
     let key = `${lead.profile}:${scheduledDate}`;
 
     while ((occupancy.get(key) ?? 0) >= dailyLimit) {

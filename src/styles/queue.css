@@ -215,6 +215,22 @@
   padding: 0 var(--space-20);
 }
 
+.queue-page .batch-row__summary--instagram {
+  grid-template-columns: minmax(0, 34%) minmax(0, 59%) 7%;
+}
+
+.queue-page .batch-row__company a {
+  overflow: hidden;
+  color: var(--app-text);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-page .batch-row__company a:hover {
+  color: var(--action-primary);
+}
+
 .queue-page .batch-row__tags {
   min-width: 0;
   flex-wrap: nowrap;

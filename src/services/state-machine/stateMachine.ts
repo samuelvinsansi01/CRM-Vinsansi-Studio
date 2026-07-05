@@ -91,7 +91,7 @@ function canPreSend(request: TransitionRequest): TransitionResult {
   if (from === 'sending') return denied(request, 'Lead em envio nao pode ser alterado.');
   if (request.action === 'edit') return includes(['review', 'approved', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Lead em fila ou finalizado nao pode ser editado.');
   if (request.action === 'instagram_override') return includes(['review', 'approved', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Override Instagram permitido somente antes da fila.');
-  if (request.action === 'approve') return to === 'approved' && includes(['review', 'rejected', 'invalid', 'pending', 'approved'], from) ? allowed(request) : denied(request, 'Apenas leads em revisao, recusados ou invalidos podem ser aprovados.');
+  if (request.action === 'approve') return to === 'approved' && includes(['review', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Apenas leads em revisao, recusados ou invalidos podem ser aprovados.');
   if (request.action === 'unapprove') return to === 'pending' && from === 'approved' ? allowed(request) : denied(request, 'Somente leads aprovados podem voltar para em aguarde.');
   if (request.action === 'queue') return to === 'queued' && from === 'approved' ? allowed(request) : denied(request, 'Apenas leads aprovados podem entrar em fila.');
   if (request.action === 'archive') return to === 'archived' && includes(['review', 'approved', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Lead em fila ou enviado nao pode ser arquivado pelo pre-envio.');

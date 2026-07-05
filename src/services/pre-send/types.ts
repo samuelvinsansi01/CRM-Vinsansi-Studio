@@ -46,6 +46,14 @@ export type PreSendSummary = {
   instagram: number;
   total: number;
   queued: number;
+  dateLabel?: string;
+};
+
+export type PreSendValidationSummary = {
+  approved: number;
+  returned: number;
+  errors: number;
+  skipped: number;
 };
 
 export type PreSendFilters = {
