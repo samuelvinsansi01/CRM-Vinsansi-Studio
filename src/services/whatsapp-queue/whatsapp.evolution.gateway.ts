@@ -29,7 +29,8 @@ function evolutionConfig() {
     apiKey,
     instancePrefix: processEnvValueAny('EVOLUTION_INSTANCE_PREFIX'),
     delayMs: Number(processEnvValueAny('EVOLUTION_MESSAGE_DELAY_MS') || 0),
-    validationDelayMs: Number(processEnvValueAny('EVOLUTION_VALIDATION_DELAY_MS') || processEnvValueAny('EVOLUTION_MESSAGE_DELAY_MS') || 0),
+    validationDelayMs: Number(processEnvValueAny('EVOLUTION_VALIDATION_DELAY_MS') || 0),
+    validationBatchSize: Math.max(1, Number(processEnvValueAny('EVOLUTION_VALIDATION_BATCH_SIZE') || 50)),
     testMode: envFlag(processEnvValueAny('WORKER_TEST_MODE'), false),
     testPhone: processEnvValueAny('TEST_PHONE').replace(/\D/g, ''),
     dryRun: envFlag(processEnvValueAny('DRY_RUN'), false),
@@ -157,12 +158,21 @@ function validationItems(payload: unknown): Array<Record<string, unknown>> {
   return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
 }
 
-function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: unknown): WhatsAppValidationResult {
+function booleanLike(value: unknown) {
+  if (value === true || value === false) return value;
+  const text = String(value ?? '').trim().toLowerCase();
+  if (['true', '1', 'yes', 'sim'].includes(text)) return true;
+  if (['false', '0', 'no', 'nao', 'não'].includes(text)) return false;
+  return undefined;
+}
+
+function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: unknown, index = 0): WhatsAppValidationResult {
   const number = phoneForValidation(lead);
-  const [item] = validationItems(payload).filter((candidate) => {
-    const candidateNumber = String(candidate.number ?? candidate.phone ?? candidate.jid ?? candidate.exists ?? '').replace(/\D/g, '');
-    return !candidateNumber || candidateNumber.includes(number) || number.includes(candidateNumber);
-  });
+  const items = validationItems(payload);
+  const item = items.find((candidate) => {
+    const candidateNumber = String(candidate.number ?? candidate.phone ?? candidate.jid ?? candidate.id ?? '').replace(/\D/g, '');
+    return Boolean(candidateNumber) && (candidateNumber.includes(number) || number.includes(candidateNumber));
+  }) ?? items[index];
 
   if (!item) {
     return {
@@ -174,9 +184,11 @@ function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: u
   }
 
   const exists = item.exists ?? item.valid ?? item.isWhatsapp ?? item.is_whatsapp ?? item.hasWhatsapp ?? item.has_whatsapp;
+  const existsBool = booleanLike(exists);
   const jid = String(item.jid ?? item.id ?? item._serialized ?? item.remoteJid ?? '');
-  const valid = exists === true || Boolean(jid.includes('@s.whatsapp.net'));
-  const invalid = exists === false;
+  const status = String(item.status ?? item.result ?? '').toLowerCase();
+  const valid = existsBool === true || Boolean(jid.includes('@s.whatsapp.net')) || ['valid', 'exists', 'ok'].includes(status);
+  const invalid = existsBool === false || ['invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
 
   if (!valid && !invalid) {
     return {
@@ -194,21 +206,32 @@ function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: u
   };
 }
 
-async function validateWhatsAppNumber(lead: WhatsAppValidationRequest): Promise<WhatsAppValidationResult> {
+function validationErrorResult(lead: WhatsAppValidationRequest, message: string): WhatsAppValidationResult {
+  return {
+    leadId: lead.id,
+    status: 'error',
+    valid: false,
+    errorMessage: message,
+  };
+}
+
+function chunk<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
+
+async function validateWhatsAppBatch(instance: string, leads: WhatsAppValidationRequest[]): Promise<WhatsAppValidationResult[]> {
   const config = evolutionConfig();
   if (!config.enabled) throw new Error('Evolution nao configurada no worker/backend.');
-  const instance = instanceForValidation(lead);
-  if (!instance) throw new Error(`Lead sem instancia/chip para validacao: ${lead.company}.`);
-  const number = phoneForValidation(lead);
-  if (!number) throw new Error(`Lead sem telefone normalizado para validacao: ${lead.company}.`);
   await assertConnected(instance);
-  if (config.dryRun) return { leadId: lead.id, status: 'valid', valid: true };
+  if (config.dryRun) return leads.map((lead) => ({ leadId: lead.id, status: 'valid', valid: true }));
 
   const payload = await requestEvolution(`/chat/whatsappNumbers/${encodeURIComponent(instance)}`, {
     method: 'POST',
-    body: JSON.stringify({ numbers: [number] }),
+    body: JSON.stringify({ numbers: leads.map(phoneForValidation) }),
   });
-  return validationResultFromPayload(lead, payload);
+  return leads.map((lead, index) => validationResultFromPayload(lead, payload, index));
 }
 
 export const evolutionWhatsAppGateway: WhatsAppGateway = {
@@ -249,23 +272,35 @@ export const evolutionWhatsAppGateway: WhatsAppGateway = {
 export const evolutionWhatsAppValidationGateway: WhatsAppValidationGateway = {
   async validate(leads) {
     const config = evolutionConfig();
-    const results: WhatsAppValidationResult[] = [];
+    const results = new Map<string, WhatsAppValidationResult>();
+    const grouped = new Map<string, WhatsAppValidationRequest[]>();
 
     for (const lead of leads) {
       try {
-        results.push(await validateWhatsAppNumber(lead));
+        const instance = instanceForValidation(lead);
+        const number = phoneForValidation(lead);
+        if (!instance) throw new Error(`Lead sem instancia/chip para validacao: ${lead.company}.`);
+        if (!number) throw new Error(`Lead sem telefone normalizado para validacao: ${lead.company}.`);
+        grouped.set(instance, [...(grouped.get(instance) ?? []), lead]);
       } catch (error) {
-        results.push({
-          leadId: lead.id,
-          status: 'error',
-          valid: false,
-          errorMessage: error instanceof Error ? error.message : 'Erro ao validar WhatsApp.',
-        });
+        results.set(lead.id, validationErrorResult(lead, error instanceof Error ? error.message : 'Erro ao validar WhatsApp.'));
       }
-
-      if (config.validationDelayMs) await delay(config.validationDelayMs);
     }
 
-    return results;
+    for (const [instance, instanceLeads] of grouped.entries()) {
+      for (const batch of chunk(instanceLeads, config.validationBatchSize)) {
+        try {
+          const batchResults = await validateWhatsAppBatch(instance, batch);
+          batchResults.forEach((result) => results.set(result.leadId, result));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Erro ao validar WhatsApp.';
+          batch.forEach((lead) => results.set(lead.id, validationErrorResult(lead, message)));
+        }
+
+        if (config.validationDelayMs) await delay(config.validationDelayMs);
+      }
+    }
+
+    return leads.map((lead) => results.get(lead.id) ?? validationErrorResult(lead, 'Validacao nao retornou resultado para este lead.'));
   },
 };

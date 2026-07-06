@@ -23,6 +23,14 @@ type ValidationLead = {
   chip_instance?: string;
 };
 
+type ValidationResult = {
+  leadId: string;
+  lead_id?: string;
+  status: 'valid' | 'invalid' | 'error';
+  valid: boolean;
+  errorMessage?: string;
+};
+
 function env(name: string) {
   return String(process.env[name] ?? '').trim();
 }
@@ -39,7 +47,8 @@ function evolutionConfig() {
   return {
     baseUrl: env('EVOLUTION_API_URL').replace(/\/$/, ''),
     apiKey: env('EVOLUTION_API_KEY'),
-    validationDelayMs: Number(env('EVOLUTION_VALIDATION_DELAY_MS') || env('EVOLUTION_MESSAGE_DELAY_MS') || 1500),
+    validationDelayMs: Number(env('EVOLUTION_VALIDATION_DELAY_MS') || 0),
+    validationBatchSize: Math.max(1, Number(env('EVOLUTION_VALIDATION_BATCH_SIZE') || 50)),
     dryRun: env('DRY_RUN').toLowerCase() === 'true',
   };
 }
@@ -79,16 +88,25 @@ function payloadItems(payload: unknown): Array<Record<string, unknown>> {
   return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object');
 }
 
-function parseValidation(lead: ValidationLead, payload: unknown) {
+function booleanLike(value: unknown) {
+  if (value === true || value === false) return value;
+  const text = String(value ?? '').trim().toLowerCase();
+  if (['true', '1', 'yes', 'sim'].includes(text)) return true;
+  if (['false', '0', 'no', 'nao', 'não'].includes(text)) return false;
+  return undefined;
+}
+
+function parseValidation(lead: ValidationLead, payload: unknown, index = 0): ValidationResult {
   const number = phoneDigits(lead);
-  const item = payloadItems(payload).find((candidate) => {
+  const items = payloadItems(payload);
+  const item = items.find((candidate) => {
     const candidateNumber = String(candidate.number ?? candidate.phone ?? candidate.jid ?? candidate.id ?? '').replace(/\D/g, '');
-    return !candidateNumber || candidateNumber.includes(number) || number.includes(candidateNumber);
-  });
+    return Boolean(candidateNumber) && (candidateNumber.includes(number) || number.includes(candidateNumber));
+  }) ?? items[index];
 
   if (!item) {
     return {
-      leadId: lead.id,
+      leadId: leadId(lead),
       lead_id: lead.lead_id,
       status: 'error',
       valid: false,
@@ -97,13 +115,15 @@ function parseValidation(lead: ValidationLead, payload: unknown) {
   }
 
   const exists = item.exists ?? item.valid ?? item.isWhatsapp ?? item.is_whatsapp ?? item.hasWhatsapp ?? item.has_whatsapp;
+  const existsBool = booleanLike(exists);
   const jid = String(item.jid ?? item.id ?? item._serialized ?? item.remoteJid ?? '');
-  const valid = exists === true || jid.includes('@s.whatsapp.net');
-  const invalid = exists === false;
+  const status = String(item.status ?? item.result ?? '').toLowerCase();
+  const valid = existsBool === true || jid.includes('@s.whatsapp.net') || ['valid', 'exists', 'ok'].includes(status);
+  const invalid = existsBool === false || ['invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
 
   if (!valid && !invalid) {
     return {
-      leadId: lead.id,
+      leadId: leadId(lead),
       lead_id: lead.lead_id,
       status: 'error',
       valid: false,
@@ -112,31 +132,89 @@ function parseValidation(lead: ValidationLead, payload: unknown) {
   }
 
   return {
-    leadId: lead.id,
+    leadId: leadId(lead),
     lead_id: lead.lead_id,
     status: valid ? 'valid' : 'invalid',
     valid,
   };
 }
 
-async function validateLead(lead: ValidationLead) {
-  const config = evolutionConfig();
-  const leadId = String(lead.id || lead.lead_id || '');
-  const instance = String(lead.chip_instance || '').trim();
-  const number = phoneDigits(lead);
+function leadId(lead: ValidationLead) {
+  return String(lead.id || lead.lead_id || '');
+}
 
-  if (!leadId) throw new Error('Lead sem id para validacao.');
-  if (!instance) throw new Error(`Lead sem chip/instancia para validacao: ${lead.company || leadId}.`);
-  if (!number) throw new Error(`Lead sem telefone para validacao: ${lead.company || leadId}.`);
+function errorResult(lead: ValidationLead, message: string): ValidationResult {
+  return {
+    leadId: leadId(lead),
+    lead_id: lead.lead_id,
+    status: 'error',
+    valid: false,
+    errorMessage: message,
+  };
+}
+
+function chunk<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
+
+async function validateLeadBatch(instance: string, leads: ValidationLead[]): Promise<ValidationResult[]> {
+  const config = evolutionConfig();
   if (!config.baseUrl || !config.apiKey) throw new Error('EVOLUTION_API_URL/EVOLUTION_API_KEY ausentes no backend.');
-  if (config.dryRun) return { leadId, lead_id: lead.lead_id, status: 'valid', valid: true };
+  if (config.dryRun) {
+    return leads.map((lead) => ({ leadId: leadId(lead), lead_id: lead.lead_id, status: 'valid', valid: true }));
+  }
 
   const payload = await requestEvolution(`/chat/whatsappNumbers/${encodeURIComponent(instance)}`, {
     method: 'POST',
-    body: JSON.stringify({ numbers: [number] }),
+    body: JSON.stringify({ numbers: leads.map(phoneDigits) }),
   });
 
-  return parseValidation({ ...lead, id: leadId }, payload);
+  return leads.map((lead, index) => parseValidation({ ...lead, id: leadId(lead) }, payload, index));
+}
+
+async function validateLeads(leads: ValidationLead[]) {
+  const config = evolutionConfig();
+  const results = new Map<string, ValidationResult>();
+  const grouped = new Map<string, ValidationLead[]>();
+
+  for (const lead of leads) {
+    const id = leadId(lead);
+    const instance = String(lead.chip_instance || '').trim();
+    const number = phoneDigits(lead);
+
+    if (!id) {
+      results.set(`${Math.random()}`, errorResult(lead, 'Lead sem id para validacao.'));
+      continue;
+    }
+    if (!instance) {
+      results.set(id, errorResult(lead, `Lead sem chip/instancia para validacao: ${lead.company || id}.`));
+      continue;
+    }
+    if (!number) {
+      results.set(id, errorResult(lead, `Lead sem telefone para validacao: ${lead.company || id}.`));
+      continue;
+    }
+
+    grouped.set(instance, [...(grouped.get(instance) ?? []), lead]);
+  }
+
+  for (const [instance, instanceLeads] of grouped.entries()) {
+    for (const batch of chunk(instanceLeads, config.validationBatchSize)) {
+      try {
+        const batchResults = await validateLeadBatch(instance, batch);
+        batchResults.forEach((result) => results.set(String(result.leadId), result));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Erro ao validar WhatsApp.';
+        batch.forEach((lead) => results.set(leadId(lead), errorResult(lead, message)));
+      }
+
+      if (config.validationDelayMs) await delay(config.validationDelayMs);
+    }
+  }
+
+  return leads.map((lead) => results.get(leadId(lead)) ?? errorResult(lead, 'Validacao nao retornou resultado para este lead.'));
 }
 
 function requestBodyRecord(body: unknown): { leads?: unknown } {
@@ -171,24 +249,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  const config = evolutionConfig();
-  const results = [];
-
-  for (const lead of leads) {
-    try {
-      results.push(await validateLead(lead));
-    } catch (error) {
-      results.push({
-        leadId: lead.id,
-        lead_id: lead.lead_id,
-        status: 'error',
-        valid: false,
-        errorMessage: error instanceof Error ? error.message : 'Erro ao validar WhatsApp.',
-      });
-    }
-
-    if (config.validationDelayMs) await delay(config.validationDelayMs);
-  }
+  const results = await validateLeads(leads);
 
   res.status(200).json({ results });
 }
