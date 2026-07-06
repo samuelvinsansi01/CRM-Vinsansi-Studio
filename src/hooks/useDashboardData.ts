@@ -101,10 +101,14 @@ export function useDashboardData(filters: HomeFilters) {
   useEffect(() => {
     const offImport = eventBus.on('import:changed', refresh);
     const offPreSend = eventBus.on('pre-send:changed', refresh);
+    const offWhatsAppQueue = eventBus.on('whatsapp-queue:changed', refresh);
+    const offInstagramQueue = eventBus.on('instagram-queue:changed', refresh);
 
     return () => {
       offImport();
       offPreSend();
+      offWhatsAppQueue();
+      offInstagramQueue();
     };
   }, [refresh]);
 
@@ -116,12 +120,8 @@ export function useDashboardData(filters: HomeFilters) {
       setError(null);
 
       try {
-        const [pending, approved] = await Promise.all([
-          importService.list({ status: 'pending' }),
-          importService.list({ status: 'approved' }),
-        ]);
-
-        if (active) setRecords([...pending, ...approved]);
+        const operational = await importService.listHomeOperationalLeads();
+        if (active) setRecords(operational);
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar leads da importacao.');

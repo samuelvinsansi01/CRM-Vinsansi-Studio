@@ -1,6 +1,7 @@
 import type { WhatsAppGateway, WhatsAppGatewayResult } from './whatsapp.gateway';
 import type { WhatsAppValidationGateway, WhatsAppValidationRequest, WhatsAppValidationResult } from '../whatsapp-validation/whatsappValidation.gateway';
 import type { WhatsAppQueueLead } from './types';
+import { renderTemplateVariables } from '../templates/templateVariables';
 
 function envFlag(value: unknown, defaultValue = false) {
   if (value === undefined || value === null || value === '') return defaultValue;
@@ -111,14 +112,15 @@ function isConnectionFailure(error: unknown) {
 
 async function sendText(instance: string, lead: WhatsAppQueueLead, text: string) {
   const number = phoneForEvolution(lead);
+  const renderedText = renderTemplateVariables(text, lead);
   if (!number) throw new Error('Lead sem telefone normalizado.');
-  if (!text.trim()) return;
+  if (!renderedText.trim()) return;
   const config = evolutionConfig();
   if (config.testMode && !config.dryRun && number !== config.testPhone) throw new Error('TEST_MODE bloqueou envio para numero diferente de TEST_PHONE.');
   if (config.dryRun) return;
   await requestEvolution(`/message/sendText/${encodeURIComponent(instance)}`, {
     method: 'POST',
-    body: JSON.stringify({ number, textMessage: { text } }),
+    body: JSON.stringify({ number, textMessage: { text: renderedText } }),
   });
 }
 

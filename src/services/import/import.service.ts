@@ -49,6 +49,87 @@ function baseOriginFromImport(lead: ImportLead): CreateBaseLeadInput['origin'] {
   return (lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino) === 'Instagram' ? 'Instagram' : 'WhatsApp';
 }
 
+function isActivePreSendAllocation(status: unknown) {
+  return isStatusGroup(status, 'review') || isStatusGroup(status, 'approved') || isStatusGroup(status, 'queued');
+}
+
+function isActiveQueueAllocation(status: unknown) {
+  return (
+    isStatusGroup(status, 'queued') ||
+    isStatusGroup(status, 'sending') ||
+    isStatusGroup(status, 'paused') ||
+    isStatusGroup(status, 'following') ||
+    isStatusGroup(status, 'dm_opened') ||
+    isStatusGroup(status, 'error')
+  );
+}
+
+type ActivePipelineAllocationKeys = {
+  ids: Set<string>;
+  phones: Set<string>;
+  instagrams: Set<string>;
+};
+
+function addPhone(target: Set<string>, value: unknown) {
+  const phone = normalizePhone(value);
+  if (phone) target.add(phone);
+}
+
+function addInstagram(target: Set<string>, value: unknown) {
+  const instagram = normalizeInstagramUsername(String(value ?? ''));
+  if (instagram) target.add(instagram);
+}
+
+async function activePipelineAllocationKeys(): Promise<ActivePipelineAllocationKeys> {
+  const [preSendWhatsApp, preSendInstagram, whatsappBatches, instagramBatches] = await Promise.all([
+    repositories.preSend.listLeads({ channel: 'WhatsApp', queueFilter: 'Geral' }),
+    repositories.preSend.listLeads({ channel: 'Instagram', queueFilter: 'Geral' }),
+    repositories.whatsappQueue.listBatches({}),
+    repositories.instagramQueue.listBatches({}),
+  ]);
+
+  const keys: ActivePipelineAllocationKeys = {
+    ids: new Set<string>(),
+    phones: new Set<string>(),
+    instagrams: new Set<string>(),
+  };
+  const preSendImportIdById = new Map<string, string>();
+
+  for (const lead of [...preSendWhatsApp, ...preSendInstagram]) {
+    if (lead.sourceImportId) preSendImportIdById.set(lead.id, lead.sourceImportId);
+    if (!isActivePreSendAllocation(lead.status)) continue;
+    if (lead.sourceImportId) keys.ids.add(lead.sourceImportId);
+    addPhone(keys.phones, lead.phone);
+    addInstagram(keys.instagrams, lead.instagram_url ?? lead.instagram);
+  }
+
+  for (const lead of whatsappBatches.flatMap((batch) => batch.leads)) {
+    if (!isActiveQueueAllocation(lead.status)) continue;
+    const sourceImportId = lead.lead_id || (lead.sourcePreSendId ? preSendImportIdById.get(lead.sourcePreSendId) : '');
+    if (sourceImportId) keys.ids.add(sourceImportId);
+    addPhone(keys.phones, lead.phone_normalized || lead.phone);
+    addInstagram(keys.instagrams, lead.instagram_url ?? lead.instagram_username ?? lead.instagram);
+  }
+
+  for (const lead of instagramBatches.flatMap((batch) => batch.leads)) {
+    if (!isActiveQueueAllocation(lead.status)) continue;
+    const sourceImportId = lead.lead_id || (lead.sourcePreSendId ? preSendImportIdById.get(lead.sourcePreSendId) : '');
+    if (sourceImportId) keys.ids.add(sourceImportId);
+    addPhone(keys.phones, lead.phone);
+    addInstagram(keys.instagrams, lead.instagram_url ?? lead.instagram_username ?? lead.instagram);
+  }
+
+  return keys;
+}
+
+function isAllocatedInPipeline(lead: ImportLead, keys: ActivePipelineAllocationKeys) {
+  if (keys.ids.has(lead.id)) return true;
+  const phone = normalizePhone(lead.whatsapp ?? lead.normalizedPhone);
+  if (phone && keys.phones.has(phone)) return true;
+  const instagram = normalizeInstagramUsername(lead.instagram_url ?? lead.instagram ?? lead.normalizedInstagram);
+  return Boolean(instagram && keys.instagrams.has(instagram));
+}
+
 function importLeadToBaseInput(lead: ImportLead, sentAt: string, reason: string): CreateBaseLeadInput {
   const instagram = lead.instagram_url ?? lead.instagram ?? '';
   return {
@@ -117,6 +198,19 @@ async function bulkUpdate(ids: string[], action: BulkImportAction) {
 export const importService = {
   async list(filters: ImportListFilters) {
     return repositories.import.list(filters);
+  },
+
+  async listHomeOperationalLeads() {
+    const [pending, approved, allocatedKeys] = await Promise.all([
+      repositories.import.list({ status: 'pending' }),
+      repositories.import.list({ status: 'approved' }),
+      activePipelineAllocationKeys(),
+    ]);
+    const byId = new Map<string, ImportLead>();
+    [...pending, ...approved].forEach((lead) => {
+      if (!isAllocatedInPipeline(lead, allocatedKeys)) byId.set(lead.id, lead);
+    });
+    return Array.from(byId.values());
   },
 
   async summary() {

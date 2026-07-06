@@ -10,6 +10,7 @@ import { preSendService } from '../pre-send/preSend.service';
 import { settingsService } from '../settings/settings.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
+import { renderTemplateVariables } from '../templates/templateVariables';
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 
 async function getSelectedLeads(ids: string[]) {
@@ -169,7 +170,7 @@ async function persistSentToBase(leads: InstagramQueueLead[]) {
         override_at: lead.override_at,
         status: 'sent',
         sentAt,
-        template: lead.message1,
+        template: renderTemplateVariables(lead.message1, lead),
         chipOrProfile: lead.profile,
         notes: lead.instagram,
       }),

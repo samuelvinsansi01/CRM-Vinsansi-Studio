@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { renderLeadMessages } from '../src/services/templates/templateVariables';
 
 type ApiRequest = {
   method?: string;
@@ -109,7 +110,7 @@ function itemFromRow(row: QueueRow) {
   const position = numberValue(row.position ?? data.position ?? data.order, 1);
   const status = statusOf(row.status ?? data.status ?? 'queued');
 
-  return {
+  const item = {
     ...data,
     id: text(row.id ?? data.id),
     item_id: text(row.id ?? data.id),
@@ -141,6 +142,8 @@ function itemFromRow(row: QueueRow) {
     created_at: text(row.created_at ?? data.created_at),
     updated_at: text(row.updated_at ?? data.updated_at),
   };
+  const messages = renderLeadMessages(item, item);
+  return { ...item, ...messages };
 }
 
 function sortItems(a: ReturnType<typeof itemFromRow>, b: ReturnType<typeof itemFromRow>) {

@@ -12,6 +12,7 @@ import type { CreateInstagramQueueLeadInput, InstagramQueueLead } from '../insta
 import type { CreateBaseLeadInput } from '../base/types';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { assertTransition } from '../state-machine';
+import { renderLeadMessages } from '../templates/templateVariables';
 import type { CreateWhatsAppQueueLeadInput, WhatsAppQueueLead } from '../whatsapp-queue/types';
 import { preSendLeadToWhatsAppValidationRequest, whatsappValidationGateway } from '../whatsapp-validation/whatsappValidation.gateway';
 import type { CreatePreSendLeadInput, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead, PreSendQueueFilter, PreSendValidationSummary } from './types';
@@ -670,6 +671,7 @@ async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAp
     if (!availableChip) throw new Error(`Chip ${lead.profile || 'selecionado'} inativo, offline ou com limite diario atingido.`);
     const instance = chipInstance(availableChip);
     const branchImage = branchImageForLead(lead, branches);
+    const messages = renderLeadMessages(lead, template);
     usageByChip.set(usageKey, (usageByChip.get(usageKey) ?? 0) + 1);
 
     queueLeads.push({
@@ -693,8 +695,8 @@ async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAp
       chip_instance: instance,
       chip_label: availableChip.name,
       chip_id: availableChip.id,
-      message1: template.message1,
-      message2: template.message2,
+      message1: messages.message1,
+      message2: messages.message2,
       imageName: branchImage,
       image_url: branchImage,
       template_id: template.id,
@@ -728,6 +730,7 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
       const template = await loadTemplate(lead);
       assertTemplate(lead, template);
       const branchImage = branchImageForLead(lead, branches);
+      const messages = renderLeadMessages(lead, template);
       const selectedProfile =
         activeProfiles.find((profile) => profile.username === normalizeInstagramUsername(lead.profile)) ??
         activeProfiles[0];
@@ -752,8 +755,8 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
         override_by: lead.override_by,
         override_at: lead.override_at,
         status: 'queued' as const,
-        message1: template.message1,
-        message2: template.message2,
+        message1: messages.message1,
+        message2: messages.message2,
         imageName: branchImage,
         image_url: branchImage,
         template_id: template.id,

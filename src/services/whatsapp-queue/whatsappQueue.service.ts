@@ -11,6 +11,7 @@ import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperation
 import { preSendService } from '../pre-send/preSend.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
+import { renderTemplateVariables } from '../templates/templateVariables';
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 
 function isChip(record: ConfigRecord): record is ChipConfigRecord {
@@ -150,8 +151,8 @@ async function logDispatchMessages(leads: WhatsAppQueueLead[], replayed = false)
   await Promise.all(
     leads.flatMap((lead) =>
       [
-        { part: 'message_1', body: lead.message_1 || lead.message1 },
-        { part: 'message_2', body: lead.message_2 || lead.message2 },
+        { part: 'message_1', body: renderTemplateVariables(lead.message_1 || lead.message1, lead) },
+        { part: 'message_2', body: renderTemplateVariables(lead.message_2 || lead.message2, lead) },
         { part: 'image', body: lead.image_url || lead.image_id || '' },
       ]
         .filter((item) => item.body.trim())
@@ -222,7 +223,7 @@ async function persistSentToBase(leads: WhatsAppQueueLead[]) {
         override_at: lead.override_at,
         status: 'sent',
         sentAt,
-        template: lead.message1,
+        template: renderTemplateVariables(lead.message1, lead),
         chipOrProfile: lead.chip,
         notes: lead.imageName ? `Imagem: ${lead.imageName}` : '',
       }),
