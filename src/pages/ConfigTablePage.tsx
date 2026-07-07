@@ -86,6 +86,11 @@ const activeOptions = [
   { label: 'Inativo', value: 'Inativo' },
 ];
 
+const imageRequirementOptions: SelectOption[] = [
+  { label: 'Obrigatoria — bloquear sem imagem', value: 'true' },
+  { label: 'Opcional — enviar somente texto', value: 'false' },
+];
+
 const templateTypeOptions: SelectOption[] = [
   { label: 'Sem site', value: 'sem-site' },
   { label: 'Com site', value: 'com-site' },
@@ -192,7 +197,8 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
       fields: [
         { key: 'name', label: 'Nome', placeholder: 'Ex.: Moveis Planejados', description: 'Ramo operacional utilizado por toda a plataforma.' },
         { key: 'slug', label: 'Slug', placeholder: 'moveis-planejados' },
-        { key: 'imageName', label: 'Nome da imagem', placeholder: 'moveis-planejados.jpg', description: 'Nome do arquivo usado pelo worker para este ramo.' },
+        { key: 'imageName', label: 'Nome da imagem', placeholder: 'moveis-planejados.jpg', description: 'Arquivo que o Worker procura em /app/images/.' },
+        { key: 'imageRequired', label: 'Imagem no disparo', type: 'select', options: imageRequirementOptions, description: 'Obrigatoria: o Worker confere o arquivo antes da primeira mensagem. Opcional: envia somente texto.' },
         { key: 'associatedCategories', label: 'Categorias do Google Maps', type: 'textarea', placeholder: 'Categoria principal, aliases...', description: 'Categorias oficiais importadas do Google Maps que serao associadas automaticamente a este ramo.' },
         { key: 'subcategories', label: 'Palavras-chave de reconhecimento', type: 'textarea', placeholder: 'Marcenaria, marceneiro, moveleiro...', description: 'Termos utilizados para identificar automaticamente este ramo durante a importacao.' },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
@@ -320,6 +326,7 @@ function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[]): Reco
       minRating: String(DEFAULT_BRANCH_MIN_RATING),
       minReviews: String(DEFAULT_BRANCH_MIN_REVIEWS),
       imageName: '',
+      imageRequired: 'false',
       active: 'Ativo',
     };
   }
@@ -373,6 +380,7 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
       minRating: String(record.minRating),
       minReviews: String(record.minReviews),
       imageName: record.imageName,
+      imageRequired: record.imageRequired ? 'true' : 'false',
       active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
     };
   }

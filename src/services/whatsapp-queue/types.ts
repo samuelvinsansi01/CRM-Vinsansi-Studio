@@ -38,7 +38,10 @@ export type WhatsAppQueueLead = {
   message_1: string;
   message2: string;
   message_2: string;
+  /** Nome do arquivo local que o Worker procura em /app/images. */
   imageName?: string;
+  /** Quando true, o Worker nao envia mensagem alguma se o arquivo nao existir ou estiver invalido. */
+  imageRequired?: boolean;
   image_url?: string;
   image_id?: string;
   city?: string;
@@ -117,6 +120,7 @@ export type UpdateWhatsAppQueueLeadInput = Partial<
     | 'message1'
     | 'message2'
     | 'imageName'
+    | 'imageRequired'
     | 'image_url'
     | 'image_id'
     | 'site'

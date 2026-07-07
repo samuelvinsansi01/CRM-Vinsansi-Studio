@@ -26,6 +26,8 @@ export type BranchConfigRecord = ConfigBaseRecord & {
   minRating: number;
   minReviews: number;
   imageName: string;
+  /** Define se o Worker deve bloquear o disparo quando a imagem do ramo nao estiver disponivel. */
+  imageRequired: boolean;
 };
 
 export type TemplateConfigRecord = ConfigBaseRecord & {

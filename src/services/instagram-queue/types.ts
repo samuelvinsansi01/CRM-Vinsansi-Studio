@@ -36,6 +36,7 @@ export type InstagramQueueLead = {
   message2: string;
   message_2: string;
   imageName?: string;
+  imageRequired?: boolean;
   image_url?: string;
   image_id?: string;
   city?: string;
@@ -112,6 +113,7 @@ export type UpdateInstagramQueueLeadInput = Partial<
     | 'message1'
     | 'message2'
     | 'imageName'
+    | 'imageRequired'
     | 'image_url'
     | 'image_id'
     | 'invalidReason'

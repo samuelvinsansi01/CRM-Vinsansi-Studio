@@ -175,6 +175,9 @@ function normalizeBranchInput(input: CreateConfigRecordInput | UpdateConfigRecor
     minRating: toNumber(source.minRating ?? source.notaMinima, existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING, 0),
     minReviews: toInteger(source.minReviews ?? source.reviewsMinimos, existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS, 0),
     imageName: firstString(source, ['imageName', 'image_name', 'imagem'], existing?.imageName ?? ''),
+    // Em ramos antigos, um nome de imagem ja configurado representa o comportamento
+    // historico de enviar midia. Novos ramos podem optar por envio somente texto.
+    imageRequired: toBoolean(source.imageRequired ?? source.image_required, existing?.imageRequired ?? Boolean(firstString(source, ['imageName', 'image_name', 'imagem'], ''))),
     createdAt,
     updatedAt: nowIso(),
   };

@@ -631,11 +631,17 @@ async function loadBranches() {
   return (await repositories.config.list('branches')).filter(isBranch);
 }
 
-function branchImageForLead(lead: PreSendLead, branches: BranchConfigRecord[]) {
+function branchMediaForLead(lead: PreSendLead, branches: BranchConfigRecord[]) {
   const branch =
     branches.find((item) => lead.branch_id && item.id === lead.branch_id) ??
     branches.find((item) => normalize(item.name) === normalize(lead.branch));
-  return branch?.imageName ?? '';
+
+  return {
+    imageName: branch?.imageName ?? '',
+    // Compatibilidade para ramos antigos: se ja havia um nome de imagem,
+    // a imagem continua obrigatoria ate o usuario escolher o modo opcional.
+    imageRequired: branch?.imageRequired ?? Boolean(branch?.imageName),
+  };
 }
 
 function assertTemplate(lead: PreSendLead, template: TemplateConfigRecord | undefined): asserts template is TemplateConfigRecord {
@@ -754,7 +760,7 @@ async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAp
 
     if (!availableChip) throw new Error(`Chip ${lead.profile || 'selecionado'} inativo, offline ou com limite diario atingido.`);
     const instance = chipInstance(availableChip);
-    const branchImage = branchImageForLead(lead, branches);
+    const branchMedia = branchMediaForLead(lead, branches);
     const messages = renderLeadMessages(lead, template);
     usageByChip.set(usageKey, (usageByChip.get(usageKey) ?? 0) + 1);
 
@@ -781,8 +787,9 @@ async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAp
       chip_id: availableChip.id,
       message1: messages.message1,
       message2: messages.message2,
-      imageName: branchImage,
-      image_url: branchImage,
+      imageName: branchMedia.imageName,
+      imageRequired: branchMedia.imageRequired,
+      image_url: branchMedia.imageName,
       template_id: template.id,
       scheduled_date: selectedDate,
       city: lead.city,
@@ -813,7 +820,7 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
       if (normalizedInstagram && baseInstagrams.has(normalizedInstagram)) throw new Error(`Instagram ja existe na Base Permanente: ${instagram}.`);
       const template = await loadTemplate(lead);
       assertTemplate(lead, template);
-      const branchImage = branchImageForLead(lead, branches);
+      const branchMedia = branchMediaForLead(lead, branches);
       const messages = renderLeadMessages(lead, template);
       const selectedProfile =
         activeProfiles.find((profile) => profile.username === normalizeInstagramUsername(lead.profile)) ??
@@ -841,8 +848,9 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
         status: 'queued' as const,
         message1: messages.message1,
         message2: messages.message2,
-        imageName: branchImage,
-        image_url: branchImage,
+        imageName: branchMedia.imageName,
+        imageRequired: branchMedia.imageRequired,
+        image_url: branchMedia.imageName,
         template_id: template.id,
         scheduled_date: scheduledDateForDayId(lead.dayId),
         city: lead.city,

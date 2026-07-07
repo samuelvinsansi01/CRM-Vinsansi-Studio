@@ -145,6 +145,9 @@ function normalizeBranch(input: Record<string, unknown>, fallback?: BranchConfig
     minRating: Number(input.minRating ?? fallback?.minRating ?? 4),
     minReviews: Number(input.minReviews ?? fallback?.minReviews ?? 10),
     imageName: String(input.imageName ?? input.image_name ?? fallback?.imageName ?? ''),
+    // Compatibilidade: ramos legados que ja possuem nome de imagem mantem o comportamento
+    // esperado de exigir a midia, ate que o usuario escolha explicitamente o contrario.
+    imageRequired: toBoolean(input.imageRequired ?? input.image_required ?? fallback?.imageRequired, Boolean(input.imageName ?? input.image_name ?? fallback?.imageName)),
     active,
     status,
     createdAt: String(fallback?.createdAt ?? input.createdAt ?? timestamp),
@@ -172,6 +175,7 @@ function rowToBranch(row: Record<string, unknown>): BranchConfigRecord {
       minRating: row.min_rating ?? data.minRating,
       minReviews: row.min_reviews ?? data.minReviews,
       imageName: row.image_name ?? data.imageName,
+      imageRequired: row.image_required ?? data.imageRequired ?? data.image_required,
       active: inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active,
       status: row.status ?? data.status,
       createdAt: row.created_at ?? data.createdAt,
@@ -554,7 +558,9 @@ async function upsertBranch(record: BranchConfigRecord) {
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
     kind: 'branches',
-    data: { ...record, id: String(existingBySlug?.id ?? existingById?.id ?? numericId ?? record.id), slug, imageName: record.imageName },
+    // imageRequired permanece tambem em data para compatibilidade com o schema legado,
+    // sem exigir uma nova coluna no banco atual.
+    data: { ...record, id: String(existingBySlug?.id ?? existingById?.id ?? numericId ?? record.id), slug, imageName: record.imageName, imageRequired: record.imageRequired },
     updated_at: nowIso(),
   };
   const targetId = existingBySlug?.id ?? existingById?.id ?? numericId;
