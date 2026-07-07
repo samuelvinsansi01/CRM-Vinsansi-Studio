@@ -250,10 +250,18 @@ function ValidationQueue({
       setDrawerMode('view');
       refreshQueue();
       if (queueResult) {
-        const details = queueResult.queued
-          ? `${queueResult.queued} lead(s) enviado(s) para a fila Instagram.${queueResult.waitingPreSend ? ` ${queueResult.waitingPreSend} aguardando capacidade.` : ''}`
-          : 'Link salvo. O lead permanece no card Instagram aguardando capacidade do perfil.';
-        onToast({ title: queueResult.queued ? 'Fila Instagram atualizada' : 'Instagram confirmado', description: details, tone: queueResult.queued ? 'success' : 'warning' });
+        const details: string[] = [];
+        if (queueResult.queued) details.push(`${queueResult.queued} lead(s) enviado(s) para a fila Instagram.`);
+        if (queueResult.waitingPreSend) details.push(`${queueResult.waitingPreSend} aguardando capacidade do perfil.`);
+        if (queueResult.blockedPreSend) details.push(`${queueResult.blockedPreSend} permaneceu(ram) no card Instagram por pendência operacional.`);
+        if (!details.length) details.push('Link salvo. O lead permanece no card Instagram aguardando capacidade ou configuração.');
+        const firstNotice = queueResult.notices[0];
+        if (firstNotice) details.push(firstNotice);
+        onToast({
+          title: queueResult.queued ? 'Fila Instagram atualizada' : 'Instagram salvo no Pré-Envio',
+          description: details.join(' '),
+          tone: queueResult.queued ? 'success' : 'warning',
+        });
       } else {
         onToast({ title: 'Lead atualizado', description: 'Pré-envio atualizado localmente.', tone: 'success' });
       }
@@ -496,6 +504,7 @@ function ValidationQueue({
             <Field label="Status" value={editingLead ? statusLabel(editingLead.status) : ''} readOnly />
             <Field label="WhatsApp" value={leadForm.phone} readOnly={drawerMode === 'view'} onChange={(value) => setLeadForm((current) => current ? { ...current, phone: value } : current)} />
             <Field label="Instagram" value={leadForm.instagram} readOnly={drawerMode === 'view'} onChange={(value) => setLeadForm((current) => current ? { ...current, instagram: value } : current)} />
+            {channel === 'Instagram' && editingLead?.queueWaitReason ? <Field label="Pendência operacional" value={editingLead.queueWaitReason} readOnly /> : null}
             <Field label="Site" value={leadForm.site} readOnly={drawerMode === 'view'} onChange={(value) => setLeadForm((current) => current ? { ...current, site: value } : current)} />
             <label className="drawer-field-group">
               <span>Enviar Instagram?</span>

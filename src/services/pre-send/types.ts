@@ -67,6 +67,12 @@ export type InstagramQueueFillResult = {
   fromImport: number;
   waitingPreSend: number;
   waitingImport: number;
+  /** Retornos Instagram mantidos no Pré-Envio por bloqueio operacional, como template ausente. */
+  blockedPreSend: number;
+  /** Leads de Instagram direto que ficaram no Início por bloqueio operacional. */
+  blockedImport: number;
+  /** Mensagens curtas para feedback agregado na interface. */
+  notices: string[];
   scheduledDate: string;
 };
 
