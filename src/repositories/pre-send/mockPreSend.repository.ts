@@ -92,7 +92,13 @@ export const mockPreSendRepository: PreSendRepository = {
 
   async moveToQueue(ids: string[]) {
     await delay();
-    leads = leads.map((lead) => (ids.includes(lead.id) && isStatusGroup(lead.status, 'approved') ? { ...lead, status: 'queued' } : lead));
+    leads = leads.map((lead) => {
+      const canQueue = ids.includes(lead.id) && (
+        isStatusGroup(lead.status, 'approved') ||
+        (lead.channel === 'Instagram' && isStatusGroup(lead.status, 'review') && Boolean(lead.send_instagram) && !lead.instagramPendingLink)
+      );
+      return canQueue ? { ...lead, status: 'queued' } : lead;
+    });
     refreshDayCounters();
   },
 

@@ -14,6 +14,7 @@ import type { CreateBaseLeadInput } from '../base/types';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { assertTransition } from '../state-machine';
 import { renderLeadMessages } from '../templates/templateVariables';
+import { selectTemplateForLead } from '../templates/templateSelector';
 import type { CreateWhatsAppQueueLeadInput, WhatsAppQueueLead } from '../whatsapp-queue/types';
 import { preSendLeadToWhatsAppValidationRequest, whatsappValidationGateway } from '../whatsapp-validation/whatsappValidation.gateway';
 import type { CreatePreSendLeadInput, InstagramQueueFillResult, PreSendCapacity, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead, PreSendQueueFilter, PreSendValidationSummary } from './types';
@@ -510,10 +511,6 @@ function importLeadMatchesQueueFilter(lead: ImportLead, filter?: PreSendQueueFil
   return destination === 'Com site' || destination === 'Agregadores';
 }
 
-function destinationToTemplateType(destination: PreSendLead['destination']) {
-  if (destination === 'Com site' || destination === 'Agregadores') return 'com-site';
-  return 'sem-site';
-}
 
 async function releasePreSendLinksForImports(imports: ImportLead[], channel: PreSendChannel) {
   const sourceIds = new Set(imports.map((lead) => lead.id).filter(Boolean));
@@ -582,19 +579,21 @@ async function markSourceImportsSent(leads: PreSendLead[], reason: string, sentA
 
 async function loadTemplate(lead: PreSendLead) {
   const templates = (await repositories.config.list('templates')).filter(isTemplate);
-  const type = destinationToTemplateType(lead.destination);
-  const candidates = templates
-    .filter((template) => template.active && template.status !== 'Arquivado' && template.status !== 'deleted')
-    .filter((template) => template.channel === lead.channel || template.channel === 'Geral')
-    .filter((template) => template.type === type)
-    .filter((template) =>
-      (lead.branch_id && template.branchId === lead.branch_id) ||
-      normalize(template.branchName) === normalize(lead.branch) ||
-      normalize(template.branchId) === normalize(lead.branch),
-    );
+  const selection = selectTemplateForLead(lead, templates);
+  if (!selection) return undefined;
 
-  if (!candidates.length) return undefined;
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  // A escolha é sorteada somente quando o lead ainda não possui um template
+  // compatível. Depois disso, ela fica fixada no Pré-Envio e acompanha a fila.
+  // Isso evita que uma nova tentativa troque a mensagem de forma silenciosa.
+  if (!lead.id.startsWith('direct-import-') && lead.templateId !== selection.template.id) {
+    await repositories.preSend.updateLead(lead.id, {
+      templateId: selection.template.id,
+      templateAssignedAt: new Date().toISOString(),
+      templateSelectionSource: selection.source,
+    });
+  }
+
+  return selection.template;
 }
 
 async function loadBranches() {
@@ -902,7 +901,7 @@ function isInstagramReturnReadyForQueue(lead: PreSendLead) {
 
 function queueBlockReason(error: unknown) {
   const message = error instanceof Error ? error.message : 'Não foi possível preparar o lead para a fila Instagram.';
-  if (/template/i.test(message)) return `Aguardando template Instagram: ${message}`;
+  if (/template/i.test(message)) return `Aguardando template compatível: ${message}`;
   if (/base permanente/i.test(message)) return `Revisão necessária: ${message}`;
   if (/perfil instagram ativo/i.test(message)) return `Aguardando perfil Instagram ativo: ${message}`;
   if (/instagram valido/i.test(message)) return `Aguardando Instagram válido: ${message}`;
@@ -1073,7 +1072,7 @@ async function fillInstagramQueueByPriority({ dayId: requestedDayId, profile: re
   const allLeads = await listAllLeads();
   const readyPreSend = sortByLeadScore(allLeads.filter((lead) =>
     lead.dayId === capacity.dayId &&
-    isStatusGroup(lead.status, 'approved') &&
+    (isStatusGroup(lead.status, 'review') || isStatusGroup(lead.status, 'approved')) &&
     isInstagramReturnReadyForQueue(lead),
   ));
 
@@ -1718,7 +1717,9 @@ export const preSendService = {
       if (!isValidInstagram(instagramUrl)) {
         throw new Error('Informe o link ou usuário completo do Instagram. Não use somente o domínio instagram.com.');
       }
-      assertTransition({ entity: 'pre-send', fromStatus: current.status, toStatus: 'approved', action: 'approve' });
+      // O retorno permanece em revisão até a fila ser criada de fato. Assim,
+      // link salvo + bloqueio de template/capacidade nunca deixa o lead oculto.
+      assertTransition({ entity: 'pre-send', fromStatus: current.status, toStatus: 'review', action: 'review' });
       const readyAt = new Date().toISOString();
       nextInput = {
         ...nextInput,
@@ -1732,7 +1733,7 @@ export const preSendService = {
         instagramPendingLink: false,
         instagramReadyAt: readyAt,
         queueWaitReason: '',
-        status: 'approved',
+        status: 'review',
         profile: current.profile,
         dayId: effectiveDayId('Instagram', current.dayId),
       };

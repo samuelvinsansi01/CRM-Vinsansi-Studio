@@ -113,7 +113,11 @@ export const supabasePreSendRepository: PreSendRepository = {
   async moveToQueue(ids: string[]) {
     await Promise.all(ids.map(async (id) => {
       const lead = (await allLeads()).find((item) => item.id === id);
-      if (lead && isStatusGroup(lead.status, 'approved')) await updateJsonRecord(table(), { ...lead, status: 'queued' }, { ...leadFlatExtra({ ...lead, status: 'queued' }) });
+      const canQueue = lead && (
+        isStatusGroup(lead.status, 'approved') ||
+        (lead.channel === 'Instagram' && isStatusGroup(lead.status, 'review') && Boolean(lead.send_instagram) && !lead.instagramPendingLink)
+      );
+      if (lead && canQueue) await updateJsonRecord(table(), { ...lead, status: 'queued' }, { ...leadFlatExtra({ ...lead, status: 'queued' }) });
     }));
   },
 

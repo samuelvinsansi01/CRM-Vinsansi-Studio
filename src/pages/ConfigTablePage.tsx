@@ -221,7 +221,7 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
       ],
       fields: [
         { key: 'branchId', label: 'Ramo', type: 'select', options: branchSelectOptions },
-        { key: 'channel', label: 'Canal', type: 'select', options: templateChannelOptions },
+        { key: 'channel', label: 'Canal', type: 'select', options: templateChannelOptions, description: 'Geral atende WhatsApp e Instagram deste ramo. Entre templates compatíveis, a plataforma sorteia e fixa uma opção por lead.' },
         { key: 'type', label: 'Tipo', type: 'select', options: templateTypeOptions },
         { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1 },
         { key: 'message2', label: 'Mensagem 2', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_2 },

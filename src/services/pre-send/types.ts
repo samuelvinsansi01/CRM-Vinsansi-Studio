@@ -34,7 +34,10 @@ export type PreSendLead = {
   instagram?: string;
   site?: string;
   mapsUrl?: string;
+  /** Template sorteado/selecionado e fixado para evitar troca a cada tentativa. */
   templateId?: string;
+  templateAssignedAt?: string;
+  templateSelectionSource?: string;
   city?: string;
   state?: string;
   validationStatus?: 'valid' | 'invalid' | 'error' | 'pending';
