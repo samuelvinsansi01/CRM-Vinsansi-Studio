@@ -325,7 +325,13 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
       const scheduledDate = input.scheduled_date ?? todayIsoDate();
       const batch = nextBatch(working, input.chip, limit, scheduledDate);
       const lead = buildLead(input, batch);
-      const { error } = await getSupabaseClient().from(table()).upsert({ ...dbPayload(lead, userId), created_at: lead.created_at }, { onConflict: 'source_pre_send_id', ignoreDuplicates: true });
+      // The legacy database may expose source_pre_send_id only through a partial
+      // unique index. PostgREST cannot use a partial index as an ON CONFLICT
+      // target, which made a valid WhatsApp queue allocation fail before the
+      // item was created. Duplicates are guarded above from the persisted queue
+      // snapshot, so this path can use a regular insert and remain idempotent
+      // for normal panel actions.
+      const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
       if (error) throw new Error(error.message);
       working.push(lead);
       if (lead.sourcePreSendId) existingSources.add(lead.sourcePreSendId);
