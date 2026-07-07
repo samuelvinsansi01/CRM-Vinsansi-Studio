@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { eventBus } from '../lib/events';
 import { preSendService } from '../services/pre-send/preSend.service';
 import type { PreSendCapacity, PreSendChannel, PreSendDayCard, PreSendLead, PreSendQueueFilter, PreSendSummary } from '../services/pre-send/types';
@@ -14,8 +14,10 @@ export function usePreSend() {
   const [dayCards, setDayCards] = useState<PreSendDayCard[]>([]);
   const [summary, setSummary] = useState<PreSendSummary>(emptySummary);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasLoadedRef = useRef(false);
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
 
@@ -33,7 +35,9 @@ export function usePreSend() {
     let active = true;
 
     async function load() {
-      setLoading(true);
+      const isInitialLoad = !hasLoadedRef.current;
+      if (isInitialLoad) setLoading(true);
+      else setRefreshing(true);
       setError(null);
 
       try {
@@ -44,10 +48,16 @@ export function usePreSend() {
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar pre-envio.');
-        setDayCards([]);
-        setSummary(emptySummary);
+        if (isInitialLoad) {
+          setDayCards([]);
+          setSummary(emptySummary);
+        }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          hasLoadedRef.current = true;
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     }
 
@@ -58,8 +68,6 @@ export function usePreSend() {
     };
   }, [refreshKey]);
 
-  // The Pre-Envio screen must always open on the operational day that is marked as today.
-  // We prefer the WhatsApp card only as the canonical source for the shared weekday key.
   const defaultDayId = useMemo(
     () => dayCards.find((day) => day.channel === 'WhatsApp' && day.isToday)?.id ??
       dayCards.find((day) => day.isToday)?.id ??
@@ -174,6 +182,7 @@ export function usePreSend() {
     dayCards,
     summary,
     loading,
+    refreshing,
     error,
     defaultDayId,
     refresh,
@@ -196,14 +205,18 @@ export function usePreSendQueue(channel: PreSendChannel, dayId: string, profile:
   const [profiles, setProfiles] = useState<string[]>([]);
   const [leads, setLeads] = useState<PreSendLead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [capacity, setCapacity] = useState<PreSendCapacity | null>(null);
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     let active = true;
 
     async function load() {
-      setLoading(true);
+      const isInitialLoad = !hasLoadedRef.current;
+      if (isInitialLoad) setLoading(true);
+      else setRefreshing(true);
       setError(null);
 
       try {
@@ -223,11 +236,17 @@ export function usePreSendQueue(channel: PreSendChannel, dayId: string, profile:
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar fila de pre-envio.');
-        setProfiles([]);
-        setLeads([]);
-        setCapacity(null);
+        if (isInitialLoad) {
+          setProfiles([]);
+          setLeads([]);
+          setCapacity(null);
+        }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          hasLoadedRef.current = true;
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     }
 
@@ -238,5 +257,13 @@ export function usePreSendQueue(channel: PreSendChannel, dayId: string, profile:
     };
   }, [channel, dayId, profile, queueFilter, refreshToken]);
 
-  return { profiles, leads, loading, error, capacity };
+  const removeLeadFromView = useCallback((id: string) => {
+    setLeads((current) => current.filter((lead) => lead.id !== id));
+  }, []);
+
+  const patchLeadInView = useCallback((id: string, patch: Partial<PreSendLead>) => {
+    setLeads((current) => current.map((lead) => lead.id === id ? { ...lead, ...patch } : lead));
+  }, []);
+
+  return { profiles, leads, loading, refreshing, error, capacity, removeLeadFromView, patchLeadInView };
 }

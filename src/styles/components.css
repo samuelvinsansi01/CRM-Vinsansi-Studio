@@ -1278,3 +1278,12 @@ button.checkbox {
   font-size: 12px;
   line-height: 14px;
 }
+
+.queue-refresh-indicator {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}

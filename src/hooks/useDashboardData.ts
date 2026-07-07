@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { eventBus } from '../lib/events';
 import { normalizeBrazilState } from '../services/geo/brazilState';
 import { importService } from '../services/import/import.service';
@@ -93,8 +93,10 @@ function nextWhatsAppDestination(lead: ImportLead): ImportLeadDestination {
 export function useDashboardData(filters: HomeFilters) {
   const [records, setRecords] = useState<ImportLead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshIndex, setRefreshIndex] = useState(0);
+  const hasLoadedRef = useRef(false);
 
   const refresh = useCallback(() => setRefreshIndex((current) => current + 1), []);
 
@@ -116,7 +118,9 @@ export function useDashboardData(filters: HomeFilters) {
     let active = true;
 
     async function load() {
-      setLoading(true);
+      const isInitialLoad = !hasLoadedRef.current;
+      if (isInitialLoad) setLoading(true);
+      else setRefreshing(true);
       setError(null);
 
       try {
@@ -125,9 +129,13 @@ export function useDashboardData(filters: HomeFilters) {
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar leads da importacao.');
-        setRecords([]);
+        if (isInitialLoad) setRecords([]);
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          hasLoadedRef.current = true;
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     }
 
@@ -268,6 +276,7 @@ export function useDashboardData(filters: HomeFilters) {
     options,
     visibleLeads,
     loading,
+    refreshing,
     error,
     refresh,
     updateDestination,

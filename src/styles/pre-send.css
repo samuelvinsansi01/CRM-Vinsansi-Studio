@@ -303,3 +303,8 @@
   gap: var(--space-08);
   padding: var(--space-16) var(--space-20) 0;
 }
+
+.pre-send-action {
+  align-items: center;
+  gap: var(--space-08);
+}

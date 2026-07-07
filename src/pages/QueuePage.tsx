@@ -76,7 +76,7 @@ function WhatsAppQueuePage() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const { chips, batches, summary, loading, error, updateLead, send, pause, resume, reprocess, invalidate } = useWhatsAppQueue(activeChip, scheduledDate);
+  const { chips, batches, summary, loading, refreshing, error, updateLead, send, pause, resume, reprocess, invalidate } = useWhatsAppQueue(activeChip, scheduledDate);
 
   useEffect(() => {
     if ((!activeChip || !chips.includes(activeChip)) && chips[0]) {
@@ -205,11 +205,12 @@ function WhatsAppQueuePage() {
 
       <section className="queue-list-card">
         <h2>Listagem de disparos{activeChip || chips[0] ? ` - ${activeChip || chips[0]}` : ''}</h2>
+        {refreshing && batches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
         {error ? <div className="table-message">{error}</div> : null}
-        {!error && loading ? <div className="table-message">Carregando fila WhatsApp...</div> : null}
-        {!error && !loading && !batches.length ? <div className="table-message">Nenhum lote WhatsApp disponivel.</div> : null}
+        {!error && loading && !batches.length ? <div className="table-message">Carregando fila WhatsApp...</div> : null}
+        {!error && !loading && !refreshing && !batches.length ? <div className="table-message">Nenhum lote WhatsApp disponivel.</div> : null}
         <div className="batch-list">
-          {!error && !loading ? batches.map((batch, index) => (
+          {!error ? batches.map((batch, index) => (
             <WhatsAppBatch
               key={batch.id}
               batch={batch}
@@ -401,7 +402,7 @@ function InstagramQueuePage() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const { profiles, batches, summary, loading, error, updateLead, invalidate } = useInstagramQueue(activeProfile, scheduledDate);
+  const { profiles, batches, summary, loading, refreshing, error, updateLead, invalidate } = useInstagramQueue(activeProfile, scheduledDate);
 
   useEffect(() => {
     if (!activeProfile && profiles[0]) {
@@ -449,11 +450,12 @@ function InstagramQueuePage() {
       </div>
       <section className="queue-list-card">
         <h2>Listagem de disparos{activeProfile || profiles[0] ? ` - ${activeProfile || profiles[0]}` : ''}</h2>
+        {refreshing && visibleBatches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
         {error ? <div className="table-message">{error}</div> : null}
-        {!error && loading ? <div className="table-message">Carregando fila Instagram...</div> : null}
-        {!error && !loading && !visibleBatches.length ? <div className="table-message">Nenhum lote Instagram disponivel.</div> : null}
+        {!error && loading && !visibleBatches.length ? <div className="table-message">Carregando fila Instagram...</div> : null}
+        {!error && !loading && !refreshing && !visibleBatches.length ? <div className="table-message">Nenhum lote Instagram disponivel.</div> : null}
         <div className="batch-list">
-          {!error && !loading ? visibleBatches.map((batch, index) => (
+          {!error ? visibleBatches.map((batch, index) => (
             <InstagramBatch
               key={batch.id}
               batch={batch}

@@ -156,7 +156,7 @@ function ValidationQueue({
   const [sentTarget, setSentTarget] = useState<PreSendLead | null>(null);
   const [sentReason, setSentReason] = useState(defaultManualSentReason);
 
-  const { profiles, leads, loading, error, capacity } = usePreSendQueue(channel, activeDayId, activeProfile, queueFilter, refreshToken);
+  const { profiles, leads, loading, refreshing, error, capacity, removeLeadFromView, patchLeadInView } = usePreSendQueue(channel, activeDayId, activeProfile, queueFilter, refreshToken);
 
   useEffect(() => {
     if (!profiles.length) return;
@@ -232,7 +232,7 @@ function ValidationQueue({
         return;
       }
 
-      const queueResult = await updateLead(editingLead.id, {
+      const leadPatch: Partial<PreSendLead> = {
         company: leadForm.company,
         branch: leadForm.branch,
         destination: (sendInstagram ? 'Instagram' : leadForm.destination) as PreSendLead['destination'],
@@ -247,7 +247,10 @@ function ValidationQueue({
         override_at: sendInstagram ? editingLead.override_at || new Date().toISOString() : '',
         city: leadForm.city,
         state: leadForm.state,
-      });
+      };
+      const queueResult = await updateLead(editingLead.id, leadPatch);
+      if (queueResult?.queued) removeLeadFromView(editingLead.id);
+      else patchLeadInView(editingLead.id, leadPatch);
       setEditingLead(null);
       setLeadForm(null);
       setDrawerMode('view');
@@ -287,6 +290,8 @@ function ValidationQueue({
     if (action === 'invalidate') {
       try {
         await invalidateLead(lead.id);
+        removeLeadFromView(lead.id);
+        setSelectedRows([]);
         refreshQueue();
         onToast({ title: 'Lead invalidado', description: 'O lead foi retirado do fluxo ativo do Instagram.', tone: 'warning' });
       } catch (err) {
@@ -403,6 +408,8 @@ function ValidationQueue({
 
     try {
       await archiveLead(archiveTarget.id);
+      removeLeadFromView(archiveTarget.id);
+      setSelectedRows([]);
       setArchiveTarget(null);
       refreshQueue();
       onToast({ title: 'Lead arquivado', description: 'Registro removido do pré-envio local.', tone: 'warning' });
@@ -416,6 +423,8 @@ function ValidationQueue({
 
     try {
       const marked = await markAlreadySent([sentTarget.id], sentReason.trim() || defaultManualSentReason);
+      removeLeadFromView(sentTarget.id);
+      setSelectedRows([]);
       setSentTarget(null);
       setSentReason(defaultManualSentReason);
       refreshQueue();
@@ -438,9 +447,10 @@ function ValidationQueue({
       {selectedLeads.length && !canApproveSelection && !canRevalidateSelection ? (
         <div className="lead-bulk-actions"><span>{selectedLeads.length} selecionado(s)</span><small>Nenhuma acao disponivel para a selecao atual.</small></div>
       ) : null}
+      {refreshing && leads.length ? <small className="queue-refresh-indicator" role="status">Atualizando sem interromper a lista...</small> : null}
       {error ? <div className="table-message">{error}</div> : null}
-      {!error && loading ? <div className="table-message">Carregando leads...</div> : null}
-      {!error && !loading && tableRows.length ? (
+      {!error && loading && !leads.length ? <div className="table-message">Carregando leads...</div> : null}
+      {!error && tableRows.length ? (
         <DataTable
           selectable
           selectedRows={selectedRows}
@@ -469,8 +479,9 @@ function ValidationQueue({
           onAction={handleAction}
         />
       ) : null}
+      {!error && !loading && !refreshing && !tableRows.length ? <div className="table-message">Nenhum lead disponivel para pre-envio.</div> : null}
       <div className="validation-list__footer">
-        <small>{loading ? 'Carregando...' : `Mostrando ${pageRows.length} de ${leads.length} lead(s)`}</small>
+        <small>{loading ? 'Carregando...' : refreshing ? 'Atualizando...' : `Mostrando ${pageRows.length} de ${leads.length} lead(s)`}</small>
         <Pagination page={currentPage} totalPages={totalPages} onPageChange={setPage} />
       </div>
 
@@ -556,7 +567,7 @@ export function PreSendPage() {
   const [instagramScope, setInstagramScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [summaryRefreshToken, setSummaryRefreshToken] = useState(0);
-  const { dayCards, summary, loading, error, defaultDayId, refresh, moveDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, validateLeads, revalidateApprovedLeads, invalidateLead, archiveLead, markAlreadySent, updateLead } = usePreSend();
+  const { dayCards, summary, loading, refreshing, error, defaultDayId, refresh, moveDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, validateLeads, revalidateApprovedLeads, invalidateLead, archiveLead, markAlreadySent, updateLead } = usePreSend();
   const [daySummary, setDaySummary] = useState<PreSendSummary>(summary);
 
   useEffect(() => {
@@ -658,7 +669,8 @@ export function PreSendPage() {
         <MetricCard icon={Instagram} value={String(daySummary.instagram)} label={`Retornos Instagram${daySummary.dateLabel ? ` - ${daySummary.dateLabel}` : ''}`} />
       </section>
       <div className="pre-send-action">
-        <Button iconLeft={RefreshCcw} onClick={() => { refreshAll(); pushToast({ title: 'Pré-envio atualizado', description: 'Dados locais recarregados.', tone: 'info' }); }}>Atualizar pré-envio</Button>
+        <Button iconLeft={RefreshCcw} onClick={() => { refreshAll(); pushToast({ title: 'Pré-envio atualizado', description: 'Dados atualizados em segundo plano.', tone: 'info' }); }}>Atualizar pré-envio</Button>
+        {refreshing ? <small className="queue-refresh-indicator" role="status">Sincronizando dados...</small> : null}
       </div>
       <section className="queue-grid">
         <Panel className="queue-card-shell">

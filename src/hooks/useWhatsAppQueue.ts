@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { whatsappQueueService } from '../services/whatsapp-queue/whatsappQueue.service';
 import type { UpdateWhatsAppQueueLeadInput, WhatsAppQueueBatch, WhatsAppQueueLead, WhatsAppQueueSummary } from '../services/whatsapp-queue/types';
 
@@ -15,8 +15,10 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
   const [batches, setBatches] = useState<WhatsAppQueueBatch[]>([]);
   const [summary, setSummary] = useState<WhatsAppQueueSummary>(emptySummary);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasLoadedRef = useRef(false);
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
 
@@ -24,7 +26,9 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
     let active = true;
 
     async function load() {
-      setLoading(true);
+      const isInitialLoad = !hasLoadedRef.current;
+      if (isInitialLoad) setLoading(true);
+      else setRefreshing(true);
       setError(null);
 
       try {
@@ -44,11 +48,17 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar fila WhatsApp.');
-        setChips([]);
-        setBatches([]);
-        setSummary(emptySummary);
+        if (isInitialLoad) {
+          setChips([]);
+          setBatches([]);
+          setSummary(emptySummary);
+        }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          hasLoadedRef.current = true;
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     }
 
@@ -112,6 +122,7 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
     batches,
     summary,
     loading,
+    refreshing,
     error,
     refresh,
     updateLead,

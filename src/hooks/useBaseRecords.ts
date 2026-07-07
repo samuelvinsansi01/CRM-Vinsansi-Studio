@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { baseService } from '../services/base/base.service';
 import type { BaseFilters, BaseLead, BaseSummary, UpdateBaseLeadInput } from '../services/base/types';
 
@@ -35,8 +35,10 @@ export function useBaseRecords(filters: BaseFilters) {
   const [summary, setSummary] = useState<BaseSummary>(emptySummary);
   const [options, setOptions] = useState<BaseOptions>(emptyOptions);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasLoadedRef = useRef(false);
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
 
@@ -44,7 +46,9 @@ export function useBaseRecords(filters: BaseFilters) {
     let active = true;
 
     async function load() {
-      setLoading(true);
+      const isInitialLoad = !hasLoadedRef.current;
+      if (isInitialLoad) setLoading(true);
+      else setRefreshing(true);
       setError(null);
 
       try {
@@ -61,11 +65,17 @@ export function useBaseRecords(filters: BaseFilters) {
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar Base Permanente.');
-        setRecords([]);
-        setSummary(emptySummary);
-        setOptions(emptyOptions);
+        if (isInitialLoad) {
+          setRecords([]);
+          setSummary(emptySummary);
+          setOptions(emptyOptions);
+        }
       } finally {
-        if (active) setLoading(false);
+        if (active) {
+          hasLoadedRef.current = true;
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     }
 
@@ -137,6 +147,7 @@ export function useBaseRecords(filters: BaseFilters) {
     summary,
     options,
     loading,
+    refreshing,
     error,
     refresh,
     updateLead,

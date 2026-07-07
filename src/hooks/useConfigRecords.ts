@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { configService } from '../services/config/config.service';
 import type { ConfigKind, ConfigListFilters, ConfigRecord, CreateConfigRecordInput, UpdateConfigRecordInput } from '../services/config/types';
 
 export function useConfigRecords(kind: ConfigKind, filters: ConfigListFilters) {
   const [records, setRecords] = useState<ConfigRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const stableFilters = useMemo(
     () => ({ search: filters.search ?? '', status: filters.status ?? 'Todos' }),
@@ -13,7 +15,9 @@ export function useConfigRecords(kind: ConfigKind, filters: ConfigListFilters) {
   );
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    const isInitialLoad = !hasLoadedRef.current;
+    if (isInitialLoad) setLoading(true);
+    else setRefreshing(true);
     setError(null);
 
     try {
@@ -21,8 +25,11 @@ export function useConfigRecords(kind: ConfigKind, filters: ConfigListFilters) {
       setRecords(nextRecords);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar registros.');
+      if (isInitialLoad) setRecords([]);
     } finally {
+      hasLoadedRef.current = true;
       setLoading(false);
+      setRefreshing(false);
     }
   }, [kind, stableFilters]);
 
@@ -89,6 +96,7 @@ export function useConfigRecords(kind: ConfigKind, filters: ConfigListFilters) {
   return {
     records,
     loading,
+    refreshing,
     error,
     refresh,
     createRecord,
