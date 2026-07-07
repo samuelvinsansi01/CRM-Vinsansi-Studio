@@ -197,7 +197,20 @@ function matchesSelectedProfile(lead: PreSendLead, profile?: string) {
 async function listFilteredLeads(filters: PreSendFilters) {
   await rolloverPreSendAfterCutoff();
   const leads = await repositories.preSend.listLeads({ ...filters, profile: undefined });
-  return sortByLeadScore(leads.filter((lead) => isVisiblePreSendStatus(lead.status) && matchesSelectedProfile(lead, filters.profile)));
+
+  return sortByLeadScore(leads.filter((lead) => {
+    if (!isVisiblePreSendStatus(lead.status)) return false;
+
+    // Retornos do WhatsApp ficam no card Instagram do próprio Pré-Envio.
+    // Eles não devem desaparecer quando o perfil ainda estiver vazio, legado ou
+    // diferente do perfil selecionado, porque não consomem capacidade até entrar
+    // efetivamente na fila Instagram.
+    if (filters.channel === 'Instagram' && (isInstagramReturnPendingLink(lead) || isInstagramReturnReadyForQueue(lead))) {
+      return true;
+    }
+
+    return matchesSelectedProfile(lead, filters.profile);
+  }));
 }
 
 async function listAllLeads() {

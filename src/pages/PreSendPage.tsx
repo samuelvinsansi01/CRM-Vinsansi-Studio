@@ -252,7 +252,7 @@ function ValidationQueue({
       if (queueResult) {
         const details = queueResult.queued
           ? `${queueResult.queued} lead(s) enviado(s) para a fila Instagram.${queueResult.waitingPreSend ? ` ${queueResult.waitingPreSend} aguardando capacidade.` : ''}`
-          : 'Link salvo. O lead permanece no Pré-Envio aguardando capacidade do perfil Instagram.';
+          : 'Link salvo. O lead permanece no card Instagram aguardando capacidade do perfil.';
         onToast({ title: queueResult.queued ? 'Fila Instagram atualizada' : 'Instagram confirmado', description: details, tone: queueResult.queued ? 'success' : 'warning' });
       } else {
         onToast({ title: 'Lead atualizado', description: 'Pré-envio atualizado localmente.', tone: 'success' });
@@ -420,17 +420,15 @@ function ValidationQueue({
         {title ? <h3>{title}</h3> : null}
         {channel === 'WhatsApp' ? <SelectField options={queueFilterOptions} value={queueFilter} placeholder="Destino" onChange={(value) => setQueueFilter(value as PreSendQueueFilter)} /> : null}
         <SelectField options={profiles.length ? profiles : [emptyProfileLabel]} value={activeProfile || profiles[0] || emptyProfileLabel} placeholder={channel === 'WhatsApp' ? 'Chip' : 'Perfil'} onChange={setActiveProfile} />
-        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={fillSaving} disabled={!hasOperationalProfile || !capacity || capacity.available <= 0 || initialValidationSaving || revalidationSaving} onClick={fillQueue}>Preencher fila</Button>
+        {channel === 'WhatsApp' ? <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={fillSaving} disabled={!hasOperationalProfile || !capacity || capacity.available <= 0 || initialValidationSaving || revalidationSaving} onClick={fillQueue}>Preencher fila</Button> : null}
         {channel === 'WhatsApp' ? <Button variant="secondary" iconLeft={RefreshCcw} size="sm" loading={revalidationSaving} disabled={fillSaving || initialValidationSaving || (selectedRows.length ? !canRevalidateSelection : !approvedIds.length)} onClick={revalidateSelected}>Revalidar aprovados</Button> : null}
         {channel === 'WhatsApp' ? <Button size="sm" loading={initialValidationSaving} disabled={fillSaving || revalidationSaving || (selectedRows.length ? !canApproveSelection : !approvableIds.length)} onClick={validateSelected}>Validar leads</Button> : null}
       </div>
-      {capacity ? <div className="table-message">Capacidade {channel === 'WhatsApp' ? 'do chip' : 'do perfil'}: {capacity.used}/{capacity.limit} • {capacity.available} vaga(s) disponível(is).</div> : null}
       {selectedLeads.length && !canApproveSelection && !canRevalidateSelection ? (
         <div className="lead-bulk-actions"><span>{selectedLeads.length} selecionado(s)</span><small>Nenhuma acao disponivel para a selecao atual.</small></div>
       ) : null}
       {error ? <div className="table-message">{error}</div> : null}
       {!error && loading ? <div className="table-message">Carregando leads...</div> : null}
-      {!error && !loading && !tableRows.length ? <div className="table-message">Nenhum lead disponivel para pre-envio.</div> : null}
       {!error && !loading && tableRows.length ? (
         <DataTable
           selectable
