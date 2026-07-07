@@ -1,4 +1,4 @@
-import { handleValidationRequest, type ApiResponse } from './validation.handler';
+import { handleValidationRequest, type ApiResponse } from './validation.handler.js';
 
 type ApiRequest = {
   method?: string;
