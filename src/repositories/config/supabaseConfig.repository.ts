@@ -1,5 +1,5 @@
 import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
-import { branchIdOrNull, branchSlug, normalizeBranchId } from '../../services/config/branchIdentity';
+import { branchIdOrNull, branchSlug, normalizeBranchId, normalizeBranchText } from '../../services/config/branchIdentity';
 import { chipLevelDefaults } from '../../services/config/chipOperational';
 import type { BranchConfigRecord, ChipConfigRecord, ConfigKind, ConfigRecord, ConfigStatus, InstagramConfigRecord, TemplateConfigRecord, TemplateType } from '../../services/config/types';
 import { defaultDispatchSettings } from '../../services/settings/settings.seed';
@@ -522,6 +522,75 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
   return rowToInstagramProfile(response.data ?? { ...payload, created_at: record.createdAt });
 }
 
+
+function rowData(row: Record<string, unknown>) {
+  return row.data && typeof row.data === 'object' && !Array.isArray(row.data) ? row.data as Record<string, unknown> : {};
+}
+
+function isOpenQueueRow(row: Record<string, unknown>) {
+  const data = rowData(row);
+  const status = normalizeComparable(row.status ?? data.status);
+  // Itens em envio, enviados, invalidados ou finalizados mantem o snapshot
+  // historico. Apenas itens ainda aguardando/reprocessaveis herdam o ramo atual.
+  return !['sending', 'enviando', 'sent', 'enviado', 'invalid', 'invalidado', 'invalido', 'deleted', 'arquivado', 'archived'].includes(status);
+}
+
+function queueRowUsesBranch(row: Record<string, unknown>, branch: BranchConfigRecord) {
+  const data = rowData(row);
+  const rowId = normalizeBranchId(textFrom(row.branch_id, data.branch_id, data.branchId));
+  const branchId = normalizeBranchId(branch.id);
+  if (rowId && branchId && rowId === branchId) return true;
+
+  const rowSlug = branchSlug(textFrom(row.branch_slug, data.branch_slug, data.branchSlug));
+  if (rowSlug && rowSlug !== 'ramo' && rowSlug === branchSlug(branch.slug || branch.name)) return true;
+
+  const rowName = normalizeComparable(textFrom(row.parent_category, row.branch_name, data.branch, data.branch_name, data.branchName));
+  return Boolean(rowName) && (rowName === normalizeComparable(branch.name) || rowName === normalizeComparable(branch.category));
+}
+
+async function propagateBranchMediaToOpenQueues(branch: BranchConfigRecord) {
+  const client = getSupabaseClient();
+  const tables = [getSupabaseConfig().tables.whatsappQueueItems, getSupabaseConfig().tables.instagramQueueItems];
+  const imageName = String(branch.imageName ?? '').trim();
+  const imageRequired = Boolean(branch.imageRequired);
+  const effectiveImageUrl = imageRequired ? imageName : '';
+
+  for (const queueTable of tables) {
+    const response = await client.from(queueTable).select('*');
+    // A leitura dinâmica ainda garante o valor correto no painel/worker se uma
+    // tabela antiga estiver temporariamente sem permissão de atualização.
+    if (response.error) {
+      console.warn(`[branches] nao foi possivel sincronizar ${queueTable}: ${response.error.message}`);
+      continue;
+    }
+
+    const targets = (response.data ?? [])
+      .filter((row) => isOpenQueueRow(row as Record<string, unknown>))
+      .filter((row) => queueRowUsesBranch(row as Record<string, unknown>, branch));
+
+    await Promise.all(targets.map(async (row) => {
+      const current = row as Record<string, unknown>;
+      const data = rowData(current);
+      const { error } = await client
+        .from(queueTable)
+        .update({
+          image_url: effectiveImageUrl,
+          data: {
+            ...data,
+            imageName,
+            imageRequired,
+            image_url: effectiveImageUrl,
+          },
+          updated_at: nowIso(),
+        })
+        .eq('id', current.id);
+      if (error) {
+        console.warn(`[branches] item ${String(current.id)} nao sincronizado em ${queueTable}: ${error.message}`);
+      }
+    }));
+  }
+}
+
 async function upsertBranch(record: BranchConfigRecord) {
   const userId = await getCurrentUserId();
   const table = tableForKind('branches');
@@ -570,7 +639,12 @@ async function upsertBranch(record: BranchConfigRecord) {
     : await getSupabaseClient().from(table).insert({ ...queryPayload, created_at: record.createdAt || nowIso() }).select('*').single();
 
   if (response.error) throw new Error(response.error.message);
-  return rowToBranch((response.data ?? { ...queryPayload, created_at: record.createdAt }) as Record<string, unknown>);
+  const saved = rowToBranch((response.data ?? { ...queryPayload, created_at: record.createdAt }) as Record<string, unknown>);
+  // O ramo é a fonte de verdade da mídia de itens ainda abertos. A persistência
+  // atualiza a fila imediatamente; as leituras também resolvem o ramo em tempo
+  // real para cobrir registros legados que não tenham sido atualizados.
+  await propagateBranchMediaToOpenQueues(saved);
+  return saved;
 }
 
 export const supabaseConfigRepository: ConfigRepository = {

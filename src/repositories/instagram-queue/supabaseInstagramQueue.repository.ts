@@ -1,5 +1,6 @@
 import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
 import { branchIdOrNull } from '../../services/config/branchIdentity';
+import { applyCurrentBranchMedia, branchForBoundRecord, normalizeStoredBoolean } from '../../services/config/branchMedia';
 import { normalizeInstagramUsername } from '../../services/instagram/instagram.utils';
 import { isStatusGroup, normalizeInstagramQueueStatus } from '../../services/status/status.mapper';
 import type {
@@ -70,7 +71,7 @@ function rowToLead(row: Record<string, unknown>): InstagramQueueLead {
     message2: String(row.message_2 ?? data.message2 ?? data.message_2 ?? ''),
     message_2: String(row.message_2 ?? data.message_2 ?? data.message2 ?? ''),
     imageName: String(data.imageName ?? (data as Record<string, unknown>).image_name ?? row.image_url ?? ''),
-    imageRequired: Boolean(data.imageRequired ?? (data as Record<string, unknown>).image_required ?? row.image_url ?? data.imageName),
+    imageRequired: normalizeStoredBoolean(data.imageRequired ?? (data as Record<string, unknown>).image_required, Boolean(row.image_url ?? data.imageName)),
     image_url: String(row.image_url ?? data.image_url ?? ''),
     image_id: String(row.image_id ?? data.image_id ?? ''),
     city: data.city,
@@ -93,9 +94,41 @@ function isDeletedRow(row: Record<string, unknown>) {
 }
 
 async function allLeads() {
-  const { data, error } = await getSupabaseClient().from(table()).select('*');
-  if (error) throw new Error(error.message);
-  return (data ?? []).filter((row) => !isDeletedRow(row)).map((row) => rowToLead(row));
+  const client = getSupabaseClient();
+  const [queueResponse, branchResponse] = await Promise.all([
+    client.from(table()).select('*'),
+    client.from(getSupabaseConfig().tables.branches).select('*'),
+  ]);
+  if (queueResponse.error) throw new Error(queueResponse.error.message);
+
+  const branches = branchResponse.error
+    ? []
+    : (branchResponse.data ?? []).map((row) => {
+        const data = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : {};
+        return {
+          id: String(row.id ?? data.id ?? ''),
+          kind: 'branches' as const,
+          slug: String(row.slug ?? data.slug ?? ''),
+          name: String(row.name ?? data.name ?? row.category ?? data.category ?? ''),
+          category: String(row.category ?? data.category ?? row.name ?? data.name ?? ''),
+          subcategories: Array.isArray(row.subcategories ?? data.subcategories) ? (row.subcategories ?? data.subcategories) as string[] : [],
+          associatedCategories: Array.isArray(row.associated_categories ?? data.associatedCategories) ? (row.associated_categories ?? data.associatedCategories) as string[] : [],
+          order: Number(row.order_index ?? data.order ?? 0),
+          minRating: Number(row.min_rating ?? data.minRating ?? 0),
+          minReviews: Number(row.min_reviews ?? data.minReviews ?? 0),
+          imageName: String(row.image_name ?? data.imageName ?? ''),
+          imageRequired: normalizeStoredBoolean(row.image_required ?? data.imageRequired ?? data.image_required, Boolean(row.image_name ?? data.imageName)),
+          active: normalizeStoredBoolean(row.active ?? data.active, true),
+          status: String(row.status ?? data.status ?? 'Ativo') as 'Ativo',
+          createdAt: String(row.created_at ?? data.createdAt ?? ''),
+          updatedAt: String(row.updated_at ?? data.updatedAt ?? ''),
+        };
+      });
+
+  return (queueResponse.data ?? [])
+    .filter((row) => !isDeletedRow(row))
+    .map((row) => rowToLead(row))
+    .map((lead) => applyCurrentBranchMedia(lead, branchForBoundRecord(lead, branches)));
 }
 
 async function loadValidLeadIds(ids: string[]) {
@@ -208,7 +241,7 @@ function buildLead(input: CreateInstagramQueueLeadInput, batch: InstagramQueueBa
     message_1: input.message1,
     message_2: input.message2,
     imageRequired: input.imageRequired ?? Boolean(input.imageName ?? input.image_url),
-    image_url: input.image_url ?? input.imageName,
+    image_url: input.imageRequired === false ? '' : (input.image_url ?? input.imageName),
     image_id: input.image_id,
     instagram_username: normalizeInstagramUsername(input.instagram_url ?? input.instagram),
     retry_count: 0,

@@ -137,6 +137,10 @@ function eventsTableName() {
   return companionTable('SUPABASE_TABLE_EVENTS', 'VITE_SUPABASE_TABLE_EVENTS', 'lead_events');
 }
 
+function branchesTableName() {
+  return companionTable('SUPABASE_TABLE_BRANCHES', 'VITE_SUPABASE_TABLE_BRANCHES', 'branches');
+}
+
 /**
  * Esta rota usa apenas o REST/PostgREST do Supabase. O cliente JS, porem,
  * inicializa internamente o modulo Realtime mesmo quando nenhuma assinatura
@@ -206,6 +210,34 @@ function numberValue(value: unknown, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function booleanValue(value: unknown, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  const normalized = text(value).toLowerCase();
+  if (['true', '1', 'sim', 'yes', 'required', 'obrigatoria', 'obrigatório'].includes(normalized)) return true;
+  if (['false', '0', 'nao', 'não', 'no', 'optional', 'opcional'].includes(normalized)) return false;
+  return fallback;
+}
+
+function normalizeBranchText(value: unknown) {
+  return text(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function branchSlug(value: unknown) {
+  return normalizeBranchText(value).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function branchId(value: unknown) {
+  const candidate = text(value);
+  return /^\d+$/.test(candidate) ? candidate.replace(/^0+(?=\d)/, '') : '';
+}
+
 function cleanInstagramUsername(value: unknown) {
   return text(value)
     .replace(/^@+/, '')
@@ -257,11 +289,15 @@ function itemFromRow(row: QueueRow) {
     phone: text(row.phone ?? data.phone),
     parent_category: text(row.parent_category ?? row.branch_name ?? data.parent_category ?? data.branch),
     branch_name: text(row.branch_name ?? row.parent_category ?? data.branch_name ?? data.branch),
+    branch_id: text(row.branch_id ?? data.branch_id ?? data.branchId),
+    branch_slug: text(row.branch_slug ?? data.branch_slug ?? data.branchSlug),
     lead_type: text(row.lead_type ?? data.lead_type ?? data.type ?? 'Instagram'),
     instagram_url: instagram,
     instagram_username: username,
     message_1: text(row.message_1 ?? data.message_1 ?? data.message1),
     message_2: text(row.message_2 ?? data.message_2 ?? data.message2),
+    image_name: text(data.imageName ?? data.image_name ?? row.image_url),
+    image_required: booleanValue(data.imageRequired ?? data.image_required, Boolean(row.image_url ?? data.imageName)),
     image_url: text(row.image_url ?? data.image_url ?? data.imageName),
     image_id: text(row.image_id ?? data.image_id),
     error_message: text(row.error_message ?? data.error_message),
@@ -293,6 +329,75 @@ function isQueuedItem(item: ReturnType<typeof itemFromRow>) {
   return ['queued', 'paused', 'following', 'dm_opened'].includes(item.status);
 }
 
+
+type BranchMedia = {
+  id: string;
+  slug: string;
+  name: string;
+  category: string;
+  imageName: string;
+  imageRequired: boolean;
+};
+
+function branchMediaFromRow(row: QueueRow): BranchMedia {
+  const data = dataRecord(row);
+  const imageName = text(row.image_name ?? data.imageName ?? data.image_name);
+  return {
+    id: text(row.id ?? data.id),
+    slug: text(row.slug ?? data.slug),
+    name: text(row.name ?? data.name ?? row.category ?? data.category),
+    category: text(row.category ?? data.category ?? row.name ?? data.name),
+    imageName,
+    imageRequired: booleanValue(row.image_required ?? data.imageRequired ?? data.image_required, Boolean(imageName)),
+  };
+}
+
+function branchForItem(item: Record<string, unknown>, branches: BranchMedia[]) {
+  const data = dataRecord(item);
+  const itemBranchId = branchId(item.branch_id ?? data.branch_id ?? data.branchId);
+  if (itemBranchId) {
+    const match = branches.find((branch) => branchId(branch.id) === itemBranchId);
+    if (match) return match;
+  }
+
+  const itemSlug = branchSlug(item.branch_slug ?? data.branch_slug ?? data.branchSlug);
+  if (itemSlug) {
+    const match = branches.find((branch) => branchSlug(branch.slug) === itemSlug);
+    if (match) return match;
+  }
+
+  const itemName = normalizeBranchText(item.parent_category ?? item.branch_name ?? data.branch ?? data.branch_name ?? data.branchName);
+  if (!itemName) return undefined;
+  return branches.find((branch) => normalizeBranchText(branch.name) === itemName || normalizeBranchText(branch.category) === itemName);
+}
+
+function withCurrentBranchMedia<T extends Record<string, unknown>>(item: T, branches: BranchMedia[]): T {
+  const branch = branchForItem(item, branches);
+  if (!branch) return item;
+  const imageName = branch.imageName;
+  const imageRequired = branch.imageRequired;
+  return {
+    ...item,
+    image_name: imageName,
+    imageName,
+    image_required: imageRequired,
+    imageRequired,
+    // Extensões antigas usam image_url. Em modo somente texto ela fica vazia
+    // para que nenhuma imagem seja anexada acidentalmente.
+    image_url: imageRequired ? imageName : '',
+  };
+}
+
+async function loadBranchMedia(client: ReturnType<typeof supabase>, userId: string) {
+  let query = client.from(branchesTableName()).select('*');
+  if (userId) query = query.eq('user_id', userId);
+  const { data, error } = await query;
+  // A fila ainda deve carregar mesmo em bancos antigos que não concedam leitura
+  // da tabela de ramos a esta rota. Nesse caso, usa o snapshot do item.
+  if (error) return [] as BranchMedia[];
+  return (data ?? []).map((row) => branchMediaFromRow(row as QueueRow));
+}
+
 async function listInstagramItems(body: RequestBody) {
   const client = supabase();
   let query = client.from(tableName()).select('*');
@@ -311,9 +416,11 @@ async function listInstagramItems(body: RequestBody) {
 
   if (error) throw new Error(error.message);
 
+  const branches = await loadBranchMedia(client, userId);
   return (data ?? [])
     .filter((row) => isActiveRow(row as QueueRow))
     .map((row) => itemFromRow(row as QueueRow))
+    .map((item) => withCurrentBranchMedia(item, branches))
     .sort(sortItems);
 }
 
