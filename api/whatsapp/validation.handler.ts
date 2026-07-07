@@ -87,7 +87,7 @@ function workerHealthConfig() {
   };
 }
 
-function validationInstances(leads: ValidationLead[]) {
+function preflightValidationInstances(leads: ValidationLead[]) {
   return Array.from(new Set(leads.map((lead) => String(lead.chip_instance || '').trim()).filter(Boolean)));
 }
 
@@ -105,7 +105,7 @@ async function assertValidationInfrastructure(leads: ValidationLead[]) {
     throw new Error('Validação bloqueada por segurança: WHATSAPP_VALIDATION_WORKER_HEALTH_URL não foi configurada. Nenhum lead foi alterado.');
   }
 
-  const instances = validationInstances(leads);
+  const instances = preflightValidationInstances(leads);
   if (!instances.length) {
     throw new Error('Validação bloqueada por segurança: nenhum chip/instância foi informado. Nenhum lead foi alterado.');
   }
