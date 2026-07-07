@@ -893,8 +893,13 @@ async function appendValidationAudit(input: EventLogInput) {
   }
 }
 
-function instagramDayIdFromWhatsAppDayId(value: string) {
-  return effectiveDayId('Instagram', value.replace(/^whatsapp-/, 'instagram-'));
+/**
+ * Retornos inválidos do WhatsApp entram no fluxo Instagram no dia operacional
+ * em que a validação ocorreu. Eles não podem herdar o dia original do WhatsApp,
+ * pois isso pode deslocá-los para uma data passada/próxima semana.
+ */
+function operationalInstagramReturnDayId(reference = new Date()) {
+  return effectiveDayId('Instagram', currentDayId('Instagram', reference), reference);
 }
 
 function isInstagramReturn(lead: PreSendLead) {
@@ -947,7 +952,7 @@ async function moveInvalidWhatsAppToInstagramPendingLink(lead: PreSendLead, reas
     override_by: 'Sistema',
     override_at: routedAt,
     profile: firstProfile?.username || settings.instagram.profile || '',
-    dayId: instagramDayIdFromWhatsAppDayId(lead.dayId),
+    dayId: operationalInstagramReturnDayId(),
     status: 'review',
     validationStatus: 'invalid',
     validationError: reason,
@@ -965,8 +970,8 @@ async function moveInvalidWhatsAppToInstagramPendingLink(lead: PreSendLead, reas
     metadata: {
       pre_send_id: lead.id,
       previous_channel: 'whatsapp',
-      dayId: instagramDayIdFromWhatsAppDayId(lead.dayId),
-      scheduled_date: scheduledDateForDayId(instagramDayIdFromWhatsAppDayId(lead.dayId)),
+      dayId: operationalInstagramReturnDayId(),
+      scheduled_date: scheduledDateForDayId(operationalInstagramReturnDayId()),
       company_name: lead.company,
       normalized_phone: normalizePhone(lead.phone),
       validation_reason: reason,
@@ -1751,7 +1756,9 @@ export const preSendService = {
         queueWaitReason: '',
         status: 'review',
         profile: firstInstagramProfile?.username || current.profile,
-        dayId: operationalDayIdForChannel('Instagram', current.dayId),
+        // Ao confirmar o link de um retorno, tente sempre a fila da data
+        // operacional atual (ou do próximo dia após 22h), nunca o dia legado.
+        dayId: operationalInstagramReturnDayId(),
       };
       shouldAutoQueueInstagram = true;
     } else if (current && Object.prototype.hasOwnProperty.call(input, 'send_instagram')) {
