@@ -86,6 +86,7 @@ export const baseService = {
   async remove(id: string) {
     const current = (await repositories.base.list({})).find((lead) => lead.id === id);
     if (!current || !isStatusGroup(current.status, 'archived')) throw new Error('Excluir exige um registro arquivado.');
+    assertTransition({ entity: 'base', fromStatus: current.status, toStatus: 'deleted', action: 'delete' });
     await repositories.base.remove(id);
     eventBus.emit('base:changed', { action: 'remove' });
   },
@@ -99,6 +100,7 @@ export const baseService = {
     if (selected.some((lead) => !lead)) throw new Error('Um ou mais leads nao foram encontrados.');
     const leads = selected as NonNullable<(typeof selected)[number]>[];
     if (!leads.every((lead) => isStatusGroup(lead.status, 'archived'))) throw new Error('Excluir exige apenas registros arquivados.');
+    leads.forEach((lead) => assertTransition({ entity: 'base', fromStatus: lead.status, toStatus: 'deleted', action: 'delete' }));
     await Promise.all(leads.map((lead) => repositories.base.remove(lead.id)));
     eventBus.emit('base:changed', { action: 'remove' });
   },

@@ -148,7 +148,9 @@ function assertWorkerContractReady(leads: WhatsAppQueueLead[]) {
 }
 
 async function logDispatchMessages(leads: WhatsAppQueueLead[], replayed = false) {
-  await Promise.all(
+  // Auditoria nunca pode desfazer um envio confirmado. Falhas de log ficam registradas
+  // no console/observabilidade do backend, mas nao revertem o estado operacional.
+  await Promise.allSettled(
     leads.flatMap((lead) =>
       [
         { part: 'message_1', body: renderTemplateVariables(lead.message_1 || lead.message1, lead) },
@@ -242,20 +244,12 @@ async function finishSentPersistence({
   preSendIds: string[];
   replayed?: boolean;
 }) {
-  const tasks: Promise<unknown>[] = [];
-  if (queueIds.length) tasks.push(repositories.whatsappQueue.send(queueIds));
-  if (leads.length) tasks.push(logDispatchMessages(leads, replayed));
-  if (leads.length) tasks.push(persistSentToBase(leads));
-  if (preSendIds.length) tasks.push(preSendService.markSent(preSendIds));
-
-  const results = await Promise.allSettled(tasks);
-  const failures = results
-    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-    .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
-
-  if (failures.length) {
-    throw new Error(`Persistencia pos-envio incompleta: ${failures.join(' | ')}`);
-  }
+  // Ordem intencional: a Base Permanente e a fonte de recuperacao. Ela precisa ser
+  // gravada antes de qualquer item ser exibido como "enviado" na fila.
+  if (leads.length) await persistSentToBase(leads);
+  if (queueIds.length) await repositories.whatsappQueue.send(queueIds);
+  if (preSendIds.length) await preSendService.markSent(preSendIds);
+  if (leads.length) await logDispatchMessages(leads, replayed);
 }
 
 export const whatsappQueueService = {
@@ -331,17 +325,43 @@ export const whatsappQueueService = {
     assertTemplateReady(leads);
     leads.forEach((lead) => assertTransition({ entity: 'whatsapp-queue', fromStatus: lead.status, toStatus: 'sending', action: 'mark_sending' }));
 
-    const results = await whatsappGateway.send(leads);
-    const sentIds = results.filter((result) => result.status === 'sent').map((result) => result.leadId);
-    const errorResults = results.filter((result) => result.status === 'error');
-    const pausedResults = results.filter((result) => result.status === 'paused');
+    // O item passa para envio antes de chamar o worker. Qualquer falha posterior fica
+    // rastreavel como error e pode ser reprocessada, em vez de permanecer em queued.
+    await Promise.all(leads.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'sending', error_message: '' })));
+    leads.forEach((lead) => logQueueEvent('sending', lead, 'sending'));
+
+    let results;
+    try {
+      results = await whatsappGateway.send(leads);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao acionar worker WhatsApp.';
+      await Promise.all(leads.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'error', error_message: message })));
+      leads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
+      eventBus.emit('whatsapp-queue:changed', { action: 'error' });
+      throw new Error(`Worker WhatsApp indisponivel. Itens movidos para erro e prontos para reprocessamento: ${message}`);
+    }
+
+    const byId = new Map(results.map((result) => [result.leadId, result]));
+    const normalizedResults = leads.map((lead) => byId.get(lead.id) ?? ({ leadId: lead.id, status: 'error' as const, errorMessage: 'Worker WhatsApp nao retornou resultado para este item.' }));
+    const sentIds = normalizedResults.filter((result) => result.status === 'sent').map((result) => result.leadId);
+    const errorResults = normalizedResults.filter((result) => result.status === 'error');
+    const pausedResults = normalizedResults.filter((result) => result.status === 'paused');
     const sentLeads = leads.filter((lead) => sentIds.includes(lead.id));
     const sentPreSendIds = sentLeads.map((lead) => lead.sourcePreSendId).filter((id): id is string => Boolean(id));
 
-    const sentAllowedIds = allowedIds(sentLeads, 'mark_sent', 'sent');
-    await finishSentPersistence({ queueIds: sentAllowedIds, leads: sentLeads, preSendIds: sentPreSendIds });
+    const sentAllowedIds = allowedIds(sentLeads.map((lead) => ({ ...lead, status: 'sending' })), 'mark_sent', 'sent');
+    try {
+      await finishSentPersistence({ queueIds: sentAllowedIds, leads: sentLeads, preSendIds: sentPreSendIds });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao persistir envio WhatsApp.';
+      await Promise.all(sentLeads.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'error', error_message: message })));
+      sentLeads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
+      eventBus.emit('whatsapp-queue:changed', { action: 'error' });
+      throw new Error(`Envio confirmado pelo worker, mas a persistencia falhou. Itens foram movidos para erro para reconciliacao: ${message}`);
+    }
+
     await Promise.all(errorResults.map((result) => repositories.whatsappQueue.updateLead(result.leadId, { status: 'error', error_message: result.errorMessage ?? 'Erro ao enviar WhatsApp.' })));
-    await Promise.all(pausedResults.map((result) => repositories.whatsappQueue.updateLead(result.leadId, { status: 'paused', error_message: result.errorMessage ?? 'chip desconectado' })));
+    await Promise.all(pausedResults.map((result) => repositories.whatsappQueue.updateLead(result.leadId, { status: 'paused', error_message: result.errorMessage ?? 'Chip desconectado.' })));
     sentLeads.forEach((lead) => logQueueEvent('sent', lead, 'sent'));
     errorResults.forEach((result) => logQueueEvent('error', leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId }, 'error', result.errorMessage));
     pausedResults.forEach((result) => logQueueEvent('paused', leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId }, 'paused', result.errorMessage));

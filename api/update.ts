@@ -30,7 +30,31 @@ function envAny(...names: string[]) {
 }
 
 function tableName() {
-  return envAny('SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS', 'VITE_SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS') || 'instagram_dispatch_items';
+  return envAny('SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS', 'VITE_SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS') || 'instagram_queue_items';
+}
+
+function companionTable(envName: string, viteEnvName: string, fallback: string) {
+  return envAny(envName, viteEnvName) || fallback;
+}
+
+function baseTableName() {
+  return companionTable('SUPABASE_TABLE_BASE_PERMANENTE', 'VITE_SUPABASE_TABLE_BASE_PERMANENTE', 'base_permanente');
+}
+
+function sentContactsTableName() {
+  return companionTable('SUPABASE_TABLE_SENT_CONTACTS', 'VITE_SUPABASE_TABLE_SENT_CONTACTS', 'sent_contacts');
+}
+
+function preSendTableName() {
+  return companionTable('SUPABASE_TABLE_PRE_SEND_LEADS', 'VITE_SUPABASE_TABLE_PRE_SEND_LEADS', 'pre_send_leads');
+}
+
+function importTableName() {
+  return companionTable('SUPABASE_TABLE_IMPORT_LEADS', 'VITE_SUPABASE_TABLE_IMPORT_LEADS', 'leads');
+}
+
+function eventsTableName() {
+  return companionTable('SUPABASE_TABLE_EVENTS', 'VITE_SUPABASE_TABLE_EVENTS', 'lead_events');
 }
 
 function supabase() {
@@ -61,7 +85,7 @@ function headerValue(req: ApiRequest, name: string) {
 
 function assertExtensionSecret(req: ApiRequest) {
   const expected = envAny('INSTAGRAM_EXTENSION_SECRET', 'EXTENSION_SECRET');
-  if (!expected) return;
+  if (!expected) throw new Error('INSTAGRAM_EXTENSION_SECRET deve ser configurado no backend antes de liberar a extensao Instagram.');
   const received = headerValue(req, 'x-instagram-extension-secret');
   if (received !== expected) throw new Error('Secret da extensao Instagram invalido.');
 }
@@ -116,6 +140,7 @@ function itemFromRow(row: QueueRow) {
     item_id: text(row.id ?? data.id),
     queue_item_id: text(row.id ?? data.id),
     lead_id: text(row.lead_id ?? data.lead_id),
+    source_pre_send_id: text(row.source_pre_send_id ?? data.sourcePreSendId),
     user_id: text(row.user_id ?? data.user_id),
     profile_username: text(row.profile_username ?? data.profile_username ?? data.profile),
     scheduled_date: text(row.scheduled_date ?? data.scheduled_date),
@@ -127,6 +152,7 @@ function itemFromRow(row: QueueRow) {
     order: position,
     status,
     company_name: text(row.company_name ?? data.company_name ?? data.company),
+    phone: text(row.phone ?? data.phone),
     parent_category: text(row.parent_category ?? row.branch_name ?? data.parent_category ?? data.branch),
     branch_name: text(row.branch_name ?? row.parent_category ?? data.branch_name ?? data.branch),
     lead_type: text(row.lead_type ?? data.lead_type ?? data.type ?? 'Instagram'),
@@ -209,6 +235,175 @@ function nextStatus(body: RequestBody) {
   return statusOf(body.status ?? 'queued');
 }
 
+function safePhone(value: unknown) {
+  let digits = text(value).replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('55')) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
+function uniqueId(prefix: string, source: string) {
+  const safe = source.replace(/[^a-zA-Z0-9_-]/g, '').slice(-80) || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${prefix}-${safe}`;
+}
+
+function normalizeInstagram(value: unknown) {
+  return cleanInstagramUsername(value);
+}
+
+async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: ReturnType<typeof itemFromRow>, timestamp: string) {
+  const userId = item.user_id || null;
+  const sourceLeadId = item.lead_id || item.source_pre_send_id || item.id;
+  const normalizedPhone = safePhone(item.phone);
+  const normalizedInstagram = normalizeInstagram(item.instagram_url || item.instagram_username);
+  const baseId = uniqueId('base-instagram', item.id);
+  const sentContactId = uniqueId('sent-instagram', item.id);
+  const history = [{
+    id: uniqueId('history', `${item.id}-${timestamp}`),
+    date: timestamp.slice(0, 10),
+    title: 'Lead enviado pelo Instagram',
+    description: 'Confirmado pela extensao/worker Instagram.',
+  }];
+
+  const baseData = {
+    id: baseId,
+    sourceLeadId,
+    company: item.company_name,
+    branch: item.parent_category || item.branch_name,
+    branch_id: '',
+    branch_slug: '',
+    state: '',
+    city: '',
+    phone: item.phone,
+    normalizedPhone,
+    site: '',
+    normalizedSite: '',
+    instagram: item.instagram_url,
+    normalizedInstagram,
+    mapsUrl: '',
+    origin: 'Instagram',
+    destination: 'Instagram',
+    status: 'sent',
+    sentAt: timestamp,
+    template: [item.message_1, item.message_2].filter(Boolean).join('\n\n'),
+    chipOrProfile: item.profile_username,
+    notes: item.instagram_url,
+    history,
+  };
+
+  const { error: baseError } = await client.from(baseTableName()).upsert({
+    id: baseId,
+    user_id: userId,
+    company_name: item.company_name || null,
+    phone: item.phone || null,
+    normalized_phone: normalizedPhone || null,
+    instagram_url: item.instagram_url || null,
+    instagram_username: normalizedInstagram || null,
+    source: 'Instagram',
+    branch_name: item.branch_name || item.parent_category || null,
+    destination: 'Instagram',
+    status: 'sent',
+    sent_at: timestamp,
+    last_contact_at: timestamp,
+    last_channel: 'Instagram',
+    source_instance: item.profile_username || null,
+    instagram_sent_at: timestamp,
+    active: true,
+    kind: 'base',
+    channel: 'instagram',
+    data: baseData,
+    updated_at: timestamp,
+    created_at: timestamp,
+  }, { onConflict: 'id' });
+  if (baseError) throw new Error(`Falha ao persistir Base Permanente: ${baseError.message}`);
+
+  const sentData = {
+    id: sentContactId,
+    sourceLeadId,
+    company: item.company_name,
+    phone: item.phone,
+    normalizedPhone,
+    site: '',
+    normalizedSite: '',
+    instagram: item.instagram_url,
+    normalizedInstagram,
+    mapsUrl: '',
+    sentAt: timestamp,
+    origin: 'Instagram',
+    queueItemId: item.id,
+  };
+  const { error: contactError } = await client.from(sentContactsTableName()).upsert({
+    id: sentContactId,
+    user_id: userId,
+    lead_id: sourceLeadId,
+    company_name: item.company_name || null,
+    phone: item.phone || null,
+    normalized_phone: normalizedPhone || null,
+    instagram_username: normalizedInstagram || null,
+    sent_at: timestamp,
+    dispatched_at: timestamp,
+    source: 'Instagram',
+    active: true,
+    data: sentData,
+    updated_at: timestamp,
+    created_at: timestamp,
+  }, { onConflict: 'id' });
+  if (contactError) throw new Error(`Falha ao registrar contato enviado: ${contactError.message}`);
+
+  if (item.source_pre_send_id) {
+    const { data: preSendRow, error: preSendReadError } = await client.from(preSendTableName()).select('*').eq('id', item.source_pre_send_id).maybeSingle();
+    if (preSendReadError) throw new Error(`Falha ao localizar pre-envio: ${preSendReadError.message}`);
+    if (preSendRow) {
+      const preData = dataRecord(preSendRow as QueueRow);
+      const sourceImportId = text(preData.sourceImportId ?? (preSendRow as QueueRow).source_import_id);
+      const { error: preSendUpdateError } = await client.from(preSendTableName()).update({
+        status: 'sent',
+        data: { ...preData, status: 'sent', sentAt: timestamp },
+        updated_at: timestamp,
+      }).eq('id', item.source_pre_send_id);
+      if (preSendUpdateError) throw new Error(`Falha ao concluir pre-envio: ${preSendUpdateError.message}`);
+
+      if (sourceImportId) {
+        const { data: importRow, error: importReadError } = await client.from(importTableName()).select('*').eq('id', sourceImportId).maybeSingle();
+        if (importReadError) throw new Error(`Falha ao localizar importacao: ${importReadError.message}`);
+        if (importRow) {
+          const importData = dataRecord(importRow as QueueRow);
+          const { error: importUpdateError } = await client.from(importTableName()).update({
+            status: 'sent',
+            current_status: 'sent',
+            pipeline_status: 'sent',
+            data: { ...importData, status: 'sent', motivo: 'Envio confirmado pelo worker/extensao Instagram.', sent_at: timestamp },
+            updated_at: timestamp,
+          }).eq('id', sourceImportId);
+          if (importUpdateError) throw new Error(`Falha ao concluir importacao: ${importUpdateError.message}`);
+        }
+      }
+    }
+  }
+
+  const { error: eventError } = await client.from(eventsTableName()).insert({
+    id: uniqueId('event-instagram', `${item.id}-${timestamp}`),
+    user_id: userId,
+    source: 'instagram-extension',
+    action: 'sent_confirmed',
+    channel: 'instagram',
+    status: 'sent',
+    lead_id: sourceLeadId,
+    queue_item_id: item.id,
+    company_name: item.company_name || null,
+    instagram_url: item.instagram_url || null,
+    event_type: 'sent_confirmed',
+    sent_at: timestamp,
+    data: { queue_item_id: item.id, profile: item.profile_username, source: 'extension' },
+    metadata: { queue_item_id: item.id, profile: item.profile_username, source: 'extension' },
+    created_at: timestamp,
+    updated_at: timestamp,
+  });
+  if (eventError) throw new Error(`Falha ao registrar auditoria: ${eventError.message}`);
+}
+
 async function updateInstagramItem(body: RequestBody) {
   const id = text(body.id ?? body.item_id ?? body.queue_item_id);
   if (!id) throw new Error('ID do item Instagram nao informado.');
@@ -222,6 +417,14 @@ async function updateInstagramItem(body: RequestBody) {
   const status = nextStatus(body);
   const timestamp = new Date().toISOString();
   const reason = text(body.reason ?? body.invalid_reason ?? body.error_message);
+
+  if (status === 'sent' && current.status !== 'sent') {
+    if (!['queued', 'paused', 'following', 'dm_opened'].includes(current.status)) {
+      throw new Error(`Transicao Instagram invalida: ${current.status} -> sent.`);
+    }
+    // Base, contatos e etapas anteriores sao gravados antes da fila ficar visivel como enviada.
+    await syncSentInstagramLead(client, current, timestamp);
+  }
   const nextData = {
     ...dataRecord(data as QueueRow),
     ...current,

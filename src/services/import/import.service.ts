@@ -336,6 +336,7 @@ export const importService = {
 
     for (const lead of selectedLeads) {
       if (isStatusGroup(lead.status, 'sent')) continue;
+      assertTransition({ entity: 'import', fromStatus: lead.status, toStatus: 'sent', action: 'mark_sent' });
       await repositories.base.upsertSent(importLeadToBaseInput(lead, sentAt, reason));
       await repositories.import.update(lead.id, {
         status: 'sent',

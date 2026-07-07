@@ -36,7 +36,7 @@ function rowToLead(row: Record<string, unknown>): InstagramQueueLead {
     ...(row.batch_limit ? { batch_limit: Number(row.batch_limit) } : {}),
     id: String(row.id),
     lead_id: String(row.lead_id ?? data.lead_id ?? ''),
-    sourcePreSendId: String(data.sourcePreSendId ?? row.lead_id ?? ''),
+    sourcePreSendId: String(data.sourcePreSendId ?? row.source_pre_send_id ?? row.lead_id ?? ''),
     order: position,
     position,
     company: String(row.company_name ?? data.company ?? ''),
@@ -222,6 +222,7 @@ function dbPayload(lead: InstagramQueueLead, userId: string) {
     id: lead.id,
     user_id: userId,
     lead_id: lead.lead_id || null,
+    source_pre_send_id: lead.sourcePreSendId ?? null,
     scheduled_date: lead.scheduled_date,
     status: lead.status,
     position: lead.position,
@@ -325,7 +326,7 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
       const scheduledDate = safeInput.scheduled_date ?? todayIsoDate();
       const batch = nextBatch(working, safeInput.profile, limit, scheduledDate);
       const lead = buildLead(safeInput, batch);
-      const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
+      const { error } = await getSupabaseClient().from(table()).upsert({ ...dbPayload(lead, userId), created_at: lead.created_at }, { onConflict: 'source_pre_send_id', ignoreDuplicates: true });
       if (error) throw new Error(error.message);
       working.push(lead);
       if (lead.sourcePreSendId) existingSources.add(lead.sourcePreSendId);

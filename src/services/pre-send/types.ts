@@ -37,6 +37,10 @@ export type PreSendLead = {
   templateId?: string;
   city?: string;
   state?: string;
+  validationStatus?: 'valid' | 'invalid' | 'error' | 'pending';
+  validationError?: string;
+  validationAttempts?: number;
+  lastValidatedAt?: string;
 };
 
 export type CreatePreSendLeadInput = Omit<PreSendLead, 'id'>;
@@ -52,6 +56,7 @@ export type PreSendSummary = {
 export type PreSendValidationSummary = {
   approved: number;
   returned: number;
+  requiresReview: number;
   errors: number;
   skipped: number;
 };

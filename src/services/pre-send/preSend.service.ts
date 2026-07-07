@@ -518,6 +518,7 @@ async function approvedImportsForPreSend(channel: PreSendChannel, queueFilter?: 
 
 async function markImportsQueued(imports: ImportLead[]) {
   const queuedAt = new Date().toISOString();
+  imports.forEach((lead) => assertTransition({ entity: 'import', fromStatus: lead.status, toStatus: 'queued', action: 'queue' }));
   await Promise.all(imports.map((lead) =>
     repositories.import.update(lead.id, {
       status: 'queued',
@@ -525,6 +526,42 @@ async function markImportsQueued(imports: ImportLead[]) {
     } as Partial<ImportLead>),
   ));
   eventBus.emit('import:changed', { source: 'pre-send' });
+}
+
+/** Mantem a importacao sincronizada com a conclusao real registrada na fila/Base. */
+async function markSourceImportsSent(leads: PreSendLead[], reason: string, sentAt = new Date().toISOString()) {
+  const sourceIds = Array.from(new Set(leads.map((lead) => lead.sourceImportId).filter((id): id is string => Boolean(id))));
+  if (!sourceIds.length) return 0;
+
+  const statuses = ['pending', 'approved', 'rejected', 'invalid', 'review', 'queued', 'sent', 'archived'] as const;
+  const records = (await Promise.all(statuses.map((status) => repositories.import.list({ status })))).flat();
+  const importsById = new Map(records.map((lead) => [lead.id, lead]));
+  let updated = 0;
+
+  await Promise.all(leads.map(async (lead) => {
+    if (!lead.sourceImportId) return;
+    const source = importsById.get(lead.sourceImportId);
+    if (!source || isStatusGroup(source.status, 'sent')) return;
+
+    assertTransition({ entity: 'import', fromStatus: source.status, toStatus: 'sent', action: 'mark_sent' });
+    await repositories.import.update(source.id, {
+      status: 'sent',
+      motivo: reason,
+      destino: lead.destination,
+      destination: lead.destination,
+      original_destination: lead.original_destination ?? lead.destination,
+      destination_override: lead.destination_override,
+      send_instagram: lead.send_instagram,
+      instagram_url: lead.instagram_url,
+      instagram_override_reason: lead.instagram_override_reason,
+      override_by: lead.override_by,
+      override_at: lead.override_at,
+      sent_at: sentAt,
+    } as Partial<ImportLead>);
+    updated += 1;
+  }));
+
+  return updated;
 }
 
 async function loadTemplate(lead: PreSendLead) {
@@ -820,6 +857,7 @@ async function returnInvalidWhatsAppToInstagram(lead: PreSendLead, reason = 'Wha
   const returnedAt = new Date().toISOString();
 
   if (lead.sourceImportId) {
+    assertTransition({ entity: 'import', fromStatus: 'queued', toStatus: 'pending', action: 'return_to_import' });
     await repositories.import.update(lead.sourceImportId, {
       status: 'pending',
       destino: 'Instagram',
@@ -854,6 +892,55 @@ async function returnInvalidWhatsAppToInstagram(lead: PreSendLead, reason = 'Wha
       validation_reason: reason,
     },
   });
+}
+
+type InvalidWhatsAppAction = 'review' | 'instagram';
+
+function invalidWhatsAppAction(): InvalidWhatsAppAction {
+  const value = String(import.meta.env.VITE_WHATSAPP_INVALID_ACTION ?? 'review').trim().toLowerCase();
+  return value === 'instagram' ? 'instagram' : 'review';
+}
+
+async function markWhatsAppValidationForReview(
+  lead: PreSendLead,
+  validationStatus: 'invalid' | 'error',
+  reason: string,
+) {
+  const reviewedAt = new Date().toISOString();
+  assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'review', action: 'review' });
+  await repositories.preSend.updateLead(lead.id, {
+    status: 'review',
+    validationStatus,
+    validationError: reason,
+    validationAttempts: (lead.validationAttempts ?? 0) + 1,
+    lastValidatedAt: reviewedAt,
+  });
+  await repositories.events.append({
+    source: 'pre-send',
+    action: validationStatus === 'invalid' ? 'whatsapp_validation_requires_review' : 'whatsapp_validation_error_requires_review',
+    channel: 'whatsapp',
+    leadId: lead.sourceImportId ?? lead.id,
+    status: 'review',
+    message: reason,
+    metadata: {
+      pre_send_id: lead.id,
+      dayId: lead.dayId,
+      scheduled_date: scheduledDateForDayId(lead.dayId),
+      company_name: lead.company,
+      normalized_phone: normalizePhone(lead.phone),
+      validation_status: validationStatus,
+      validation_attempts: (lead.validationAttempts ?? 0) + 1,
+    },
+  });
+}
+
+async function handleInvalidWhatsApp(lead: PreSendLead, reason: string) {
+  if (invalidWhatsAppAction() === 'instagram') {
+    await returnInvalidWhatsAppToInstagram(lead, reason);
+    return 'instagram' as const;
+  }
+  await markWhatsAppValidationForReview(lead, 'invalid', reason);
+  return 'review' as const;
 }
 
 export const preSendService = {
@@ -1046,7 +1133,9 @@ export const preSendService = {
     if (!leads.length) throw new Error('Nenhum lead disponivel para retornar ao Inicio no dia selecionado.');
 
     const returnedAt = new Date().toISOString();
-    await Promise.all(leads.map((lead) => repositories.import.update(lead.sourceImportId!, {
+    await Promise.all(leads.map((lead) => {
+      assertTransition({ entity: 'import', fromStatus: 'queued', toStatus: 'approved', action: 'return_to_import' });
+      return repositories.import.update(lead.sourceImportId!, {
       status: 'approved',
       destino: lead.destination,
       destination: lead.destination,
@@ -1060,7 +1149,8 @@ export const preSendService = {
       returned_from_queue: true,
       returned_at: returnedAt,
       return_reason: 'manual',
-    })));
+    });
+    }));
     await Promise.all(leads.map((lead) => repositories.preSend.archiveLead(lead.id)));
     eventBus.emit('import:changed', { source: 'update' });
     eventBus.emit('pre-send:changed', { action: 'update' });
@@ -1072,8 +1162,10 @@ export const preSendService = {
     const allLeads = await listAllLeads();
     const selected = allLeads.filter((lead) => ids.includes(lead.id));
     selected.forEach((lead) => assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'sent', action: 'mark_sent' }));
-    await repositories.preSend.markSent(ids);
+    const importsUpdated = await markSourceImportsSent(selected, 'Envio confirmado pela fila operacional.');
+    await repositories.preSend.markSent(selected.map((lead) => lead.id));
     eventBus.emit('pre-send:changed', { action: 'sent' });
+    if (importsUpdated) eventBus.emit('import:changed', { source: 'update' });
   },
 
   async markAlreadySent(ids: string[], reason = 'Marcado manualmente como ja enviado no Pre-Envio.') {
@@ -1089,21 +1181,6 @@ export const preSendService = {
 
     for (const lead of selected) {
       await repositories.base.upsertSent(preSendLeadToBaseInput(lead, sentAt, reason));
-      if (lead.sourceImportId) {
-        await repositories.import.update(lead.sourceImportId, {
-          status: 'sent',
-          motivo: reason,
-          destino: lead.destination,
-          destination: lead.destination,
-          original_destination: lead.original_destination ?? lead.destination,
-          destination_override: lead.destination_override,
-          send_instagram: lead.send_instagram,
-          instagram_url: lead.instagram_url,
-          instagram_override_reason: lead.instagram_override_reason,
-          override_by: lead.override_by,
-          override_at: lead.override_at,
-        });
-      }
       await repositories.events.append({
         source: 'pre-send',
         action: 'manual_mark_sent',
@@ -1127,6 +1204,7 @@ export const preSendService = {
       });
     }
 
+    await markSourceImportsSent(selected, reason, sentAt);
     await repositories.preSend.markSent(selected.map((lead) => lead.id));
     eventBus.emit('pre-send:changed', { action: 'sent' });
     eventBus.emit('base:changed', { action: 'update' });
@@ -1137,7 +1215,7 @@ export const preSendService = {
   async validateLeads(ids: string[]): Promise<PreSendValidationSummary> {
     await rolloverPreSendAfterCutoff();
     const uniqueIds = Array.from(new Set(ids));
-    if (!uniqueIds.length) return { approved: 0, returned: 0, errors: 0, skipped: 0 };
+    if (!uniqueIds.length) return { approved: 0, returned: 0, requiresReview: 0, errors: 0, skipped: 0 };
 
     const allLeads = await listAllLeads();
     const selected = uniqueIds.map((id) => allLeads.find((lead) => lead.id === id)).filter((lead): lead is PreSendLead => Boolean(lead));
@@ -1150,62 +1228,69 @@ export const preSendService = {
     const validFormat = whatsapp.filter((lead) => isLikelyValidWhatsApp(lead.phone));
     const approvedIds = new Set(nonWhatsApp.map((lead) => lead.id));
     const returnedIds = new Set<string>();
+    const reviewIds = new Set<string>();
     const errorIds = new Set<string>();
 
     await Promise.all(malformed.map(async (lead) => {
-      await returnInvalidWhatsAppToInstagram(lead, 'WhatsApp sem formato valido na validacao do Pre-Envio.');
-      returnedIds.add(lead.id);
+      const outcome = await handleInvalidWhatsApp(lead, 'WhatsApp sem formato valido na validacao do Pre-Envio.');
+      if (outcome === 'instagram') returnedIds.add(lead.id);
+      else reviewIds.add(lead.id);
     }));
 
     if (validFormat.length) {
-      const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest));
-      const byId = new Map(results.map((result) => [result.leadId, result]));
-      const missing = validFormat.filter((lead) => !byId.has(lead.id));
-      missing.forEach((lead) => errorIds.add(lead.id));
+      try {
+        const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest));
+        const byId = new Map(results.map((result) => [result.leadId, result]));
 
-      await Promise.all(validFormat.map(async (lead) => {
-        const result = byId.get(lead.id);
-        if (!result || result.status === 'error') {
-          errorIds.add(lead.id);
-          if (result?.errorMessage) {
-            await repositories.events.append({
-              source: 'pre-send',
-              action: 'whatsapp_validation_error',
-              channel: 'whatsapp',
-              leadId: lead.sourceImportId ?? lead.id,
-              status: lead.status,
-              message: result.errorMessage,
-              metadata: {
-                pre_send_id: lead.id,
-                dayId: lead.dayId,
-                scheduled_date: scheduledDateForDayId(lead.dayId),
-                company_name: lead.company,
-                normalized_phone: normalizePhone(lead.phone),
-              },
-            });
+        await Promise.all(validFormat.map(async (lead) => {
+          const result = byId.get(lead.id);
+          if (!result || result.status === 'error') {
+            errorIds.add(lead.id);
+            const message = result?.errorMessage || 'Worker WhatsApp nao retornou resultado para este lead.';
+            await markWhatsAppValidationForReview(lead, 'error', message);
+            reviewIds.add(lead.id);
+            return;
           }
-          return;
-        }
 
-        if (result.valid) {
-          approvedIds.add(lead.id);
-          return;
-        }
+          if (result.valid) {
+            approvedIds.add(lead.id);
+            return;
+          }
 
-        await returnInvalidWhatsAppToInstagram(lead, result.errorMessage || 'WhatsApp inexistente na validacao real do Pre-Envio.');
-        returnedIds.add(lead.id);
-      }));
+          const outcome = await handleInvalidWhatsApp(lead, result.errorMessage || 'WhatsApp inexistente na validacao real do Pre-Envio.');
+          if (outcome === 'instagram') returnedIds.add(lead.id);
+          else reviewIds.add(lead.id);
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Falha inesperada no provider de validacao WhatsApp.';
+        await Promise.all(validFormat.map(async (lead) => {
+          errorIds.add(lead.id);
+          reviewIds.add(lead.id);
+          await markWhatsAppValidationForReview(lead, 'error', message);
+        }));
+      }
     }
 
     if (approvedIds.size) {
-      await Promise.all(Array.from(approvedIds).map((id) => repositories.preSend.validateLead(id)));
+      const validatedAt = new Date().toISOString();
+      await Promise.all(Array.from(approvedIds).map(async (id) => {
+        const lead = allLeads.find((item) => item.id === id);
+        await repositories.preSend.updateLead(id, {
+          status: 'approved',
+          validationStatus: 'valid',
+          validationError: '',
+          validationAttempts: (lead?.validationAttempts ?? 0) + 1,
+          lastValidatedAt: validatedAt,
+        });
+      }));
     }
 
     if (returnedIds.size) eventBus.emit('import:changed', { source: 'pre-send' });
-    eventBus.emit('pre-send:changed', { action: returnedIds.size ? 'whatsapp-invalid-return' : 'validate' });
+    eventBus.emit('pre-send:changed', { action: returnedIds.size ? 'whatsapp-invalid-return' : reviewIds.size ? 'whatsapp-validation-review' : 'validate' });
     return {
       approved: approvedIds.size,
       returned: returnedIds.size,
+      requiresReview: reviewIds.size,
       errors: errorIds.size,
       skipped: selected.length - pending.length,
     };

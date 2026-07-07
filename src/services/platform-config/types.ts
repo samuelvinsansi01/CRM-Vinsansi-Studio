@@ -6,7 +6,7 @@ export type ExtensionRuntimeConfig = {
   generatedAt: string;
   instagram: {
     queueContract: {
-      table: 'instagram_dispatch_items';
+      table: 'instagram_queue_items';
       profileField: 'profile_username';
       scheduledDateField: 'scheduled_date';
       statusField: 'status';

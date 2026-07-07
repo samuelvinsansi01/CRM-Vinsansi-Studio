@@ -220,6 +220,7 @@ function dbPayload(lead: WhatsAppQueueLead, userId: string) {
     id: lead.id,
     user_id: userId,
     lead_id: lead.lead_id,
+    source_pre_send_id: lead.sourcePreSendId ?? null,
     scheduled_date: lead.scheduled_date,
     status: lead.status,
     position: lead.position,
@@ -324,7 +325,7 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
       const scheduledDate = input.scheduled_date ?? todayIsoDate();
       const batch = nextBatch(working, input.chip, limit, scheduledDate);
       const lead = buildLead(input, batch);
-      const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
+      const { error } = await getSupabaseClient().from(table()).upsert({ ...dbPayload(lead, userId), created_at: lead.created_at }, { onConflict: 'source_pre_send_id', ignoreDuplicates: true });
       if (error) throw new Error(error.message);
       working.push(lead);
       if (lead.sourcePreSendId) existingSources.add(lead.sourcePreSendId);

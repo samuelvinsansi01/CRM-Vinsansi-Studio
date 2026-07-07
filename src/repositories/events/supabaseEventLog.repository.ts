@@ -68,7 +68,7 @@ export const supabaseEventLogRepository: EventLogRepository = {
 
   async appendDispatchMessageLog(input) {
     const timestamp = nowIso();
-    const { error } = await getSupabaseClient().from('dispatch_message_logs').insert({
+    const { error } = await getSupabaseClient().from(getSupabaseConfig().tables.dispatchMessageLogs).insert({
       id: createUuid(),
       user_id: await getCurrentUserId(),
       lead_id: input.leadId || null,

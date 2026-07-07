@@ -1,3 +1,5 @@
+-- Lead Certo: schema base. Para completar o contrato V3, execute em seguida supabase/migration_v3_canonical_contract.sql.
+
 create table if not exists public.app_settings (
   id text primary key,
   data jsonb not null default '{}'::jsonb,

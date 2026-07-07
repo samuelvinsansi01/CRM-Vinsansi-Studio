@@ -329,7 +329,7 @@ function dbLeadPayload(lead: ImportLead, userId: string) {
 
 async function rememberImportBatch(userId: string, leads: ImportLead[], parsed: unknown, source = 'react') {
   const batchId = createUuid();
-  const { error } = await getSupabaseClient().from('import_batches').insert({
+  const { error } = await getSupabaseClient().from(getSupabaseConfig().tables.importBatches).insert({
     id: batchId,
     user_id: userId,
     source,
@@ -357,7 +357,7 @@ async function rememberLeadImports(userId: string, batchId: string, leads: Impor
     created_at: nowIso(),
   }));
   if (!rows.length) return;
-  const { error } = await getSupabaseClient().from('lead_imports').insert(rows);
+  const { error } = await getSupabaseClient().from(getSupabaseConfig().tables.leadImports).insert(rows);
   if (error) throw new Error(error.message);
 }
 
@@ -385,7 +385,7 @@ async function rememberRegistries(userId: string, leads: ImportLead[]) {
   });
   if (identityRows.length) {
     const { error } = await getSupabaseClient()
-      .from('lead_registry')
+      .from(getSupabaseConfig().tables.leadRegistry)
       .upsert(identityRows, { onConflict: 'user_id,identity_type,identity_value', ignoreDuplicates: true });
     if (error) throw new Error(error.message);
   }

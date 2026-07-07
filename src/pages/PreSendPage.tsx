@@ -322,7 +322,7 @@ function ValidationQueue({
       refreshQueue();
       onToast({
         title: 'Leads validados',
-        description: `${result.approved} aprovado(s), ${result.returned} retorno(s) para Instagram${result.errors ? `, ${result.errors} erro(s)` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}.`,
+        description: `${result.approved} aprovado(s)${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.returned ? `, ${result.returned} retorno(s) para Instagram` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}.`,
         tone: result.errors ? 'warning' : 'success',
       });
     } catch (err) {

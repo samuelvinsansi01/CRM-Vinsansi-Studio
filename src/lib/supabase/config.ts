@@ -22,6 +22,10 @@ export type SupabaseRuntimeConfig = {
     sentContacts: string;
     events: string;
     settings: string;
+    importBatches: string;
+    leadImports: string;
+    leadRegistry: string;
+    dispatchMessageLogs: string;
   };
 };
 
@@ -49,18 +53,22 @@ export function getSupabaseConfig(): SupabaseRuntimeConfig {
     useSupabaseWhatsAppQueue: envFlag(import.meta.env.VITE_USE_SUPABASE_WHATSAPP_QUEUE, isConfigured),
     useSupabaseInstagramQueue: envFlag(import.meta.env.VITE_USE_SUPABASE_INSTAGRAM_QUEUE, isConfigured),
     tables: {
-      chips: import.meta.env.VITE_SUPABASE_TABLE_CHIPS ?? 'whatsapp_instances',
+      chips: import.meta.env.VITE_SUPABASE_TABLE_CHIPS ?? 'chips',
       instagramProfiles: import.meta.env.VITE_SUPABASE_TABLE_INSTAGRAM_PROFILES ?? 'instagram_profiles',
       branches: import.meta.env.VITE_SUPABASE_TABLE_BRANCHES ?? 'branches',
-      templates: import.meta.env.VITE_SUPABASE_TABLE_TEMPLATES ?? 'message_templates',
+      templates: import.meta.env.VITE_SUPABASE_TABLE_TEMPLATES ?? 'templates',
       importLeads: import.meta.env.VITE_SUPABASE_TABLE_IMPORT_LEADS ?? 'leads',
       preSendLeads: import.meta.env.VITE_SUPABASE_TABLE_PRE_SEND_LEADS ?? 'pre_send_leads',
-      whatsappQueueItems: import.meta.env.VITE_SUPABASE_TABLE_WHATSAPP_QUEUE_ITEMS ?? 'pre_dispatch_items',
-      instagramQueueItems: import.meta.env.VITE_SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS ?? 'instagram_dispatch_items',
+      whatsappQueueItems: import.meta.env.VITE_SUPABASE_TABLE_WHATSAPP_QUEUE_ITEMS ?? 'whatsapp_queue_items',
+      instagramQueueItems: import.meta.env.VITE_SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS ?? 'instagram_queue_items',
       basePermanent: import.meta.env.VITE_SUPABASE_TABLE_BASE_PERMANENTE ?? 'base_permanente',
       sentContacts: import.meta.env.VITE_SUPABASE_TABLE_SENT_CONTACTS ?? 'sent_contacts',
-      events: import.meta.env.VITE_SUPABASE_TABLE_EVENTS ?? 'contact_events',
-      settings: import.meta.env.VITE_SUPABASE_TABLE_SETTINGS ?? 'settings',
+      events: import.meta.env.VITE_SUPABASE_TABLE_EVENTS ?? 'lead_events',
+      settings: import.meta.env.VITE_SUPABASE_TABLE_SETTINGS ?? 'app_settings',
+      importBatches: import.meta.env.VITE_SUPABASE_TABLE_IMPORT_BATCHES ?? 'import_batches',
+      leadImports: import.meta.env.VITE_SUPABASE_TABLE_LEAD_IMPORTS ?? 'lead_imports',
+      leadRegistry: import.meta.env.VITE_SUPABASE_TABLE_LEAD_REGISTRY ?? 'lead_registry',
+      dispatchMessageLogs: import.meta.env.VITE_SUPABASE_TABLE_DISPATCH_MESSAGE_LOGS ?? 'lead_dispatch_messages',
     },
   };
 }

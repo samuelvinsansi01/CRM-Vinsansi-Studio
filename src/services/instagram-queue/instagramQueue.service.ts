@@ -4,7 +4,7 @@ import type { ConfigRecord, InstagramConfigRecord } from '../config/types';
 import { normalizeDomain, normalizePhone } from '../import/importValidation';
 import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { permissionsFor } from '../permissions';
-import { mockInstagramGateway } from './instagram.gateway';
+import { internalWorkerInstagramGateway } from './instagram.gateway';
 import type { InstagramQueueFilters, InstagramQueueLead, UpdateInstagramQueueLeadInput } from './types';
 import { preSendService } from '../pre-send/preSend.service';
 import { settingsService } from '../settings/settings.service';
@@ -178,6 +178,13 @@ async function persistSentToBase(leads: InstagramQueueLead[]) {
   );
 }
 
+async function finishSentPersistence(queueIds: string[], leads: InstagramQueueLead[], preSendIds: string[]) {
+  // A Base e gravada primeiro para que nenhum item apareca como enviado sem historico persistente.
+  if (leads.length) await persistSentToBase(leads);
+  if (queueIds.length) await repositories.instagramQueue.send(queueIds);
+  if (preSendIds.length) await preSendService.markSent(preSendIds);
+}
+
 export const instagramQueueService = {
   async listQueuedForWorker(limit = 50) {
     await rolloverOverdueInstagramItems();
@@ -203,9 +210,15 @@ export const instagramQueueService = {
     const allowedLeads = sentLeads.filter((lead) => allowed.includes(lead.id));
     const sentPreSendIds = allowedLeads.map((lead) => lead.sourcePreSendId).filter((id): id is string => Boolean(id));
 
-    if (allowed.length) await repositories.instagramQueue.send(allowed);
-    if (allowedLeads.length) await persistSentToBase(allowedLeads);
-    if (sentPreSendIds.length) await preSendService.markSent(sentPreSendIds);
+    try {
+      await finishSentPersistence(allowed, allowedLeads, sentPreSendIds);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao persistir envio Instagram.';
+      await Promise.all(allowedLeads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'error', error_message: message })));
+      allowedLeads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
+      eventBus.emit('instagram-queue:changed', { action: 'error' });
+      throw new Error(`Confirmacao Instagram recebida, mas a persistencia falhou. Itens movidos para erro para reconciliacao: ${message}`);
+    }
     allowedLeads.forEach((lead) => logQueueEvent('sent', lead, 'sent'));
     eventBus.emit('instagram-queue:changed', { action: 'worker-sent' });
     if (allowedLeads.length) eventBus.emit('base:changed', { action: 'update' });
@@ -248,21 +261,39 @@ export const instagramQueueService = {
     const leads = assertAllSendable(await getSelectedLeads(ids));
     assertTemplateReady(leads);
     leads.forEach((lead) => assertTransition({ entity: 'instagram-queue', fromStatus: lead.status, toStatus: 'dm_opened', action: 'mark_sending' }));
-    await Promise.all(leads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'dm_opened' })));
+    await Promise.all(leads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'dm_opened', error_message: '' })));
+    leads.forEach((lead) => logQueueEvent('sending', lead, 'dm_opened'));
 
-    const results = await mockInstagramGateway.send(leads);
+    let results;
+    try {
+      results = await internalWorkerInstagramGateway.send(leads);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao acionar worker Instagram.';
+      await Promise.all(leads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'error', error_message: message })));
+      leads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
+      eventBus.emit('instagram-queue:changed', { action: 'error' });
+      throw new Error(`Worker Instagram indisponivel. Itens movidos para erro e prontos para reprocessamento: ${message}`);
+    }
+
     const sentIds = results.filter((result) => result.status === 'sent').map((result) => result.leadId);
-    const errorIds = results.filter((result) => result.status === 'error').map((result) => result.leadId);
+    const errorResults = results.filter((result) => result.status === 'error');
     const sentLeads = leads.filter((lead) => sentIds.includes(lead.id));
     const sentPreSendIds = sentLeads.map((lead) => lead.sourcePreSendId).filter((id): id is string => Boolean(id));
-
     const sentAllowedIds = allowedIds(sentLeads.map((lead) => ({ ...lead, status: 'dm_opened' })), 'mark_sent', 'sent');
-    if (sentAllowedIds.length) await repositories.instagramQueue.send(sentAllowedIds);
-    if (sentLeads.length) await persistSentToBase(sentLeads);
-    if (sentPreSendIds.length) await preSendService.markSent(sentPreSendIds);
-    await Promise.all(errorIds.map((id) => repositories.instagramQueue.updateLead(id, { status: 'error' })));
+
+    try {
+      await finishSentPersistence(sentAllowedIds, sentLeads, sentPreSendIds);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha ao persistir envio Instagram.';
+      await Promise.all(sentLeads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'error', error_message: message })));
+      sentLeads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
+      eventBus.emit('instagram-queue:changed', { action: 'error' });
+      throw new Error(`Envio confirmado pelo worker, mas a persistencia falhou. Itens foram movidos para erro para reconciliacao: ${message}`);
+    }
+
+    await Promise.all(errorResults.map((result) => repositories.instagramQueue.updateLead(result.leadId, { status: 'error', error_message: result.errorMessage ?? 'Erro ao enviar Instagram.' })));
     sentLeads.forEach((lead) => logQueueEvent('sent', lead, 'sent'));
-    errorIds.forEach((id) => logQueueEvent('error', leads.find((lead) => lead.id === id) ?? { id }, 'error', 'Erro ao enviar Instagram.'));
+    errorResults.forEach((result) => logQueueEvent('error', leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId }, 'error', result.errorMessage ?? 'Erro ao enviar Instagram.'));
     eventBus.emit('instagram-queue:changed', { action: 'send' });
     if (sentLeads.length) eventBus.emit('base:changed', { action: 'update' });
   },
