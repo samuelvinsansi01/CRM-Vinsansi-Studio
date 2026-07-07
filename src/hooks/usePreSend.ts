@@ -58,7 +58,15 @@ export function usePreSend() {
     };
   }, [refreshKey]);
 
-  const defaultDayId = useMemo(() => dayCards.find((day) => day.queued > 0)?.id ?? dayCards[0]?.id ?? '', [dayCards]);
+  // The Pre-Envio screen must always open on the operational day that is marked as today.
+  // We prefer the WhatsApp card only as the canonical source for the shared weekday key.
+  const defaultDayId = useMemo(
+    () => dayCards.find((day) => day.channel === 'WhatsApp' && day.isToday)?.id ??
+      dayCards.find((day) => day.isToday)?.id ??
+      dayCards[0]?.id ??
+      '',
+    [dayCards],
+  );
 
   const moveToQueue = useCallback(
     async (ids: string[], options?: Parameters<typeof preSendService.moveToQueue>[1]) => {
