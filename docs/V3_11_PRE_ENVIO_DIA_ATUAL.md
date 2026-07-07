@@ -1,11 +1,10 @@
-# V3.11 — Pré-Envio abre no dia atual
+# V3.12 — Pré-Envio abre no dia atual sem alterar a semana
 
-## Alteração
+## Regra
+- A semana mantém a ordem operacional original: domingo a sábado.
+- A linha WhatsApp continua antes da linha Instagram.
+- Ao abrir o Pré-Envio, o dia atual é selecionado automaticamente.
+- Os painéis de WhatsApp e Instagram carregam o conteúdo do dia atual, não o primeiro card de domingo.
+- Ao escolher outro dia, a seleção manual é preservada enquanto a tela estiver aberta.
 
-Ao abrir a tela de Pré-Envio, o dia operacional marcado como `isToday` é selecionado automaticamente. O card de hoje passa a ser o primeiro card exibido em cada sequência semanal: primeiro WhatsApp e depois Instagram.
-
-## Regras
-
-- A escolha manual de outro dia continua preservada enquanto o usuário permanece na tela.
-- Uma atualização de dados não força a tela de volta ao dia atual caso o dia selecionado ainda exista.
-- Não houve alteração de banco, limites, filas ou validação.
+Nenhuma regra de filas, validação, limites ou banco foi alterada.

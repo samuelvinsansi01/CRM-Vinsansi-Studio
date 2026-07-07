@@ -95,24 +95,10 @@ function daySelectionKey(dayId: string) {
   return dayId.replace(/^whatsapp-/, '').replace(/^instagram-/, '');
 }
 
-function sortDayCardsFromToday(dayCards: PreSendDayCard[]) {
-  const channels: PreSendChannel[] = ['WhatsApp', 'Instagram'];
-
-  return channels.flatMap((channel) => {
-    const cards = dayCards.filter((day) => day.channel === channel);
-    const todayIndex = cards.findIndex((day) => day.isToday);
-
-    if (todayIndex <= 0) return cards;
-    return [...cards.slice(todayIndex), ...cards.slice(0, todayIndex)];
-  });
-}
-
 function DayLimitGrid({ dayCards, activeDayKey, onDayChange }: { dayCards: PreSendDayCard[]; activeDayKey: string; onDayChange: (dayId: string) => void }) {
-  const cardsFromToday = useMemo(() => sortDayCardsFromToday(dayCards), [dayCards]);
-
   return (
     <section className="day-limit-grid">
-      {cardsFromToday.map((day) => (
+      {dayCards.map((day) => (
         <button className={`day-card ${day.isToday ? 'day-card--today' : ''} ${daySelectionKey(day.id) === activeDayKey ? 'day-card--active' : ''} ${day.queued > 0 ? 'day-card--has-leads' : ''} ${day.limit > 0 && day.queued >= day.limit ? 'day-card--complete' : ''}`} type="button" key={day.id} onClick={() => onDayChange(day.id)}>
           <small>{day.channel}</small>
           <strong>{day.queued}/{day.limit}</strong>
