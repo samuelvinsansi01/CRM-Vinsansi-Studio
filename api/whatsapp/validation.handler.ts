@@ -87,9 +87,6 @@ function workerHealthConfig() {
   };
 }
 
-function preflightValidationInstances(leads: ValidationLead[]) {
-  return Array.from(new Set(leads.map((lead) => String(lead.chip_instance || '').trim()).filter(Boolean)));
-}
 
 function safeProviderMessage(payload: unknown, fallback: string) {
   const record = asObject(payload);
@@ -105,7 +102,13 @@ async function assertValidationInfrastructure(leads: ValidationLead[]) {
     throw new Error('Validação bloqueada por segurança: WHATSAPP_VALIDATION_WORKER_HEALTH_URL não foi configurada. Nenhum lead foi alterado.');
   }
 
-  const instances = preflightValidationInstances(leads);
+  // Mantido dentro do próprio preflight para evitar qualquer dependência de símbolo
+  // em builds serverless incrementais da Vercel.
+  const instances = Array.from(new Set(
+    (Array.isArray(leads) ? leads : [])
+      .map((lead) => String(lead?.chip_instance || '').trim())
+      .filter(Boolean),
+  ));
   if (!instances.length) {
     throw new Error('Validação bloqueada por segurança: nenhum chip/instância foi informado. Nenhum lead foi alterado.');
   }
