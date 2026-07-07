@@ -76,7 +76,8 @@ function isSocialOrContactOnlyUrl(value: unknown) {
   ].some((domain) => normalized === domain || normalized.endsWith(`.${domain}`));
 }
 
-function hasWebsiteForTemplate(value: unknown) {
+/** Retorna se o valor representa um site comercial próprio, não rede social ou contato. */
+export function hasWebsiteForTemplate(value: unknown) {
   return !isEmptySiteValue(value) && !isSocialOrContactOnlyUrl(value);
 }
 

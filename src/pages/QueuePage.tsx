@@ -10,6 +10,7 @@ import { isStatusGroup, statusLabel, statusTone } from '../services/status/statu
 import { hasWhatsAppOperationalIssue, hasWhatsAppWorkerContract } from '../services/whatsapp-queue/whatsappQueue.guards';
 import type { WhatsAppQueueBatch, WhatsAppQueueLead, WhatsAppQueueStatus } from '../services/whatsapp-queue/types';
 import { toLocalDateInputValue } from '../utils/date';
+import { hasWebsiteForTemplate } from '../services/templates/templateSelector';
 
 type QueuePageProps = {
   channel: 'whatsapp' | 'instagram';
@@ -55,6 +56,11 @@ function instagramHref(lead: InstagramQueueLead) {
   if (/^https?:\/\//i.test(lead.instagram_url ?? '')) return lead.instagram_url;
   const handle = instagramHandle(lead);
   return handle ? `https://instagram.com/${handle}` : undefined;
+}
+
+/** A classificação visual segue a mesma regra usada para escolher templates. */
+function siteBadgeLabel(lead: { site?: string | null }) {
+  return hasWebsiteForTemplate(lead.site) ? 'Com site' : 'Sem site';
 }
 
 export function QueuePage({ channel }: QueuePageProps) {
@@ -284,6 +290,7 @@ function WhatsAppBatch({
                 <span className="batch-row__tags">
                   <Tag>{lead.branch}</Tag>
                   <Tag>{lead.type}</Tag>
+                  <Tag>{siteBadgeLabel(lead)}</Tag>
                   <Tag tone={hasWhatsAppOperationalIssue(lead) ? 'danger' : statusTone(lead.status)}>
                     {hasWhatsAppOperationalIssue(lead) ? 'Dados incompletos' : statusLabel(lead.status)}
                   </Tag>
@@ -534,6 +541,7 @@ function InstagramBatch({
                 <span className="batch-row__tags">
                   <Tag>{lead.branch}</Tag>
                   <Tag>{lead.type}</Tag>
+                  <Tag>{siteBadgeLabel(lead)}</Tag>
                   <Tag tone={statusTone(lead.status)}>{statusLabel(lead.status)}</Tag>
                 </span>
                 <span className="batch-row__icons">
