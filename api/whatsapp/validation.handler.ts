@@ -38,6 +38,12 @@ function env(name: string) {
   return String(process.env[name] ?? '').trim();
 }
 
+function envBoolean(name: string, fallback = false) {
+  const value = env(name).toLowerCase();
+  if (!value) return fallback;
+  return ['true', '1', 'yes', 'sim', 'on'].includes(value);
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
@@ -61,6 +67,74 @@ function evolutionConfig() {
     production: isProductionRuntime(),
     dryRun: dryRunRequested && !isProductionRuntime(),
   };
+}
+
+/**
+ * Porta de segurança antes da validação. Quando habilitada, a Vercel consulta
+ * o Worker Docker, que confirma estar de pé e também confere a conexão da
+ * instância Evolution antes que qualquer número seja enviado ao provider.
+ *
+ * Em indisponibilidade, a validação inteira falha fechada: nenhum lead recebe
+ * status inválido, revisão, retorno para Instagram ou alteração de capacidade.
+ */
+function workerHealthConfig() {
+  const healthUrl = env('WHATSAPP_VALIDATION_WORKER_HEALTH_URL').replace(/\/$/, '');
+  return {
+    healthUrl,
+    token: env('WHATSAPP_VALIDATION_WORKER_HEALTH_TOKEN'),
+    required: envBoolean('WHATSAPP_VALIDATION_REQUIRE_WORKER_HEALTH', false),
+    timeoutMs: Math.max(1_000, Number(env('WHATSAPP_VALIDATION_HEALTH_TIMEOUT_MS') || 8_000)),
+  };
+}
+
+function validationInstances(leads: ValidationLead[]) {
+  return Array.from(new Set(leads.map((lead) => String(lead.chip_instance || '').trim()).filter(Boolean)));
+}
+
+function safeProviderMessage(payload: unknown, fallback: string) {
+  const record = asObject(payload);
+  const message = record?.message ?? record?.error ?? record?.detail ?? record?.details;
+  return String(message ?? fallback).trim() || fallback;
+}
+
+async function assertValidationInfrastructure(leads: ValidationLead[]) {
+  const config = workerHealthConfig();
+  if (!config.required) return;
+
+  if (!config.healthUrl) {
+    throw new Error('Validação bloqueada por segurança: WHATSAPP_VALIDATION_WORKER_HEALTH_URL não foi configurada. Nenhum lead foi alterado.');
+  }
+
+  const instances = validationInstances(leads);
+  if (!instances.length) {
+    throw new Error('Validação bloqueada por segurança: nenhum chip/instância foi informado. Nenhum lead foi alterado.');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    const response = await fetch(`${config.healthUrl}/preflight/validation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(config.token ? { 'X-Worker-Token': config.token } : {}),
+      },
+      body: JSON.stringify({ instances }),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || asObject(payload)?.ok !== true) {
+      throw new Error(safeProviderMessage(payload, `Worker/Evolution indisponível (HTTP ${response.status}). Nenhum lead foi alterado.`));
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Worker WhatsApp não respondeu ao preflight dentro do prazo. Nenhum lead foi alterado.');
+    }
+    const message = error instanceof Error ? error.message : 'Worker WhatsApp indisponível.';
+    throw new Error(`Validação indisponível: ${message}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function requestEvolution(path: string, init: RequestInit = {}) {
@@ -316,6 +390,26 @@ export async function handleValidationRequest(req: ApiRequest, res: ApiResponse,
     res.status(409).json({
       error: `Operacao incompatível. Esta rota aceita somente ${expectedOperation}/${expectedMode}.`,
       expected: { operation: expectedOperation, mode: expectedMode },
+    });
+    return;
+  }
+
+  try {
+    await assertValidationInfrastructure(leads);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Validação indisponível.';
+    console.warn(JSON.stringify({
+      event: 'whatsapp_validation_preflight_failed',
+      operation: expectedOperation,
+      mode: expectedMode,
+      total: leads.length,
+      message,
+    }));
+    res.status(503).json({
+      code: 'validation_unavailable',
+      error: message,
+      message,
+      unchanged: true,
     });
     return;
   }

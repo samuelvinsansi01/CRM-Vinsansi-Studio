@@ -25,6 +25,16 @@ export interface WhatsAppValidationGateway {
 type ValidationOperation = 'validate' | 'revalidate';
 type ValidationMode = 'initial' | 'revalidation';
 
+/** Infraestrutura indisponível: a operação foi interrompida antes de alterar qualquer lead. */
+export class WhatsAppValidationUnavailableError extends Error {
+  readonly code = 'validation_unavailable';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'WhatsAppValidationUnavailableError';
+  }
+}
+
 function initialValidationEndpoint() {
   return String(import.meta.env.VITE_WHATSAPP_WORKER_VALIDATE_ENDPOINT ?? '/api/whatsapp/validate').trim();
 }
@@ -122,7 +132,11 @@ async function callValidationWorker(
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload?.message || payload?.error || response.statusText || `Erro ao executar ${operation} no worker WhatsApp.`;
-    throw new Error(Array.isArray(message) ? message.flat(Infinity).join(', ') : String(message));
+    const formatted = Array.isArray(message) ? message.flat(Infinity).join(', ') : String(message);
+    if (response.status === 503 && payload?.code === 'validation_unavailable') {
+      throw new WhatsAppValidationUnavailableError(formatted);
+    }
+    throw new Error(formatted);
   }
 
   if (payload?.meta?.operation !== operation || payload?.meta?.mode !== mode) {

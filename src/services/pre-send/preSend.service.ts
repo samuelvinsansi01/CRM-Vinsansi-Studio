@@ -16,7 +16,7 @@ import { assertTransition } from '../state-machine';
 import { renderLeadMessages } from '../templates/templateVariables';
 import { selectTemplateForLead, templateTypeForLead } from '../templates/templateSelector';
 import type { CreateWhatsAppQueueLeadInput, WhatsAppQueueLead } from '../whatsapp-queue/types';
-import { preSendLeadToWhatsAppValidationRequest, whatsappValidationGateway } from '../whatsapp-validation/whatsappValidation.gateway';
+import { preSendLeadToWhatsAppValidationRequest, whatsappValidationGateway, WhatsAppValidationUnavailableError } from '../whatsapp-validation/whatsappValidation.gateway';
 import type { CreatePreSendLeadInput, InstagramQueueFillResult, PreSendCapacity, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead, PreSendQueueFilter, PreSendValidationSummary } from './types';
 
 type QueueAssignmentOptions = {
@@ -1609,6 +1609,10 @@ export const preSendService = {
           else reviewIds.add(lead.id);
         }));
       } catch (error) {
+        // Falha de infraestrutura (Docker desligado, Evolution desconectada ou
+        // preflight sem resposta) não muda nenhum lead. A UI mostra o erro e
+        // o usuário pode tentar novamente quando o ambiente voltar.
+        if (error instanceof WhatsAppValidationUnavailableError) throw error;
         const message = error instanceof Error ? error.message : 'Falha inesperada no provider de validacao WhatsApp.';
         await Promise.all(validFormat.map(async (lead) => {
           errorIds.add(lead.id);
@@ -1722,6 +1726,8 @@ export const preSendService = {
           approvedIds.add(lead.id);
         }));
       } catch (error) {
+        // Nunca rebaixa/retorna leads por indisponibilidade de infraestrutura.
+        if (error instanceof WhatsAppValidationUnavailableError) throw error;
         const message = error instanceof Error ? error.message : 'Falha inesperada no provider de revalidacao WhatsApp.';
         await Promise.all(validFormat.map(async (lead) => {
           errorIds.add(lead.id);
