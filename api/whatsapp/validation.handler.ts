@@ -105,6 +105,8 @@ function payloadItems(payload: unknown): Array<Record<string, unknown>> {
     if (nested) {
       const nestedItems = [nested.response, nested.data, nested.result, nested.results].find(Array.isArray);
       if (Array.isArray(nestedItems)) return nestedItems.filter((item): item is Record<string, unknown> => Boolean(asObject(item)));
+      // Algumas versões retornam um único resultado em `data`/`response`.
+      if (candidateDigits(nested)) return [nested];
     }
   }
 
@@ -122,41 +124,50 @@ function booleanLike(value: unknown) {
 }
 
 function candidateDigits(candidate: Record<string, unknown>) {
-  return String(
+  const raw = String(
     candidate.number
       ?? candidate.phone
       ?? candidate.jid
       ?? candidate.remoteJid
       ?? candidate._serialized
       ?? '',
-  ).replace(/\D/g, '');
+  );
+  // JIDs podem conter um sufixo de dispositivo, como :1@s.whatsapp.net.
+  // O sufixo não faz parte do número e não pode participar da comparação.
+  return raw.split('@')[0].split(':')[0].replace(/\D/g, '');
 }
 
+/**
+ * A validação usa sempre números normalizados no formato E.164 (ex.: 5511999999999).
+ * Não há comparação por "final do número": qualquer divergência deixa o lead em revisão.
+ */
 function numbersMatch(left: string, right: string) {
-  if (left.length < 10 || right.length < 10) return false;
-  return left === right || left.endsWith(right) || right.endsWith(left);
+  return left.length >= 12 && right.length >= 12 && left === right;
 }
 
-function matchingItem(lead: ValidationLead, items: Array<Record<string, unknown>>) {
+function matchingItems(lead: ValidationLead, items: Array<Record<string, unknown>>) {
   const number = phoneDigits(lead);
-  return items.find((item) => numbersMatch(candidateDigits(item), number));
+  return items.filter((item) => numbersMatch(candidateDigits(item), number));
 }
 
 function leadId(lead: ValidationLead) {
   return String(lead.id || lead.lead_id || '');
 }
 
-function parseValidation(lead: ValidationLead, item?: Record<string, unknown>): ValidationResult {
-  if (!item) {
+function parseValidation(lead: ValidationLead, matching: Array<Record<string, unknown>>): ValidationResult {
+  if (matching.length !== 1) {
     return {
       leadId: leadId(lead),
       lead_id: lead.lead_id,
       status: 'error',
       valid: false,
-      errorMessage: 'Evolution nao retornou uma confirmação vinculada a este numero.',
+      errorMessage: matching.length
+        ? 'Evolution retornou mais de uma confirmação para este número. O lead foi enviado para revisão.'
+        : 'Evolution não retornou confirmação exatamente vinculada a este número.',
     };
   }
 
+  const item = matching[0];
   const exists = item.exists
     ?? item.valid
     ?? item.isWhatsapp
@@ -191,34 +202,44 @@ function parseValidation(lead: ValidationLead, item?: Record<string, unknown>): 
 }
 
 function errorResult(lead: ValidationLead, message: string): ValidationResult {
+
   return { leadId: leadId(lead), lead_id: lead.lead_id, status: 'error', valid: false, errorMessage: message };
 }
 
-function chunk<T>(items: T[], size: number) {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
-  return chunks;
-}
 
-async function validateLeadBatch(instance: string, leads: ValidationLead[], operation: ValidationOperation, mode: ValidationMode): Promise<ValidationResult[]> {
+async function validateOneLead(instance: string, lead: ValidationLead, operation: ValidationOperation, mode: ValidationMode): Promise<ValidationResult> {
   const config = evolutionConfig();
   if (!config.baseUrl || !config.apiKey) throw new Error('EVOLUTION_API_URL/EVOLUTION_API_KEY ausentes no backend.');
   if (config.dryRunRequested && config.production) throw new Error('DRY_RUN=true está bloqueado em Production. Defina DRY_RUN=false para validar pela Evolution.');
 
   if (config.dryRun) {
-    console.warn(JSON.stringify({ event: 'whatsapp_validation_dry_run', operation, mode, instance, total: leads.length }));
-    return leads.map((lead) => ({ leadId: leadId(lead), lead_id: lead.lead_id, status: 'valid', valid: true }));
+    console.warn(JSON.stringify({ event: 'whatsapp_validation_dry_run', operation, mode, instance, leadId: leadId(lead) }));
+    return { leadId: leadId(lead), lead_id: lead.lead_id, status: 'valid', valid: true };
   }
 
-  console.info(JSON.stringify({ event: 'whatsapp_validation_evolution', operation, mode, instance, total: leads.length }));
+  // Uma consulta por lead elimina qualquer possibilidade de um resultado em lote
+  // ser aplicado a outro número. A Evolution ainda recebe o formato oficial `numbers`.
+  console.info(JSON.stringify({ event: 'whatsapp_validation_evolution_single', operation, mode, instance, leadId: leadId(lead) }));
   const payload = await requestEvolution(`/chat/whatsappNumbers/${encodeURIComponent(instance)}`, {
     method: 'POST',
-    body: JSON.stringify({ numbers: leads.map(phoneDigits) }),
+    body: JSON.stringify({ numbers: [phoneDigits(lead)] }),
   });
   const items = payloadItems(payload);
+  const result = parseValidation({ ...lead, id: leadId(lead) }, matchingItems(lead, items));
 
-  return leads.map((lead) => parseValidation({ ...lead, id: leadId(lead) }, matchingItem(lead, items)));
+  console.info(JSON.stringify({
+    event: 'whatsapp_validation_evolution_single_result',
+    operation,
+    mode,
+    instance,
+    leadId: leadId(lead),
+    status: result.status,
+    providerItems: items.length,
+    exactMatches: matchingItems(lead, items).length,
+  }));
+  return result;
 }
+
 
 export async function runStrictValidation(leads: ValidationLead[], operation: ValidationOperation, mode: ValidationMode) {
   const config = evolutionConfig();
@@ -245,13 +266,13 @@ export async function runStrictValidation(leads: ValidationLead[], operation: Va
   }
 
   for (const [instance, instanceLeads] of grouped.entries()) {
-    for (const batch of chunk(instanceLeads, config.validationBatchSize)) {
+    for (const lead of instanceLeads) {
       try {
-        const batchResults = await validateLeadBatch(instance, batch, operation, mode);
-        batchResults.forEach((result) => results.set(String(result.leadId), result));
+        const result = await validateOneLead(instance, lead, operation, mode);
+        results.set(String(result.leadId), result);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Erro ao validar WhatsApp.';
-        batch.forEach((lead) => results.set(leadId(lead), errorResult(lead, message)));
+        results.set(leadId(lead), errorResult(lead, message));
       }
       if (config.validationDelayMs) await delay(config.validationDelayMs);
     }
