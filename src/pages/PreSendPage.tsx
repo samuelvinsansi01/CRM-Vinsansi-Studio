@@ -118,6 +118,7 @@ function ValidationQueue({
   moveApprovedImportsToQueue,
   validateLead,
   validateLeads,
+  revalidateApprovedLeads,
   archiveLead,
   markAlreadySent,
   updateLead,
@@ -131,6 +132,7 @@ function ValidationQueue({
   moveApprovedImportsToQueue: (input: { channel: PreSendChannel; dayId: string; profile?: string; queueFilter?: PreSendQueueFilter }) => Promise<number>;
   validateLead: (id: string) => Promise<void>;
   validateLeads: (ids: string[]) => Promise<PreSendValidationSummary>;
+  revalidateApprovedLeads: (ids: string[]) => Promise<PreSendValidationSummary>;
   archiveLead: (id: string) => Promise<void>;
   markAlreadySent: (ids: string[], reason?: string) => Promise<number>;
   updateLead: (id: string, input: Partial<PreSendLead>) => Promise<void>;
@@ -175,8 +177,11 @@ function ValidationQueue({
   const selectedIds = selectedRows.map((rowIndex) => pageRows[rowIndex]?.id).filter(Boolean);
   const selectedLeads = selectedRows.map((rowIndex) => pageRows[rowIndex]).filter((lead): lead is PreSendLead => Boolean(lead));
   const approvableIds = useMemo(() => leads.filter((lead) => permissionsFor('pre-send', lead.status).canApprove()).map((lead) => lead.id), [leads]);
+  const approvedIds = useMemo(() => leads.filter((lead) => channel === 'WhatsApp' && normalizeStatusGroup(lead.status) === 'approved').map((lead) => lead.id), [channel, leads]);
   const canApproveSelection = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('pre-send', lead.status).canApprove());
+  const canRevalidateSelection = selectedLeads.length > 0 && selectedLeads.every((lead) => channel === 'WhatsApp' && normalizeStatusGroup(lead.status) === 'approved');
   const selectedApprovableIds = canApproveSelection ? selectedIds : [];
+  const selectedRevalidationIds = canRevalidateSelection ? selectedIds : [];
   const emptyProfileLabel = channel === 'WhatsApp' ? 'Sem chip ativo' : 'Sem perfil';
   const hasOperationalProfile = profiles.length > 0 && Boolean(activeProfile || profiles[0]);
 
@@ -303,6 +308,35 @@ function ValidationQueue({
     }
   };
 
+  const revalidateSelected = async () => {
+    if (fillSaving || validateSaving) return;
+    if (selectedRows.length && !canRevalidateSelection) {
+      onToast({ title: 'Selecao incompativel', description: 'Revalidar exige apenas leads WhatsApp ja aprovados.', tone: 'warning' });
+      return;
+    }
+    const ids = selectedRevalidationIds.length ? selectedRevalidationIds : approvedIds;
+    if (!ids.length) {
+      onToast({ title: 'Nada para revalidar', description: 'Nao ha leads WhatsApp aprovados neste dia, chip e filtro.', tone: 'warning' });
+      return;
+    }
+
+    setValidateSaving(true);
+    try {
+      const result = await revalidateApprovedLeads(ids);
+      setSelectedRows([]);
+      refreshQueue();
+      onToast({
+        title: 'Aprovados revalidados',
+        description: `${result.approved} confirmado(s)${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ignorado(s)` : ''}. Nenhum lead foi enviado para fila.`,
+        tone: result.errors || result.requiresReview ? 'warning' : 'success',
+      });
+    } catch (err) {
+      onToast({ title: 'Erro ao revalidar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setValidateSaving(false);
+    }
+  };
+
   const validateSelected = async () => {
     if (fillSaving || validateSaving) return;
     if (selectedRows.length && !canApproveSelection) {
@@ -366,9 +400,10 @@ function ValidationQueue({
         {channel === 'WhatsApp' ? <SelectField options={queueFilterOptions} value={queueFilter} placeholder="Destino" onChange={(value) => setQueueFilter(value as PreSendQueueFilter)} /> : null}
         <SelectField options={profiles.length ? profiles : [emptyProfileLabel]} value={activeProfile || profiles[0] || emptyProfileLabel} placeholder={channel === 'WhatsApp' ? 'Chip' : 'Perfil'} onChange={setActiveProfile} />
         <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={fillSaving} disabled={!hasOperationalProfile || validateSaving} onClick={fillQueue}>Preencher fila</Button>
+        {channel === 'WhatsApp' ? <Button variant="secondary" iconLeft={RefreshCcw} size="sm" loading={validateSaving} disabled={fillSaving || (selectedRows.length ? !canRevalidateSelection : !approvedIds.length)} onClick={revalidateSelected}>Revalidar aprovados</Button> : null}
         {channel === 'WhatsApp' ? <Button size="sm" loading={validateSaving} disabled={fillSaving || (selectedRows.length ? !canApproveSelection : !approvableIds.length)} onClick={validateSelected}>Validar leads</Button> : null}
       </div>
-      {selectedLeads.length && !canApproveSelection ? (
+      {selectedLeads.length && !canApproveSelection && !canRevalidateSelection ? (
         <div className="lead-bulk-actions"><span>{selectedLeads.length} selecionado(s)</span><small>Nenhuma acao disponivel para a selecao atual.</small></div>
       ) : null}
       {error ? <div className="table-message">{error}</div> : null}
@@ -482,7 +517,7 @@ export function PreSendPage() {
   const [instagramScope, setInstagramScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [summaryRefreshToken, setSummaryRefreshToken] = useState(0);
-  const { dayCards, summary, loading, error, defaultDayId, refresh, moveDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, validateLeads, archiveLead, markAlreadySent, updateLead } = usePreSend();
+  const { dayCards, summary, loading, error, defaultDayId, refresh, moveDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, validateLeads, revalidateApprovedLeads, archiveLead, markAlreadySent, updateLead } = usePreSend();
   const [daySummary, setDaySummary] = useState<PreSendSummary>(summary);
 
   useEffect(() => {
@@ -597,6 +632,7 @@ export function PreSendPage() {
             moveApprovedImportsToQueue={moveApprovedImportsToQueue}
             validateLead={validateLead}
             validateLeads={validateLeads}
+            revalidateApprovedLeads={revalidateApprovedLeads}
             archiveLead={archiveLead}
             markAlreadySent={markAlreadySent}
             updateLead={updateLead}
@@ -613,6 +649,7 @@ export function PreSendPage() {
             moveApprovedImportsToQueue={moveApprovedImportsToQueue}
             validateLead={validateLead}
             validateLeads={validateLeads}
+            revalidateApprovedLeads={revalidateApprovedLeads}
             archiveLead={archiveLead}
             markAlreadySent={markAlreadySent}
             updateLead={updateLead}

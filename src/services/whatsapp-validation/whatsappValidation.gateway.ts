@@ -41,12 +41,6 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
 
   const status = String(record.status ?? record.result ?? '').toLowerCase();
   const validValue = record.valid ?? record.exists ?? record.hasWhatsapp ?? record.has_whatsapp ?? record.isWhatsapp ?? record.is_whatsapp;
-  const valid =
-    validValue === true ||
-    status === 'valid' ||
-    status === 'whatsapp_valid' ||
-    status === 'exists' ||
-    status === 'ok';
   const invalid =
     validValue === false ||
     status === 'invalid' ||
@@ -54,21 +48,36 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
     status === 'not_found' ||
     status === 'no_whatsapp' ||
     status === 'not_on_whatsapp';
+  const valid =
+    validValue === true ||
+    status === 'valid' ||
+    status === 'whatsapp_valid' ||
+    status === 'exists';
 
-  if (!valid && !invalid) {
+  // "ok" não é confirmação de que o número existe no WhatsApp. Uma resposta
+  // explicitamente negativa deve sempre prevalecer sobre qualquer status genérico.
+  if (invalid) {
+    return {
+      leadId,
+      status: 'invalid',
+      valid: false,
+      errorMessage: resultError(record),
+    };
+  }
+
+  if (!valid) {
     return {
       leadId,
       status: 'error',
       valid: false,
-      errorMessage: resultError(record) ?? 'Worker nao retornou status de validacao reconhecido.',
+      errorMessage: resultError(record) ?? 'Worker nao retornou confirmação explícita de WhatsApp.',
     };
   }
 
   return {
     leadId,
-    status: valid ? 'valid' : 'invalid',
-    valid,
-    errorMessage: valid ? undefined : resultError(record),
+    status: 'valid',
+    valid: true,
   };
 }
 

@@ -55,6 +55,8 @@ export type PreSendSummary = {
 
 export type PreSendValidationSummary = {
   approved: number;
+  /** Quantos aprovados foram conferidos novamente pelo worker/Evolution. */
+  revalidated: number;
   returned: number;
   requiresReview: number;
   errors: number;

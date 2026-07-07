@@ -1215,7 +1215,7 @@ export const preSendService = {
   async validateLeads(ids: string[]): Promise<PreSendValidationSummary> {
     await rolloverPreSendAfterCutoff();
     const uniqueIds = Array.from(new Set(ids));
-    if (!uniqueIds.length) return { approved: 0, returned: 0, requiresReview: 0, errors: 0, skipped: 0 };
+    if (!uniqueIds.length) return { approved: 0, revalidated: 0, returned: 0, requiresReview: 0, errors: 0, skipped: 0 };
 
     const allLeads = await listAllLeads();
     const selected = uniqueIds.map((id) => allLeads.find((lead) => lead.id === id)).filter((lead): lead is PreSendLead => Boolean(lead));
@@ -1282,6 +1282,21 @@ export const preSendService = {
           validationAttempts: (lead?.validationAttempts ?? 0) + 1,
           lastValidatedAt: validatedAt,
         });
+        await repositories.events.append({
+          source: 'pre-send',
+          action: 'whatsapp_validation_approved',
+          channel: 'whatsapp',
+          leadId: lead?.sourceImportId ?? id,
+          status: 'approved',
+          message: 'WhatsApp confirmado pelo worker/Evolution no Pre-Envio.',
+          metadata: {
+            pre_send_id: id,
+            company_name: lead?.company ?? '',
+            normalized_phone: normalizePhone(lead?.phone),
+            validation_attempts: (lead?.validationAttempts ?? 0) + 1,
+            validated_at: validatedAt,
+          },
+        });
       }));
     }
 
@@ -1289,10 +1304,118 @@ export const preSendService = {
     eventBus.emit('pre-send:changed', { action: returnedIds.size ? 'whatsapp-invalid-return' : reviewIds.size ? 'whatsapp-validation-review' : 'validate' });
     return {
       approved: approvedIds.size,
+      revalidated: 0,
       returned: returnedIds.size,
       requiresReview: reviewIds.size,
       errors: errorIds.size,
       skipped: selected.length - pending.length,
+    };
+  },
+
+  /**
+   * Confere de novo somente os leads WhatsApp que já estavam aprovados no
+   * Pré-Envio. Nenhum item é enviado à fila. Resultado inválido ou ambíguo
+   * volta para revisão — nunca muda automaticamente o canal para Instagram.
+   */
+  async revalidateApprovedLeads(ids: string[]): Promise<PreSendValidationSummary> {
+    await rolloverPreSendAfterCutoff();
+    const uniqueIds = Array.from(new Set(ids));
+    if (!uniqueIds.length) return { approved: 0, revalidated: 0, returned: 0, requiresReview: 0, errors: 0, skipped: 0 };
+
+    const allLeads = await listAllLeads();
+    const selected = uniqueIds.map((id) => allLeads.find((lead) => lead.id === id)).filter((lead): lead is PreSendLead => Boolean(lead));
+    const candidates = selected.filter((lead) => lead.channel === 'WhatsApp' && isStatusGroup(lead.status, 'approved'));
+    const malformed = candidates.filter((lead) => !isLikelyValidWhatsApp(lead.phone));
+    const validFormat = candidates.filter((lead) => isLikelyValidWhatsApp(lead.phone));
+    const approvedIds = new Set<string>();
+    const reviewIds = new Set<string>();
+    const errorIds = new Set<string>();
+
+    // Revalidação é corretiva. Mesmo que o ambiente antigo tenha configurado
+    // retorno para Instagram, qualquer problema fica em revisão humana.
+    await Promise.all(malformed.map(async (lead) => {
+      await markWhatsAppValidationForReview(lead, 'invalid', 'WhatsApp sem formato valido na revalidacao do Pre-Envio.');
+      reviewIds.add(lead.id);
+    }));
+
+    if (validFormat.length) {
+      try {
+        const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest));
+        const byId = new Map(results.map((result) => [result.leadId, result]));
+
+        await Promise.all(validFormat.map(async (lead) => {
+          const result = byId.get(lead.id);
+          if (!result || result.status === 'error') {
+            errorIds.add(lead.id);
+            reviewIds.add(lead.id);
+            await markWhatsAppValidationForReview(
+              lead,
+              'error',
+              result?.errorMessage || 'Worker WhatsApp nao retornou confirmação explícita para a revalidacao.',
+            );
+            return;
+          }
+
+          if (!result.valid) {
+            reviewIds.add(lead.id);
+            await markWhatsAppValidationForReview(
+              lead,
+              'invalid',
+              result.errorMessage || 'WhatsApp inexistente na revalidacao real do Pre-Envio.',
+            );
+            return;
+          }
+
+          approvedIds.add(lead.id);
+        }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Falha inesperada no provider de revalidacao WhatsApp.';
+        await Promise.all(validFormat.map(async (lead) => {
+          errorIds.add(lead.id);
+          reviewIds.add(lead.id);
+          await markWhatsAppValidationForReview(lead, 'error', message);
+        }));
+      }
+    }
+
+    if (approvedIds.size) {
+      const validatedAt = new Date().toISOString();
+      await Promise.all(Array.from(approvedIds).map(async (id) => {
+        const lead = allLeads.find((item) => item.id === id);
+        await repositories.preSend.updateLead(id, {
+          status: 'approved',
+          validationStatus: 'valid',
+          validationError: '',
+          validationAttempts: (lead?.validationAttempts ?? 0) + 1,
+          lastValidatedAt: validatedAt,
+        });
+        await repositories.events.append({
+          source: 'pre-send',
+          action: 'whatsapp_revalidation_approved',
+          channel: 'whatsapp',
+          leadId: lead?.sourceImportId ?? id,
+          status: 'approved',
+          message: 'WhatsApp reconfirmado pelo worker/Evolution no Pre-Envio.',
+          metadata: {
+            pre_send_id: id,
+            company_name: lead?.company ?? '',
+            normalized_phone: normalizePhone(lead?.phone),
+            validation_attempts: (lead?.validationAttempts ?? 0) + 1,
+            revalidated_at: validatedAt,
+            previous_status: 'approved',
+          },
+        });
+      }));
+    }
+
+    eventBus.emit('pre-send:changed', { action: reviewIds.size ? 'whatsapp-revalidation-review' : 'whatsapp-revalidate' });
+    return {
+      approved: approvedIds.size,
+      revalidated: candidates.length,
+      returned: 0,
+      requiresReview: reviewIds.size,
+      errors: errorIds.size,
+      skipped: selected.length - candidates.length,
     };
   },
 

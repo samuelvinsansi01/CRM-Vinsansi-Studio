@@ -119,6 +119,15 @@ export function usePreSend() {
     [refresh],
   );
 
+  const revalidateApprovedLeads = useCallback(
+    async (ids: string[]) => {
+      const result = await preSendService.revalidateApprovedLeads(ids);
+      refresh();
+      return result;
+    },
+    [refresh],
+  );
+
   const archiveLead = useCallback(
     async (id: string) => {
       await preSendService.archiveLead(id);
@@ -158,6 +167,7 @@ export function usePreSend() {
     returnDayToImport,
     validateLead,
     validateLeads,
+    revalidateApprovedLeads,
     archiveLead,
     markAlreadySent,
     updateLead,

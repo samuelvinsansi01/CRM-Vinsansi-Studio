@@ -189,22 +189,23 @@ function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: u
   const existsBool = booleanLike(exists);
   const jid = String(item.jid ?? item.id ?? item._serialized ?? item.remoteJid ?? '');
   const status = String(item.status ?? item.result ?? '').toLowerCase();
-  const valid = existsBool === true || Boolean(jid.includes('@s.whatsapp.net')) || ['valid', 'exists', 'ok'].includes(status);
-  const invalid = existsBool === false || ['invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
+  const hasWhatsAppJid = Boolean(jid.includes('@s.whatsapp.net'));
+  const validStatus = ['valid', 'exists'].includes(status);
+  const invalidStatus = ['invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
 
-  if (!valid && !invalid) {
-    return {
-      leadId: lead.id,
-      status: 'error',
-      valid: false,
-      errorMessage: 'Evolution retornou resposta sem campo exists/valid reconhecido.',
-    };
+  if (existsBool === false || invalidStatus) {
+    return { leadId: lead.id, status: 'invalid', valid: false };
+  }
+
+  if (existsBool === true || hasWhatsAppJid || validStatus) {
+    return { leadId: lead.id, status: 'valid', valid: true };
   }
 
   return {
     leadId: lead.id,
-    status: valid ? 'valid' : 'invalid',
-    valid,
+    status: 'error',
+    valid: false,
+    errorMessage: 'Evolution retornou resposta sem confirmação explícita de WhatsApp.',
   };
 }
 
