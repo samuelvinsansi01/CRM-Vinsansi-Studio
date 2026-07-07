@@ -137,11 +137,33 @@ function eventsTableName() {
   return companionTable('SUPABASE_TABLE_EVENTS', 'VITE_SUPABASE_TABLE_EVENTS', 'lead_events');
 }
 
+/**
+ * Esta rota usa apenas o REST/PostgREST do Supabase. O cliente JS, porem,
+ * inicializa internamente o modulo Realtime mesmo quando nenhuma assinatura
+ * de canal e criada. Em runtimes serverless sem WebSocket nativo isso derruba
+ * a funcao antes da primeira consulta.
+ *
+ * Fornecemos um transporte que so seria usado se alguem tentasse abrir um
+ * canal Realtime nesta rota. Como a extensao nao usa Realtime, as operacoes
+ * HTTP da fila continuam normais e independentes de WebSocket.
+ */
+class ServerlessOnlyRealtimeTransport {
+  constructor() {
+    throw new Error('Realtime nao e utilizado pela rota serverless da extensao Instagram.');
+  }
+}
+
 function supabase() {
   const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
   const key = envAny('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_ANON_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_ANON_KEY');
   if (!url || !key) throw new Error('Supabase nao configurado no backend para a extensao Instagram.');
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    realtime: {
+      transport: ServerlessOnlyRealtimeTransport as never,
+    },
+  });
 }
 
 function bodyRecord(body: unknown): RequestBody {
