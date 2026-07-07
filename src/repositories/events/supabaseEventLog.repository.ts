@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
 import { createUuid, getCurrentUserId, nowIso } from '../supabase.helpers';
-import type { EventLogInput, EventLogRecord, EventLogRepository } from './eventLog.repository';
+import type { DispatchMessageLogInput, EventLogInput, EventLogRecord, EventLogRepository } from './eventLog.repository';
 
 function table() {
   return getSupabaseConfig().tables.events;
@@ -28,17 +28,19 @@ function uuidOrNull(value: unknown) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(text) ? text : null;
 }
 
-export const supabaseEventLogRepository: EventLogRepository = {
-  async append(input: EventLogInput) {
-    const userId = await getCurrentUserId();
-    const timestamp = nowIso();
-    const record: EventLogRecord = {
-      id: createUuid(),
-      created_at: timestamp,
-      updated_at: timestamp,
-      ...input,
-    };
-    const { error } = await getSupabaseClient().from(table()).insert({
+async function createEventRow(input: EventLogInput) {
+  const userId = await getCurrentUserId();
+  const timestamp = nowIso();
+  const record: EventLogRecord = {
+    id: createUuid(),
+    created_at: timestamp,
+    updated_at: timestamp,
+    ...input,
+  };
+
+  return {
+    record,
+    row: {
       id: record.id,
       user_id: userId,
       lead_id: record.leadId || null,
@@ -60,13 +62,30 @@ export const supabaseEventLogRepository: EventLogRepository = {
       data: record,
       active: true,
       kind: 'event',
-      queue_item_id: record.queueItemId,
-    });
-    if (error) throw new Error(error.message);
+      queue_item_id: record.queueItemId || null,
+    },
+  };
+}
+
+export const supabaseEventLogRepository: EventLogRepository = {
+  async append(input: EventLogInput) {
+    const { record, row } = await createEventRow(input);
+    const client = getSupabaseClient();
+
+    // A função SQL usa SECURITY DEFINER, mas confere auth.uid() contra user_id.
+    // Assim a auditoria não depende de políticas RLS frágeis no INSERT direto.
+    const { error: rpcError } = await client.rpc('append_lead_event', { p_event: row });
+    if (!rpcError) return record;
+
+    // Compatibilidade temporária com bancos que ainda não receberam a migration V3.5.
+    const { error: insertError } = await client.from(table()).insert(row);
+    if (insertError) {
+      throw new Error(`Falha ao gravar auditoria: ${insertError.message}`);
+    }
     return record;
   },
 
-  async appendDispatchMessageLog(input) {
+  async appendDispatchMessageLog(input: DispatchMessageLogInput) {
     const timestamp = nowIso();
     const { error } = await getSupabaseClient().from(getSupabaseConfig().tables.dispatchMessageLogs).insert({
       id: createUuid(),

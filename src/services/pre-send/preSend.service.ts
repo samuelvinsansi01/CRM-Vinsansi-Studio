@@ -1,5 +1,6 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
+import type { EventLogInput } from '../../repositories/events/eventLog.repository';
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 import { settingsService } from '../settings/settings.service';
 import type { BranchConfigRecord, ChipConfigRecord, ConfigRecord, InstagramConfigRecord, TemplateConfigRecord } from '../config/types';
@@ -853,6 +854,17 @@ function preSendLeadToBaseInput(lead: PreSendLead, sentAt: string, reason: strin
   };
 }
 
+async function appendValidationAudit(input: EventLogInput) {
+  try {
+    await repositories.events.append(input);
+  } catch (error) {
+    // Auditoria não pode desfazer uma decisão já confirmada pelo provider.
+    // O repositório usa RPC seguro quando a migration V3.5 estiver aplicada;
+    // este fallback protege o fluxo caso o banco ainda esteja com política antiga.
+    console.error('Falha ao gravar auditoria de validacao WhatsApp.', error);
+  }
+}
+
 async function returnInvalidWhatsAppToInstagram(lead: PreSendLead, reason = 'WhatsApp invalido na validacao real do Pre-Envio.') {
   const returnedAt = new Date().toISOString();
 
@@ -875,7 +887,7 @@ async function returnInvalidWhatsAppToInstagram(lead: PreSendLead, reason = 'Wha
   }
 
   await repositories.preSend.archiveLead(lead.id);
-  await repositories.events.append({
+  await appendValidationAudit({
     source: 'pre-send',
     action: 'whatsapp_invalid_return_to_instagram',
     channel: 'whatsapp',
@@ -915,7 +927,7 @@ async function markWhatsAppValidationForReview(
     validationAttempts: (lead.validationAttempts ?? 0) + 1,
     lastValidatedAt: reviewedAt,
   });
-  await repositories.events.append({
+  await appendValidationAudit({
     source: 'pre-send',
     action: validationStatus === 'invalid' ? 'whatsapp_validation_requires_review' : 'whatsapp_validation_error_requires_review',
     channel: 'whatsapp',
@@ -1239,7 +1251,7 @@ export const preSendService = {
 
     if (validFormat.length) {
       try {
-        const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest));
+        const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest), 'initial');
         const byId = new Map(results.map((result) => [result.leadId, result]));
 
         await Promise.all(validFormat.map(async (lead) => {
@@ -1282,7 +1294,7 @@ export const preSendService = {
           validationAttempts: (lead?.validationAttempts ?? 0) + 1,
           lastValidatedAt: validatedAt,
         });
-        await repositories.events.append({
+        await appendValidationAudit({
           source: 'pre-send',
           action: 'whatsapp_validation_approved',
           channel: 'whatsapp',
@@ -1340,7 +1352,7 @@ export const preSendService = {
 
     if (validFormat.length) {
       try {
-        const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest));
+        const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest), 'revalidation');
         const byId = new Map(results.map((result) => [result.leadId, result]));
 
         await Promise.all(validFormat.map(async (lead) => {
@@ -1389,7 +1401,7 @@ export const preSendService = {
           validationAttempts: (lead?.validationAttempts ?? 0) + 1,
           lastValidatedAt: validatedAt,
         });
-        await repositories.events.append({
+        await appendValidationAudit({
           source: 'pre-send',
           action: 'whatsapp_revalidation_approved',
           channel: 'whatsapp',

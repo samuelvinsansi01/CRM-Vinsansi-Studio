@@ -555,3 +555,18 @@ begin
     $copy$;
   end if;
 end $$;
+
+-- V3.4: políticas de auditoria para o painel autenticado.
+alter table public.lead_events enable row level security;
+update public.lead_events e
+set user_id = l.user_id
+from public.leads l
+where e.user_id is null
+  and e.lead_id = l.id
+  and l.user_id is not null;
+drop policy if exists lead_events_select_own on public.lead_events;
+drop policy if exists lead_events_insert_own on public.lead_events;
+create policy lead_events_select_own on public.lead_events
+for select to authenticated using (user_id = auth.uid());
+create policy lead_events_insert_own on public.lead_events
+for insert to authenticated with check (user_id = auth.uid());
