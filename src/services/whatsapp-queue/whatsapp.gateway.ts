@@ -1,3 +1,4 @@
+import { getSupabaseClient } from '../../lib/supabase';
 import type { WhatsAppQueueLead } from './types';
 
 export type WhatsAppGatewayResult = {
@@ -14,8 +15,25 @@ function isBrowserRuntime() {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
 }
 
+/**
+ * O navegador nunca conversa diretamente com o Worker exposto no Tunnel.
+ * A rota serverless recebe a sessão atual, valida a posse dos itens e injeta
+ * o segredo do Worker no backend. Variáveis VITE_ com URL externa antiga são
+ * ignoradas para não reexpor o token no bundle do painel.
+ */
 function workerDispatchEndpoint() {
-  return String(import.meta.env.VITE_WHATSAPP_WORKER_DISPATCH_ENDPOINT ?? '').trim();
+  const legacy = String(import.meta.env.VITE_WHATSAPP_WORKER_DISPATCH_ENDPOINT ?? '').trim();
+  return legacy.startsWith('/api/') ? legacy : '/api/whatsapp/dispatch';
+}
+
+async function authenticatedHeaders() {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const { data, error } = await getSupabaseClient().auth.getSession();
+  if (error) throw new Error(error.message);
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Sessão inválida. Entre novamente no painel.');
+  headers.Authorization = `Bearer ${token}`;
+  return headers;
 }
 
 export const mockWhatsAppGateway: WhatsAppGateway = {
@@ -27,13 +45,9 @@ export const mockWhatsAppGateway: WhatsAppGateway = {
 export const internalWorkerWhatsAppGateway: WhatsAppGateway = {
   async send(leads) {
     const endpoint = workerDispatchEndpoint();
-    if (!endpoint) {
-      throw new Error('Envio WhatsApp real deve ser executado pelo worker/backend. Configure VITE_WHATSAPP_WORKER_DISPATCH_ENDPOINT para delegar sem expor credenciais da Evolution.');
-    }
-
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authenticatedHeaders(),
       body: JSON.stringify({
         channel: 'whatsapp',
         queue_item_ids: leads.map((lead) => lead.id),

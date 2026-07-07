@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import updateHandler from './api/update';
 import validateHandler from './api/whatsapp/validate';
 import revalidateHandler from './api/whatsapp/revalidate';
+import dispatchHandler from './api/whatsapp/dispatch';
 
 type LocalApiResponse = {
   status(code: number): LocalApiResponse;
@@ -73,6 +74,7 @@ function localApiPlugin(): Plugin {
       register(server, '/api/update', updateHandler as LocalApiHandler);
       register(server, '/api/whatsapp/validate', validateHandler as LocalApiHandler);
       register(server, '/api/whatsapp/revalidate', revalidateHandler as LocalApiHandler);
+      register(server, '/api/whatsapp/dispatch', dispatchHandler as LocalApiHandler);
     },
   };
 }
