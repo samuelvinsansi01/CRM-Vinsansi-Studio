@@ -931,11 +931,13 @@ function isInstagramImport(lead: ImportLead) {
   return importFinalDestination(lead) === 'Instagram';
 }
 
-async function moveInvalidWhatsAppToInstagramPendingLink(lead: PreSendLead, reason: string) {
+async function moveInvalidWhatsAppToInstagram(lead: PreSendLead, reason: string) {
   const settings = await settingsService.getDispatchSettings();
   const [firstProfile] = await loadActiveInstagramProfiles();
   const routedAt = new Date().toISOString();
   const instagram = lead.instagram_url ?? lead.instagram ?? '';
+  const hasValidInstagram = isValidInstagram(instagram);
+  const operationalDayId = operationalInstagramReturnDayId();
 
   assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'review', action: 'review' });
   await repositories.preSend.updateLead(lead.id, {
@@ -946,13 +948,17 @@ async function moveInvalidWhatsAppToInstagramPendingLink(lead: PreSendLead, reas
     instagram_url: instagram,
     instagram: instagram || lead.instagram,
     instagram_override_reason: 'whatsapp_invalid',
-    instagramPendingLink: true,
-    instagramReadyAt: '',
-    queueWaitReason: 'Aguardando link do Instagram.',
+    // O retorno só fica aguardando edição quando realmente não há um Instagram
+    // aproveitável. Links já existentes seguem prontos para a tentativa automática.
+    instagramPendingLink: !hasValidInstagram,
+    instagramReadyAt: hasValidInstagram ? routedAt : '',
+    queueWaitReason: hasValidInstagram
+      ? 'Instagram já informado. Aguardando tentativa automática de entrada na fila.'
+      : 'Aguardando link do Instagram.',
     override_by: 'Sistema',
     override_at: routedAt,
     profile: firstProfile?.username || settings.instagram.profile || '',
-    dayId: operationalInstagramReturnDayId(),
+    dayId: operationalDayId,
     status: 'review',
     validationStatus: 'invalid',
     validationError: reason,
@@ -962,22 +968,73 @@ async function moveInvalidWhatsAppToInstagramPendingLink(lead: PreSendLead, reas
 
   await appendValidationAudit({
     source: 'pre-send',
-    action: 'whatsapp_invalid_to_instagram_pending_link',
+    action: hasValidInstagram
+      ? 'whatsapp_invalid_to_instagram_ready_for_auto_queue'
+      : 'whatsapp_invalid_to_instagram_pending_link',
     channel: 'instagram',
     leadId: lead.sourceImportId ?? lead.id,
     status: 'review',
-    message: `${reason} Lead mantido no Pré-Envio Instagram aguardando link.`,
+    message: hasValidInstagram
+      ? `${reason} Instagram existente preservado; o sistema tentará inserir o retorno automaticamente na fila Instagram.`
+      : `${reason} Lead mantido no Pré-Envio Instagram aguardando link.`,
     metadata: {
       pre_send_id: lead.id,
       previous_channel: 'whatsapp',
-      dayId: operationalInstagramReturnDayId(),
-      scheduled_date: scheduledDateForDayId(operationalInstagramReturnDayId()),
+      dayId: operationalDayId,
+      scheduled_date: scheduledDateForDayId(operationalDayId),
       company_name: lead.company,
       normalized_phone: normalizePhone(lead.phone),
       validation_reason: reason,
       instagram_url: instagram,
+      instagram_ready_for_auto_queue: hasValidInstagram,
     },
   });
+}
+
+/**
+ * Após uma invalidação explícita do WhatsApp, aproveita links Instagram que já
+ * estavam cadastrados. A função usa a mesma fila por prioridade: retornos do
+ * WhatsApp são preenchidos antes dos leads vindos diretamente do Início.
+ * Falhas operacionais não desfazem a invalidação; o lead continua visível no
+ * Pré-Envio Instagram com o motivo para nova tentativa automática ou manual.
+ */
+async function autoQueueReadyInstagramReturns(returnedIds: Iterable<string>) {
+  const ids = new Set(Array.from(returnedIds));
+  if (!ids.size) return;
+
+  const routedLeads = (await listAllLeads()).filter((lead) =>
+    ids.has(lead.id) &&
+    lead.dayId === operationalInstagramReturnDayId() &&
+    isInstagramReturnReadyForQueue(lead),
+  );
+
+  if (!routedLeads.length) return;
+
+  try {
+    await fillInstagramQueueByPriority({ dayId: operationalInstagramReturnDayId() });
+  } catch (error) {
+    const reason = queueBlockReason(error);
+    await Promise.all(routedLeads.map(async (lead) => {
+      await repositories.preSend.updateLead(lead.id, {
+        status: 'review',
+        instagramPendingLink: false,
+        queueWaitReason: reason,
+      });
+      await appendValidationAudit({
+        source: 'pre-send',
+        action: 'instagram_auto_queue_unavailable',
+        channel: 'instagram',
+        leadId: lead.sourceImportId ?? lead.id,
+        status: 'review',
+        message: reason,
+        metadata: {
+          pre_send_id: lead.id,
+          company_name: lead.company,
+          instagram_url: lead.instagram_url ?? lead.instagram,
+        },
+      });
+    }));
+  }
 }
 
 async function markWhatsAppValidationForReview(
@@ -1013,9 +1070,9 @@ async function markWhatsAppValidationForReview(
   });
 }
 
-/** Resultado inválido da validação inicial: mantém o lead no Pré-Envio e transfere somente o canal. */
+/** Resultado inválido confirmado: transfere ao Instagram e aproveita o link já existente, quando houver. */
 async function handleInvalidWhatsApp(lead: PreSendLead, reason: string) {
-  await moveInvalidWhatsAppToInstagramPendingLink(lead, reason);
+  await moveInvalidWhatsAppToInstagram(lead, reason);
   return 'instagram' as const;
 }
 
@@ -1561,7 +1618,10 @@ export const preSendService = {
       }));
     }
 
-    if (returnedIds.size) eventBus.emit('import:changed', { source: 'pre-send' });
+    if (returnedIds.size) {
+      await autoQueueReadyInstagramReturns(returnedIds);
+      eventBus.emit('import:changed', { source: 'pre-send' });
+    }
     eventBus.emit('pre-send:changed', { action: returnedIds.size ? 'whatsapp-invalid-return' : reviewIds.size ? 'whatsapp-validation-review' : 'validate' });
     return {
       approved: approvedIds.size,
@@ -1574,9 +1634,9 @@ export const preSendService = {
   },
 
   /**
-   * Confere de novo somente os leads WhatsApp que já estavam aprovados no
-   * Pré-Envio. Nenhum item é enviado à fila. Resultado inválido ou ambíguo
-   * volta para revisão — nunca muda automaticamente o canal para Instagram.
+   * Confere de novo somente os leads WhatsApp já aprovados. Resultado ambíguo
+   * continua em revisão; resultado explicitamente inválido segue a mesma rota
+   * segura do fluxo inicial e aproveita Instagram já cadastrado.
    */
   async revalidateApprovedLeads(ids: string[]): Promise<PreSendValidationSummary> {
     await rolloverPreSendAfterCutoff();
@@ -1589,14 +1649,17 @@ export const preSendService = {
     const malformed = candidates.filter((lead) => !isLikelyValidWhatsApp(lead.phone));
     const validFormat = candidates.filter((lead) => isLikelyValidWhatsApp(lead.phone));
     const approvedIds = new Set<string>();
+    const returnedIds = new Set<string>();
     const reviewIds = new Set<string>();
     const errorIds = new Set<string>();
 
-    // Revalidação é corretiva. Mesmo que o ambiente antigo tenha configurado
-    // retorno para Instagram, qualquer problema fica em revisão humana.
+    // Revalidação mantém erros/ambiguidade em revisão. Quando a inexistência
+    // do WhatsApp é explícita, aplica a rota Instagram com a mesma segurança
+    // da validação inicial.
     await Promise.all(malformed.map(async (lead) => {
-      await markWhatsAppValidationForReview(lead, 'invalid', 'WhatsApp sem formato valido na revalidacao do Pre-Envio.');
-      reviewIds.add(lead.id);
+      const outcome = await handleInvalidWhatsApp(lead, 'WhatsApp sem formato valido na revalidacao do Pre-Envio.');
+      if (outcome === 'instagram') returnedIds.add(lead.id);
+      else reviewIds.add(lead.id);
     }));
 
     if (validFormat.length) {
@@ -1618,12 +1681,12 @@ export const preSendService = {
           }
 
           if (!result.valid) {
-            reviewIds.add(lead.id);
-            await markWhatsAppValidationForReview(
+            const outcome = await handleInvalidWhatsApp(
               lead,
-              'invalid',
               result.errorMessage || 'WhatsApp inexistente na revalidacao real do Pre-Envio.',
             );
+            if (outcome === 'instagram') returnedIds.add(lead.id);
+            else reviewIds.add(lead.id);
             return;
           }
 
@@ -1669,11 +1732,15 @@ export const preSendService = {
       }));
     }
 
-    eventBus.emit('pre-send:changed', { action: reviewIds.size ? 'whatsapp-revalidation-review' : 'whatsapp-revalidate' });
+    if (returnedIds.size) {
+      await autoQueueReadyInstagramReturns(returnedIds);
+      eventBus.emit('import:changed', { source: 'pre-send' });
+    }
+    eventBus.emit('pre-send:changed', { action: returnedIds.size ? 'whatsapp-invalid-return' : reviewIds.size ? 'whatsapp-revalidation-review' : 'whatsapp-revalidate' });
     return {
       approved: approvedIds.size,
       revalidated: candidates.length,
-      returned: 0,
+      returned: returnedIds.size,
       requiresReview: reviewIds.size,
       errors: errorIds.size,
       skipped: selected.length - candidates.length,

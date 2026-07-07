@@ -359,7 +359,7 @@ function ValidationQueue({
       refreshQueue();
       onToast({
         title: 'Aprovados revalidados',
-        description: `${result.approved} confirmado(s)${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ignorado(s)` : ''}. Nenhum lead foi enviado para fila.`,
+        description: `${result.approved} confirmado(s)${result.returned ? `, ${result.returned} encaminhado(s) ao Instagram` : ''}${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ignorado(s)` : ''}. Retornos com Instagram válido tentam entrar automaticamente na fila.`,
         tone: result.errors || result.requiresReview ? 'warning' : 'success',
       });
     } catch (err) {
@@ -388,7 +388,7 @@ function ValidationQueue({
       refreshQueue();
       onToast({
         title: 'Leads validados',
-        description: `${result.approved} aprovado(s)${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.returned ? `, ${result.returned} movido(s) para Instagram pendente de link` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}.`,
+        description: `${result.approved} aprovado(s)${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.returned ? `, ${result.returned} encaminhado(s) ao Instagram` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}. Retornos com Instagram válido tentam entrar automaticamente na fila.`,
         tone: result.errors ? 'warning' : 'success',
       });
     } catch (err) {

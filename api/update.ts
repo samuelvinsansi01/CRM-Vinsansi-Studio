@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { renderLeadMessages } from '../src/services/templates/templateVariables';
 
 type ApiRequest = {
   method?: string;
@@ -20,6 +19,87 @@ declare const process: {
 
 type QueueRow = Record<string, unknown>;
 type RequestBody = Record<string, unknown>;
+
+/**
+ * Este módulo atende a extensão diretamente no runtime serverless. Mantemos a
+ * interpolação local para não depender de imports do diretório src/, que a
+ * Vercel não inclui de forma confiável para esta função.
+ */
+type TemplateVariableContext = {
+  company?: string;
+  company_name?: string;
+  empresa?: string;
+  branch?: string;
+  ramo?: string;
+  city?: string;
+  cidade?: string;
+  state?: string;
+  estado?: string;
+  phone?: string;
+  whatsapp?: string;
+  instagram?: string;
+  site?: string;
+};
+
+function cleanTemplateValue(value: unknown) {
+  return String(value ?? '').trim();
+}
+
+function normalizeTemplateKey(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function templateVariables(context: TemplateVariableContext) {
+  const company = cleanTemplateValue(context.company ?? context.company_name ?? context.empresa);
+  const branch = cleanTemplateValue(context.branch ?? context.ramo);
+  const city = cleanTemplateValue(context.city ?? context.cidade);
+  const state = cleanTemplateValue(context.state ?? context.estado);
+  const phone = cleanTemplateValue(context.phone ?? context.whatsapp);
+
+  return new Map<string, string>([
+    ['EMPRESA', company],
+    ['NOME_EMPRESA', company],
+    ['NOME_DA_EMPRESA', company],
+    ['COMPANY', company],
+    ['COMPANY_NAME', company],
+    ['RAMO', branch],
+    ['BRANCH', branch],
+    ['CIDADE', city],
+    ['CITY', city],
+    ['ESTADO', state],
+    ['STATE', state],
+    ['TELEFONE', phone],
+    ['WHATSAPP', phone],
+    ['PHONE', phone],
+    ['INSTAGRAM', cleanTemplateValue(context.instagram)],
+    ['SITE', cleanTemplateValue(context.site)],
+  ]);
+}
+
+function renderTemplateVariables(message: string, context: TemplateVariableContext) {
+  const variables = templateVariables(context);
+  const pattern = /\{\{\s*([^{}[\]]+?)\s*\}\}|\{\s*([^{}[\]]+?)\s*\}|\[\s*([^\[\]{}]+?)\s*\]|%\s*([A-Za-z0-9_ -]+?)\s*%/g;
+
+  return String(message ?? '').replace(pattern, (match, doubleBrace, brace, bracket, percent) => {
+    const rawKey = doubleBrace ?? brace ?? bracket ?? percent;
+    const replacement = variables.get(normalizeTemplateKey(rawKey));
+    return replacement || match;
+  });
+}
+
+function renderLeadMessages<T extends TemplateVariableContext>(
+  lead: T,
+  messages: { message1?: string; message2?: string; message_1?: string; message_2?: string },
+) {
+  const message1 = renderTemplateVariables(messages.message1 ?? messages.message_1 ?? '', lead);
+  const message2 = renderTemplateVariables(messages.message2 ?? messages.message_2 ?? '', lead);
+  return { message1, message2, message_1: message1, message_2: message2 };
+}
 
 function envAny(...names: string[]) {
   for (const name of names) {
