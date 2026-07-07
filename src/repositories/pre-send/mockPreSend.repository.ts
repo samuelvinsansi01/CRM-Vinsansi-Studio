@@ -30,10 +30,18 @@ function leadKey(lead: Pick<PreSendLead, 'sourceImportId' | 'phone' | 'instagram
   return lead.sourceImportId || lead.phone || lead.instagram || '';
 }
 
-function normalizeLeadState<T extends { state?: string }>(lead: T): T {
+function canonicalDayIdForChannel(channel: PreSendChannel | undefined, value: unknown) {
+  const raw = String(value ?? '').trim();
+  if (!raw || !channel) return raw;
+  const weekday = raw.replace(/^(whatsapp|instagram)-/i, '');
+  return `${channel.toLowerCase()}-${weekday}`;
+}
+
+function normalizeLeadState<T extends { state?: string; channel?: PreSendChannel; dayId?: string }>(lead: T): T {
   return {
     ...lead,
     state: normalizeBrazilState(lead.state),
+    dayId: canonicalDayIdForChannel(lead.channel, lead.dayId),
   };
 }
 

@@ -20,10 +20,21 @@ function leadKey(lead: Pick<PreSendLead, 'sourceImportId' | 'phone' | 'instagram
   return lead.sourceImportId || lead.phone || lead.instagram || '';
 }
 
-function normalizeLeadState<T extends { state?: string }>(lead: T): T {
+function canonicalDayIdForChannel(channel: PreSendChannel | undefined, value: unknown) {
+  const raw = String(value ?? '').trim();
+  if (!raw || !channel) return raw;
+  const weekday = raw.replace(/^(whatsapp|instagram)-/i, '');
+  return `${channel.toLowerCase()}-${weekday}`;
+}
+
+function normalizeLeadState<T extends { state?: string; channel?: PreSendChannel; dayId?: string }>(lead: T): T {
   return {
     ...lead,
     state: normalizeBrazilState(lead.state),
+    // Compatibilidade: versões antigas podiam manter "whatsapp-terca"
+    // depois de o lead ser redirecionado para Instagram. O canal é a fonte
+    // de verdade para o prefixo do dia, evitando que o lead suma do card.
+    dayId: canonicalDayIdForChannel(lead.channel, lead.dayId),
   };
 }
 
@@ -42,12 +53,11 @@ async function allLeads() {
 
   return (data ?? []).map((row) => {
     const lead = (row.data ?? {}) as PreSendLead;
-    return {
-    ...lead,
-    id: lead.id ?? String(row.id),
-    state: normalizeBrazilState(lead.state),
-    status: normalizePreSendStatus(row.status ?? lead.status),
-    };
+    return normalizeLeadState({
+      ...lead,
+      id: lead.id ?? String(row.id),
+      status: normalizePreSendStatus(row.status ?? lead.status),
+    });
   }).filter((lead) => !isStatusGroup(lead.status, 'deleted'));
 }
 

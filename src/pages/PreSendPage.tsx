@@ -78,7 +78,7 @@ function toForm(lead: PreSendLead): PreSendForm {
     branch: lead.branch,
     destination: lead.destination,
     phone: lead.phone ?? '',
-    instagram: lead.instagram ?? '',
+    instagram: lead.instagram_url || lead.instagram || '',
     site: lead.site ?? '',
     send_instagram: lead.send_instagram ? 'Sim' : 'Não',
     instagram_override_reason: lead.instagram_override_reason ?? '',
@@ -199,7 +199,10 @@ function ValidationQueue({
     ramo: lead.branch,
     contato: channel === 'WhatsApp'
       ? lead.phone ?? ''
-      : silentLink(lead.instagram ?? lead.instagram_url ?? '', instagramHref(lead.instagram_url ?? lead.instagram)),
+      : (() => {
+        const instagram = lead.instagram_url || lead.instagram || '';
+        return silentLink(instagram, instagramHref(instagram));
+      })(),
     status: <Tag tone={statusTone(lead.status)}>{statusLabel(lead.status)}</Tag>,
   }));
 

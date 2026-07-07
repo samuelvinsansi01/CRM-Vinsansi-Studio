@@ -146,6 +146,20 @@ function effectiveDayId(channel: PreSendChannel, requestedDayId: string, referen
   return requestedDayId;
 }
 
+/**
+ * O prefixo do identificador de dia sempre acompanha o canal.
+ * Isso recupera registros legados que ficaram como whatsapp-terca após
+ * migrarem para Instagram e impede que desapareçam do card correto.
+ */
+function canonicalDayIdForChannel(channel: PreSendChannel, requestedDayId: string) {
+  const weekday = dayKeyFromId(requestedDayId) || dayKeyFromId(currentDayId(channel));
+  return `${channel.toLowerCase()}-${weekday}`;
+}
+
+function operationalDayIdForChannel(channel: PreSendChannel, requestedDayId: string, reference = new Date()) {
+  return effectiveDayId(channel, canonicalDayIdForChannel(channel, requestedDayId), reference);
+}
+
 function scheduledDateForDayId(id: string) {
   const index = weekdayIndexFromDayId(id);
   if (index < 0) return scheduledDate();
@@ -1712,14 +1726,16 @@ export const preSendService = {
       assertStatusPatch(current, input);
     }
 
-    if (current && isInstagramReturnPendingLink(current)) {
+    if (current && isInstagramReturn(current)) {
       const instagramUrl = input.instagram_url ?? input.instagram ?? current.instagram_url ?? current.instagram ?? '';
       if (!isValidInstagram(instagramUrl)) {
         throw new Error('Informe o link ou usuário completo do Instagram. Não use somente o domínio instagram.com.');
       }
-      // O retorno permanece em revisão até a fila ser criada de fato. Assim,
-      // link salvo + bloqueio de template/capacidade nunca deixa o lead oculto.
+      // Tanto retornos novos quanto registros antigos já com link salvo devem
+      // ficar visíveis no card Instagram e tentar a fila somente depois de
+      // persistir a edição. Nunca mantemos o antigo status approved isolado.
       assertTransition({ entity: 'pre-send', fromStatus: current.status, toStatus: 'review', action: 'review' });
+      const [firstInstagramProfile] = await loadActiveInstagramProfiles();
       const readyAt = new Date().toISOString();
       nextInput = {
         ...nextInput,
@@ -1731,11 +1747,11 @@ export const preSendService = {
         instagram_url: instagramUrl,
         instagram_override_reason: 'whatsapp_invalid',
         instagramPendingLink: false,
-        instagramReadyAt: readyAt,
+        instagramReadyAt: current.instagramReadyAt || readyAt,
         queueWaitReason: '',
         status: 'review',
-        profile: current.profile,
-        dayId: effectiveDayId('Instagram', current.dayId),
+        profile: firstInstagramProfile?.username || current.profile,
+        dayId: operationalDayIdForChannel('Instagram', current.dayId),
       };
       shouldAutoQueueInstagram = true;
     } else if (current && Object.prototype.hasOwnProperty.call(input, 'send_instagram')) {
