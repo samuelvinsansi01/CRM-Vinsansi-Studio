@@ -1,8 +1,6 @@
 import type { PreSendLead } from '../pre-send/types';
 import { normalizePhone } from '../import/importValidation';
 
-export type WhatsAppValidationMode = 'initial' | 'revalidation';
-
 export type WhatsAppValidationRequest = {
   id: string;
   sourceImportId?: string;
@@ -20,11 +18,19 @@ export type WhatsAppValidationResult = {
 };
 
 export interface WhatsAppValidationGateway {
-  validate(leads: WhatsAppValidationRequest[], mode?: WhatsAppValidationMode): Promise<WhatsAppValidationResult[]>;
+  validateInitial(leads: WhatsAppValidationRequest[]): Promise<WhatsAppValidationResult[]>;
+  revalidateApproved(leads: WhatsAppValidationRequest[]): Promise<WhatsAppValidationResult[]>;
 }
 
-function validationEndpoint() {
-  return String(import.meta.env.VITE_WHATSAPP_WORKER_VALIDATE_ENDPOINT ?? '').trim();
+type ValidationOperation = 'validate' | 'revalidate';
+type ValidationMode = 'initial' | 'revalidation';
+
+function initialValidationEndpoint() {
+  return String(import.meta.env.VITE_WHATSAPP_WORKER_VALIDATE_ENDPOINT ?? '/api/whatsapp/validate').trim();
+}
+
+function revalidationEndpoint() {
+  return String(import.meta.env.VITE_WHATSAPP_WORKER_REVALIDATE_ENDPOINT ?? '/api/whatsapp/revalidate').trim();
 }
 
 function resultLeadId(result: Record<string, unknown>) {
@@ -70,6 +76,65 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
   };
 }
 
+function assertOneResultForEachLead(leads: WhatsAppValidationRequest[], normalized: WhatsAppValidationResult[]) {
+  const expected = new Set(leads.map((lead) => lead.id));
+  const received = normalized.map((result) => result.leadId);
+  const uniqueReceived = new Set(received);
+
+  if (
+    normalized.length !== leads.length ||
+    uniqueReceived.size !== leads.length ||
+    received.some((leadId) => !expected.has(leadId))
+  ) {
+    throw new Error('Worker WhatsApp retornou resultados sem correspondência exata dos leads solicitados. Nenhum lead será aprovado.');
+  }
+}
+
+async function callValidationWorker(
+  endpoint: string,
+  operation: ValidationOperation,
+  mode: ValidationMode,
+  leads: WhatsAppValidationRequest[],
+): Promise<WhatsAppValidationResult[]> {
+  if (!endpoint) throw new Error(`Configure o endpoint de ${operation === 'validate' ? 'validação inicial' : 'revalidação'} do WhatsApp antes de aprovar leads.`);
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Lead-Certo-Operation': operation,
+    },
+    body: JSON.stringify({
+      channel: 'whatsapp',
+      operation,
+      mode,
+      leads: leads.map((lead) => ({
+        id: lead.id,
+        lead_id: lead.sourceImportId,
+        company: lead.company,
+        phone: lead.phone,
+        normalized_phone: lead.normalizedPhone,
+        chip_instance: lead.chipInstance,
+      })),
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = payload?.message || payload?.error || response.statusText || `Erro ao executar ${operation} no worker WhatsApp.`;
+    throw new Error(Array.isArray(message) ? message.flat(Infinity).join(', ') : String(message));
+  }
+
+  if (payload?.meta?.operation !== operation || payload?.meta?.mode !== mode) {
+    throw new Error('Worker respondeu uma operação diferente da solicitada. Nenhum lead será aprovado.');
+  }
+
+  const results: unknown[] = Array.isArray(payload?.results) ? payload.results : Array.isArray(payload) ? payload : [];
+  const normalized = results.map(normalizeValidationResult).filter((item): item is WhatsAppValidationResult => Boolean(item));
+  assertOneResultForEachLead(leads, normalized);
+  return normalized;
+}
+
 export function preSendLeadToWhatsAppValidationRequest(lead: PreSendLead): WhatsAppValidationRequest {
   return {
     id: lead.id,
@@ -82,37 +147,11 @@ export function preSendLeadToWhatsAppValidationRequest(lead: PreSendLead): Whats
 }
 
 export const workerWhatsAppValidationGateway: WhatsAppValidationGateway = {
-  async validate(leads, mode: WhatsAppValidationMode = 'initial') {
-    const endpoint = validationEndpoint();
-    if (!endpoint) throw new Error('Configure VITE_WHATSAPP_WORKER_VALIDATE_ENDPOINT para validar WhatsApp de verdade antes de aprovar leads.');
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        channel: 'whatsapp',
-        mode,
-        leads: leads.map((lead) => ({
-          id: lead.id,
-          lead_id: lead.sourceImportId,
-          company: lead.company,
-          phone: lead.phone,
-          normalized_phone: lead.normalizedPhone,
-          chip_instance: lead.chipInstance,
-        })),
-      }),
-    });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      const message = payload?.message || payload?.error || response.statusText || 'Erro ao validar WhatsApp no worker.';
-      throw new Error(Array.isArray(message) ? message.flat(Infinity).join(', ') : String(message));
-    }
-
-    const results: unknown[] = Array.isArray(payload?.results) ? payload.results : Array.isArray(payload) ? payload : [];
-    const normalized = results.map(normalizeValidationResult).filter((item): item is WhatsAppValidationResult => Boolean(item));
-    if (normalized.length !== leads.length) throw new Error('Worker WhatsApp nao retornou um resultado confiável para cada lead.');
-    return normalized;
+  validateInitial(leads) {
+    return callValidationWorker(initialValidationEndpoint(), 'validate', 'initial', leads);
+  },
+  revalidateApproved(leads) {
+    return callValidationWorker(revalidationEndpoint(), 'revalidate', 'revalidation', leads);
   },
 };
 

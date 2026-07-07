@@ -6,5 +6,5 @@ type ApiRequest = {
 };
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
-  await handleValidationRequest(req, res, 'initial');
+  await handleValidationRequest(req, res, 'revalidation');
 }

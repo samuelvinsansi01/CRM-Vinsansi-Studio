@@ -145,7 +145,8 @@ function ValidationQueue({
   const [refreshToken, setRefreshToken] = useState(0);
   const [saving, setSaving] = useState(false);
   const [fillSaving, setFillSaving] = useState(false);
-  const [validateSaving, setValidateSaving] = useState(false);
+  const [initialValidationSaving, setInitialValidationSaving] = useState(false);
+  const [revalidationSaving, setRevalidationSaving] = useState(false);
   const [editingLead, setEditingLead] = useState<PreSendLead | null>(null);
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
   const [leadForm, setLeadForm] = useState<PreSendForm | null>(null);
@@ -294,7 +295,7 @@ function ValidationQueue({
   };
 
   const fillQueue = async () => {
-    if (fillSaving || validateSaving) return;
+    if (fillSaving || initialValidationSaving || revalidationSaving) return;
     setFillSaving(true);
     try {
       const moved = await moveApprovedImportsToQueue({ channel, dayId: activeDayId, profile: activeProfile || profiles[0] || '', queueFilter });
@@ -309,7 +310,7 @@ function ValidationQueue({
   };
 
   const revalidateSelected = async () => {
-    if (fillSaving || validateSaving) return;
+    if (fillSaving || initialValidationSaving || revalidationSaving) return;
     if (selectedRows.length && !canRevalidateSelection) {
       onToast({ title: 'Selecao incompativel', description: 'Revalidar exige apenas leads WhatsApp ja aprovados.', tone: 'warning' });
       return;
@@ -320,7 +321,7 @@ function ValidationQueue({
       return;
     }
 
-    setValidateSaving(true);
+    setRevalidationSaving(true);
     try {
       const result = await revalidateApprovedLeads(ids);
       setSelectedRows([]);
@@ -333,12 +334,12 @@ function ValidationQueue({
     } catch (err) {
       onToast({ title: 'Erro ao revalidar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
-      setValidateSaving(false);
+      setRevalidationSaving(false);
     }
   };
 
   const validateSelected = async () => {
-    if (fillSaving || validateSaving) return;
+    if (fillSaving || initialValidationSaving || revalidationSaving) return;
     if (selectedRows.length && !canApproveSelection) {
       onToast({ title: 'Selecao incompativel', description: 'Validar exige que todos os selecionados possam ser aprovados.', tone: 'warning' });
       return;
@@ -349,7 +350,7 @@ function ValidationQueue({
       return;
     }
 
-    setValidateSaving(true);
+    setInitialValidationSaving(true);
     try {
       const result = await validateLeads(ids);
       setSelectedRows([]);
@@ -362,7 +363,7 @@ function ValidationQueue({
     } catch (err) {
       onToast({ title: 'Erro ao validar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
-      setValidateSaving(false);
+      setInitialValidationSaving(false);
     }
   };
 
@@ -399,9 +400,9 @@ function ValidationQueue({
         {title ? <h3>{title}</h3> : null}
         {channel === 'WhatsApp' ? <SelectField options={queueFilterOptions} value={queueFilter} placeholder="Destino" onChange={(value) => setQueueFilter(value as PreSendQueueFilter)} /> : null}
         <SelectField options={profiles.length ? profiles : [emptyProfileLabel]} value={activeProfile || profiles[0] || emptyProfileLabel} placeholder={channel === 'WhatsApp' ? 'Chip' : 'Perfil'} onChange={setActiveProfile} />
-        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={fillSaving} disabled={!hasOperationalProfile || validateSaving} onClick={fillQueue}>Preencher fila</Button>
-        {channel === 'WhatsApp' ? <Button variant="secondary" iconLeft={RefreshCcw} size="sm" loading={validateSaving} disabled={fillSaving || (selectedRows.length ? !canRevalidateSelection : !approvedIds.length)} onClick={revalidateSelected}>Revalidar aprovados</Button> : null}
-        {channel === 'WhatsApp' ? <Button size="sm" loading={validateSaving} disabled={fillSaving || (selectedRows.length ? !canApproveSelection : !approvableIds.length)} onClick={validateSelected}>Validar leads</Button> : null}
+        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={fillSaving} disabled={!hasOperationalProfile || initialValidationSaving || revalidationSaving} onClick={fillQueue}>Preencher fila</Button>
+        {channel === 'WhatsApp' ? <Button variant="secondary" iconLeft={RefreshCcw} size="sm" loading={revalidationSaving} disabled={fillSaving || initialValidationSaving || (selectedRows.length ? !canRevalidateSelection : !approvedIds.length)} onClick={revalidateSelected}>Revalidar aprovados</Button> : null}
+        {channel === 'WhatsApp' ? <Button size="sm" loading={initialValidationSaving} disabled={fillSaving || revalidationSaving || (selectedRows.length ? !canApproveSelection : !approvableIds.length)} onClick={validateSelected}>Validar leads</Button> : null}
       </div>
       {selectedLeads.length && !canApproveSelection && !canRevalidateSelection ? (
         <div className="lead-bulk-actions"><span>{selectedLeads.length} selecionado(s)</span><small>Nenhuma acao disponivel para a selecao atual.</small></div>

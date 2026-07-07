@@ -168,13 +168,13 @@ function booleanLike(value: unknown) {
   return undefined;
 }
 
-function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: unknown, index = 0): WhatsAppValidationResult {
+function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: unknown): WhatsAppValidationResult {
   const number = phoneForValidation(lead);
   const items = validationItems(payload);
   const item = items.find((candidate) => {
     const candidateNumber = String(candidate.number ?? candidate.phone ?? candidate.jid ?? candidate.id ?? '').replace(/\D/g, '');
     return Boolean(candidateNumber) && (candidateNumber.includes(number) || number.includes(candidateNumber));
-  }) ?? items[index];
+  });
 
   if (!item) {
     return {
@@ -190,14 +190,13 @@ function validationResultFromPayload(lead: WhatsAppValidationRequest, payload: u
   const jid = String(item.jid ?? item.id ?? item._serialized ?? item.remoteJid ?? '');
   const status = String(item.status ?? item.result ?? '').toLowerCase();
   const hasWhatsAppJid = Boolean(jid.includes('@s.whatsapp.net'));
-  const validStatus = ['valid', 'exists'].includes(status);
   const invalidStatus = ['invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
 
   if (existsBool === false || invalidStatus) {
     return { leadId: lead.id, status: 'invalid', valid: false };
   }
 
-  if (existsBool === true || hasWhatsAppJid || validStatus) {
+  if (existsBool === true || hasWhatsAppJid) {
     return { leadId: lead.id, status: 'valid', valid: true };
   }
 
@@ -234,7 +233,7 @@ async function validateWhatsAppBatch(instance: string, leads: WhatsAppValidation
     method: 'POST',
     body: JSON.stringify({ numbers: leads.map(phoneForValidation) }),
   });
-  return leads.map((lead, index) => validationResultFromPayload(lead, payload, index));
+  return leads.map((lead) => validationResultFromPayload(lead, payload));
 }
 
 export const evolutionWhatsAppGateway: WhatsAppGateway = {
@@ -272,38 +271,41 @@ export const evolutionWhatsAppGateway: WhatsAppGateway = {
   },
 };
 
-export const evolutionWhatsAppValidationGateway: WhatsAppValidationGateway = {
-  async validate(leads) {
-    const config = evolutionConfig();
-    const results = new Map<string, WhatsAppValidationResult>();
-    const grouped = new Map<string, WhatsAppValidationRequest[]>();
+async function validateWithEvolution(leads: WhatsAppValidationRequest[]) {
+  const config = evolutionConfig();
+  const results = new Map<string, WhatsAppValidationResult>();
+  const grouped = new Map<string, WhatsAppValidationRequest[]>();
 
-    for (const lead of leads) {
+  for (const lead of leads) {
+    try {
+      const instance = instanceForValidation(lead);
+      const number = phoneForValidation(lead);
+      if (!instance) throw new Error(`Lead sem instancia/chip para validacao: ${lead.company}.`);
+      if (!number) throw new Error(`Lead sem telefone normalizado para validacao: ${lead.company}.`);
+      grouped.set(instance, [...(grouped.get(instance) ?? []), lead]);
+    } catch (error) {
+      results.set(lead.id, validationErrorResult(lead, error instanceof Error ? error.message : 'Erro ao validar WhatsApp.'));
+    }
+  }
+
+  for (const [instance, instanceLeads] of grouped.entries()) {
+    for (const batch of chunk(instanceLeads, config.validationBatchSize)) {
       try {
-        const instance = instanceForValidation(lead);
-        const number = phoneForValidation(lead);
-        if (!instance) throw new Error(`Lead sem instancia/chip para validacao: ${lead.company}.`);
-        if (!number) throw new Error(`Lead sem telefone normalizado para validacao: ${lead.company}.`);
-        grouped.set(instance, [...(grouped.get(instance) ?? []), lead]);
+        const batchResults = await validateWhatsAppBatch(instance, batch);
+        batchResults.forEach((result) => results.set(result.leadId, result));
       } catch (error) {
-        results.set(lead.id, validationErrorResult(lead, error instanceof Error ? error.message : 'Erro ao validar WhatsApp.'));
+        const message = error instanceof Error ? error.message : 'Erro ao validar WhatsApp.';
+        batch.forEach((lead) => results.set(lead.id, validationErrorResult(lead, message)));
       }
+
+      if (config.validationDelayMs) await delay(config.validationDelayMs);
     }
+  }
 
-    for (const [instance, instanceLeads] of grouped.entries()) {
-      for (const batch of chunk(instanceLeads, config.validationBatchSize)) {
-        try {
-          const batchResults = await validateWhatsAppBatch(instance, batch);
-          batchResults.forEach((result) => results.set(result.leadId, result));
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Erro ao validar WhatsApp.';
-          batch.forEach((lead) => results.set(lead.id, validationErrorResult(lead, message)));
-        }
+  return leads.map((lead) => results.get(lead.id) ?? validationErrorResult(lead, 'Validacao nao retornou resultado para este lead.'));
+}
 
-        if (config.validationDelayMs) await delay(config.validationDelayMs);
-      }
-    }
-
-    return leads.map((lead) => results.get(lead.id) ?? validationErrorResult(lead, 'Validacao nao retornou resultado para este lead.'));
-  },
+export const evolutionWhatsAppValidationGateway: WhatsAppValidationGateway = {
+  validateInitial: validateWithEvolution,
+  revalidateApproved: validateWithEvolution,
 };

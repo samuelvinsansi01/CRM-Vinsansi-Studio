@@ -1251,7 +1251,7 @@ export const preSendService = {
 
     if (validFormat.length) {
       try {
-        const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest), 'initial');
+        const results = await whatsappValidationGateway.validateInitial(validFormat.map(preSendLeadToWhatsAppValidationRequest));
         const byId = new Map(results.map((result) => [result.leadId, result]));
 
         await Promise.all(validFormat.map(async (lead) => {
@@ -1352,7 +1352,7 @@ export const preSendService = {
 
     if (validFormat.length) {
       try {
-        const results = await whatsappValidationGateway.validate(validFormat.map(preSendLeadToWhatsAppValidationRequest), 'revalidation');
+        const results = await whatsappValidationGateway.revalidateApproved(validFormat.map(preSendLeadToWhatsAppValidationRequest));
         const byId = new Map(results.map((result) => [result.leadId, result]));
 
         await Promise.all(validFormat.map(async (lead) => {
