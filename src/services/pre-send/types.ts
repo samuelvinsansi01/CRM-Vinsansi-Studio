@@ -1,3 +1,5 @@
+import type { TemplateType } from '../config/types';
+
 export type PreSendChannel = 'WhatsApp' | 'Instagram';
 export type PreSendStatus = 'review' | 'approved' | 'queued' | 'rejected' | 'invalid' | 'archived' | 'sent' | 'deleted';
 export type PreSendQueueFilter = 'Geral' | 'WhatsApp' | 'Com site + Agregadores';
@@ -34,6 +36,8 @@ export type PreSendLead = {
   instagram?: string;
   site?: string;
   mapsUrl?: string;
+  /** Grupo fixado pela presença de site: com-site ou sem-site. */
+  templateType?: TemplateType;
   /** Template sorteado/selecionado e fixado para evitar troca a cada tentativa. */
   templateId?: string;
   templateAssignedAt?: string;

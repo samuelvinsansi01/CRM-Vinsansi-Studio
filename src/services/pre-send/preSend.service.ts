@@ -14,7 +14,7 @@ import type { CreateBaseLeadInput } from '../base/types';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { assertTransition } from '../state-machine';
 import { renderLeadMessages } from '../templates/templateVariables';
-import { selectTemplateForLead } from '../templates/templateSelector';
+import { selectTemplateForLead, templateTypeForLead } from '../templates/templateSelector';
 import type { CreateWhatsAppQueueLeadInput, WhatsAppQueueLead } from '../whatsapp-queue/types';
 import { preSendLeadToWhatsAppValidationRequest, whatsappValidationGateway } from '../whatsapp-validation/whatsappValidation.gateway';
 import type { CreatePreSendLeadInput, InstagramQueueFillResult, PreSendCapacity, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead, PreSendQueueFilter, PreSendValidationSummary } from './types';
@@ -491,6 +491,13 @@ function importToPreSendLead(
     throw new Error('Lead sem Instagram valido');
   }
 
+  const templateType = templateTypeForLead({
+    channel,
+    destination,
+    original_destination: originalDestination,
+    site: lead.site,
+  });
+
   return {
     sourceImportId: lead.id,
     company: lead.empresa,
@@ -500,6 +507,7 @@ function importToPreSendLead(
     channel,
     destination,
     original_destination: originalDestination,
+    templateType,
     destination_override: destinationOverride,
     send_instagram: lead.send_instagram ?? false,
     instagram_url: instagramUrl,
@@ -593,21 +601,30 @@ async function markSourceImportsSent(leads: PreSendLead[], reason: string, sentA
 
 async function loadTemplate(lead: PreSendLead) {
   const templates = (await repositories.config.list('templates')).filter(isTemplate);
-  const selection = selectTemplateForLead(lead, templates);
-  if (!selection) return undefined;
+  const expectedType = templateTypeForLead(lead);
+  const selection = selectTemplateForLead({ ...lead, templateType: expectedType }, templates);
 
-  // A escolha é sorteada somente quando o lead ainda não possui um template
-  // compatível. Depois disso, ela fica fixada no Pré-Envio e acompanha a fila.
-  // Isso evita que uma nova tentativa troque a mensagem de forma silenciosa.
-  if (!lead.id.startsWith('direct-import-') && lead.templateId !== selection.template.id) {
-    await repositories.preSend.updateLead(lead.id, {
-      templateId: selection.template.id,
-      templateAssignedAt: new Date().toISOString(),
-      templateSelectionSource: selection.source,
-    });
+  // Registros legados não guardavam o tipo do template. Persistimos a
+  // classificação antes da fila para que uma troca de canal não altere a
+  // abordagem (com-site/sem-site) em tentativas futuras.
+  if (!lead.id.startsWith('direct-import-')) {
+    const shouldPersistType = lead.templateType !== expectedType;
+    const shouldPersistTemplate = Boolean(selection) && lead.templateId !== selection?.template.id;
+    if (shouldPersistType || shouldPersistTemplate) {
+      await repositories.preSend.updateLead(lead.id, {
+        templateType: expectedType,
+        ...(selection
+          ? {
+              templateId: selection.template.id,
+              templateAssignedAt: new Date().toISOString(),
+              templateSelectionSource: selection.source,
+            }
+          : {}),
+      });
+    }
   }
 
-  return selection.template;
+  return selection?.template;
 }
 
 async function loadBranches() {
@@ -623,7 +640,8 @@ function branchImageForLead(lead: PreSendLead, branches: BranchConfigRecord[]) {
 
 function assertTemplate(lead: PreSendLead, template: TemplateConfigRecord | undefined): asserts template is TemplateConfigRecord {
   if (!template || !template.message1.trim()) {
-    throw new Error(`Template valido ausente para ${lead.channel} / ${lead.branch} / ${lead.destination}.`);
+    const requiredType = templateTypeForLead(lead);
+    throw new Error(`Template ${requiredType} valido ausente para ${lead.channel} / ${lead.branch}.`);
   }
 }
 
@@ -748,7 +766,7 @@ async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAp
       branch: lead.branch,
       branch_id: lead.branch_id,
       branch_slug: lead.branch_slug,
-      type: lead.destination === 'Com site' || lead.destination === 'Agregadores' ? 'Com site' : 'Sem site',
+      type: templateTypeForLead(lead) === 'com-site' ? 'Com site' : 'Sem site',
       original_destination: lead.original_destination,
       destination_override: lead.destination_override,
       send_instagram: lead.send_instagram,
@@ -948,6 +966,9 @@ async function moveInvalidWhatsAppToInstagram(lead: PreSendLead, reason: string)
     instagram_url: instagram,
     instagram: instagram || lead.instagram,
     instagram_override_reason: 'whatsapp_invalid',
+    // Mantém a classificação de site original mesmo após trocar o destino para
+    // Instagram. Registros legados sem esse campo serão normalizados em loadTemplate.
+    templateType: templateTypeForLead(lead),
     // O retorno só fica aguardando edição quando realmente não há um Instagram
     // aproveitável. Links já existentes seguem prontos para a tentativa automática.
     instagramPendingLink: !hasValidInstagram,
