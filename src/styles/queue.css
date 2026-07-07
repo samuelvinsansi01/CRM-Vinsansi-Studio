@@ -390,3 +390,11 @@ button.batch__header {
     margin-left: auto;
   }
 }
+
+.queue-batch-status {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 10px;
+  color: var(--muted-foreground, #64748b);
+  font-weight: 600;
+}

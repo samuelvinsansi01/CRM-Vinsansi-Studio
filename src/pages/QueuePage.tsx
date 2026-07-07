@@ -75,14 +75,15 @@ function WhatsAppQueuePage() {
   const [activeChip, setActiveChip] = useState('');
   const [scheduledDate, setScheduledDate] = useState(todayInputValue);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [running, setRunning] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [editingLead, setEditingLead] = useState<WhatsAppQueueLead | null>(null);
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
   const [confirmLead, setConfirmLead] = useState<WhatsAppQueueLead | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const { chips, batches, summary, loading, refreshing, error, updateLead, send, pause, resume, reprocess, invalidate } = useWhatsAppQueue(activeChip, scheduledDate);
+  const { chips, batches, summary, batchState, loading, refreshing, error, updateLead, startBatch, pauseBatch, resumeBatch, stopBatch, reprocess, invalidate } = useWhatsAppQueue(activeChip, scheduledDate);
+  const running = batchState.enabled && batchState.status === 'running';
 
   useEffect(() => {
     if ((!activeChip || !chips.includes(activeChip)) && chips[0]) {
@@ -95,7 +96,7 @@ function WhatsAppQueuePage() {
 
   useEffect(() => {
     setSelectedIds([]);
-    setRunning(false);
+    setStarting(false);
   }, [activeChip, scheduledDate]);
 
   const visibleLeads = () => batches.flatMap((batch) => batch.leads);
@@ -116,45 +117,53 @@ function WhatsAppQueuePage() {
   const handleStart = async () => {
     const ids = selectedOrRunnableIds();
     if (!ids.length) {
-      pushToast({ title: 'Nada para iniciar', description: 'Nao ha leads em fila no lote visivel.', tone: 'warning' });
+      pushToast({ title: 'Nada para iniciar', description: 'Nao ha leads em fila ou pausados no lote visivel.', tone: 'warning' });
       return;
     }
 
-    const pausedIds = visibleLeads().filter((lead) => ids.includes(lead.id) && hasWhatsAppWorkerContract(lead) && permissionsFor('whatsapp-queue', lead.status).canResume()).map((lead) => lead.id);
-    if (pausedIds.length) await resume(pausedIds);
-    setRunning(true);
-    setSelectedIds(ids);
-    pushToast({ title: 'Fila iniciada', description: `${ids.length} lead(s) prontos para envio.`, tone: 'success' });
-  };
-
-  const handleSend = async () => {
-    const ids = selectedIds.length
-      ? visibleLeads().filter((lead) => selectedIds.includes(lead.id) && permissionsFor('whatsapp-queue', lead.status).canSend() && hasWhatsAppWorkerContract(lead)).map((lead) => lead.id)
-      : visibleActionIds((lead) => permissionsFor('whatsapp-queue', lead.status).canSend() && hasWhatsAppWorkerContract(lead));
-    if (!ids.length) {
-      pushToast({ title: 'Nada para enviar', description: 'Nao ha leads aguardando no dia e lote visiveis.', tone: 'warning' });
-      return;
-    }
-
-    setRunning(true);
+    setStarting(true);
     try {
-      await send(ids);
-      setSelectedIds([]);
-      pushToast({ title: 'Envio concluido', description: `${ids.length} lead(s) marcados como enviados.`, tone: 'success' });
+      const state = await startBatch(ids);
+      setSelectedIds(ids);
+      const next = state.next_run_at ? new Date(state.next_run_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'agora';
+      pushToast({
+        title: state.already_running ? 'Lote já está em execução' : 'Lote iniciado',
+        description: `${ids.length} lead(s). Próximo envio: ${next}. O Worker continuará mesmo com esta tela fechada.`,
+        tone: 'success',
+      });
     } catch (err) {
-      pushToast({ title: 'Envio bloqueado', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      pushToast({ title: 'Não foi possível iniciar o lote', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
-      setRunning(false);
+      setStarting(false);
     }
   };
 
   const handlePause = async () => {
-    const ids = selectedIds.length ? selectedIds : visibleActionIds((lead) => permissionsFor('whatsapp-queue', lead.status).canPause());
-    if (!ids.length) return;
-    await pause(ids);
-    setRunning(false);
-    setSelectedIds([]);
-    pushToast({ title: 'Fila pausada', description: `${ids.length} lead(s) pausados localmente.`, tone: 'info' });
+    try {
+      await pauseBatch(activeChip);
+      pushToast({ title: 'Lote pausado', description: 'Nenhum novo lead será enviado até você retomar o lote.', tone: 'info' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível pausar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
+  const handleResume = async () => {
+    try {
+      await resumeBatch(activeChip);
+      pushToast({ title: 'Lote retomado', description: 'O Worker continuará a partir do próximo lead pendente.', tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível retomar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
+  const handleStop = async () => {
+    try {
+      await stopBatch(activeChip);
+      setSelectedIds([]);
+      pushToast({ title: 'Lote encerrado', description: 'Os itens restantes continuam em fila e podem ser iniciados depois.', tone: 'warning' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível encerrar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
   };
 
   const handleReprocess = async () => {
@@ -165,7 +174,7 @@ function WhatsAppQueuePage() {
     }
 
     await reprocess(ids);
-    setRunning(false);
+    setStarting(false);
     setSelectedIds([]);
     pushToast({ title: 'Leads reprocessados', description: `${ids.length} lead(s) voltaram para a fila.`, tone: 'success' });
   };
@@ -202,11 +211,21 @@ function WhatsAppQueuePage() {
       <div className="queue-topline">
         <SegmentedControl items={chips.length ? chips : ['Geral']} active={activeChip || chips[0] || 'Geral'} onChange={setActiveChip} compact />
         <div className="queue-controls">
-          <Button variant="danger" iconLeft={Square} disabled={!running && !selectedIds.length} onClick={handlePause}>Parar</Button>
-          <Button variant="secondary" iconLeft={Pause} disabled={!running && !selectedIds.length} onClick={handlePause}>Pausar</Button>
-          <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading} onClick={handleReprocess}>Reprocessar</Button>
-          <Button iconLeft={Play} disabled={loading} onClick={running ? handleSend : handleStart}>{running ? 'Enviar lote' : 'Iniciar'}</Button>
+          <Button variant="danger" iconLeft={Square} disabled={!running && batchState.status !== 'paused'} onClick={handleStop}>Parar</Button>
+          {running ? (
+            <Button variant="secondary" iconLeft={Pause} onClick={handlePause}>Pausar</Button>
+          ) : batchState.status === 'paused' ? (
+            <Button variant="secondary" iconLeft={Play} onClick={handleResume}>Retomar</Button>
+          ) : null}
+          <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || starting || running} onClick={handleReprocess}>Reprocessar</Button>
+          <Button iconLeft={Play} disabled={loading || starting || running || batchState.status === 'paused'} onClick={handleStart}>{starting ? 'Iniciando...' : running ? 'Em execução' : 'Iniciar lote'}</Button>
         </div>
+        {(running || batchState.status === 'paused') && (
+          <small className="queue-batch-status">
+            {batchState.status === 'paused' ? 'Lote pausado' : `Lote em execução • ${batchState.remaining} restante(s)`}
+            {batchState.next_run_at ? ` • próximo: ${new Date(batchState.next_run_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+          </small>
+        )}
       </div>
 
       <section className="queue-list-card">

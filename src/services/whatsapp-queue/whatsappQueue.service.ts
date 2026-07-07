@@ -4,6 +4,7 @@ import { normalizeDomain, normalizePhone } from '../import/importValidation';
 import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { permissionsFor } from '../permissions';
 import { whatsappGateway } from './whatsapp.gateway';
+import { whatsappBatchGateway, type WhatsAppBatchState } from './whatsapp.batch.gateway';
 import { hasWhatsAppWorkerContract, missingWhatsAppWorkerFields } from './whatsappQueue.guards';
 import type { UpdateWhatsAppQueueLeadInput, WhatsAppQueueFilters, WhatsAppQueueLead } from './types';
 import type { ChipConfigRecord, ConfigRecord } from '../config/types';
@@ -316,6 +317,59 @@ export const whatsappQueueService = {
     const lead = await repositories.whatsappQueue.updateLead(id, input);
     eventBus.emit('whatsapp-queue:changed', { action: 'update' });
     return lead;
+  },
+
+  async getBatchStatus(chip?: string): Promise<WhatsAppBatchState> {
+    return whatsappBatchGateway.status(chip);
+  },
+
+  async startBatch(ids: string[]): Promise<WhatsAppBatchState> {
+    const leads = await getSelectedLeads(ids);
+    if (!leads.length) throw new Error('Nenhum item foi encontrado para iniciar o lote.');
+
+    // Um lote pode retomar itens pausados; eles voltam para queued antes de o
+    // Worker persistente assumir a cadência. Itens finais/erro não entram.
+    const blocked = leads.find((lead) =>
+      !hasWhatsAppWorkerContract(lead) ||
+      !(permissionsFor('whatsapp-queue', lead.status).canSend() || permissionsFor('whatsapp-queue', lead.status).canResume()),
+    );
+    if (blocked) throw new Error(`Item WhatsApp não pode iniciar lote: ${blocked.company || blocked.id}.`);
+
+    await assertLeadsUseOperationalChips(leads);
+    assertWorkerContractReady(leads);
+    assertTemplateReady(leads);
+
+    const instances = new Set(leads.map((lead) => lead.chip_instance || lead.chip).filter(Boolean));
+    if (instances.size !== 1) throw new Error('Inicie um lote por chip. Selecione somente itens do mesmo chip.');
+    const chip = Array.from(instances)[0];
+
+    const paused = leads.filter((lead) => permissionsFor('whatsapp-queue', lead.status).canResume());
+    if (paused.length) {
+      await Promise.all(paused.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'queued', error_message: '' })));
+      paused.forEach((lead) => logQueueEvent('resume_for_batch', lead, 'queued'));
+    }
+
+    const state = await whatsappBatchGateway.start(ids, chip);
+    eventBus.emit('whatsapp-queue:changed', { action: 'update' });
+    return state;
+  },
+
+  async pauseBatch(chip?: string): Promise<WhatsAppBatchState> {
+    const state = await whatsappBatchGateway.pause(chip);
+    eventBus.emit('whatsapp-queue:changed', { action: 'update' });
+    return state;
+  },
+
+  async resumeBatch(chip?: string): Promise<WhatsAppBatchState> {
+    const state = await whatsappBatchGateway.resume(chip);
+    eventBus.emit('whatsapp-queue:changed', { action: 'update' });
+    return state;
+  },
+
+  async stopBatch(chip?: string): Promise<WhatsAppBatchState> {
+    const state = await whatsappBatchGateway.stop(chip);
+    eventBus.emit('whatsapp-queue:changed', { action: 'update' });
+    return state;
   },
 
   async send(ids: string[]) {
