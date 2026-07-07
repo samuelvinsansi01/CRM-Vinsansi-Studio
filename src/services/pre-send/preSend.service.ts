@@ -16,7 +16,7 @@ import { assertTransition } from '../state-machine';
 import { renderLeadMessages } from '../templates/templateVariables';
 import type { CreateWhatsAppQueueLeadInput, WhatsAppQueueLead } from '../whatsapp-queue/types';
 import { preSendLeadToWhatsAppValidationRequest, whatsappValidationGateway } from '../whatsapp-validation/whatsappValidation.gateway';
-import type { CreatePreSendLeadInput, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead, PreSendQueueFilter, PreSendValidationSummary } from './types';
+import type { CreatePreSendLeadInput, InstagramQueueFillResult, PreSendCapacity, PreSendChannel, PreSendDayCard, PreSendFilters, PreSendLead, PreSendQueueFilter, PreSendValidationSummary } from './types';
 
 type QueueAssignmentOptions = {
   whatsappProfile?: string;
@@ -372,12 +372,14 @@ async function scheduledDayCards(): Promise<PreSendDayCard[]> {
       const id = dayId(channel, weekday);
       const date = dateForWeekdayIndex(index);
       const scheduledDate = toLocalDateInputValue(date);
-      const preSendQueued = leads.filter((lead) =>
-        lead.channel === channel &&
-        lead.dayId === id &&
-        isActivePreSendStatus(lead.status) &&
-        !queueAllocations.preSendIds.has(lead.id),
-      ).length;
+      const preSendQueued = channel === 'WhatsApp'
+        ? leads.filter((lead) =>
+            lead.channel === channel &&
+            lead.dayId === id &&
+            isActivePreSendStatus(lead.status) &&
+            !queueAllocations.preSendIds.has(lead.id),
+          ).length
+        : 0;
       const queued = preSendQueued + (queueAllocations.counts.get(`${channel}:${scheduledDate}`) ?? 0);
 
       return {
@@ -865,52 +867,76 @@ async function appendValidationAudit(input: EventLogInput) {
   }
 }
 
-async function returnInvalidWhatsAppToInstagram(lead: PreSendLead, reason = 'WhatsApp invalido na validacao real do Pre-Envio.') {
-  const returnedAt = new Date().toISOString();
-
-  if (lead.sourceImportId) {
-    assertTransition({ entity: 'import', fromStatus: 'queued', toStatus: 'pending', action: 'return_to_import' });
-    await repositories.import.update(lead.sourceImportId, {
-      status: 'pending',
-      destino: 'Instagram',
-      destination: 'Instagram',
-      destination_override: 'Instagram',
-      send_instagram: true,
-      instagram_url: lead.instagram_url ?? lead.instagram ?? '',
-      instagram_override_reason: reason,
-      override_by: lead.override_by || 'Sistema',
-      override_at: returnedAt,
-      returned_from_queue: true,
-      returned_at: returnedAt,
-      return_reason: 'whatsapp_invalid',
-    });
-  }
-
-  await repositories.preSend.archiveLead(lead.id);
-  await appendValidationAudit({
-    source: 'pre-send',
-    action: 'whatsapp_invalid_return_to_instagram',
-    channel: 'whatsapp',
-    leadId: lead.sourceImportId ?? lead.id,
-    status: 'pending',
-    message: `${reason} Lead retornou ao Inicio como Instagram pendente.`,
-    metadata: {
-      pre_send_id: lead.id,
-      dayId: lead.dayId,
-      scheduled_date: scheduledDateForDayId(lead.dayId),
-      company_name: lead.company,
-      normalized_phone: normalizePhone(lead.phone),
-      instagram_url: lead.instagram_url ?? lead.instagram,
-      validation_reason: reason,
-    },
-  });
+function instagramDayIdFromWhatsAppDayId(value: string) {
+  return effectiveDayId('Instagram', value.replace(/^whatsapp-/, 'instagram-'));
 }
 
-type InvalidWhatsAppAction = 'review' | 'instagram';
+function isInstagramReturnPendingLink(lead: PreSendLead) {
+  return lead.channel === 'Instagram' &&
+    Boolean(lead.send_instagram) &&
+    Boolean(lead.instagramPendingLink) &&
+    normalize(lead.instagram_override_reason).includes('whatsapp_invalid');
+}
 
-function invalidWhatsAppAction(): InvalidWhatsAppAction {
-  const value = String(import.meta.env.VITE_WHATSAPP_INVALID_ACTION ?? 'review').trim().toLowerCase();
-  return value === 'instagram' ? 'instagram' : 'review';
+function isInstagramReturnReadyForQueue(lead: PreSendLead) {
+  return lead.channel === 'Instagram' &&
+    Boolean(lead.send_instagram) &&
+    normalize(lead.instagram_override_reason).includes('whatsapp_invalid') &&
+    !lead.instagramPendingLink &&
+    isValidInstagram(lead.instagram_url ?? lead.instagram);
+}
+
+function isInstagramImport(lead: ImportLead) {
+  return importFinalDestination(lead) === 'Instagram';
+}
+
+async function moveInvalidWhatsAppToInstagramPendingLink(lead: PreSendLead, reason: string) {
+  const settings = await settingsService.getDispatchSettings();
+  const [firstProfile] = await loadActiveInstagramProfiles();
+  const routedAt = new Date().toISOString();
+  const instagram = lead.instagram_url ?? lead.instagram ?? '';
+
+  assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'review', action: 'review' });
+  await repositories.preSend.updateLead(lead.id, {
+    channel: 'Instagram',
+    destination: 'Instagram',
+    destination_override: 'Instagram',
+    send_instagram: true,
+    instagram_url: instagram,
+    instagram: instagram || lead.instagram,
+    instagram_override_reason: 'whatsapp_invalid',
+    instagramPendingLink: true,
+    instagramReadyAt: '',
+    queueWaitReason: 'Aguardando link do Instagram.',
+    override_by: 'Sistema',
+    override_at: routedAt,
+    profile: firstProfile?.username || settings.instagram.profile || '',
+    dayId: instagramDayIdFromWhatsAppDayId(lead.dayId),
+    status: 'review',
+    validationStatus: 'invalid',
+    validationError: reason,
+    validationAttempts: (lead.validationAttempts ?? 0) + 1,
+    lastValidatedAt: routedAt,
+  });
+
+  await appendValidationAudit({
+    source: 'pre-send',
+    action: 'whatsapp_invalid_to_instagram_pending_link',
+    channel: 'instagram',
+    leadId: lead.sourceImportId ?? lead.id,
+    status: 'review',
+    message: `${reason} Lead mantido no Pré-Envio Instagram aguardando link.`,
+    metadata: {
+      pre_send_id: lead.id,
+      previous_channel: 'whatsapp',
+      dayId: instagramDayIdFromWhatsAppDayId(lead.dayId),
+      scheduled_date: scheduledDateForDayId(instagramDayIdFromWhatsAppDayId(lead.dayId)),
+      company_name: lead.company,
+      normalized_phone: normalizePhone(lead.phone),
+      validation_reason: reason,
+      instagram_url: instagram,
+    },
+  });
 }
 
 async function markWhatsAppValidationForReview(
@@ -946,13 +972,130 @@ async function markWhatsAppValidationForReview(
   });
 }
 
+/** Resultado inválido da validação inicial: mantém o lead no Pré-Envio e transfere somente o canal. */
 async function handleInvalidWhatsApp(lead: PreSendLead, reason: string) {
-  if (invalidWhatsAppAction() === 'instagram') {
-    await returnInvalidWhatsAppToInstagram(lead, reason);
-    return 'instagram' as const;
+  await moveInvalidWhatsAppToInstagramPendingLink(lead, reason);
+  return 'instagram' as const;
+}
+
+async function queueCapacity(channel: PreSendChannel, requestedDayId: string, requestedProfile?: string): Promise<PreSendCapacity> {
+  await rolloverPreSendAfterCutoff();
+  const dayId = effectiveDayId(channel, requestedDayId);
+  const scheduledDate = scheduledDateForDayId(dayId);
+  const settings = await settingsService.getDispatchSettings();
+
+  if (channel === 'WhatsApp') {
+    const chips = await loadActiveChips();
+    const chip = requestedProfile
+      ? chips.find((item) => chipInstance(item) === requestedProfile)
+      : chips[0];
+    const profile = chip ? chipInstance(chip) : requestedProfile ?? '';
+    const limit = chip?.dailyLimit ?? 0;
+    const [leads, allocations, batches] = await Promise.all([listAllLeads(), queueAllocationsByDate(), repositories.whatsappQueue.listBatches({})]);
+    const reserved = leads.filter((lead) =>
+      lead.channel === 'WhatsApp' &&
+      lead.dayId === dayId &&
+      matchesSelectedProfile(lead, profile) &&
+      isActivePreSendStatus(lead.status) &&
+      !allocations.preSendIds.has(lead.id),
+    ).length;
+    const queued = batches.flatMap((batch) => batch.leads).filter((lead) =>
+      isActiveWhatsAppQueueStatus(lead.status) &&
+      lead.scheduled_date === scheduledDate &&
+      (lead.chip_instance || lead.chip) === profile,
+    ).length;
+    const used = reserved + queued;
+    return { channel, dayId, scheduledDate, profile, limit, used, available: Math.max(0, limit - used) };
   }
-  await markWhatsAppValidationForReview(lead, 'invalid', reason);
-  return 'review' as const;
+
+  const profiles = await loadActiveInstagramProfiles();
+  const profile = requestedProfile
+    ? profiles.find((item) => item.username === normalizeInstagramUsername(requestedProfile))?.username ?? requestedProfile
+    : profiles[0]?.username ?? '';
+  const batches = await repositories.instagramQueue.listBatches({});
+  const limit = Math.max(0, settings.instagram.dailyLimit);
+  const used = batches.flatMap((batch) => batch.leads).filter((lead) =>
+    isActiveInstagramQueueStatus(lead.status) && lead.scheduled_date === scheduledDate && lead.profile === profile,
+  ).length;
+  return { channel, dayId, scheduledDate, profile, limit, used, available: Math.max(0, limit - used) };
+}
+
+async function directInstagramQueueInput(lead: ImportLead, profile: string, dayId: string): Promise<CreateInstagramQueueLeadInput> {
+  const settings = await settingsService.getDispatchSettings();
+  const transient = importToPreSendLead(lead, settings, '', profile, { dayId, profile, forceApproved: true });
+  if (!transient || transient.channel !== 'Instagram') throw new Error('Lead aprovado não está configurado para Instagram.');
+  const [queueLead] = await toInstagramQueueLeads([{ id: `direct-import-${lead.id}`, ...transient }]);
+  if (!queueLead) throw new Error('Não foi possível preparar o lead para a fila Instagram.');
+  return { ...queueLead, lead_id: lead.id, sourcePreSendId: undefined };
+}
+
+async function fillInstagramQueueByPriority({ dayId: requestedDayId, profile: requestedProfile }: { dayId: string; profile?: string }): Promise<InstagramQueueFillResult> {
+  await rolloverPreSendAfterCutoff();
+  let capacity = await queueCapacity('Instagram', requestedDayId, requestedProfile);
+  const result: InstagramQueueFillResult = {
+    queued: 0,
+    fromPreSend: 0,
+    fromImport: 0,
+    waitingPreSend: 0,
+    waitingImport: 0,
+    scheduledDate: capacity.scheduledDate,
+  };
+
+  const allLeads = await listAllLeads();
+  const readyPreSend = sortByLeadScore(allLeads.filter((lead) =>
+    lead.dayId === capacity.dayId &&
+    isStatusGroup(lead.status, 'approved') &&
+    isInstagramReturnReadyForQueue(lead),
+  ));
+
+  const selectedPreSend = readyPreSend.slice(0, capacity.available);
+  const waitingPreSend = readyPreSend.slice(selectedPreSend.length);
+  if (waitingPreSend.length) {
+    await Promise.all(waitingPreSend.map((lead) => repositories.preSend.updateLead(lead.id, {
+      queueWaitReason: 'Aguardando capacidade do perfil Instagram.',
+    })));
+    result.waitingPreSend = waitingPreSend.length;
+  }
+
+  if (selectedPreSend.length) {
+    const assigned = await assignProfilesAndLimitCapacity(selectedPreSend, { instagramProfile: capacity.profile });
+    if (assigned.length) {
+      await repositories.instagramQueue.enqueue(await toInstagramQueueLeads(assigned));
+      await repositories.preSend.moveToQueue(assigned.map((lead) => lead.id));
+      result.fromPreSend = assigned.length;
+      result.queued += assigned.length;
+    }
+  }
+
+  capacity = await queueCapacity('Instagram', capacity.dayId, capacity.profile);
+  if (capacity.available > 0) {
+    const allPreSend = await listAllLeads();
+    const activePreSendSourceIds = new Set(allPreSend
+      .filter((lead) => isActivePreSendStatus(lead.status))
+      .map((lead) => lead.sourceImportId)
+      .filter((id): id is string => Boolean(id)));
+    const imports = sortByLeadScore((await repositories.import.list({ status: 'approved' }))
+      .filter(isInstagramImport)
+      .filter((lead) => isValidInstagram(lead.instagram_url ?? lead.instagram))
+      .filter((lead) => !activePreSendSourceIds.has(lead.id)));
+    const selectedImports = imports.slice(0, capacity.available);
+    const waitingImports = imports.slice(selectedImports.length);
+    result.waitingImport = waitingImports.length;
+
+    if (selectedImports.length) {
+      const queueInputs = await Promise.all(selectedImports.map((lead) => directInstagramQueueInput(lead, capacity.profile, capacity.dayId)));
+      await repositories.instagramQueue.enqueue(queueInputs);
+      await markImportsQueued(selectedImports);
+      result.fromImport = selectedImports.length;
+      result.queued += selectedImports.length;
+    }
+  }
+
+  if (result.queued) {
+    eventBus.emit('instagram-queue:changed', { action: 'update' });
+    eventBus.emit('pre-send:changed', { action: 'update' });
+  }
+  return result;
 }
 
 export const preSendService = {
@@ -964,7 +1107,7 @@ export const preSendService = {
     await rolloverPreSendAfterCutoff();
     if (!filters?.whatsappDayId && !filters?.instagramDayId) return repositories.preSend.summary();
 
-    const [leads, events, queueAllocations] = await Promise.all([listAllLeads(), repositories.events.list(1000), queueAllocationsByDate()]);
+    const [leads, queueAllocations] = await Promise.all([listAllLeads(), queueAllocationsByDate()]);
     const whatsappDayId = filters.whatsappDayId;
     const instagramDayId = filters.instagramDayId;
     const dateId = whatsappDayId ?? instagramDayId ?? '';
@@ -980,12 +1123,8 @@ export const preSendService = {
       : 0;
     const whatsappQueue = whatsappScheduledDate ? queueAllocations.counts.get(`WhatsApp:${whatsappScheduledDate}`) ?? 0 : 0;
     const whatsapp = whatsappPreSend + whatsappQueue;
-    const instagram = whatsappDayId
-      ? events.filter((event) =>
-          event.action === 'whatsapp_invalid_return_to_instagram' &&
-          String(event.metadata?.dayId ?? '') === whatsappDayId &&
-          String(event.metadata?.scheduled_date ?? '') === whatsappScheduledDate,
-        ).length
+    const instagram = instagramDayId
+      ? leads.filter((lead) => lead.dayId === instagramDayId && isInstagramReturnPendingLink(lead)).length
       : 0;
     const queued = leads.filter((lead) =>
       ((whatsappDayId && lead.channel === 'WhatsApp' && lead.dayId === whatsappDayId) ||
@@ -1033,6 +1172,23 @@ export const preSendService = {
     return created;
   },
 
+  async getQueueCapacity(input: { channel: PreSendChannel; dayId: string; profile?: string }) {
+    return queueCapacity(input.channel, input.dayId, input.profile);
+  },
+
+  async fillInstagramQueueByPriority(input: { dayId: string; profile?: string }) {
+    return fillInstagramQueueByPriority(input);
+  },
+
+  async enqueueApprovedInstagramImports() {
+    const [profile] = await loadActiveInstagramProfiles();
+    if (!profile) return { queued: 0, fromPreSend: 0, fromImport: 0, waitingPreSend: 0, waitingImport: 0, scheduledDate: toLocalDateInputValue() } satisfies InstagramQueueFillResult;
+    return fillInstagramQueueByPriority({
+      dayId: effectiveDayId('Instagram', currentDayId('Instagram')),
+      profile: profile.username,
+    });
+  },
+
   async moveApprovedImportsToQueue({
     channel,
     dayId,
@@ -1045,9 +1201,22 @@ export const preSendService = {
     queueFilter?: PreSendQueueFilter;
   }) {
     await rolloverPreSendAfterCutoff();
+
+    if (channel === 'Instagram') {
+      const filled = await fillInstagramQueueByPriority({ dayId, profile });
+      if (!filled.queued) {
+        throw new Error(filled.waitingPreSend || filled.waitingImport
+          ? 'Fila Instagram sem capacidade disponível hoje.'
+          : 'Nenhum lead Instagram pronto para entrar na fila.');
+      }
+      return filled.queued;
+    }
+
     const settings = await settingsService.getDispatchSettings();
-    const imports = await approvedImportsForPreSend(channel, queueFilter);
-    if (!imports.length) throw new Error('Nenhum lead aprovado disponivel no Inicio para este canal/filtro.');
+    const capacity = await queueCapacity('WhatsApp', dayId, profile);
+    if (capacity.available <= 0) throw new Error('Limite diário do chip atingido. Preencha novas vagas somente quando houver capacidade.');
+    const imports = (await approvedImportsForPreSend(channel, queueFilter)).slice(0, capacity.available);
+    if (!imports.length) throw new Error('Nenhum lead aprovado disponível no Início para este canal/filtro.');
     await releasePreSendLinksForImports(imports, channel);
 
     const [firstChip, firstInstagramProfile] = await Promise.all([
@@ -1056,8 +1225,8 @@ export const preSendService = {
     ]);
     const defaultWhatsAppChip = firstChip ? chipInstance(firstChip) : '';
     const defaultInstagramProfile = firstInstagramProfile?.username ?? '';
-    const targetProfile = profile || (channel === 'Instagram' ? defaultInstagramProfile : defaultWhatsAppChip);
-    if (!targetProfile) throw new Error(channel === 'WhatsApp' ? 'Nenhum chip ativo/conectado selecionado.' : 'Nenhum perfil Instagram ativo selecionado.');
+    const targetProfile = profile || defaultWhatsAppChip;
+    if (!targetProfile) throw new Error('Nenhum chip ativo/conectado selecionado.');
     const targetDayId = effectiveDayId(channel, dayId);
 
     const payload = imports
@@ -1435,6 +1604,32 @@ export const preSendService = {
     await this.validateLeads([id]);
   },
 
+  async invalidateLead(id: string, reason = 'Invalidado manualmente no Pré-Envio Instagram.') {
+    await rolloverPreSendAfterCutoff();
+    const allLeads = await listAllLeads();
+    const current = allLeads.find((lead) => lead.id === id);
+    if (!current) throw new Error('Lead não encontrado no Pré-Envio.');
+    assertTransition({ entity: 'pre-send', fromStatus: current.status, toStatus: 'invalid', action: 'invalidate' });
+    await repositories.preSend.updateLead(id, {
+      status: 'invalid',
+      queueWaitReason: reason,
+    });
+    await appendValidationAudit({
+      source: 'pre-send',
+      action: 'instagram_pending_link_invalidated',
+      channel: 'instagram',
+      leadId: current.sourceImportId ?? current.id,
+      status: 'invalid',
+      message: reason,
+      metadata: {
+        pre_send_id: current.id,
+        company_name: current.company,
+        instagram_url: current.instagram_url ?? current.instagram,
+      },
+    });
+    eventBus.emit('pre-send:changed', { action: 'update' });
+  },
+
   async archiveLead(id: string) {
     await rolloverPreSendAfterCutoff();
     const allLeads = await listAllLeads();
@@ -1449,13 +1644,38 @@ export const preSendService = {
     const allLeads = await listAllLeads();
     const current = allLeads.find((lead) => lead.id === id);
     let nextInput = { ...input };
+    let shouldAutoQueueInstagram = false;
 
     if (current) {
       assertTransition({ entity: 'pre-send', fromStatus: current.status, action: 'edit' });
       assertStatusPatch(current, input);
     }
 
-    if (current && Object.prototype.hasOwnProperty.call(input, 'send_instagram')) {
+    if (current && isInstagramReturnPendingLink(current)) {
+      const instagramUrl = input.instagram_url ?? input.instagram ?? current.instagram_url ?? current.instagram ?? '';
+      if (!isValidInstagram(instagramUrl)) {
+        throw new Error('Informe o link ou usuário completo do Instagram. Não use somente o domínio instagram.com.');
+      }
+      assertTransition({ entity: 'pre-send', fromStatus: current.status, toStatus: 'approved', action: 'approve' });
+      const readyAt = new Date().toISOString();
+      nextInput = {
+        ...nextInput,
+        channel: 'Instagram',
+        destination: 'Instagram',
+        destination_override: 'Instagram',
+        send_instagram: true,
+        instagram: instagramUrl,
+        instagram_url: instagramUrl,
+        instagram_override_reason: 'whatsapp_invalid',
+        instagramPendingLink: false,
+        instagramReadyAt: readyAt,
+        queueWaitReason: '',
+        status: 'approved',
+        profile: current.profile,
+        dayId: effectiveDayId('Instagram', current.dayId),
+      };
+      shouldAutoQueueInstagram = true;
+    } else if (current && Object.prototype.hasOwnProperty.call(input, 'send_instagram')) {
       assertTransition({ entity: 'pre-send', fromStatus: current.status, action: 'instagram_override' });
       const settings = await settingsService.getDispatchSettings();
       const wasInstagram = Boolean(current.send_instagram);
@@ -1521,5 +1741,15 @@ export const preSendService = {
 
     await repositories.preSend.updateLead(id, nextInput);
     eventBus.emit('pre-send:changed', { action: 'update' });
+
+    if (shouldAutoQueueInstagram) {
+      const filled = await fillInstagramQueueByPriority({
+        dayId: String(nextInput.dayId ?? current?.dayId ?? currentDayId('Instagram')),
+        profile: String(nextInput.profile ?? current?.profile ?? ''),
+      });
+      return filled;
+    }
+
+    return undefined;
   },
 };

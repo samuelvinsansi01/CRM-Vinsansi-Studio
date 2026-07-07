@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { eventBus } from '../lib/events';
 import { preSendService } from '../services/pre-send/preSend.service';
-import type { PreSendChannel, PreSendDayCard, PreSendLead, PreSendQueueFilter, PreSendSummary } from '../services/pre-send/types';
+import type { PreSendCapacity, PreSendChannel, PreSendDayCard, PreSendLead, PreSendQueueFilter, PreSendSummary } from '../services/pre-send/types';
 
 const emptySummary: PreSendSummary = {
   whatsapp: 0,
@@ -128,6 +128,14 @@ export function usePreSend() {
     [refresh],
   );
 
+  const invalidateLead = useCallback(
+    async (id: string) => {
+      await preSendService.invalidateLead(id);
+      refresh();
+    },
+    [refresh],
+  );
+
   const archiveLead = useCallback(
     async (id: string) => {
       await preSendService.archiveLead(id);
@@ -147,8 +155,9 @@ export function usePreSend() {
 
   const updateLead = useCallback(
     async (id: string, input: Partial<PreSendLead>) => {
-      await preSendService.updateLead(id, input);
+      const result = await preSendService.updateLead(id, input);
       refresh();
+      return result;
     },
     [refresh],
   );
@@ -168,6 +177,7 @@ export function usePreSend() {
     validateLead,
     validateLeads,
     revalidateApprovedLeads,
+    invalidateLead,
     archiveLead,
     markAlreadySent,
     updateLead,
@@ -179,6 +189,7 @@ export function usePreSendQueue(channel: PreSendChannel, dayId: string, profile:
   const [leads, setLeads] = useState<PreSendLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [capacity, setCapacity] = useState<PreSendCapacity | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -190,18 +201,23 @@ export function usePreSendQueue(channel: PreSendChannel, dayId: string, profile:
       try {
         const nextProfiles = await preSendService.listProfiles(channel);
         const safeProfile = profile || nextProfiles[0] || '';
-        const nextLeads = channel === 'WhatsApp' && !safeProfile
-          ? []
-          : await preSendService.listLeads({ channel, dayId, profile: safeProfile, queueFilter });
+        const [nextLeads, nextCapacity] = await Promise.all([
+          channel === 'WhatsApp' && !safeProfile
+            ? Promise.resolve([])
+            : preSendService.listLeads({ channel, dayId, profile: safeProfile, queueFilter }),
+          preSendService.getQueueCapacity({ channel, dayId, profile: safeProfile }),
+        ]);
 
         if (!active) return;
         setProfiles(nextProfiles);
         setLeads(nextLeads);
+        setCapacity(nextCapacity);
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar fila de pre-envio.');
         setProfiles([]);
         setLeads([]);
+        setCapacity(null);
       } finally {
         if (active) setLoading(false);
       }
@@ -214,5 +230,5 @@ export function usePreSendQueue(channel: PreSendChannel, dayId: string, profile:
     };
   }, [channel, dayId, profile, queueFilter, refreshToken]);
 
-  return { profiles, leads, loading, error };
+  return { profiles, leads, loading, error, capacity };
 }

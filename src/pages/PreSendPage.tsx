@@ -21,7 +21,7 @@ import { usePreSend, usePreSendQueue } from '../hooks/usePreSend';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
 import { permissionsFor } from '../services/permissions';
 import { preSendService } from '../services/pre-send/preSend.service';
-import type { PreSendChannel, PreSendDayCard, PreSendLead, PreSendQueueFilter, PreSendSummary, PreSendValidationSummary } from '../services/pre-send/types';
+import type { InstagramQueueFillResult, PreSendChannel, PreSendDayCard, PreSendLead, PreSendQueueFilter, PreSendSummary, PreSendValidationSummary } from '../services/pre-send/types';
 import { normalizeStatusGroup, statusLabel, statusTone } from '../services/status/status.mapper';
 
 type PreSendForm = {
@@ -119,6 +119,7 @@ function ValidationQueue({
   validateLead,
   validateLeads,
   revalidateApprovedLeads,
+  invalidateLead,
   archiveLead,
   markAlreadySent,
   updateLead,
@@ -133,9 +134,10 @@ function ValidationQueue({
   validateLead: (id: string) => Promise<void>;
   validateLeads: (ids: string[]) => Promise<PreSendValidationSummary>;
   revalidateApprovedLeads: (ids: string[]) => Promise<PreSendValidationSummary>;
+  invalidateLead: (id: string) => Promise<void>;
   archiveLead: (id: string) => Promise<void>;
   markAlreadySent: (ids: string[], reason?: string) => Promise<number>;
-  updateLead: (id: string, input: Partial<PreSendLead>) => Promise<void>;
+  updateLead: (id: string, input: Partial<PreSendLead>) => Promise<InstagramQueueFillResult | undefined>;
   onScopeChange?: (scope: { profile: string; queueFilter: PreSendQueueFilter }) => void;
 }) {
   const [activeProfile, setActiveProfile] = useState('');
@@ -154,7 +156,7 @@ function ValidationQueue({
   const [sentTarget, setSentTarget] = useState<PreSendLead | null>(null);
   const [sentReason, setSentReason] = useState(defaultManualSentReason);
 
-  const { profiles, leads, loading, error } = usePreSendQueue(channel, activeDayId, activeProfile, queueFilter, refreshToken);
+  const { profiles, leads, loading, error, capacity } = usePreSendQueue(channel, activeDayId, activeProfile, queueFilter, refreshToken);
 
   useEffect(() => {
     if (!profiles.length) return;
@@ -227,7 +229,7 @@ function ValidationQueue({
         return;
       }
 
-      await updateLead(editingLead.id, {
+      const queueResult = await updateLead(editingLead.id, {
         company: leadForm.company,
         branch: leadForm.branch,
         destination: (sendInstagram ? 'Instagram' : leadForm.destination) as PreSendLead['destination'],
@@ -247,7 +249,14 @@ function ValidationQueue({
       setLeadForm(null);
       setDrawerMode('view');
       refreshQueue();
-      onToast({ title: 'Lead atualizado', description: 'Pré-envio atualizado localmente.', tone: 'success' });
+      if (queueResult) {
+        const details = queueResult.queued
+          ? `${queueResult.queued} lead(s) enviado(s) para a fila Instagram.${queueResult.waitingPreSend ? ` ${queueResult.waitingPreSend} aguardando capacidade.` : ''}`
+          : 'Link salvo. O lead permanece no Pré-Envio aguardando capacidade do perfil Instagram.';
+        onToast({ title: queueResult.queued ? 'Fila Instagram atualizada' : 'Instagram confirmado', description: details, tone: queueResult.queued ? 'success' : 'warning' });
+      } else {
+        onToast({ title: 'Lead atualizado', description: 'Pré-envio atualizado localmente.', tone: 'success' });
+      }
     } catch (err) {
       onToast({ title: 'Não foi possível salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
@@ -261,6 +270,17 @@ function ValidationQueue({
 
     if (action === 'view' || action === 'edit') {
       openLeadDrawer(lead, action === 'edit' ? 'edit' : 'view');
+      return;
+    }
+
+    if (action === 'invalidate') {
+      try {
+        await invalidateLead(lead.id);
+        refreshQueue();
+        onToast({ title: 'Lead invalidado', description: 'O lead foi retirado do fluxo ativo do Instagram.', tone: 'warning' });
+      } catch (err) {
+        onToast({ title: 'Não foi possível invalidar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      }
       return;
     }
 
@@ -357,7 +377,7 @@ function ValidationQueue({
       refreshQueue();
       onToast({
         title: 'Leads validados',
-        description: `${result.approved} aprovado(s)${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.returned ? `, ${result.returned} retorno(s) para Instagram` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}.`,
+        description: `${result.approved} aprovado(s)${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.returned ? `, ${result.returned} movido(s) para Instagram pendente de link` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}.`,
         tone: result.errors ? 'warning' : 'success',
       });
     } catch (err) {
@@ -400,10 +420,11 @@ function ValidationQueue({
         {title ? <h3>{title}</h3> : null}
         {channel === 'WhatsApp' ? <SelectField options={queueFilterOptions} value={queueFilter} placeholder="Destino" onChange={(value) => setQueueFilter(value as PreSendQueueFilter)} /> : null}
         <SelectField options={profiles.length ? profiles : [emptyProfileLabel]} value={activeProfile || profiles[0] || emptyProfileLabel} placeholder={channel === 'WhatsApp' ? 'Chip' : 'Perfil'} onChange={setActiveProfile} />
-        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={fillSaving} disabled={!hasOperationalProfile || initialValidationSaving || revalidationSaving} onClick={fillQueue}>Preencher fila</Button>
+        <Button variant="secondary" iconLeft={TableProperties} size="sm" loading={fillSaving} disabled={!hasOperationalProfile || !capacity || capacity.available <= 0 || initialValidationSaving || revalidationSaving} onClick={fillQueue}>Preencher fila</Button>
         {channel === 'WhatsApp' ? <Button variant="secondary" iconLeft={RefreshCcw} size="sm" loading={revalidationSaving} disabled={fillSaving || initialValidationSaving || (selectedRows.length ? !canRevalidateSelection : !approvedIds.length)} onClick={revalidateSelected}>Revalidar aprovados</Button> : null}
         {channel === 'WhatsApp' ? <Button size="sm" loading={initialValidationSaving} disabled={fillSaving || revalidationSaving || (selectedRows.length ? !canApproveSelection : !approvableIds.length)} onClick={validateSelected}>Validar leads</Button> : null}
       </div>
+      {capacity ? <div className="table-message">Capacidade {channel === 'WhatsApp' ? 'do chip' : 'do perfil'}: {capacity.used}/{capacity.limit} • {capacity.available} vaga(s) disponível(is).</div> : null}
       {selectedLeads.length && !canApproveSelection && !canRevalidateSelection ? (
         <div className="lead-bulk-actions"><span>{selectedLeads.length} selecionado(s)</span><small>Nenhuma acao disponivel para a selecao atual.</small></div>
       ) : null}
@@ -417,11 +438,18 @@ function ValidationQueue({
           onSelectedRowsChange={setSelectedRows}
           columns={columns}
           rows={tableRows}
-          actions={['view', 'approve', 'archive']}
+          actions={channel === 'Instagram' ? ['view', 'invalidate', 'archive'] : ['view', 'approve', 'archive']}
           getRowActions={(row) => {
             const lead = findLead(row);
             if (!lead) return [];
             const permissions = permissionsFor('pre-send', lead.status);
+            if (channel === 'Instagram') {
+              return [
+                'view',
+                ...(permissions.canInvalidate() ? ['invalidate' as TableAction] : []),
+                ...(permissions.canArchive() ? ['archive' as TableAction] : []),
+              ];
+            }
             return [
               'view',
               ...(permissions.canApprove() ? ['approve' as TableAction] : []),
@@ -440,7 +468,7 @@ function ValidationQueue({
       <Drawer
         open={Boolean(editingLead && leadForm)}
         title={drawerMode === 'edit' ? 'Editar lead' : 'Detalhes do lead'}
-        description="Edição local do pré-envio."
+        description={channel === 'Instagram' ? 'Ao salvar um Instagram válido, o sistema tenta inserir o lead automaticamente na fila conforme a capacidade.' : 'Edição local do pré-envio.'}
         onClose={() => {
           setEditingLead(null);
           setLeadForm(null);
@@ -518,7 +546,7 @@ export function PreSendPage() {
   const [instagramScope, setInstagramScope] = useState<{ profile: string; queueFilter: PreSendQueueFilter }>({ profile: '', queueFilter: 'Geral' });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [summaryRefreshToken, setSummaryRefreshToken] = useState(0);
-  const { dayCards, summary, loading, error, defaultDayId, refresh, moveDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, validateLeads, revalidateApprovedLeads, archiveLead, markAlreadySent, updateLead } = usePreSend();
+  const { dayCards, summary, loading, error, defaultDayId, refresh, moveDayToQueue, moveApprovedImportsToQueue, returnDayToImport, validateLead, validateLeads, revalidateApprovedLeads, invalidateLead, archiveLead, markAlreadySent, updateLead } = usePreSend();
   const [daySummary, setDaySummary] = useState<PreSendSummary>(summary);
 
   useEffect(() => {
@@ -634,6 +662,7 @@ export function PreSendPage() {
             validateLead={validateLead}
             validateLeads={validateLeads}
             revalidateApprovedLeads={revalidateApprovedLeads}
+            invalidateLead={invalidateLead}
             archiveLead={archiveLead}
             markAlreadySent={markAlreadySent}
             updateLead={updateLead}
@@ -651,6 +680,7 @@ export function PreSendPage() {
             validateLead={validateLead}
             validateLeads={validateLeads}
             revalidateApprovedLeads={revalidateApprovedLeads}
+            invalidateLead={invalidateLead}
             archiveLead={archiveLead}
             markAlreadySent={markAlreadySent}
             updateLead={updateLead}

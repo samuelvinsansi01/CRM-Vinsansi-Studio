@@ -404,7 +404,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           />
           <div className="import-json__actions">
             <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
-            <Button variant="secondary" disabled={summary.approved === 0} onClick={sendToPreSend}>Enviar aprovados ao Pré-Envio</Button>
+            <Button variant="secondary" disabled={summary.approved === 0} onClick={sendToPreSend}>Enviar WhatsApp ao Pré-Envio</Button>
             <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={handleImport}>{simulateImport ? 'Simular regras' : 'Importar'}</Button>
           </div>
           {lastImport ? (

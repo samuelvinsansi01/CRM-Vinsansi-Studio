@@ -41,9 +41,34 @@ export type PreSendLead = {
   validationError?: string;
   validationAttempts?: number;
   lastValidatedAt?: string;
+  /** Lead retornado do WhatsApp inválido que ainda exige confirmação manual do perfil Instagram. */
+  instagramPendingLink?: boolean;
+  /** Momento em que o perfil Instagram foi confirmado no drawer. */
+  instagramReadyAt?: string;
+  /** Motivo operacional exibido quando o lead pronto não pôde entrar na fila. */
+  queueWaitReason?: string;
 };
 
 export type CreatePreSendLeadInput = Omit<PreSendLead, 'id'>;
+
+export type PreSendCapacity = {
+  channel: PreSendChannel;
+  dayId: string;
+  scheduledDate: string;
+  profile: string;
+  limit: number;
+  used: number;
+  available: number;
+};
+
+export type InstagramQueueFillResult = {
+  queued: number;
+  fromPreSend: number;
+  fromImport: number;
+  waitingPreSend: number;
+  waitingImport: number;
+  scheduledDate: string;
+};
 
 export type PreSendSummary = {
   whatsapp: number;

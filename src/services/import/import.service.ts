@@ -171,6 +171,16 @@ function importLeadToBaseInput(lead: ImportLead, sentAt: string, reason: string)
   };
 }
 
+async function routeApprovedInstagramToQueue(leads: ImportLead[]) {
+  const eligible = leads.filter((lead) =>
+    isStatusGroup(lead.status, 'approved') &&
+    (lead.send_instagram || (lead.destination ?? lead.destino) === 'Instagram') &&
+    isValidInstagram(lead.instagram_url ?? lead.instagram),
+  );
+  if (!eligible.length) return;
+  await preSendService.enqueueApprovedInstagramImports();
+}
+
 async function bulkUpdate(ids: string[], action: BulkImportAction) {
   if (!ids.length) throw new Error('Selecione pelo menos um lead.');
   const uniqueIds = Array.from(new Set(ids));
@@ -191,6 +201,7 @@ async function bulkUpdate(ids: string[], action: BulkImportAction) {
   });
 
   const updated = await Promise.all(selectedLeads.map((lead) => repositories.import.update(lead.id, target.input)));
+  if (action === 'approve') await routeApprovedInstagramToQueue(updated);
   eventBus.emit('import:changed', { source: 'update' });
   return updated;
 }
@@ -247,6 +258,7 @@ export const importService = {
 
   async create(input: ImportLeadInput) {
     const lead = await repositories.import.create(input);
+    await routeApprovedInstagramToQueue([lead]);
     eventBus.emit('import:changed', { source: 'manual' });
     return lead;
   },
@@ -279,6 +291,7 @@ export const importService = {
       }
     }
     const lead = await repositories.import.update(id, input);
+    await routeApprovedInstagramToQueue([lead]);
     eventBus.emit('import:changed', { source: 'update' });
     return lead;
   },
@@ -292,12 +305,13 @@ export const importService = {
     const current = (await repositories.import.list({ status: status === 'approved' ? 'rejected' : 'approved' })).find((lead) => lead.id === id);
     if (current) assertTransition({ entity: 'import', fromStatus: current.status, toStatus: status, action: status === 'approved' ? 'approve' : 'reject' });
     const lead = await repositories.import.move(id, status);
+    if (status === 'approved') await routeApprovedInstagramToQueue([lead]);
     eventBus.emit('import:changed', { source: 'move' });
     return lead;
   },
 
   async sendToPreSend(leads: ImportLead[]) {
-    const approved = leads.filter((lead) => isStatusGroup(lead.status, 'approved'));
+    const approved = leads.filter((lead) => isStatusGroup(lead.status, 'approved') && !(lead.send_instagram || (lead.destination ?? lead.destino) === 'Instagram'));
     const created = await preSendService.addFromImport(approved);
     eventBus.emit('import:changed', { source: 'move' });
     return created;
