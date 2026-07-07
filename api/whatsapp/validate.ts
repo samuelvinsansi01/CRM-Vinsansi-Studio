@@ -43,13 +43,20 @@ function phoneDigits(lead: ValidationLead) {
   return String(lead.normalized_phone || lead.phone || '').replace(/\D/g, '');
 }
 
+function isProductionRuntime() {
+  return env('VERCEL_ENV').toLowerCase() === 'production' || env('NODE_ENV').toLowerCase() === 'production';
+}
+
 function evolutionConfig() {
+  const dryRunRequested = env('DRY_RUN').toLowerCase() === 'true';
   return {
     baseUrl: env('EVOLUTION_API_URL').replace(/\/$/, ''),
     apiKey: env('EVOLUTION_API_KEY'),
     validationDelayMs: Number(env('EVOLUTION_VALIDATION_DELAY_MS') || 0),
     validationBatchSize: Math.max(1, Number(env('EVOLUTION_VALIDATION_BATCH_SIZE') || 50)),
-    dryRun: env('DRY_RUN').toLowerCase() === 'true',
+    dryRunRequested,
+    production: isProductionRuntime(),
+    dryRun: dryRunRequested && !isProductionRuntime(),
   };
 }
 
@@ -118,24 +125,36 @@ function parseValidation(lead: ValidationLead, payload: unknown, index = 0): Val
   const existsBool = booleanLike(exists);
   const jid = String(item.jid ?? item.id ?? item._serialized ?? item.remoteJid ?? '');
   const status = String(item.status ?? item.result ?? '').toLowerCase();
-  const valid = existsBool === true || jid.includes('@s.whatsapp.net') || ['valid', 'exists', 'ok'].includes(status);
-  const invalid = existsBool === false || ['invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
+  const hasWhatsAppJid = jid.includes('@s.whatsapp.net');
+  const validStatus = ['valid', 'exists'].includes(status);
+  const invalidStatus = ['invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
 
-  if (!valid && !invalid) {
+  // A negativa explícita da Evolution sempre prevalece. "ok" pode representar
+  // somente que a requisição foi processada e não é prova de que há WhatsApp.
+  if (existsBool === false || invalidStatus) {
     return {
       leadId: leadId(lead),
       lead_id: lead.lead_id,
-      status: 'error',
+      status: 'invalid',
       valid: false,
-      errorMessage: 'Evolution retornou resposta sem campo exists/valid reconhecido.',
+    };
+  }
+
+  if (existsBool === true || hasWhatsAppJid || validStatus) {
+    return {
+      leadId: leadId(lead),
+      lead_id: lead.lead_id,
+      status: 'valid',
+      valid: true,
     };
   }
 
   return {
     leadId: leadId(lead),
     lead_id: lead.lead_id,
-    status: valid ? 'valid' : 'invalid',
-    valid,
+    status: 'error',
+    valid: false,
+    errorMessage: 'Evolution retornou resposta sem confirmação explícita de WhatsApp.',
   };
 }
 
@@ -162,10 +181,15 @@ function chunk<T>(items: T[], size: number) {
 async function validateLeadBatch(instance: string, leads: ValidationLead[]): Promise<ValidationResult[]> {
   const config = evolutionConfig();
   if (!config.baseUrl || !config.apiKey) throw new Error('EVOLUTION_API_URL/EVOLUTION_API_KEY ausentes no backend.');
+  if (config.dryRunRequested && config.production) {
+    throw new Error('DRY_RUN=true está bloqueado em Production. Defina DRY_RUN=false para validar pela Evolution.');
+  }
   if (config.dryRun) {
+    console.warn(JSON.stringify({ event: 'whatsapp_validation_dry_run', instance, total: leads.length }));
     return leads.map((lead) => ({ leadId: leadId(lead), lead_id: lead.lead_id, status: 'valid', valid: true }));
   }
 
+  console.info(JSON.stringify({ event: 'whatsapp_validation_evolution', instance, total: leads.length }));
   const payload = await requestEvolution(`/chat/whatsappNumbers/${encodeURIComponent(instance)}`, {
     method: 'POST',
     body: JSON.stringify({ numbers: leads.map(phoneDigits) }),
@@ -250,6 +274,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const results = await validateLeads(leads);
+  const summary = results.reduce((acc, result) => {
+    acc[result.status] += 1;
+    return acc;
+  }, { valid: 0, invalid: 0, error: 0 });
+  console.info(JSON.stringify({ event: 'whatsapp_validation_complete', total: leads.length, ...summary }));
 
-  res.status(200).json({ results });
+  res.status(200).json({
+    results,
+    meta: {
+      provider: evolutionConfig().dryRun ? 'dry_run' : 'evolution',
+      simulated: evolutionConfig().dryRun,
+    },
+  });
 }
