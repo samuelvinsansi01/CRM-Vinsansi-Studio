@@ -34,10 +34,16 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
 
+  // A tela só consulta automaticamente enquanto existe um lote realmente em execução.
+  // Quando o Worker conclui todos os itens, o status muda para completed e o timer
+  // é removido; assim a interface não continua exibindo atualização sem necessidade.
+  const shouldPoll = batchState.enabled && batchState.status === 'running';
+
   useEffect(() => {
+    if (!shouldPoll) return;
     const timer = window.setInterval(refresh, 8_000);
     return () => window.clearInterval(timer);
-  }, [refresh]);
+  }, [refresh, shouldPoll]);
 
   useEffect(() => {
     let active = true;

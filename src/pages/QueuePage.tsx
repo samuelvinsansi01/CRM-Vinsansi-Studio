@@ -220,17 +220,19 @@ function WhatsAppQueuePage() {
           <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || starting || running} onClick={handleReprocess}>Reprocessar</Button>
           <Button iconLeft={Play} disabled={loading || starting || running || batchState.status === 'paused'} onClick={handleStart}>{starting ? 'Iniciando...' : running ? 'Em execução' : 'Iniciar lote'}</Button>
         </div>
-        {(running || batchState.status === 'paused') && (
-          <small className="queue-batch-status">
-            {batchState.status === 'paused' ? 'Lote pausado' : `Lote em execução • ${batchState.remaining} restante(s)`}
-            {batchState.next_run_at ? ` • próximo: ${new Date(batchState.next_run_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
-          </small>
-        )}
       </div>
 
       <section className="queue-list-card">
-        <h2>Listagem de disparos{activeChip || chips[0] ? ` - ${activeChip || chips[0]}` : ''}</h2>
-        {refreshing && batches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
+        <div className="queue-list-card__header">
+          <h2>Listagem de disparos{activeChip || chips[0] ? ` - ${activeChip || chips[0]}` : ''}</h2>
+          {(running || batchState.status === 'paused') && (
+            <small className="queue-batch-status" role="status">
+              {batchState.status === 'paused' ? 'Lote pausado' : `Lote em execução • ${batchState.remaining} restante(s)`}
+              {batchState.next_run_at ? ` • próximo: ${new Date(batchState.next_run_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+            </small>
+          )}
+        </div>
+        {refreshing && running && batches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
         {error ? <div className="table-message">{error}</div> : null}
         {!error && loading && !batches.length ? <div className="table-message">Carregando fila WhatsApp...</div> : null}
         {!error && !loading && !refreshing && !batches.length ? <div className="table-message">Nenhum lote WhatsApp disponivel.</div> : null}
