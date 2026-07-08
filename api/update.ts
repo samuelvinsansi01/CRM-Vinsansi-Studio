@@ -458,6 +458,43 @@ function uniqueId(prefix: string, source: string) {
   return `${prefix}-${safe}`;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function stableUuid(seed: string) {
+  // Gera um UUID determinístico sem dependência externa. Ele só é usado para
+  // compatibilidade com filas legadas cujo id não seja UUID; novas filas já
+  // chegam com UUID e mantêm o próprio id em todas as persistências.
+  let h1 = 0xdeadbeef ^ seed.length;
+  let h2 = 0x41c6ce57 ^ seed.length;
+  let h3 = 0xc0decafe ^ seed.length;
+  let h4 = 0x9e3779b9 ^ seed.length;
+
+  for (let index = 0; index < seed.length; index += 1) {
+    const code = seed.charCodeAt(index);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+    h3 = Math.imul(h3 ^ code, 974711);
+    h4 = Math.imul(h4 ^ code, 2246822519);
+  }
+
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h3 ^ (h3 >>> 13), 3266489909);
+  h3 = Math.imul(h3 ^ (h3 >>> 16), 2246822507) ^ Math.imul(h4 ^ (h4 >>> 13), 3266489909);
+  h4 = Math.imul(h4 ^ (h4 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+
+  const hex = [h1, h2, h3, h4]
+    .map((value) => (value >>> 0).toString(16).padStart(8, '0'))
+    .join('');
+  const versioned = `${hex.slice(0, 12)}5${hex.slice(13, 16)}${((Number.parseInt(hex.charAt(16), 16) & 0x3) | 0x8).toString(16)}${hex.slice(17)}`;
+  return `${versioned.slice(0, 8)}-${versioned.slice(8, 12)}-${versioned.slice(12, 16)}-${versioned.slice(16, 20)}-${versioned.slice(20, 32)}`;
+}
+
+function persistenceUuid(queueItemId: unknown) {
+  const value = text(queueItemId);
+  if (UUID_PATTERN.test(value)) return value.toLowerCase();
+  return stableUuid(`instagram-queue:${value || 'missing'}`);
+}
+
 function normalizeInstagram(value: unknown) {
   return cleanInstagramUsername(value);
 }
@@ -467,8 +504,12 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
   const sourceLeadId = item.lead_id || item.source_pre_send_id || item.id;
   const normalizedPhone = safePhone(item.phone);
   const normalizedInstagram = normalizeInstagram(item.instagram_url || item.instagram_username);
-  const baseId = uniqueId('base-instagram', item.id);
-  const sentContactId = uniqueId('sent-instagram', item.id);
+  // A instalação atual usa UUID nas tabelas de histórico. Usar o próprio
+  // UUID do item da fila mantém a operação idempotente: uma confirmação repetida
+  // apenas completa o mesmo registro, sem criar duplicatas nem quebrar a fila.
+  const persistenceId = persistenceUuid(item.id);
+  const baseId = persistenceId;
+  const sentContactId = persistenceId;
   const history = [{
     id: uniqueId('history', `${item.id}-${timestamp}`),
     date: timestamp.slice(0, 10),
@@ -593,7 +634,7 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
   }
 
   const { error: eventError } = await client.from(eventsTableName()).insert({
-    id: uniqueId('event-instagram', `${item.id}-${timestamp}`),
+    id: persistenceId,
     user_id: userId,
     source: 'instagram-extension',
     action: 'sent_confirmed',
