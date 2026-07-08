@@ -499,25 +499,108 @@ function normalizeInstagram(value: unknown) {
   return cleanInstagramUsername(value);
 }
 
+function rowData(row: unknown) {
+  return dataRecord((row && typeof row === 'object' ? row : {}) as QueueRow);
+}
+
+function rowHistory(row: unknown) {
+  const history = rowData(row).history;
+  return Array.isArray(history) ? history.filter((entry) => entry && typeof entry === 'object') : [];
+}
+
+async function findBaseIdentity(
+  client: ReturnType<typeof supabase>,
+  userId: string | null,
+  normalizedPhone: string,
+  normalizedInstagram: string,
+) {
+  if (!userId) return null;
+
+  if (normalizedPhone) {
+    const { data, error } = await client
+      .from(baseTableName())
+      .select('id,data')
+      .eq('user_id', userId)
+      .eq('normalized_phone', normalizedPhone)
+      .limit(1);
+    if (error) throw new Error(`Falha ao localizar Base Permanente existente: ${error.message}`);
+    if (data?.[0]?.id) return data[0] as QueueRow;
+  }
+
+  // Alguns registros legados não possuem telefone normalizado. O Instagram é
+  // usado apenas como segunda chave para evitar duplicar o mesmo contato.
+  if (normalizedInstagram) {
+    const { data, error } = await client
+      .from(baseTableName())
+      .select('id,data')
+      .eq('user_id', userId)
+      .eq('instagram_username', normalizedInstagram)
+      .limit(1);
+    if (error) throw new Error(`Falha ao localizar Base Permanente existente: ${error.message}`);
+    if (data?.[0]?.id) return data[0] as QueueRow;
+  }
+
+  return null;
+}
+
+async function findSentContactIdentity(
+  client: ReturnType<typeof supabase>,
+  userId: string | null,
+  normalizedPhone: string,
+  normalizedInstagram: string,
+) {
+  if (!userId) return null;
+
+  if (normalizedPhone) {
+    const { data, error } = await client
+      .from(sentContactsTableName())
+      .select('id,data')
+      .eq('user_id', userId)
+      .eq('normalized_phone', normalizedPhone)
+      .limit(1);
+    if (error) throw new Error(`Falha ao localizar contato enviado existente: ${error.message}`);
+    if (data?.[0]?.id) return data[0] as QueueRow;
+  }
+
+  if (normalizedInstagram) {
+    const { data, error } = await client
+      .from(sentContactsTableName())
+      .select('id,data')
+      .eq('user_id', userId)
+      .eq('instagram_username', normalizedInstagram)
+      .limit(1);
+    if (error) throw new Error(`Falha ao localizar contato enviado existente: ${error.message}`);
+    if (data?.[0]?.id) return data[0] as QueueRow;
+  }
+
+  return null;
+}
+
 async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: ReturnType<typeof itemFromRow>, timestamp: string) {
   const userId = item.user_id || null;
   const sourceLeadId = item.lead_id || item.source_pre_send_id || item.id;
   const normalizedPhone = safePhone(item.phone);
   const normalizedInstagram = normalizeInstagram(item.instagram_url || item.instagram_username);
-  // A instalação atual usa UUID nas tabelas de histórico. Usar o próprio
-  // UUID do item da fila mantém a operação idempotente: uma confirmação repetida
-  // apenas completa o mesmo registro, sem criar duplicatas nem quebrar a fila.
+  // O UUID da fila continua sendo a identidade de auditoria. Para a Base e
+  // sent_contacts, porém, a instalação atual impõe unicidade por usuário +
+  // telefone. Assim, um novo envio ao mesmo telefone atualiza o registro já
+  // existente sem interromper a confirmação da extensão.
   const persistenceId = persistenceUuid(item.id);
-  const baseId = persistenceId;
-  const sentContactId = persistenceId;
-  const history = [{
+  const existingBase = await findBaseIdentity(client, userId, normalizedPhone, normalizedInstagram);
+  const existingContact = await findSentContactIdentity(client, userId, normalizedPhone, normalizedInstagram);
+  const baseId = text(existingBase?.id) || persistenceId;
+  const sentContactId = text(existingContact?.id) || persistenceId;
+  const historyEntry = {
     id: uniqueId('history', `${item.id}-${timestamp}`),
     date: timestamp.slice(0, 10),
-    title: 'Lead enviado pelo Instagram',
-    description: 'Confirmado pela extensao/worker Instagram.',
-  }];
+    title: existingBase ? 'Lead reenviado pelo Instagram' : 'Lead enviado pelo Instagram',
+    description: existingBase
+      ? 'Confirmação pela extensão/worker Instagram atualizou o contato já existente na Base Permanente.'
+      : 'Confirmado pela extensao/worker Instagram.',
+  };
 
   const baseData = {
+    ...rowData(existingBase),
     id: baseId,
     sourceLeadId,
     company: item.company_name,
@@ -540,10 +623,10 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
     template: [item.message_1, item.message_2].filter(Boolean).join('\n\n'),
     chipOrProfile: item.profile_username,
     notes: item.instagram_url,
-    history,
+    history: [historyEntry, ...rowHistory(existingBase)],
   };
 
-  const { error: baseError } = await client.from(baseTableName()).upsert({
+  const basePayload = {
     id: baseId,
     user_id: userId,
     company_name: item.company_name || null,
@@ -565,11 +648,15 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
     channel: 'instagram',
     data: baseData,
     updated_at: timestamp,
-    created_at: timestamp,
-  }, { onConflict: 'id' });
-  if (baseError) throw new Error(`Falha ao persistir Base Permanente: ${baseError.message}`);
+  };
+
+  const baseWrite = existingBase
+    ? await client.from(baseTableName()).update(basePayload).eq('id', baseId)
+    : await client.from(baseTableName()).insert({ ...basePayload, created_at: timestamp });
+  if (baseWrite.error) throw new Error(`Falha ao persistir Base Permanente: ${baseWrite.error.message}`);
 
   const sentData = {
+    ...rowData(existingContact),
     id: sentContactId,
     sourceLeadId,
     company: item.company_name,
@@ -584,7 +671,7 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
     origin: 'Instagram',
     queueItemId: item.id,
   };
-  const { error: contactError } = await client.from(sentContactsTableName()).upsert({
+  const contactPayload = {
     id: sentContactId,
     user_id: userId,
     lead_id: sourceLeadId,
@@ -598,9 +685,11 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
     active: true,
     data: sentData,
     updated_at: timestamp,
-    created_at: timestamp,
-  }, { onConflict: 'id' });
-  if (contactError) throw new Error(`Falha ao registrar contato enviado: ${contactError.message}`);
+  };
+  const contactWrite = existingContact
+    ? await client.from(sentContactsTableName()).update(contactPayload).eq('id', sentContactId)
+    : await client.from(sentContactsTableName()).insert({ ...contactPayload, created_at: timestamp });
+  if (contactWrite.error) throw new Error(`Falha ao registrar contato enviado: ${contactWrite.error.message}`);
 
   if (item.source_pre_send_id) {
     const { data: preSendRow, error: preSendReadError } = await client.from(preSendTableName()).select('*').eq('id', item.source_pre_send_id).maybeSingle();
@@ -633,7 +722,9 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
     }
   }
 
-  const { error: eventError } = await client.from(eventsTableName()).insert({
+  // O mesmo item pode ser confirmado mais de uma vez após queda de rede. A
+  // auditoria é idempotente pelo UUID da fila e não pode interromper a execução.
+  const { error: eventError } = await client.from(eventsTableName()).upsert({
     id: persistenceId,
     user_id: userId,
     source: 'instagram-extension',
@@ -650,7 +741,7 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
     metadata: { queue_item_id: item.id, profile: item.profile_username, source: 'extension' },
     created_at: timestamp,
     updated_at: timestamp,
-  });
+  }, { onConflict: 'id' });
   if (eventError) throw new Error(`Falha ao registrar auditoria: ${eventError.message}`);
 }
 
