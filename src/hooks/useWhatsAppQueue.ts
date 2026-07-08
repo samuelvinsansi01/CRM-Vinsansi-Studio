@@ -21,6 +21,52 @@ const idleBatchState: WhatsAppBatchState = {
   remaining: 0,
 };
 
+function aggregateBatchStates(states: WhatsAppBatchState[], chips: string[]): WhatsAppBatchState {
+  const activeStates = states.filter((state) => state.status !== 'idle' || state.enabled || state.total || state.remaining);
+  if (!activeStates.length) return { ...idleBatchState, chip: '' };
+
+  const status = activeStates.some((state) => state.status === 'running')
+    ? 'running'
+    : activeStates.some((state) => state.status === 'paused')
+      ? 'paused'
+      : activeStates.some((state) => state.status === 'error')
+        ? 'error'
+        : activeStates.every((state) => state.status === 'completed')
+          ? 'completed'
+          : activeStates[0]?.status ?? 'idle';
+
+  const nextRunAt = activeStates
+    .map((state) => state.next_run_at)
+    .filter((value): value is string => Boolean(value))
+    .sort()[0];
+
+  return {
+    status,
+    enabled: status === 'running' || status === 'paused',
+    chip: '',
+    total: activeStates.reduce((sum, state) => sum + Number(state.total || 0), 0),
+    remaining: activeStates.reduce((sum, state) => sum + Number(state.remaining || 0), 0),
+    next_run_at: nextRunAt ?? '',
+    last_error: activeStates.find((state) => state.last_error)?.last_error ?? '',
+    already_running: activeStates.some((state) => state.already_running),
+    block_number: undefined,
+    sent_in_block: undefined,
+    started_at: activeStates.map((state) => state.started_at).filter(Boolean).sort()[0] ?? '',
+  };
+}
+
+async function batchStatusForScope(chip: string, chips: string[]): Promise<WhatsAppBatchState> {
+  if (chip) return whatsappQueueService.getBatchStatus(chip);
+  if (!chips.length) return idleBatchState;
+
+  const settled = await Promise.allSettled(chips.map((item) => whatsappQueueService.getBatchStatus(item)));
+  const states = settled
+    .filter((result): result is PromiseFulfilledResult<WhatsAppBatchState> => result.status === 'fulfilled')
+    .map((result) => result.value);
+
+  return aggregateBatchStates(states, chips);
+}
+
 export function useWhatsAppQueue(chip: string, scheduledDate: string) {
   const [chips, setChips] = useState<string[]>([]);
   const [batches, setBatches] = useState<WhatsAppQueueBatch[]>([]);
@@ -56,14 +102,12 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
 
       try {
         const nextChips = await whatsappQueueService.listChips();
-        const safeChip = chip || nextChips[0] || '';
-        const [nextBatches, nextSummary, nextBatchState] = safeChip
-          ? await Promise.all([
-              whatsappQueueService.listBatches({ chip: safeChip, scheduledDate }),
-              whatsappQueueService.summary({ chip: safeChip, scheduledDate }),
-              whatsappQueueService.getBatchStatus(safeChip),
-            ])
-          : [emptyBatches, emptySummary, idleBatchState];
+        const scopedFilters = chip ? { chip, scheduledDate } : { scheduledDate };
+        const [nextBatches, nextSummary, nextBatchState] = await Promise.all([
+          whatsappQueueService.listBatches(scopedFilters),
+          whatsappQueueService.summary(scopedFilters),
+          batchStatusForScope(chip, nextChips),
+        ]);
 
         if (!active) return;
         setChips(nextChips);

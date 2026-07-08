@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bug, Calendar, CheckSquare, ChevronDown, ChevronUp, Eye, Flag, List, Pause, Play, RefreshCcw, Send, Square, Users, X } from 'lucide-react';
-import { Button, ConfirmDialog, Drawer, Field, MetricCard, SegmentedControl, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
+import { Button, ConfirmDialog, Drawer, Field, MetricCard, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useInstagramQueue } from '../hooks/useInstagramQueue';
 import { useWhatsAppQueue } from '../hooks/useWhatsAppQueue';
@@ -86,10 +86,7 @@ function WhatsAppQueuePage() {
   const running = batchState.enabled && batchState.status === 'running';
 
   useEffect(() => {
-    if ((!activeChip || !chips.includes(activeChip)) && chips[0]) {
-      setActiveChip(chips[0]);
-    }
-    if (activeChip && !chips.includes(activeChip) && !chips.length) {
+    if (activeChip && !chips.includes(activeChip)) {
       setActiveChip('');
     }
   }, [activeChip, chips]);
@@ -103,10 +100,20 @@ function WhatsAppQueuePage() {
   const visibleActionIds = (predicate: (lead: WhatsAppQueueLead) => boolean) => visibleLeads().filter(predicate).map((lead) => lead.id);
   const isRunnableLead = (lead: WhatsAppQueueLead) =>
     hasWhatsAppWorkerContract(lead) && (permissionsFor('whatsapp-queue', lead.status).canSend() || permissionsFor('whatsapp-queue', lead.status).canResume());
-  const selectedOrRunnableIds = () =>
+  const selectedOrRunnableLeads = () =>
     selectedIds.length
-      ? visibleLeads().filter((lead) => selectedIds.includes(lead.id) && isRunnableLead(lead)).map((lead) => lead.id)
-      : visibleActionIds(isRunnableLead);
+      ? visibleLeads().filter((lead) => selectedIds.includes(lead.id) && isRunnableLead(lead))
+      : visibleLeads().filter(isRunnableLead);
+  const selectedOrRunnableIds = () => selectedOrRunnableLeads().map((lead) => lead.id);
+  const groupRunnableByChip = (leads: WhatsAppQueueLead[]) => {
+    const groups = new Map<string, string[]>();
+    for (const lead of leads) {
+      const chip = lead.chip_instance || lead.chip;
+      if (!chip) continue;
+      groups.set(chip, [...(groups.get(chip) ?? []), lead.id]);
+    }
+    return groups;
+  };
 
   const pushToast = (toast: Omit<ToastItem, 'id'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -115,20 +122,36 @@ function WhatsAppQueuePage() {
   };
 
   const handleStart = async () => {
-    const ids = selectedOrRunnableIds();
+    const leads = selectedOrRunnableLeads();
+    const ids = leads.map((lead) => lead.id);
     if (!ids.length) {
       pushToast({ title: 'Nada para iniciar', description: 'Nao ha leads em fila ou pausados no lote visivel.', tone: 'warning' });
       return;
     }
 
+    const groups = groupRunnableByChip(leads);
+    if (!groups.size) {
+      pushToast({ title: 'Nada para iniciar', description: 'Nenhum lead visivel possui chip operacional.', tone: 'warning' });
+      return;
+    }
+
     setStarting(true);
     try {
-      const state = await startBatch(ids);
+      const states = [];
+      for (const [, groupIds] of groups.entries()) {
+        states.push(await startBatch(groupIds));
+      }
       setSelectedIds(ids);
-      const next = state.next_run_at ? new Date(state.next_run_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'agora';
+      const firstNext = states
+        .map((state) => state.next_run_at)
+        .filter(Boolean)
+        .sort()[0];
+      const next = firstNext ? new Date(firstNext).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'agora';
       pushToast({
-        title: state.already_running ? 'Lote já está em execução' : 'Lote iniciado',
-        description: `${ids.length} lead(s). Próximo envio: ${next}. O Worker continuará mesmo com esta tela fechada.`,
+        title: states.some((state) => state.already_running) ? 'Lote já está em execução' : activeChip ? `Lote iniciado para ${activeChip}` : 'Lotes visíveis iniciados',
+        description: activeChip
+          ? `${ids.length} lead(s). Próximo envio: ${next}. O Worker continuará mesmo com esta tela fechada.`
+          : `${ids.length} lead(s) em ${groups.size} chip(s). Próximo envio: ${next}. O Worker continuará mesmo com esta tela fechada.`,
         tone: 'success',
       });
     } catch (err) {
@@ -138,10 +161,13 @@ function WhatsAppQueuePage() {
     }
   };
 
+  const targetChips = () => activeChip ? [activeChip] : chips;
+
   const handlePause = async () => {
     try {
-      await pauseBatch(activeChip);
-      pushToast({ title: 'Lote pausado', description: 'Nenhum novo lead será enviado até você retomar o lote.', tone: 'info' });
+      const targets = targetChips();
+      await Promise.all(targets.map((chip) => pauseBatch(chip)));
+      pushToast({ title: activeChip ? 'Lote pausado' : 'Lotes visíveis pausados', description: 'Nenhum novo lead será enviado até você retomar o lote.', tone: 'info' });
     } catch (err) {
       pushToast({ title: 'Não foi possível pausar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
@@ -149,8 +175,9 @@ function WhatsAppQueuePage() {
 
   const handleResume = async () => {
     try {
-      await resumeBatch(activeChip);
-      pushToast({ title: 'Lote retomado', description: 'O Worker continuará a partir do próximo lead pendente.', tone: 'success' });
+      const targets = targetChips();
+      await Promise.all(targets.map((chip) => resumeBatch(chip)));
+      pushToast({ title: activeChip ? 'Lote retomado' : 'Lotes visíveis retomados', description: 'O Worker continuará a partir do próximo lead pendente.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Não foi possível retomar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
@@ -158,9 +185,10 @@ function WhatsAppQueuePage() {
 
   const handleStop = async () => {
     try {
-      await stopBatch(activeChip);
+      const targets = targetChips();
+      await Promise.all(targets.map((chip) => stopBatch(chip)));
       setSelectedIds([]);
-      pushToast({ title: 'Lote encerrado', description: 'Os itens restantes continuam em fila e podem ser iniciados depois.', tone: 'warning' });
+      pushToast({ title: activeChip ? 'Lote encerrado' : 'Lotes visíveis encerrados', description: 'Os itens restantes continuam em fila e podem ser iniciados depois.', tone: 'warning' });
     } catch (err) {
       pushToast({ title: 'Não foi possível encerrar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
@@ -197,6 +225,19 @@ function WhatsAppQueuePage() {
     pushToast({ title: 'Lead invalidado', description: `${confirmLead.company} saiu da fila ativa.`, tone: 'warning' });
   };
 
+  const chipFilterOptions = [{ label: 'Todos os chips', value: '' }, ...chips.map((chip) => ({ label: chip, value: chip }))];
+  const scopeLabel = activeChip || 'Todos os chips';
+  const visibleScopeDescription = activeChip
+    ? `Exibindo e acionando apenas ${activeChip}.`
+    : 'Exibindo todos os chips. Iniciar lote acionará todos os chips visíveis com leads aptos.';
+  const startButtonLabel = starting
+    ? 'Iniciando...'
+    : running
+      ? 'Em execução'
+      : activeChip
+        ? `Iniciar ${activeChip}`
+        : 'Iniciar lotes visíveis';
+
   return (
     <div className="queue-page queue-page--whatsapp">
       <PageHeader title="Fila WhatsApp" action={<Field label="Data" type="date" iconLeft={Calendar} value={scheduledDate} onChange={setScheduledDate} />} />
@@ -208,8 +249,11 @@ function WhatsAppQueuePage() {
         <MetricCard icon={Bug} value={String(summary.errors)} label="Erros" tone="danger" />
       </section>
 
-      <div className="queue-topline">
-        <SegmentedControl items={chips.length ? chips : ['Geral']} active={activeChip || chips[0] || 'Geral'} onChange={setActiveChip} compact />
+      <div className="queue-topline queue-topline--actions">
+        <div className="queue-scope-summary">
+          <strong>{scopeLabel}</strong>
+          <small>{visibleScopeDescription}</small>
+        </div>
         <div className="queue-controls">
           <Button variant="danger" iconLeft={Square} disabled={!running && batchState.status !== 'paused'} onClick={handleStop}>Parar</Button>
           {running ? (
@@ -218,36 +262,47 @@ function WhatsAppQueuePage() {
             <Button variant="secondary" iconLeft={Play} onClick={handleResume}>Retomar</Button>
           ) : null}
           <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || starting || running} onClick={handleReprocess}>Reprocessar</Button>
-          <Button iconLeft={Play} disabled={loading || starting || running || batchState.status === 'paused'} onClick={handleStart}>{starting ? 'Iniciando...' : running ? 'Em execução' : 'Iniciar lote'}</Button>
+          <Button iconLeft={Play} disabled={loading || starting || running || batchState.status === 'paused'} onClick={handleStart}>{startButtonLabel}</Button>
         </div>
       </div>
 
-      <section className="queue-list-card">
-        <div className="queue-list-card__header">
-          <h2>Listagem de disparos{activeChip || chips[0] ? ` - ${activeChip || chips[0]}` : ''}</h2>
-          {(running || batchState.status === 'paused') && (
-            <small className="queue-batch-status" role="status">
-              {batchState.status === 'paused' ? 'Lote pausado' : `Lote em execução • ${batchState.remaining} restante(s)`}
-              {batchState.next_run_at ? ` • próximo: ${new Date(batchState.next_run_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
-            </small>
-          )}
-        </div>
-        {refreshing && running && batches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
-        {error ? <div className="table-message">{error}</div> : null}
-        {!error && loading && !batches.length ? <div className="table-message">Carregando fila WhatsApp...</div> : null}
-        {!error && !loading && !refreshing && !batches.length ? <div className="table-message">Nenhum lote WhatsApp disponivel.</div> : null}
-        <div className="batch-list">
-          {!error ? batches.map((batch, index) => (
-            <WhatsAppBatch
-              key={batch.id}
-              batch={batch}
-              defaultExpanded={index === 0}
-              onEdit={(lead) => { setEditingLead(lead); setDrawerMode('view'); }}
-              onInvalidate={setConfirmLead}
-            />
-          )) : null}
-        </div>
-      </section>
+      <div className="queue-workspace">
+        <section className="queue-list-card">
+          <div className="queue-list-card__header">
+            <h2>Listagem de disparos - {scopeLabel}</h2>
+            {(running || batchState.status === 'paused') && (
+              <small className="queue-batch-status" role="status">
+                {batchState.status === 'paused' ? 'Lote pausado' : `Lote em execução • ${batchState.remaining} restante(s)`}
+                {batchState.next_run_at ? ` • próximo: ${new Date(batchState.next_run_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+              </small>
+            )}
+          </div>
+          {refreshing && running && batches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
+          {error ? <div className="table-message">{error}</div> : null}
+          {!error && loading && !batches.length ? <div className="table-message">Carregando fila WhatsApp...</div> : null}
+          {!error && !loading && !refreshing && !batches.length ? <div className="table-message">Nenhum lote WhatsApp disponivel.</div> : null}
+          <div className="batch-list">
+            {!error ? batches.map((batch, index) => (
+              <WhatsAppBatch
+                key={batch.id}
+                batch={batch}
+                showScope={!activeChip}
+                defaultExpanded={index === 0}
+                onEdit={(lead) => { setEditingLead(lead); setDrawerMode('view'); }}
+                onInvalidate={setConfirmLead}
+              />
+            )) : null}
+          </div>
+        </section>
+        <QueueFilterPanel
+          title="Filtros"
+          label="Chip"
+          description="A visão Geral mostra todos os chips. Ao filtrar, os botões afetam somente o chip escolhido."
+          value={activeChip}
+          options={chipFilterOptions}
+          onChange={setActiveChip}
+        />
+      </div>
 
       <QueueLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
@@ -267,11 +322,13 @@ function WhatsAppQueuePage() {
 function WhatsAppBatch({
   batch,
   defaultExpanded = false,
+  showScope = false,
   onEdit,
   onInvalidate,
 }: {
   batch: WhatsAppQueueBatch;
   defaultExpanded?: boolean;
+  showScope?: boolean;
   onEdit: (lead: WhatsAppQueueLead) => void;
   onInvalidate: (lead: WhatsAppQueueLead) => void;
 }) {
@@ -291,7 +348,7 @@ function WhatsAppBatch({
   return (
     <article className={`batch ${expanded ? 'batch--expanded' : ''}`}>
       <button className="batch__header" type="button" onClick={() => setExpanded((current) => !current)}>
-        <strong>Lote {String(batch.number).padStart(2, '0')}</strong>
+        <strong>{showScope ? `${batch.chip} • ` : ''}Lote {String(batch.number).padStart(2, '0')}</strong>
         <span>{batch.leads.length}/{batch.limit}</span>
         <span>{stats.sent} enviados</span>
         <span>{stats.queued} aguardando</span>
@@ -310,7 +367,7 @@ function WhatsAppBatch({
                 <span>{lead.phone}</span>
                 <span className="batch-row__tags">
                   <Tag>{lead.branch}</Tag>
-                  <Tag>{lead.type}</Tag>
+                  {String(lead.type) !== siteBadgeLabel(lead) ? <Tag>{lead.type}</Tag> : null}
                   <Tag>{siteBadgeLabel(lead)}</Tag>
                   <Tag tone={hasWhatsAppOperationalIssue(lead) ? 'danger' : statusTone(lead.status)}>
                     {hasWhatsAppOperationalIssue(lead) ? 'Dados incompletos' : statusLabel(lead.status)}
@@ -433,8 +490,8 @@ function InstagramQueuePage() {
   const { profiles, batches, summary, loading, refreshing, error, updateLead, invalidate } = useInstagramQueue(activeProfile, scheduledDate);
 
   useEffect(() => {
-    if (!activeProfile && profiles[0]) {
-      setActiveProfile(profiles[0]);
+    if (activeProfile && !profiles.includes(activeProfile)) {
+      setActiveProfile('');
     }
   }, [activeProfile, profiles]);
 
@@ -463,6 +520,9 @@ function InstagramQueuePage() {
     pushToast({ title: 'Lead invalidado', description: `${confirmLead.instagram} saiu da fila ativa.`, tone: 'warning' });
   };
 
+  const profileFilterOptions = [{ label: 'Todos os perfis', value: '' }, ...profiles.map((profile) => ({ label: profile, value: profile }))];
+  const scopeLabel = activeProfile || 'Todos os perfis';
+
   return (
     <div className="queue-page queue-page--instagram">
       <PageHeader title="Fila Instagram" action={<Field label="Data" type="date" iconLeft={Calendar} value={scheduledDate} onChange={setScheduledDate} />} />
@@ -473,27 +533,37 @@ function InstagramQueuePage() {
         <MetricCard icon={Bug} value={String(summary.errors)} label="Erros" tone="warning" />
         <MetricCard icon={X} value={String(summary.invalid)} label="Invalidos" tone="danger" />
       </section>
-      <div className="queue-topline">
-        <SegmentedControl items={profiles.length ? profiles : ['Geral']} active={activeProfile || profiles[0] || 'Geral'} onChange={setActiveProfile} compact />
+      <div className="queue-workspace">
+        <section className="queue-list-card">
+          <div className="queue-list-card__header">
+            <h2>Listagem de disparos - {scopeLabel}</h2>
+          </div>
+          {refreshing && visibleBatches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
+          {error ? <div className="table-message">{error}</div> : null}
+          {!error && loading && !visibleBatches.length ? <div className="table-message">Carregando fila Instagram...</div> : null}
+          {!error && !loading && !refreshing && !visibleBatches.length ? <div className="table-message">Nenhum lote Instagram disponivel.</div> : null}
+          <div className="batch-list">
+            {!error ? visibleBatches.map((batch, index) => (
+              <InstagramBatch
+                key={batch.id}
+                batch={batch}
+                showScope={!activeProfile}
+                defaultExpanded={index === 0}
+                onEdit={(lead) => { setEditingLead(lead); setDrawerMode('view'); }}
+                onInvalidate={setConfirmLead}
+              />
+            )) : null}
+          </div>
+        </section>
+        <QueueFilterPanel
+          title="Filtros"
+          label="Perfil"
+          description="A extensão continua puxando pelo @ configurado. Este filtro serve para gestão visual da fila no CRM."
+          value={activeProfile}
+          options={profileFilterOptions}
+          onChange={setActiveProfile}
+        />
       </div>
-      <section className="queue-list-card">
-        <h2>Listagem de disparos{activeProfile || profiles[0] ? ` - ${activeProfile || profiles[0]}` : ''}</h2>
-        {refreshing && visibleBatches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
-        {error ? <div className="table-message">{error}</div> : null}
-        {!error && loading && !visibleBatches.length ? <div className="table-message">Carregando fila Instagram...</div> : null}
-        {!error && !loading && !refreshing && !visibleBatches.length ? <div className="table-message">Nenhum lote Instagram disponivel.</div> : null}
-        <div className="batch-list">
-          {!error ? visibleBatches.map((batch, index) => (
-            <InstagramBatch
-              key={batch.id}
-              batch={batch}
-              defaultExpanded={index === 0}
-              onEdit={(lead) => { setEditingLead(lead); setDrawerMode('view'); }}
-              onInvalidate={setConfirmLead}
-            />
-          )) : null}
-        </div>
-      </section>
 
       <InstagramLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
@@ -515,11 +585,13 @@ type InstagramQueueDraft = Pick<InstagramQueueLead, 'company' | 'instagram' | 'b
 function InstagramBatch({
   batch,
   defaultExpanded = false,
+  showScope = false,
   onEdit,
   onInvalidate,
 }: {
   batch: InstagramQueueBatch;
   defaultExpanded?: boolean;
+  showScope?: boolean;
   onEdit: (lead: InstagramQueueLead) => void;
   onInvalidate: (lead: InstagramQueueLead) => void;
 }) {
@@ -539,7 +611,7 @@ function InstagramBatch({
   return (
     <article className={`batch ${expanded ? 'batch--expanded' : ''}`}>
       <button className="batch__header" type="button" onClick={() => setExpanded((current) => !current)}>
-        <strong>Lote {String(batch.number).padStart(2, '0')}</strong>
+        <strong>{showScope ? `${batch.profile} • ` : ''}Lote {String(batch.number).padStart(2, '0')}</strong>
         <span>{batch.leads.length}/{batch.limit}</span>
         <span>{stats.sent} enviados</span>
         <span>{stats.queued} aguardando</span>
@@ -561,7 +633,7 @@ function InstagramBatch({
                 </span>
                 <span className="batch-row__tags">
                   <Tag>{lead.branch}</Tag>
-                  <Tag>{lead.type}</Tag>
+                  {String(lead.type) !== siteBadgeLabel(lead) ? <Tag>{lead.type}</Tag> : null}
                   <Tag>{siteBadgeLabel(lead)}</Tag>
                   <Tag tone={statusTone(lead.status)}>{statusLabel(lead.status)}</Tag>
                 </span>
@@ -669,6 +741,30 @@ function InstagramLeadDrawer({
         </div>
       ) : null}
     </Drawer>
+  );
+}
+
+type QueueFilterPanelProps = {
+  title: string;
+  label: string;
+  description: string;
+  value: string;
+  options: Array<{ label: string; value: string }>;
+  onChange: (value: string) => void;
+};
+
+function QueueFilterPanel({ title, label, description, value, options, onChange }: QueueFilterPanelProps) {
+  return (
+    <aside className="queue-filter-panel" aria-label={title}>
+      <div className="queue-filter-panel__header">
+        <strong>{title}</strong>
+        <small>{description}</small>
+      </div>
+      <label className="queue-filter-panel__field">
+        <span>{label}</span>
+        <SelectField options={options} value={value} onChange={onChange} placeholder={options[0]?.label ?? 'Todos'} />
+      </label>
+    </aside>
   );
 }
 
