@@ -237,13 +237,27 @@ async function listAllLeads() {
 }
 
 async function rolloverPreSendAfterCutoff() {
-  if (!isRolloverCutoffPassed()) return;
-
   const leads = await listAllLeads();
-  const updates = leads
-    .filter((lead) => isActivePreSendStatus(lead.status))
-    .filter((lead) => lead.dayId === currentDayId(lead.channel))
-    .map((lead) => repositories.preSend.updateLead(lead.id, { dayId: nextDayId(lead.channel, lead.dayId) }));
+  const updates: Promise<void>[] = [];
+
+  if (isRolloverCutoffPassed()) {
+    updates.push(...leads
+      .filter((lead) => isActivePreSendStatus(lead.status))
+      .filter((lead) => lead.dayId === currentDayId(lead.channel))
+      .map((lead) => repositories.preSend.updateLead(lead.id, { dayId: nextDayId(lead.channel, lead.dayId) })));
+  }
+
+  const instagramReturnDayId = operationalInstagramReturnDayId();
+  updates.push(...leads
+    .filter((lead) => isStatusGroup(lead.status, 'review'))
+    .filter(isInstagramReturn)
+    .filter((lead) => lead.dayId !== instagramReturnDayId)
+    .map((lead) => repositories.preSend.updateLead(lead.id, {
+      dayId: instagramReturnDayId,
+      queueWaitReason: lead.instagramPendingLink
+        ? 'Aguardando link do Instagram.'
+        : lead.queueWaitReason || 'Retorno WhatsApp inválido mantido no dia atual do Pré-Envio Instagram.',
+    })));
 
   if (!updates.length) return;
   await Promise.all(updates);
