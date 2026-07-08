@@ -38,6 +38,10 @@ export type WhatsAppQueueLead = {
   message_1: string;
   message2: string;
   message_2: string;
+  message3: string;
+  message_3: string;
+  message4: string;
+  message_4: string;
   /** Nome do arquivo local que o Worker procura em /app/images. */
   imageName?: string;
   /** Quando true, o Worker nao envia mensagem alguma se o arquivo nao existir ou estiver invalido. */
@@ -72,8 +76,14 @@ export type CreateWhatsAppQueueLeadInput = Omit<
   | 'batch_number'
   | 'chip_id'
   | 'profile_id'
+  | 'message1'
+  | 'message2'
+  | 'message3'
+  | 'message4'
   | 'message_1'
   | 'message_2'
+  | 'message_3'
+  | 'message_4'
   | 'retry_count'
   | 'error_message'
   | 'sent_at'
@@ -83,6 +93,10 @@ export type CreateWhatsAppQueueLeadInput = Omit<
   lead_id?: string;
   chip_id?: string;
   batchLimit?: number;
+  message1: string;
+  message2: string;
+  message3?: string;
+  message4?: string;
   scheduled_date?: string;
   template_id?: string;
 };
@@ -119,6 +133,8 @@ export type UpdateWhatsAppQueueLeadInput = Partial<
     | 'status'
     | 'message1'
     | 'message2'
+    | 'message3'
+    | 'message4'
     | 'imageName'
     | 'imageRequired'
     | 'image_url'

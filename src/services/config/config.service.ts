@@ -7,6 +7,8 @@ import {
   DEFAULT_BRANCH_MIN_REVIEWS,
   DEFAULT_TEMPLATE_MESSAGE_1,
   DEFAULT_TEMPLATE_MESSAGE_2,
+  DEFAULT_TEMPLATE_MESSAGE_3,
+  DEFAULT_TEMPLATE_MESSAGE_4,
   MOVEIS_PLANEJADOS_KEYWORDS,
 } from './config.seed';
 import { chipLevelDefaults } from './chipOperational';
@@ -111,6 +113,8 @@ function isTestConfigRecord(record: ConfigRecord) {
     record.kind === 'templates' ? record.type : '',
     record.kind === 'templates' ? record.message1 : '',
     record.kind === 'templates' ? record.message2 : '',
+    record.kind === 'templates' ? record.message3 : '',
+    record.kind === 'templates' ? record.message4 : '',
   ]
     .map((value) => normalizeText(value))
     .join(' ');
@@ -217,6 +221,8 @@ function normalizeTemplateInput(
   const active = toBoolean(source.active ?? source.status, existing?.active ?? true);
   const message1 = firstString(source, ['message1', 'msg1', 'part_1', 'mensagem1', 'mensagem'], existing?.message1 ?? DEFAULT_TEMPLATE_MESSAGE_1);
   const message2 = firstString(source, ['message2', 'msg2', 'part_2', 'mensagem2'], existing?.message2 ?? DEFAULT_TEMPLATE_MESSAGE_2);
+  const message3 = firstString(source, ['message3', 'msg3', 'part_3', 'mensagem3'], existing?.message3 ?? DEFAULT_TEMPLATE_MESSAGE_3);
+  const message4 = firstString(source, ['message4', 'msg4', 'part_4', 'mensagem4'], existing?.message4 ?? DEFAULT_TEMPLATE_MESSAGE_4);
 
   return {
     id: String(existing?.id ?? source.id ?? fallbackId('templates')),
@@ -227,6 +233,8 @@ function normalizeTemplateInput(
     type: normalizeTemplateType(source.type ?? source.tipo, existing?.type ?? 'sem-site'),
     message1,
     message2,
+    message3,
+    message4,
     preview: renderPreview(message1),
     active,
     status: statusFromActive(active),

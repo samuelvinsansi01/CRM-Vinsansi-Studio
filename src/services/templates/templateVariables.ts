@@ -68,9 +68,29 @@ export function renderTemplateVariables(message: string, context: TemplateVariab
 
 export function renderLeadMessages<T extends TemplateVariableContext>(
   lead: T,
-  messages: { message1?: string; message2?: string; message_1?: string; message_2?: string },
+  messages: {
+    message1?: string;
+    message2?: string;
+    message3?: string;
+    message4?: string;
+    message_1?: string;
+    message_2?: string;
+    message_3?: string;
+    message_4?: string;
+  },
 ) {
   const message1 = renderTemplateVariables(messages.message1 ?? messages.message_1 ?? '', lead);
   const message2 = renderTemplateVariables(messages.message2 ?? messages.message_2 ?? '', lead);
-  return { message1, message2, message_1: message1, message_2: message2 };
+  const message3 = renderTemplateVariables(messages.message3 ?? messages.message_3 ?? '', lead);
+  const message4 = renderTemplateVariables(messages.message4 ?? messages.message_4 ?? '', lead);
+  return {
+    message1,
+    message2,
+    message3,
+    message4,
+    message_1: message1,
+    message_2: message2,
+    message_3: message3,
+    message_4: message4,
+  };
 }

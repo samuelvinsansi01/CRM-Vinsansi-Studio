@@ -156,6 +156,8 @@ async function logDispatchMessages(leads: WhatsAppQueueLead[], replayed = false)
       [
         { part: 'message_1', body: renderTemplateVariables(lead.message_1 || lead.message1, lead) },
         { part: 'message_2', body: renderTemplateVariables(lead.message_2 || lead.message2, lead) },
+        { part: 'message_3', body: renderTemplateVariables(lead.message_3 || lead.message3, lead) },
+        { part: 'message_4', body: renderTemplateVariables(lead.message_4 || lead.message4, lead) },
         { part: 'image', body: lead.image_url || lead.image_id || '' },
       ]
         .filter((item) => item.body.trim())
@@ -226,7 +228,10 @@ async function persistSentToBase(leads: WhatsAppQueueLead[]) {
         override_at: lead.override_at,
         status: 'sent',
         sentAt,
-        template: renderTemplateVariables(lead.message1, lead),
+        template: [lead.message1, lead.message2, lead.message3, lead.message4]
+          .map((message) => renderTemplateVariables(message, lead))
+          .filter(Boolean)
+          .join('\n\n'),
         chipOrProfile: lead.chip,
         notes: lead.imageName ? `Imagem: ${lead.imageName}` : '',
       }),

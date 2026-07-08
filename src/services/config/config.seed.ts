@@ -27,6 +27,8 @@ export const TEMPLATE_CHANNELS = ['WhatsApp', 'Instagram', 'Geral'] as const;
 
 export const DEFAULT_TEMPLATE_MESSAGE_1 = 'Ola, {EMPRESA}! Tudo bem?';
 export const DEFAULT_TEMPLATE_MESSAGE_2 = 'Passando para conversar sobre uma oportunidade para sua empresa.';
+export const DEFAULT_TEMPLATE_MESSAGE_3 = '';
+export const DEFAULT_TEMPLATE_MESSAGE_4 = '';
 
 export const configSeed: Record<ConfigKind, ConfigRecord[]> = {
   chips: [],
