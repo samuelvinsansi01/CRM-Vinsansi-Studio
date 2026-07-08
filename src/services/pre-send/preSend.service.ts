@@ -170,8 +170,12 @@ function isActivePreSendStatus(status: PreSendLead['status']) {
   return isStatusGroup(status, 'review') || isStatusGroup(status, 'approved') || isStatusGroup(status, 'queued');
 }
 
+function isCountedPreSendStatus(status: PreSendLead['status']) {
+  return isActivePreSendStatus(status) || isStatusGroup(status, 'sent');
+}
+
 function isVisiblePreSendStatus(status: PreSendLead['status']) {
-  return isStatusGroup(status, 'review') || isStatusGroup(status, 'approved') || isStatusGroup(status, 'rejected') || isStatusGroup(status, 'invalid');
+  return isStatusGroup(status, 'review') || isStatusGroup(status, 'approved') || isStatusGroup(status, 'queued') || isStatusGroup(status, 'rejected') || isStatusGroup(status, 'invalid') || isStatusGroup(status, 'sent');
 }
 
 function isLikelyValidWhatsApp(value: unknown) {
@@ -182,12 +186,20 @@ function isActiveWhatsAppQueueStatus(status: unknown) {
   return isStatusGroup(status, 'queued') || isStatusGroup(status, 'paused') || isStatusGroup(status, 'sending');
 }
 
+function isCountedWhatsAppQueueStatus(status: unknown) {
+  return isActiveWhatsAppQueueStatus(status) || isStatusGroup(status, 'sent');
+}
+
 function isMovableWhatsAppQueueStatus(status: unknown) {
   return isStatusGroup(status, 'queued') || isStatusGroup(status, 'paused');
 }
 
 function isActiveInstagramQueueStatus(status: unknown) {
   return isStatusGroup(status, 'queued') || isStatusGroup(status, 'paused') || isStatusGroup(status, 'following') || isStatusGroup(status, 'dm_opened');
+}
+
+function isCountedInstagramQueueStatus(status: unknown) {
+  return isActiveInstagramQueueStatus(status) || isStatusGroup(status, 'sent');
 }
 
 function isMovableInstagramQueueStatus(status: unknown) {
@@ -378,8 +390,8 @@ async function rolloverQueuesAfterCutoff() {
 }
 
 function addQueueAllocation(snapshot: QueueAllocationSnapshot, channel: PreSendChannel, scheduledDate: string, lead: { sourcePreSendId?: string; status: unknown }) {
-  const active = channel === 'WhatsApp' ? isActiveWhatsAppQueueStatus(lead.status) : isActiveInstagramQueueStatus(lead.status);
-  if (!active) return;
+  const counted = channel === 'WhatsApp' ? isCountedWhatsAppQueueStatus(lead.status) : isCountedInstagramQueueStatus(lead.status);
+  if (!counted) return;
   const key = `${channel}:${scheduledDate}`;
   snapshot.counts.set(key, (snapshot.counts.get(key) ?? 0) + 1);
   if (lead.sourcePreSendId) snapshot.preSendIds.add(lead.sourcePreSendId);
@@ -418,7 +430,7 @@ async function scheduledDayCards(): Promise<PreSendDayCard[]> {
         ? leads.filter((lead) =>
             lead.channel === channel &&
             lead.dayId === id &&
-            isActivePreSendStatus(lead.status) &&
+            isCountedPreSendStatus(lead.status) &&
             !queueAllocations.preSendIds.has(lead.id),
           ).length
         : 0;
@@ -1145,7 +1157,7 @@ async function queueCapacity(channel: PreSendChannel, requestedDayId: string, re
       !allocations.preSendIds.has(lead.id),
     ).length;
     const queued = batches.flatMap((batch) => batch.leads).filter((lead) =>
-      isActiveWhatsAppQueueStatus(lead.status) &&
+      isCountedWhatsAppQueueStatus(lead.status) &&
       lead.scheduled_date === scheduledDate &&
       (lead.chip_instance || lead.chip) === profile,
     ).length;
@@ -1160,7 +1172,7 @@ async function queueCapacity(channel: PreSendChannel, requestedDayId: string, re
   const batches = await repositories.instagramQueue.listBatches({});
   const limit = Math.max(0, settings.instagram.dailyLimit);
   const used = batches.flatMap((batch) => batch.leads).filter((lead) =>
-    isActiveInstagramQueueStatus(lead.status) && lead.scheduled_date === scheduledDate && lead.profile === profile,
+    isCountedInstagramQueueStatus(lead.status) && lead.scheduled_date === scheduledDate && lead.profile === profile,
   ).length;
   return { channel, dayId, scheduledDate, profile, limit, used, available: Math.max(0, limit - used) };
 }
@@ -1301,15 +1313,23 @@ export const preSendService = {
       ? leads.filter((lead) =>
           lead.channel === 'WhatsApp' &&
           lead.dayId === whatsappDayId &&
-          (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'queued')) &&
+          (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'sent')) &&
           !queueAllocations.preSendIds.has(lead.id),
         ).length
       : 0;
     const whatsappQueue = whatsappScheduledDate ? queueAllocations.counts.get(`WhatsApp:${whatsappScheduledDate}`) ?? 0 : 0;
     const whatsapp = whatsappPreSend + whatsappQueue;
-    const instagram = instagramDayId
-      ? leads.filter((lead) => lead.dayId === instagramDayId && isInstagramReturn(lead) && isVisiblePreSendStatus(lead.status)).length
+    const instagramScheduledDate = instagramDayId ? scheduledDateForDayId(instagramDayId) : '';
+    const instagramPreSend = instagramDayId
+      ? leads.filter((lead) =>
+          lead.dayId === instagramDayId &&
+          isInstagramReturn(lead) &&
+          isVisiblePreSendStatus(lead.status) &&
+          !queueAllocations.preSendIds.has(lead.id),
+        ).length
       : 0;
+    const instagramQueue = instagramScheduledDate ? queueAllocations.counts.get(`Instagram:${instagramScheduledDate}`) ?? 0 : 0;
+    const instagram = instagramPreSend + instagramQueue;
     const queued = leads.filter((lead) =>
       ((whatsappDayId && lead.channel === 'WhatsApp' && lead.dayId === whatsappDayId) ||
         (instagramDayId && lead.channel === 'Instagram' && lead.dayId === instagramDayId)) &&
