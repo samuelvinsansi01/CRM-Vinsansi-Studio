@@ -96,6 +96,10 @@ function channelLimit(channel: PreSendChannel, settings: Awaited<ReturnType<type
   return channel === 'WhatsApp' ? settings.whatsapp.dailyLimit : settings.instagram.dailyLimit;
 }
 
+function whatsappBatchLimit(settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>, fallback?: number) {
+  return Math.max(1, settings.whatsapp.perBatch || fallback || 1);
+}
+
 function channelDays(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
   return channel === 'WhatsApp' ? settings.whatsapp.activeDays : settings.instagram.activeDays;
 }
@@ -223,10 +227,19 @@ function matchesSelectedProfile(lead: PreSendLead, profile?: string) {
 
 async function listFilteredLeads(filters: PreSendFilters) {
   await rolloverPreSendAfterCutoff();
-  const leads = await repositories.preSend.listLeads({ ...filters, profile: undefined });
+  const [leads, queueAllocations] = await Promise.all([
+    repositories.preSend.listLeads({ ...filters, profile: undefined }),
+    queueAllocationsByDate(),
+  ]);
 
   return sortByLeadScore(leads.filter((lead) => {
     if (!isVisiblePreSendStatus(lead.status)) return false;
+
+    // O Pré-Envio lista apenas o que ainda exige ação humana. Quando o lead já
+    // entrou na fila operacional, ele continua contabilizando nos cards/resumo,
+    // mas não deve aparecer de novo como item aprovável/enviável.
+    if (queueAllocations.preSendIds.has(lead.id)) return false;
+    if (isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'sent')) return false;
 
     // Retornos do WhatsApp ficam no card Instagram do próprio Pré-Envio.
     // Eles não devem desaparecer quando o perfil ainda estiver vazio, legado ou
@@ -282,6 +295,7 @@ type QueueAllocationSnapshot = {
 };
 
 async function rolloverWhatsAppQueueAfterCutoff(targetDate: string) {
+  const settings = await settingsService.getDispatchSettings();
   const chips = (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
   const chipMap = new Map(chips.map((chip) => [chipInstance(chip), chip]));
   if (!chipMap.size) return 0;
@@ -310,7 +324,7 @@ async function rolloverWhatsAppQueueAfterCutoff(targetDate: string) {
     const chip = chipMap.get(instance);
     if (!chip) continue;
     const dailyLimit = Math.max(1, chip.dailyLimit);
-    const batchLimit = Math.max(1, chip.blockSize);
+    const batchLimit = whatsappBatchLimit(settings, chip.blockSize);
     let scheduledDate = targetDate;
     let key = `${instance}:${scheduledDate}`;
 
@@ -760,6 +774,7 @@ async function assignProfilesAndLimitCapacity(leads: PreSendLead[], options: Que
 }
 
 async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAppQueueLeadInput[]> {
+  const settings = await settingsService.getDispatchSettings();
   const chips = await loadActiveChips();
   if (!chips.length) throw new Error('Nenhum chip ativo configurado.');
   const branches = await loadBranches();
@@ -825,7 +840,7 @@ async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAp
       site: lead.site,
       instagram: lead.instagram,
       mapsUrl: lead.mapsUrl,
-      batchLimit: availableChip.blockSize,
+      batchLimit: whatsappBatchLimit(settings, availableChip.blockSize),
     });
   }
 
@@ -1294,6 +1309,45 @@ async function fillInstagramQueueByPriority({ dayId: requestedDayId, profile: re
   return result;
 }
 
+
+async function autoQueueValidatedWhatsApp(ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids));
+  if (!uniqueIds.length) return { queued: 0, queueErrors: 0 };
+
+  try {
+    await rolloverPreSendAfterCutoff();
+    const allLeads = await listAllLeads();
+    const selected = sortByLeadScore(allLeads.filter((lead) =>
+      uniqueIds.includes(lead.id) &&
+      lead.channel === 'WhatsApp' &&
+      isStatusGroup(lead.status, 'approved'),
+    ));
+
+    if (!selected.length) return { queued: 0, queueErrors: uniqueIds.length };
+
+    const assigned = await assignProfilesAndLimitCapacity(selected, {});
+    if (!assigned.length) return { queued: 0, queueErrors: selected.length };
+    assigned.forEach((lead) => assertTransition({ entity: 'pre-send', fromStatus: lead.status, toStatus: 'queued', action: 'queue' }));
+
+    await Promise.all(assigned.map((lead) => {
+      const original = selected.find((item) => item.id === lead.id);
+      return original && original.profile !== lead.profile ? repositories.preSend.updateLead(lead.id, { profile: lead.profile }) : Promise.resolve();
+    }));
+
+    await repositories.whatsappQueue.enqueue(await toWhatsAppQueueLeads(assigned));
+    const movedIds = assigned.map((lead) => lead.id);
+    await repositories.preSend.moveToQueue(movedIds);
+
+    eventBus.emit('pre-send:changed', { action: 'move-to-queue' });
+    eventBus.emit('whatsapp-queue:changed', { action: 'update' });
+
+    return { queued: movedIds.length, queueErrors: Math.max(0, uniqueIds.length - movedIds.length) };
+  } catch (error) {
+    console.warn('Leads aprovados permaneceram no Pré-Envio por bloqueio de fila.', error);
+    return { queued: 0, queueErrors: uniqueIds.length };
+  }
+}
+
 export const preSendService = {
   async listDayCards() {
     return scheduledDayCards();
@@ -1600,7 +1654,7 @@ export const preSendService = {
   async validateLeads(ids: string[]): Promise<PreSendValidationSummary> {
     await rolloverPreSendAfterCutoff();
     const uniqueIds = Array.from(new Set(ids));
-    if (!uniqueIds.length) return { approved: 0, revalidated: 0, returned: 0, requiresReview: 0, errors: 0, skipped: 0 };
+    if (!uniqueIds.length) return { approved: 0, revalidated: 0, queued: 0, queueErrors: 0, returned: 0, requiresReview: 0, errors: 0, skipped: 0 };
 
     const allLeads = await listAllLeads();
     const selected = uniqueIds.map((id) => allLeads.find((lead) => lead.id === id)).filter((lead): lead is PreSendLead => Boolean(lead));
@@ -1615,6 +1669,8 @@ export const preSendService = {
     const returnedIds = new Set<string>();
     const reviewIds = new Set<string>();
     const errorIds = new Set<string>();
+    let queued = 0;
+    let queueErrors = 0;
 
     await Promise.all(malformed.map(async (lead) => {
       const outcome = await handleInvalidWhatsApp(lead, 'WhatsApp sem formato valido na validacao do Pre-Envio.');
@@ -1687,6 +1743,11 @@ export const preSendService = {
           },
         });
       }));
+
+      const approvedWhatsAppIds = Array.from(approvedIds).filter((id) => allLeads.find((item) => item.id === id)?.channel === 'WhatsApp');
+      const queueResult = await autoQueueValidatedWhatsApp(approvedWhatsAppIds);
+      queued = queueResult.queued;
+      queueErrors = queueResult.queueErrors;
     }
 
     if (returnedIds.size) {
@@ -1697,6 +1758,8 @@ export const preSendService = {
     return {
       approved: approvedIds.size,
       revalidated: 0,
+      queued,
+      queueErrors,
       returned: returnedIds.size,
       requiresReview: reviewIds.size,
       errors: errorIds.size,
@@ -1712,7 +1775,7 @@ export const preSendService = {
   async revalidateApprovedLeads(ids: string[]): Promise<PreSendValidationSummary> {
     await rolloverPreSendAfterCutoff();
     const uniqueIds = Array.from(new Set(ids));
-    if (!uniqueIds.length) return { approved: 0, revalidated: 0, returned: 0, requiresReview: 0, errors: 0, skipped: 0 };
+    if (!uniqueIds.length) return { approved: 0, revalidated: 0, queued: 0, queueErrors: 0, returned: 0, requiresReview: 0, errors: 0, skipped: 0 };
 
     const allLeads = await listAllLeads();
     const selected = uniqueIds.map((id) => allLeads.find((lead) => lead.id === id)).filter((lead): lead is PreSendLead => Boolean(lead));
@@ -1723,6 +1786,8 @@ export const preSendService = {
     const returnedIds = new Set<string>();
     const reviewIds = new Set<string>();
     const errorIds = new Set<string>();
+    let queued = 0;
+    let queueErrors = 0;
 
     // Revalidação mantém erros/ambiguidade em revisão. Quando a inexistência
     // do WhatsApp é explícita, aplica a rota Instagram com a mesma segurança
@@ -1803,6 +1868,10 @@ export const preSendService = {
           },
         });
       }));
+
+      const queueResult = await autoQueueValidatedWhatsApp(Array.from(approvedIds));
+      queued = queueResult.queued;
+      queueErrors = queueResult.queueErrors;
     }
 
     if (returnedIds.size) {
@@ -1813,6 +1882,8 @@ export const preSendService = {
     return {
       approved: approvedIds.size,
       revalidated: candidates.length,
+      queued,
+      queueErrors,
       returned: returnedIds.size,
       requiresReview: reviewIds.size,
       errors: errorIds.size,
