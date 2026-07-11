@@ -23,56 +23,14 @@ function formatList(value: string[]) {
   return value.join(', ');
 }
 
-type ChannelKey = 'whatsapp' | 'instagram';
-
-type ChannelFieldsProps = {
-  kind: ChannelKey;
-  settings: DispatchSettings;
-  saving: boolean;
-  onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>;
-  onSave: (kind: ChannelKey) => void;
-};
-
-function ChannelFields({ kind, settings, saving, onUpdate, onSave }: ChannelFieldsProps) {
-  const updateChannel = (input: Record<string, unknown>) => onUpdate({ [kind]: input });
-
-  return (
-    <>
-      {kind === 'instagram' ? (
-        <>
-          <Field
-            label="Perfil principal"
-            value={settings.instagram.profile}
-            onChange={(profile) => updateChannel({ profile, profiles: toList(profile, settings.instagram.profiles) })}
-          />
-          <Field
-            label="Perfis Instagram"
-            value={formatList(settings.instagram.profiles)}
-            onChange={(value) => {
-              const profiles = toList(value, settings.instagram.profiles);
-              updateChannel({ profiles, profile: profiles[0] ?? settings.instagram.profile });
-            }}
-          />
-        </>
-      ) : (
-        <p className="settings-note">Os parametros fixos de disparo sao compartilhados na secao acima.</p>
-      )}
-      {kind === 'instagram' ? (
-        <div className="settings-card__actions">
-          <Button iconLeft={Save} loading={saving} onClick={() => onSave(kind)}>Salvar</Button>
-        </div>
-      ) : null}
-    </>
-  );
-}
-
 function SharedDispatchFields({ settings, saving, onUpdate }: { settings: DispatchSettings; saving: boolean; onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>; }) {
   const current = settings.whatsapp;
   const updateBoth = (input: Record<string, unknown>) =>
     void onUpdate({ whatsapp: input, instagram: input as UpdateDispatchSettingsInput['instagram'] });
 
   return (
-    <Panel title="Parametros fixos" className="settings-card">
+    <Panel title="Parametros fixos" className="settings-card settings-card--fixed">
+      <p className="settings-note">Esses parametros servem para toda a operacao e sao compartilhados entre filas, pre-envio e Worker.</p>
       <Field
         label="Delay minimo entre leads (segundos)"
         value={String(current.delayMinSeconds)}
@@ -100,6 +58,31 @@ function SharedDispatchFields({ settings, saving, onUpdate }: { settings: Dispat
   );
 }
 
+function InstagramFields({ settings, saving, onUpdate }: { settings: DispatchSettings; saving: boolean; onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>; }) {
+  const updateInstagram = (input: Record<string, unknown>) => void onUpdate({ instagram: input });
+
+  return (
+    <Panel title="Instagram" className="settings-card settings-card--instagram">
+      <Field
+        label="Perfil principal"
+        value={settings.instagram.profile}
+        onChange={(profile) => updateInstagram({ profile, profiles: toList(profile, settings.instagram.profiles) })}
+      />
+      <Field
+        label="Perfis Instagram"
+        value={formatList(settings.instagram.profiles)}
+        onChange={(value) => {
+          const profiles = toList(value, settings.instagram.profiles);
+          updateInstagram({ profiles, profile: profiles[0] ?? settings.instagram.profile });
+        }}
+      />
+      <div className="settings-card__actions">
+        <Button iconLeft={Save} loading={saving} onClick={() => void onUpdate({ instagram: settings.instagram })}>Salvar</Button>
+      </div>
+    </Panel>
+  );
+}
+
 function ChipLevelPresets({ settings, saving, onUpdate }: { settings: DispatchSettings; saving: boolean; onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>; }) {
   const updateLevel = (level: string, blockSize: string) => {
     const nextBlockSize = toNumber(blockSize, Number(settings.chipLevels?.[level]?.blockSize ?? 0));
@@ -107,8 +90,8 @@ function ChipLevelPresets({ settings, saving, onUpdate }: { settings: DispatchSe
   };
 
   return (
-    <Panel title="Niveis dos chips" className="settings-card">
-      <p className="settings-note">O nivel do chip define a quantidade por lote usada como base na montagem dos chips e das filas.</p>
+    <Panel title="Niveis dos chips" className="settings-card settings-card--chips">
+      <p className="settings-note">Cada nivel define a quantidade por lote usada como base na montagem dos chips e das filas.</p>
       <div className="settings-chip-level-grid">
         {CHIP_LEVEL_OPTIONS.map((option) => (
           <label className="drawer-field" key={option.value}>
@@ -143,10 +126,6 @@ export function SettingsPage() {
     }
   };
 
-  const save = (kind: ChannelKey) => {
-    pushToast({ title: 'Configuracoes salvas', description: `${kind === 'whatsapp' ? 'WhatsApp' : 'Instagram'} atualizado com sucesso.`, tone: 'success' });
-  };
-
   const reset = async () => {
     try {
       await resetSettings();
@@ -176,16 +155,12 @@ export function SettingsPage() {
         }
       />
       {error ? <div className="table-message">{error}</div> : null}
-      <SharedDispatchFields settings={settings} saving={saving} onUpdate={update} />
-      <section className="settings-grid">
-        <Panel title="WhatsApp" className="settings-card">
-          <ChannelFields kind="whatsapp" settings={settings} saving={saving} onUpdate={update} onSave={save} />
-        </Panel>
-        <Panel title="Instagram" className="settings-card">
-          <ChannelFields kind="instagram" settings={settings} saving={saving} onUpdate={update} onSave={save} />
-        </Panel>
+
+      <section className="settings-grid settings-grid--dispatch">
+        <SharedDispatchFields settings={settings} saving={saving} onUpdate={update} />
+        <InstagramFields settings={settings} saving={saving} onUpdate={update} />
+        <ChipLevelPresets settings={settings} saving={saving} onUpdate={update} />
       </section>
-      <ChipLevelPresets settings={settings} saving={saving} onUpdate={update} />
 
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     </div>
