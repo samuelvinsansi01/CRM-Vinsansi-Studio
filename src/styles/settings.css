@@ -50,7 +50,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
-  padding: var(--space-20);
+  padding: var(--space-16);
   border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
   border-radius: var(--radius-12);
   background: color-mix(in srgb, var(--color-pure-white) 2%, transparent);
@@ -64,15 +64,15 @@
 
 .settings-chip-level-card__header strong {
   color: var(--color-pure-white);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 24px;
 }
 
 .settings-chip-level-card__header span {
   color: color-mix(in srgb, var(--color-pure-white) 62%, transparent);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .settings-chip-level-card__fields {
@@ -85,8 +85,11 @@
   margin-bottom: 0;
 }
 
-.settings-chip-level-card__fields .field__control {
-  height: 40px;
+.settings-chip-level-card__fields .field__control,
+.settings-chip-level-card__fields .select-field {
+  min-height: 40px;
+  height: auto;
+  padding: 9px 16px;
 }
 
 @media (max-width: 1440px) {
@@ -146,8 +149,10 @@
 
 .settings-page .settings-card .field {
   min-width: 0;
-  gap: var(--space-08);
+  gap: 9px;
   margin-bottom: var(--space-16);
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .settings-page .settings-card .field:last-of-type {
@@ -156,6 +161,17 @@
 
 .settings-page .settings-card .field__label {
   font-weight: 500;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.settings-page .settings-card .field__control,
+.settings-page .settings-card .select-field {
+  min-height: 40px;
+  height: auto;
+  padding: 9px 16px;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .settings-page .settings-card__actions {

@@ -83,11 +83,21 @@ export function chipInstance(chip: Pick<ChipConfigRecord, 'instance' | 'name'>) 
   return String(chip.instance ?? chip.name ?? '').trim();
 }
 
-export function isChipConnectionOpen(chip: Pick<ChipConfigRecord, 'connectionStatus' | 'status'>) {
-  const status = normalizeComparable(chip.connectionStatus || chip.status);
-  if (!status) return false;
-  if (['inativo', 'offline', 'pausado', 'paused', 'closed', 'close', 'disconnected', 'disconnect', 'error', 'erro'].includes(status)) return false;
-  return ['open', 'opened', 'connected', 'conectado', 'online', 'ready'].includes(status);
+const CONNECTION_OPEN_STATES = ['open', 'opened', 'connected', 'connectado', 'conectado', 'online', 'ready'];
+const CONNECTION_CLOSED_STATES = ['inativo', 'offline', 'pausado', 'paused', 'closed', 'close', 'disconnected', 'disconnect', 'error', 'erro'];
+
+function connectionStateToken(chip: Pick<ChipConfigRecord, 'connectionStatus' | 'status'>) {
+  return normalizeComparable(chip.connectionStatus);
+}
+
+export function isChipConnectionOpen(chip: Pick<ChipConfigRecord, 'connectionStatus' | 'status' | 'active' | 'paused'>) {
+  const state = connectionStateToken(chip);
+  if (!state) return Boolean(chip.active && !chip.paused);
+  if (CONNECTION_CLOSED_STATES.includes(state)) return false;
+  if (CONNECTION_OPEN_STATES.includes(state)) return true;
+  if (state === 'ativo') return Boolean(chip.active && !chip.paused);
+  if (state === 'inativo') return false;
+  return Boolean(chip.active && !chip.paused);
 }
 
 export function isOperationalWhatsAppChip(chip: ChipConfigRecord) {
@@ -107,7 +117,10 @@ export function chipStatusLabel(chip: ChipConfigRecord) {
   if (!chip.active) return 'Inativo';
   if (chip.paused) return 'Pausado';
   if (!chipInstance(chip)) return 'Sem instancia';
-  if (!isChipConnectionOpen(chip)) return 'Offline';
+  const state = connectionStateToken(chip);
+  if (!state) return 'Ativo';
+  if (CONNECTION_CLOSED_STATES.includes(state)) return 'Offline';
+  if (CONNECTION_OPEN_STATES.includes(state) || state === 'ativo') return 'Ativo';
   return 'Ativo';
 }
 
