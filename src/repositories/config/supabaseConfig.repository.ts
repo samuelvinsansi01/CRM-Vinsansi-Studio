@@ -557,19 +557,39 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
     data: dataPayload,
     updated_at: nowIso(),
   };
+  const client = getSupabaseClient();
   const response = existingByUsername || existingById
-    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select('*').single()
-    : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
+    ? await client.from(table).update(payload).eq('id', targetId).eq('user_id', userId).select('*').single()
+    : await client.from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
   if (response.error) throw new Error(response.error.message);
 
-  // Confirma o valor diretamente no banco antes de informar sucesso à interface.
-  // Isso evita falso positivo quando uma migration/trigger/schema remoto não
-  // persiste a coluna esperada.
-  const verification = await getSupabaseClient().from(table).select('*').eq('id', targetId).single();
+  // A coluna daily_limit e o JSON legado precisam permanecer sincronizados.
+  // Para registros existentes, a RPC dedicada confirma a persistencia dentro
+  // do banco e evita falso positivo causado por cache de schema/trigger antigo.
+  if (existingByUsername || existingById) {
+    const rpc = await client.rpc('save_instagram_profile_daily_limit', {
+      p_profile_id: targetId,
+      p_daily_limit: dailyLimit,
+    });
+    if (rpc.error) {
+      throw new Error(`Nao foi possivel persistir o limite diario no banco: ${rpc.error.message}. Aplique a migration V3.39.3.`);
+    }
+    const confirmed = Number(rpc.data);
+    if (!Number.isFinite(confirmed) || confirmed !== dailyLimit) {
+      throw new Error(`O banco retornou ${String(rpc.data)} ao salvar o limite diario de ${dailyLimit}.`);
+    }
+  }
+
+  const verification = await client
+    .from(table)
+    .select('*')
+    .eq('id', targetId)
+    .eq('user_id', userId)
+    .single();
   if (verification.error) throw new Error(`Perfil salvo, mas nao foi possivel confirmar o limite diario: ${verification.error.message}`);
   const saved = rowToInstagramProfile(verification.data as Record<string, unknown>);
   if (saved.dailyLimit !== dailyLimit) {
-    throw new Error(`O banco nao confirmou o limite diario de ${dailyLimit}. Valor retornado: ${saved.dailyLimit}. Aplique a migration V3.39.2.`);
+    throw new Error(`O banco nao confirmou o limite diario de ${dailyLimit}. Valor retornado: ${saved.dailyLimit}. Aplique a migration V3.39.3.`);
   }
   return saved;
 }
