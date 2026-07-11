@@ -195,7 +195,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const { settings: importSettings } = useImportSettings();
   const simulateImport = importSettings?.safeMode.simulationMode ?? true;
-  const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToPreSend } = useImportLeads(activeStatus, search);
+  const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToInicio } = useImportLeads(activeStatus, search);
   const previewToken = useRef(0);
 
   const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
@@ -346,16 +346,24 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     }
   };
 
-  const sendToPreSend = async () => {
+  const approveLeads = async () => {
     try {
-      const created = await sendApprovedToPreSend();
+      const result = await importJson(jsonText, { simulate: simulateImport });
+      const created = await sendApprovedToInicio(result.leads);
+      setLastImport(result);
+      setPage(1);
+      setSelectedRows([]);
       if (!created.length) {
-        pushToast({ title: 'Nada enviado', description: 'Nao ha aprovados novos para enviar ao pre-envio.', tone: 'warning' });
+        pushToast({ title: 'Nada aprovado', description: 'Nao ha aprovados novos para mandar ao Inicio.', tone: 'warning' });
         return;
       }
-      pushToast({ title: 'Enviado ao pre-envio', description: `${created.length} lead(s) disponivel(is) no pre-envio.`, tone: 'success' });
+      pushToast({
+        title: 'Leads aprovados',
+        description: `${created.length} lead(s) aprovados e enviados ao Inicio.`,
+        tone: 'success',
+      });
     } catch (err) {
-      pushToast({ title: 'Erro ao enviar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      pushToast({ title: 'Erro ao aprovar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
   };
 
@@ -434,8 +442,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           />
           <div className="import-json__actions">
             <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
-            <Button variant="secondary" disabled={summary.approved === 0} onClick={sendToPreSend}>Enviar WhatsApp ao Pré-Envio</Button>
-            <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={handleImport}>{simulateImport ? 'Simular regras' : 'Importar'}</Button>
+            <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>Aprovar leads</Button>
           </div>
           {lastImport ? (() => {
             const metrics = [
