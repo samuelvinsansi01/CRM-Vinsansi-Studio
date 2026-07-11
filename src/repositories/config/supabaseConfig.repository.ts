@@ -570,9 +570,6 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
         p_active: payload.active,
         p_status: record.status,
         p_daily_limit: dailyLimit,
-        p_blocks: instagramDefaults.batches,
-        p_block_size: instagramDefaults.perBatch,
-        p_interval_minutes: instagramDefaults.delayMinutes,
         p_data: dataPayload,
       })
     : await client
@@ -587,7 +584,7 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
 
   const rawSaved = Array.isArray(response.data) ? response.data[0] : response.data;
   if (!rawSaved || typeof rawSaved !== 'object') {
-    throw new Error('O banco nao retornou o perfil Instagram apos a gravacao. Aplique a migration V3.39.7.');
+    throw new Error('O banco nao retornou o perfil Instagram apos a gravacao. Aplique a migration V3.39.8.');
   }
 
   const saved = rowToInstagramProfile(rawSaved as Record<string, unknown>);
