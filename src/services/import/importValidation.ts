@@ -5,22 +5,18 @@ import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import type { ImportLeadDestination, ImportLeadInput, ImportReasonSummary, ImportRejectionCode } from './types';
 
 export type ImportValidationContext = {
-  existingLeadIds?: Set<string>;
   existingPhones?: Set<string>;
   existingSites?: Set<string>;
   existingInstagrams?: Set<string>;
   existingMapsUrls?: Set<string>;
-  existingLeadIdToId?: Map<string, string>;
   existingPhoneToId?: Map<string, string>;
   existingSiteToId?: Map<string, string>;
   existingInstagramToId?: Map<string, string>;
   existingMapsUrlToId?: Map<string, string>;
-  baseLeadIds?: Set<string>;
   basePhones?: Set<string>;
   baseSites?: Set<string>;
   baseInstagrams?: Set<string>;
   baseMapsUrls?: Set<string>;
-  sentLeadIds?: Set<string>;
   sentPhones?: Set<string>;
   sentSites?: Set<string>;
   sentInstagrams?: Set<string>;
@@ -93,7 +89,6 @@ const REASON_LABELS: Record<ImportRejectionCode | 'ignored' | 'approved', string
   payload_duplicate: 'Duplicado no JSON atual',
   duplicate_phone: 'Telefone duplicado',
   duplicate_site: 'Site/dominio duplicado',
-  duplicate_lead_id: 'Lead duplicado',
   already_in_base: 'Base Permanente',
   already_sent: 'Ja enviado em sent_contacts',
   invalid_item: 'Item invalido',
@@ -121,7 +116,6 @@ type NormalizedRawLead = {
   instagram: string;
   site: string;
   googleUrl: string;
-  sourceLeadId: string;
   cidade: string;
   estado: string;
   rating: number;
@@ -284,10 +278,6 @@ function splitCandidateText(value: string | string[]) {
   return values.map((item) => normalizeComparable(item)).filter(Boolean);
 }
 
-function exactNormalizedMatch(a: string, b: string) {
-  return Boolean(a && b && a === b);
-}
-
 function getCategoryCandidates(raw: Record<string, unknown>, lead: NormalizedRawLead) {
   const values = [
     lead.category,
@@ -308,7 +298,9 @@ function matchBranch(lead: NormalizedRawLead, settings: ImportSettings) {
     const branch = normalizeComparable(rule.branch);
     const subs = splitCandidateText(rule.subcategories);
     const accepted = [branch, ...subs].filter(Boolean);
-    const matches = candidates.some((candidate) => accepted.some((item) => exactNormalizedMatch(candidate, item)));
+    const matches = candidates.some((candidate) =>
+      accepted.some((item) => candidate === item || candidate.includes(item) || item.includes(candidate)),
+    );
 
     if (matches) return rule;
   }
@@ -368,7 +360,6 @@ function normalizeRawLead(raw: Record<string, unknown>): NormalizedRawLead {
   const instagram = readFirst(raw, ['instagram', 'instagramUrl', 'instagram_url', 'instagramUsername', 'instagram_username', 'ig', 'social.instagram']);
   const site = readFirst(raw, ['site', 'website', 'websiteUrl', 'website_url', 'domain', 'webpage', 'link']);
   const googleUrl = readFirst(raw, ['googleUrl', 'google_url', 'mapsUrl', 'maps_url', 'googleMapsUrl', 'google_maps_url', 'placeUrl', 'place_url', 'url']);
-  const sourceLeadId = readFirst(raw, ['lead_id', 'leadId', 'item_id', 'itemId', 'sourceLeadId', 'source_lead_id', 'id']);
   const cidade = readFirst(raw, ['cidade', 'city', 'address.city', 'location.city']);
   const estado = normalizeBrazilState(readFirst(raw, ['estado', 'state', 'uf', 'address.state', 'location.state']));
 
@@ -381,7 +372,6 @@ function normalizeRawLead(raw: Record<string, unknown>): NormalizedRawLead {
     instagram,
     site,
     googleUrl,
-    sourceLeadId,
     cidade,
     estado,
     rating: readRating(raw),
@@ -427,7 +417,6 @@ function buildDraft(lead: NormalizedRawLead, branchRule: ImportBranchRule | null
     normalizedSite: lead.identity.site,
     normalizedInstagram,
     normalizedMapsUrl: lead.identity.mapsUrl,
-    sourceLeadId: lead.sourceLeadId,
   };
 }
 
@@ -435,24 +424,17 @@ function findDuplicate(
   lead: NormalizedRawLead,
   settings: ImportSettings,
   context: Required<ImportValidationContext>,
-  payload: Required<Pick<ImportValidationContext, 'existingLeadIds' | 'existingPhones' | 'existingSites' | 'existingInstagrams' | 'existingMapsUrls'>>,
+  payload: Required<Pick<ImportValidationContext, 'existingPhones' | 'existingSites' | 'existingInstagrams' | 'existingMapsUrls'>>,
 ): Rejection | null {
   const { phone, site, instagram, mapsUrl } = lead.identity;
-  const sourceLeadId = normalizeComparable(lead.sourceLeadId);
 
   if (!settings.deduplication.enabled) return null;
-
-  if (sourceLeadId) {
-    if (context.existingLeadIds.has(sourceLeadId)) return reject('duplicate_lead_id', 'lead_id ja existe na importacao/base', true);
-    if (payload.existingLeadIds.has(sourceLeadId)) return reject('payload_duplicate', 'lead_id duplicado no JSON atual', true);
-  }
 
   if (settings.deduplication.blockSentContacts) {
     if (phone && context.sentPhones.has(phone)) return reject('already_sent', 'telefone ja esta em sent_contacts', true);
     if (site && context.sentSites.has(site)) return reject('already_sent', 'site ja esta em sent_contacts', true);
     if (instagram && context.sentInstagrams.has(instagram)) return reject('already_sent', 'instagram ja esta em sent_contacts', true);
     if (mapsUrl && context.sentMapsUrls.has(mapsUrl)) return reject('already_sent', 'maps ja esta em sent_contacts', true);
-    if (sourceLeadId && context.sentLeadIds.has(sourceLeadId)) return reject('already_sent', 'lead_id ja esta em sent_contacts', true);
   }
 
   if (settings.deduplication.blockBasePermanent) {
@@ -460,7 +442,6 @@ function findDuplicate(
     if (site && context.baseSites.has(site)) return reject('already_in_base', 'site ja existe na base permanente', true);
     if (instagram && context.baseInstagrams.has(instagram)) return reject('already_in_base', 'instagram ja existe na base permanente', true);
     if (mapsUrl && context.baseMapsUrls.has(mapsUrl)) return reject('already_in_base', 'maps ja existe na base permanente', true);
-    if (sourceLeadId && context.baseLeadIds.has(sourceLeadId)) return reject('already_in_base', 'lead_id ja existe na base permanente', true);
   }
 
   const duplicateInRepository =
@@ -588,9 +569,7 @@ function incrementReason(map: Map<string, ImportReasonSummary>, code: ImportReje
   map.set(code, { code, label: REASON_LABELS[code], count: 1 });
 }
 
-function rememberIdentity(target: Pick<ImportValidationContext, 'existingLeadIds' | 'existingPhones' | 'existingSites' | 'existingInstagrams' | 'existingMapsUrls'>, lead: NormalizedRawLead) {
-  const sourceLeadId = normalizeComparable(lead.sourceLeadId);
-  if (sourceLeadId) target.existingLeadIds?.add(sourceLeadId);
+function rememberIdentity(target: Pick<ImportValidationContext, 'existingPhones' | 'existingSites' | 'existingInstagrams' | 'existingMapsUrls'>, lead: NormalizedRawLead) {
   if (lead.identity.phone) target.existingPhones?.add(lead.identity.phone);
   if (lead.identity.site) target.existingSites?.add(lead.identity.site);
   if (lead.identity.instagram) target.existingInstagrams?.add(lead.identity.instagram);
@@ -600,29 +579,24 @@ function rememberIdentity(target: Pick<ImportValidationContext, 'existingLeadIds
 export async function normalizeImportItems(rawItems: unknown[], context: ImportValidationContext = {}): Promise<ImportValidationResult> {
   const settings = await importSettingsService.get();
   const normalizedContext: Required<ImportValidationContext> = {
-    existingLeadIds: new Set(context.existingLeadIds ?? []),
     existingPhones: new Set(context.existingPhones ?? []),
     existingSites: new Set(context.existingSites ?? []),
     existingInstagrams: new Set(context.existingInstagrams ?? []),
     existingMapsUrls: new Set(context.existingMapsUrls ?? []),
-    existingLeadIdToId: new Map(context.existingLeadIdToId ?? []),
     existingPhoneToId: new Map(context.existingPhoneToId ?? []),
     existingSiteToId: new Map(context.existingSiteToId ?? []),
     existingInstagramToId: new Map(context.existingInstagramToId ?? []),
     existingMapsUrlToId: new Map(context.existingMapsUrlToId ?? []),
-    baseLeadIds: new Set(context.baseLeadIds ?? []),
     basePhones: new Set(context.basePhones ?? []),
     baseSites: new Set(context.baseSites ?? []),
     baseInstagrams: new Set(context.baseInstagrams ?? []),
     baseMapsUrls: new Set(context.baseMapsUrls ?? []),
-    sentLeadIds: new Set(context.sentLeadIds ?? []),
     sentPhones: new Set(context.sentPhones ?? []),
     sentSites: new Set(context.sentSites ?? []),
     sentInstagrams: new Set(context.sentInstagrams ?? []),
     sentMapsUrls: new Set(context.sentMapsUrls ?? []),
   };
   const payloadIdentity = {
-    existingLeadIds: new Set<string>(),
     existingPhones: new Set<string>(),
     existingSites: new Set<string>(),
     existingInstagrams: new Set<string>(),

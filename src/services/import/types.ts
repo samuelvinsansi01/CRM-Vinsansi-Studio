@@ -17,7 +17,6 @@ export type ImportRejectionCode =
   | 'duplicate_phone'
   | 'duplicate_site'
   | 'already_in_base'
-  | 'duplicate_lead_id'
   | 'already_sent'
   | 'invalid_item';
 
@@ -25,7 +24,6 @@ export type ImportLead = {
   id: string;
   empresa: string;
   ramo: string;
-  sourceLeadId?: string;
   branch_id?: string;
   branch_slug?: string;
   subcategoria?: string;
@@ -106,13 +104,10 @@ export type ImportParseResult = {
 export type ImportExecutionOptions = {
   simulate?: boolean;
   context?: {
-    existingLeadIds?: string[];
-    baseLeadIds?: string[];
     basePhones?: string[];
     baseSites?: string[];
     baseInstagrams?: string[];
     baseMapsUrls?: string[];
-    sentLeadIds?: string[];
     sentPhones?: string[];
     sentSites?: string[];
     sentInstagrams?: string[];

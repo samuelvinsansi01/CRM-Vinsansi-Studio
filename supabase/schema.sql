@@ -34,6 +34,10 @@ create table if not exists public.branches (
 
 create table if not exists public.templates (
   id text primary key,
+  part_1 text,
+  part_2 text,
+  part_3 text,
+  part_4 text,
   data jsonb not null default '{}'::jsonb,
   status text,
   active boolean,
@@ -67,6 +71,10 @@ create table if not exists public.pre_send_leads (
 
 create table if not exists public.whatsapp_queue_items (
   id text primary key,
+  message_1 text,
+  message_2 text,
+  message_3 text,
+  message_4 text,
   data jsonb not null default '{}'::jsonb,
   status text,
   active boolean,
@@ -78,6 +86,10 @@ create table if not exists public.whatsapp_queue_items (
 
 create table if not exists public.instagram_queue_items (
   id text primary key,
+  message_1 text,
+  message_2 text,
+  message_3 text,
+  message_4 text,
   data jsonb not null default '{}'::jsonb,
   status text,
   active boolean,

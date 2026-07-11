@@ -66,20 +66,20 @@ export const supabasePreSendRepository: PreSendRepository = {
     const leads = await allLeads();
     const grouped = new Map<string, PreSendDayCard>();
     for (const lead of leads) {
-      if (isStatusGroup(lead.status, 'sent') || isStatusGroup(lead.status, 'archived')) continue;
+      if (isStatusGroup(lead.status, 'archived')) continue;
       const current = grouped.get(lead.dayId) ?? { id: lead.dayId, channel: lead.channel, label: lead.dayId.split('-').slice(1).join(' ') || lead.dayId, queued: 0, limit: 0 };
-      if (isStatusGroup(lead.status, 'review') || isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'queued')) current.queued += 1;
+      if (isStatusGroup(lead.status, 'review') || isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'sent')) current.queued += 1;
       grouped.set(lead.dayId, current);
     }
     return Array.from(grouped.values());
   },
 
   async summary(): Promise<PreSendSummary> {
-    const validLeads = (await allLeads()).filter((lead) => !isStatusGroup(lead.status, 'archived') && !isStatusGroup(lead.status, 'sent'));
+    const validLeads = (await allLeads()).filter((lead) => !isStatusGroup(lead.status, 'archived'));
     return {
-      whatsapp: validLeads.filter((lead) => lead.channel === 'WhatsApp' && isStatusGroup(lead.status, 'approved')).length,
-      instagram: validLeads.filter((lead) => lead.channel === 'Instagram' && isStatusGroup(lead.status, 'approved')).length,
-      queued: validLeads.filter((lead) => isStatusGroup(lead.status, 'queued')).length,
+      whatsapp: validLeads.filter((lead) => lead.channel === 'WhatsApp' && (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'sent'))).length,
+      instagram: validLeads.filter((lead) => lead.channel === 'Instagram' && (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'sent'))).length,
+      queued: validLeads.filter((lead) => isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'sent')).length,
       total: validLeads.length,
     };
   },
@@ -94,7 +94,7 @@ export const supabasePreSendRepository: PreSendRepository = {
       const matchesDay = !filters.dayId || lead.dayId === filters.dayId;
       const matchesProfile = !filters.profile || lead.profile === filters.profile;
       const matchesFilter = matchesQueueFilter(lead, filters.queueFilter);
-      return matchesChannel && matchesDay && matchesProfile && matchesFilter && !isStatusGroup(lead.status, 'archived') && !isStatusGroup(lead.status, 'sent');
+      return matchesChannel && matchesDay && matchesProfile && matchesFilter && !isStatusGroup(lead.status, 'archived');
     });
   },
 

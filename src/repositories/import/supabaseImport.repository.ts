@@ -172,7 +172,6 @@ function rowToLead(row: Record<string, unknown>, branchRules: BranchRule[]): Imp
     normalizedSite: String(row.website_domain ?? data.normalizedSite ?? normalizeDomain(website)),
     normalizedInstagram: String(row.instagram_username ?? data.normalizedInstagram ?? normalizeInstagramUsername(instagram)),
     normalizedMapsUrl: String(row.maps_url ?? data.normalizedMapsUrl ?? ''),
-    sourceLeadId: String((data as Record<string, unknown>).sourceLeadId ?? row.sourceLeadId ?? ''),
     returned_from_queue: Boolean((data as Record<string, unknown>).returned_from_queue ?? false),
     returned_at: String((data as Record<string, unknown>).returned_at ?? ''),
     return_reason: String((data as Record<string, unknown>).return_reason ?? ''),
@@ -203,7 +202,7 @@ function calculateSummary(records: ImportLead[]): ImportSummary {
   };
 }
 
-function idMap(records: ImportLead[], key: 'normalizedPhone' | 'normalizedSite' | 'normalizedInstagram' | 'normalizedMapsUrl' | 'sourceLeadId') {
+function idMap(records: ImportLead[], key: 'normalizedPhone' | 'normalizedSite' | 'normalizedInstagram' | 'normalizedMapsUrl') {
   const map = new Map<string, string>();
   for (const lead of records) {
     const value = String(lead[key] ?? '').trim();
@@ -285,7 +284,7 @@ function dbLeadPayload(lead: ImportLead, userId: string) {
   const site = lead.site ?? '';
   const instagram = lead.instagram_url ?? lead.instagram ?? '';
   const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-  const normalizedLead = { ...lead, estado: normalizeBrazilState(lead.estado), sourceLeadId: lead.sourceLeadId ?? '' };
+  const normalizedLead = { ...lead, estado: normalizeBrazilState(lead.estado) };
   return {
     id: lead.id,
     user_id: userId,
@@ -365,7 +364,6 @@ async function rememberLeadImports(userId: string, batchId: string, leads: Impor
 async function rememberRegistries(userId: string, leads: ImportLead[]) {
   const identityRows = leads.flatMap((lead) => {
     const identities = [
-      ['lead_id', lead.sourceLeadId ?? ''],
       ['phone', lead.normalizedPhone || normalizePhone(lead.whatsapp)],
       ['site', lead.normalizedSite || normalizeDomain(lead.site)],
       ['instagram', lead.normalizedInstagram || normalizeInstagramUsername(lead.instagram_url ?? lead.instagram)],
@@ -413,22 +411,18 @@ export const supabaseImportRepository: ImportRepository = {
     const existing = await allLeads(true);
     const startedAt = performance.now?.() ?? Date.now();
     const normalized = await normalizeImportItems(extractImportItems(parsed), {
-      existingLeadIds: new Set(existing.map((lead) => String(lead.sourceLeadId ?? '').trim()).filter(Boolean)),
       existingPhones: new Set(existing.map((lead) => normalizePhone(lead.whatsapp)).filter(Boolean)),
       existingSites: new Set(existing.map((lead) => normalizeDomain(lead.site)).filter(Boolean)),
       existingInstagrams: new Set(existing.map((lead) => String(lead.normalizedInstagram ?? '').trim()).filter(Boolean)),
       existingMapsUrls: new Set(existing.map((lead) => String(lead.normalizedMapsUrl ?? '').trim()).filter(Boolean)),
-      existingLeadIdToId: idMap(existing, 'sourceLeadId'),
       existingPhoneToId: idMap(existing, 'normalizedPhone'),
       existingSiteToId: idMap(existing, 'normalizedSite'),
       existingInstagramToId: idMap(existing, 'normalizedInstagram'),
       existingMapsUrlToId: idMap(existing, 'normalizedMapsUrl'),
-      baseLeadIds: new Set(options.context?.baseLeadIds ?? []),
       basePhones: new Set(options.context?.basePhones ?? []),
       baseSites: new Set(options.context?.baseSites ?? []),
       baseInstagrams: new Set(options.context?.baseInstagrams ?? []),
       baseMapsUrls: new Set(options.context?.baseMapsUrls ?? []),
-      sentLeadIds: new Set(options.context?.sentLeadIds ?? []),
       sentPhones: new Set(options.context?.sentPhones ?? []),
       sentSites: new Set(options.context?.sentSites ?? []),
       sentInstagrams: new Set(options.context?.sentInstagrams ?? []),

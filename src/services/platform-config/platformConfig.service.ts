@@ -68,6 +68,8 @@ export const platformConfigService = {
         type: template.type,
         message1: template.message1,
         message2: template.message2,
+        message3: template.message3,
+        message4: template.message4,
         active: template.active,
       }));
 

@@ -254,9 +254,18 @@ export const evolutionWhatsAppGateway: WhatsAppGateway = {
       try {
         if (!instance) throw new Error('Chip sem instancia Evolution vinculada.');
         await assertConnected(instance);
-        await sendText(instance, lead, lead.message_1 || lead.message1);
-        if (config.delayMs) await delay(config.delayMs);
-        await sendText(instance, lead, lead.message_2 || lead.message2);
+        const parts = [
+          lead.message_1 || lead.message1,
+          lead.message_2 || lead.message2,
+          lead.message_3 || lead.message3,
+          lead.message_4 || lead.message4,
+        ].map((message) => String(message ?? '').trim()).filter(Boolean);
+
+        for (let index = 0; index < parts.length; index += 1) {
+          if (index > 0 && config.delayMs) await delay(config.delayMs);
+          await sendText(instance, lead, parts[index]);
+        }
+
         if (config.delayMs) await delay(config.delayMs);
         await sendImage(instance, lead);
         results.push({ leadId: lead.id, status: 'sent' });

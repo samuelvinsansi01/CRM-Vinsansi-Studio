@@ -170,7 +170,10 @@ async function persistSentToBase(leads: InstagramQueueLead[]) {
         override_at: lead.override_at,
         status: 'sent',
         sentAt,
-        template: renderTemplateVariables(lead.message1, lead),
+        template: [lead.message1, lead.message2, lead.message3, lead.message4]
+          .map((message) => renderTemplateVariables(message, lead))
+          .filter(Boolean)
+          .join('\n\n'),
         chipOrProfile: lead.profile,
         notes: lead.instagram,
       }),
