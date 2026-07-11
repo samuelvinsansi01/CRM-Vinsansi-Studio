@@ -52,7 +52,13 @@ function InstagramFields({ settings, saving, onUpdate }: InstagramFieldsProps) {
           updateInstagram({ profiles, profile: profiles[0] ?? settings.instagram.profile });
         }}
       />
-      <p className="settings-note">Usado pelo Pré-Envio e pela fila Instagram, sem depender dos níveis dos chips.</p>
+      <Field
+        label="Quantidade diária por perfil"
+        value={String(settings.instagram.dailyLimit)}
+        density="compact"
+        onChange={(value) => updateInstagram({ dailyLimit: toNumber(value, settings.instagram.dailyLimit) })}
+      />
+      <p className="settings-note">Usado pelo Pré-Envio e pela fila Instagram por perfil, sem depender dos níveis dos chips.</p>
       <div className="settings-card__actions">
         <Button iconLeft={Save} loading={saving} onClick={() => void onUpdate({ instagram: settings.instagram })}>
           Salvar
