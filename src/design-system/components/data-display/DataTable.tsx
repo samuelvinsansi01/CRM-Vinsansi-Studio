@@ -147,7 +147,7 @@ export function DataTable<T extends Record<string, ReactNode>>({
                 </td>
               ) : null}
               {columns.map((column) => (
-                <td key={String(column.key)}>
+                <td key={String(column.key)} data-column-key={String(column.key)}>
                   {column.render ? column.render(row, rowIndex) : row[column.key as keyof T]}
                 </td>
               ))}

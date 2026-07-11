@@ -92,6 +92,43 @@ function destinationTone(value: string) {
   return 'success';
 }
 
+function splitSubcategories(value?: string | null) {
+  return String(value ?? '')
+    .split(/[;,|\n\/]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function SubcategoryPreview({ value }: { value?: string | null }) {
+  const items = splitSubcategories(value);
+
+  if (!items.length) {
+    return <span className="import-subcategory import-subcategory--empty">—</span>;
+  }
+
+  const label = items[0];
+  const extra = items.length - 1;
+
+  return (
+    <span className="import-subcategory" tabIndex={0} title={items.join(' • ')}>
+      <span className="import-subcategory__pill">
+        <span className="import-subcategory__text">{label}</span>
+        {extra > 0 ? <small className="import-subcategory__more">+{extra}</small> : null}
+      </span>
+      <span className="import-subcategory__card" role="tooltip">
+        <strong>Sub ramo</strong>
+        <div className="import-subcategory__list">
+          {items.map((item) => (
+            <span className="import-subcategory__tag" key={item}>
+              {item}
+            </span>
+          ))}
+        </div>
+      </span>
+    </span>
+  );
+}
+
 function toForm(lead: ImportLead): LeadForm {
   return {
     empresa: lead.empresa,
@@ -346,12 +383,13 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
   const columns: TableColumn<ImportLead>[] = [
-    { key: 'empresa', label: 'Nome da empresa', width: '42%', render: (lead) => silentLink(lead.empresa, mapsHref(lead)) },
-    { key: 'ramo', label: 'Ramo', width: '28%' },
+    { key: 'empresa', label: 'Nome da empresa', width: '36%', render: (lead) => silentLink(lead.empresa, mapsHref(lead)) },
+    { key: 'ramo', label: 'Ramo', width: '24%' },
+    { key: 'subcategoria', label: 'Sub ramo', width: '24%', render: (lead) => <SubcategoryPreview value={lead.subcategoria} /> },
     {
       key: 'destino',
       label: 'Destino',
-      width: '20%',
+      width: '16%',
       render: (lead) => {
         const value = destinationLabel(lead);
         return <Tag tone={destinationTone(value) as 'neutral' | 'success' | 'warning' | 'danger' | 'primary'}>{value}</Tag>;
