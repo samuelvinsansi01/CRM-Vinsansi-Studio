@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
 import { branchIdOrNull, branchSlug, normalizeBranchId, normalizeBranchText } from '../../services/config/branchIdentity';
-import { chipLevelDefaults } from '../../services/config/chipOperational';
+import { chipLevelDefaults, inferChipLevelFromShape } from '../../services/config/chipOperational';
 import type { BranchConfigRecord, ChipConfigRecord, ConfigKind, ConfigRecord, ConfigStatus, InstagramConfigRecord, TemplateConfigRecord, TemplateType } from '../../services/config/types';
 import { defaultDispatchSettings } from '../../services/settings/settings.seed';
 import { createUuid, getCurrentUserId, nowIso } from '../supabase.helpers';
@@ -247,8 +247,19 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
   const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
   const active = toBoolean(inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active, true);
   const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
-  const level = String(row.level ?? data.level ?? 'estabilizado');
-  const levelDefaults = chipLevelDefaults(level);
+  const numericDailyLimit = Number(row.daily_limit ?? row.dailyLimit ?? data.dailyLimit ?? 0);
+  const numericIntervalSeconds = Number(row.interval_seconds ?? row.intervalSeconds ?? data.intervalSeconds ?? 0);
+  const numericBlockSize = Number(row.block_size ?? row.blockSize ?? data.blockSize ?? 0);
+  const startTime = String(row.start_time ?? row.startTime ?? data.startTime ?? '').trim();
+  const endTime = String(row.end_time ?? row.endTime ?? data.endTime ?? '').trim();
+  const inferredLevel = inferChipLevelFromShape({
+    dailyLimit: numericDailyLimit,
+    blockSize: numericBlockSize,
+    intervalSeconds: numericIntervalSeconds,
+    startTime,
+    endTime,
+  }) ?? String(row.level ?? data.level ?? 'estabilizado');
+  const levelDefaults = chipLevelDefaults(inferredLevel);
   const blocks = row.blocks;
   const batches = Array.isArray(data.batches)
     ? data.batches
@@ -264,15 +275,15 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
     connectionStatus,
     name: String(row.label ?? row.name ?? row.instance ?? data.name ?? 'Chip'),
     number: String(row.phone ?? row.number ?? data.number ?? ''),
-    level,
+    level: inferredLevel,
     url: String(row.url ?? row.evolution_url ?? row.base_url ?? data.url ?? ''),
     apiKey: String(row.api_key ?? data.apiKey ?? ''),
     priority: Number(row.priority ?? data.priority ?? 1),
-    startTime: String(row.start_time ?? row.startTime ?? data.startTime ?? levelDefaults.startTime),
-    endTime: String(row.end_time ?? row.endTime ?? data.endTime ?? levelDefaults.endTime),
-    dailyLimit: Number(row.daily_limit ?? row.dailyLimit ?? data.dailyLimit ?? levelDefaults.dailyLimit),
-    intervalSeconds: Number(row.interval_seconds ?? row.intervalSeconds ?? data.intervalSeconds ?? levelDefaults.intervalSeconds),
-    blockSize: Number(row.block_size ?? row.blockSize ?? data.blockSize ?? levelDefaults.blockSize),
+    startTime: startTime || levelDefaults.startTime,
+    endTime: endTime || levelDefaults.endTime,
+    dailyLimit: numericDailyLimit || levelDefaults.dailyLimit,
+    intervalSeconds: numericIntervalSeconds || levelDefaults.intervalSeconds,
+    blockSize: numericBlockSize || levelDefaults.blockSize,
     batches,
     archivedPreviousActive: (data as Record<string, unknown>).archivedPreviousActive,
     paused: toBoolean(row.paused, data.paused ?? false),
