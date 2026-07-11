@@ -701,12 +701,41 @@ async function propagateBranchMediaToOpenQueues(branch: BranchConfigRecord) {
   }
 }
 
+async function updateBranchByRpc(record: BranchConfigRecord) {
+  const { data, error } = await getSupabaseClient().rpc('save_branch_config_v1', {
+    p_branch_id: String(record.id),
+    p_slug: record.slug || branchSlug(record.name),
+    p_name: record.name,
+    p_category: record.category || record.name,
+    p_subcategories: record.subcategories,
+    p_associated_categories: record.associatedCategories,
+    p_order_index: record.order,
+    p_min_rating: record.minRating,
+    p_min_reviews: record.minReviews,
+    p_image_name: record.imageName,
+    p_image_required: record.imageRequired,
+    p_active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
+    p_status: record.status,
+  });
+
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== 'object') throw new Error('O banco nao retornou o ramo atualizado.');
+
+  const saved = rowToBranch(row as Record<string, unknown>);
+  if (String(saved.id) !== String(record.id)) throw new Error('O banco retornou um ramo diferente do registro editado.');
+  if (normalizeComparable(saved.name) !== normalizeComparable(record.name)) throw new Error('O nome do ramo nao foi persistido no banco.');
+
+  await propagateBranchMediaToOpenQueues(saved);
+  return saved;
+}
+
 async function upsertBranch(record: BranchConfigRecord) {
   const userId = await getCurrentUserId();
   const table = tableForKind('branches');
   const numericId = branchIdOrNull(record.id);
   const slug = record.slug || branchSlug(record.name);
-  const existingById = numericId ? await findRowById(table, numericId) : null;
+  const existingById = record.id ? await findRowById(table, record.id) : null;
   let existingBySlug: Record<string, unknown> | null = null;
 
   if (slug) {
@@ -780,7 +809,7 @@ export const supabaseConfigRepository: ConfigRepository = {
     if (kind === 'chips') return upsertChip(rowToChip({ ...existing, ...input, id }));
     if (kind === 'instagram') return upsertInstagramProfile(rowToInstagramProfile({ ...existing, ...input, id }));
     const record = normalizeBranch({ ...existing, ...input, id }, existing as BranchConfigRecord);
-    return upsertBranch(record);
+    return updateBranchByRpc(record);
   },
 
   async remove(kind, id) {
