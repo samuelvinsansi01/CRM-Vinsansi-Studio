@@ -243,7 +243,7 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
 
 function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
   const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<ChipConfigRecord>;
-  const rawStatus = row.connectionStatus ?? data.connectionStatus ?? data.status ?? row.status;
+  const rawStatus = data.status ?? row.status;
   const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
   const active = toBoolean(inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active, true);
   const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
@@ -256,7 +256,15 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
       ? blocks.map(String)
       : levelDefaults.batches;
   const instance = String(row.instance ?? data.instance ?? row.name ?? row.label ?? 'Chip');
-  const connectionStatus = String(row.connectionStatus ?? data.connectionStatus ?? row.status ?? '');
+  const connectionStatus = String(
+    row.connection_state
+    ?? row.connectionStatus
+    ?? data.connection_state
+    ?? data.connectionState
+    ?? data.connectionStatus
+    ?? row.status
+    ?? ''
+  ).trim();
   return {
     id: String(row.id),
     kind: 'chips',
@@ -445,7 +453,7 @@ async function upsertChip(record: ChipConfigRecord) {
   }
 
   const targetId = String(existingByInstance?.id ?? existingById?.id ?? record.id ?? createUuid());
-  const preservedConnectionStatus = String(existingByInstance?.status ?? existingById?.status ?? record.connectionStatus ?? 'inactive');
+  const existingStatus = String(existingByInstance?.status ?? existingById?.status ?? '').trim();
   const payload = {
     id: targetId,
     user_id: userId,
@@ -458,7 +466,7 @@ async function upsertChip(record: ChipConfigRecord) {
     url: record.url,
     api_key: record.apiKey,
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
-    status: preservedConnectionStatus,
+    status: record.connectionStatus || existingStatus || 'inactive',
     daily_limit: record.dailyLimit || levelDefaults.dailyLimit,
     block_size: record.blockSize || levelDefaults.blockSize,
     interval_seconds: record.intervalSeconds || levelDefaults.intervalSeconds,

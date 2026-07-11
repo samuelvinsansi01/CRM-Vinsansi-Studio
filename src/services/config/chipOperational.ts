@@ -95,11 +95,11 @@ export function isOperationalWhatsAppChip(chip: ChipConfigRecord) {
 export function chipStatusLabel(chip: ChipConfigRecord) {
   if (chip.status === 'deleted') return 'Excluido';
   if (chip.status === 'Arquivado') return 'Arquivado';
-  if (!chip.active) return 'Inativo';
   if (chip.paused) return 'Pausado';
   if (!chipInstance(chip)) return 'Sem instancia';
-  if (!isChipConnectionOpen(chip)) return 'Offline';
-  return 'Ativo';
+  if (isChipConnectionOpen(chip)) return 'Ativo';
+  if (!chip.active) return 'Inativo';
+  return 'Offline';
 }
 
 export function chipLevelDefaults(level: string) {
