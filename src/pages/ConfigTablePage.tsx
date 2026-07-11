@@ -98,11 +98,6 @@ const templateTypeOptions: SelectOption[] = [
   { label: 'Com site', value: 'com-site' },
 ];
 
-const templateTypeFilterOptions: SelectOption[] = [
-  { label: 'Todos os tipos', value: 'Todos' },
-  ...templateTypeOptions,
-];
-
 const templateChannelOptions: SelectOption[] = [
   { label: 'Geral', value: 'Geral' },
   { label: 'WhatsApp', value: 'WhatsApp' },
@@ -512,7 +507,6 @@ function previewMessage(message: string) {
 export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
-  const [templateTypeFilter, setTemplateTypeFilter] = useState('Todos');
   const [drawerMode, setDrawerMode] = useState<DrawerMode>('create');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -528,15 +522,10 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   const screen = useMemo(() => makeScreen(kind, branches), [kind, branches]);
   const [form, setForm] = useState<Record<string, string>>(() => createEmptyForm(kind, branches));
 
-  const { records: loadedRecords, loading, error, createRecord, updateRecord, removeRecord, toggleArchive, bulkArchive, bulkRestore, bulkRemove } = useConfigRecords(kind, {
+  const { records, loading, error, createRecord, updateRecord, removeRecord, toggleArchive, bulkArchive, bulkRestore, bulkRemove } = useConfigRecords(kind, {
     search,
     status: statusFilter,
   });
-
-  const records = useMemo(() => {
-    if (kind !== 'templates' || templateTypeFilter === 'Todos') return loadedRecords;
-    return loadedRecords.filter((record) => isTemplate(record) && record.type === templateTypeFilter);
-  }, [kind, loadedRecords, templateTypeFilter]);
 
   const rows = useMemo(() => toTableRows(kind, records, branches), [kind, records, branches]);
   const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage));
@@ -700,9 +689,6 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
       </section>
       <FiltersBar>
         <SelectField value={statusFilter} options={statusOptions} placeholder="Status" onChange={(value) => { setStatusFilter(value); setPage(1); setSelectedRows([]); }} />
-        {kind === 'templates' ? (
-          <SelectField value={templateTypeFilter} options={templateTypeFilterOptions} placeholder="Tipo" onChange={(value) => { setTemplateTypeFilter(value); setPage(1); setSelectedRows([]); }} />
-        ) : null}
         <SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); setSelectedRows([]); }} />
       </FiltersBar>
       <TableCard

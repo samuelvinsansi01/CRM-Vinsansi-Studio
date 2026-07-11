@@ -142,7 +142,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const { settings: importSettings } = useImportSettings();
   const simulateImport = importSettings?.safeMode.simulationMode ?? true;
-  const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToPreSend } = useImportLeads(activeStatus, search);
+  const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, addApprovedToHome: commitApprovedToHome } = useImportLeads(activeStatus, search);
   const previewToken = useRef(0);
 
   const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
@@ -293,16 +293,16 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     }
   };
 
-  const sendToPreSend = async () => {
+  const addApprovedToHome = async () => {
     try {
-      const created = await sendApprovedToPreSend();
-      if (!created.length) {
-        pushToast({ title: 'Nada enviado', description: 'Nao ha aprovados novos para enviar ao pre-envio.', tone: 'warning' });
+      const added = await commitApprovedToHome();
+      if (!added) {
+        pushToast({ title: 'Nada para adicionar', description: 'Nao ha aprovados novos para enviar ao Inicio.', tone: 'warning' });
         return;
       }
-      pushToast({ title: 'Enviado ao pre-envio', description: `${created.length} lead(s) disponivel(is) no pre-envio.`, tone: 'success' });
+      pushToast({ title: 'Aprovados adicionados ao Inicio', description: `${added} lead(s) disponivel(is) no Inicio.`, tone: 'success' });
     } catch (err) {
-      pushToast({ title: 'Erro ao enviar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      pushToast({ title: 'Erro ao adicionar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
   };
 
@@ -404,7 +404,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           />
           <div className="import-json__actions">
             <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
-            <Button variant="secondary" disabled={summary.approved === 0} onClick={sendToPreSend}>Enviar WhatsApp ao Pré-Envio</Button>
+            <Button variant="secondary" disabled={summary.approved === 0} onClick={addApprovedToHome}>Adicionar aprovados ao Início</Button>
             <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={handleImport}>{simulateImport ? 'Simular regras' : 'Importar'}</Button>
           </div>
           {lastImport ? (
