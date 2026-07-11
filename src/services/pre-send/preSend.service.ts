@@ -92,12 +92,20 @@ function isInstagramProfile(record: ConfigRecord): record is InstagramConfigReco
   return record.kind === 'instagram';
 }
 
+function whatsappDispatch(settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
+  return settings.whatsapp;
+}
+
+function instagramDispatch(settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
+  return settings.instagram;
+}
+
 function channelLimit(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
-  return channel === 'WhatsApp' ? settings.whatsapp.dailyLimit : settings.instagram.dailyLimit;
+  return channel === 'WhatsApp' ? whatsappDispatch(settings).dailyLimit : instagramDispatch(settings).dailyLimit;
 }
 
 function channelDays(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
-  return channel === 'WhatsApp' ? settings.whatsapp.activeDays : settings.instagram.activeDays;
+  return channel === 'WhatsApp' ? whatsappDispatch(settings).activeDays : instagramDispatch(settings).activeDays;
 }
 
 function firstDayId(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
@@ -729,7 +737,7 @@ async function assignProfilesAndLimitCapacity(leads: PreSendLead[], options: Que
     const username = profile.username;
     const key = `${username}:${selectedDate}`;
     const current = instagramUsage.get(key) ?? 0;
-    if (current >= settings.instagram.dailyLimit) continue;
+    if (current >= instagramDispatch(settings).dailyLimit) continue;
     instagramUsage.set(key, current + 1);
     assigned.push(lead.profile === username ? lead : { ...lead, profile: username });
   }
@@ -812,7 +820,7 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
   const settings = await settingsService.getDispatchSettings();
   const activeProfiles = await loadActiveInstagramProfiles();
   const branches = await loadBranches();
-  const limit = settings.instagram.perBatch;
+  const limit = instagramDispatch(settings).perBatch;
   const baseLeads = await repositories.base.list({});
   const baseInstagrams = new Set(baseLeads.map((lead) => normalizeInstagramUsername(lead.normalizedInstagram ?? lead.instagram)).filter(Boolean));
 

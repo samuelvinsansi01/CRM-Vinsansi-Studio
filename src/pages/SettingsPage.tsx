@@ -52,6 +52,7 @@ function InstagramFields({ settings, saving, onUpdate }: InstagramFieldsProps) {
           updateInstagram({ profiles, profile: profiles[0] ?? settings.instagram.profile });
         }}
       />
+      <p className="settings-note">Usado pelo Pré-Envio e pela fila Instagram, sem depender dos níveis dos chips.</p>
       <div className="settings-card__actions">
         <Button iconLeft={Save} loading={saving} onClick={() => void onUpdate({ instagram: settings.instagram })}>
           Salvar
@@ -76,7 +77,7 @@ function SharedDispatchFields({ settings, saving, onUpdate }: { settings: Dispat
     });
 
   return (
-    <Panel title="Parametros fixos" className="settings-card settings-card--compact">
+    <Panel title="Parametros fixos globais" className="settings-card settings-card--compact">
       <Field
         label="Delay minimo entre leads (segundos)"
         value={String(current.delayMinSeconds)}

@@ -30,3 +30,10 @@ export type UpdateDispatchSettingsInput = Partial<{
   instagram: Partial<DispatchSettings['instagram']>;
   chipLevels: Partial<DispatchSettings['chipLevels']>;
 }>;
+
+export type WhatsAppDispatchSettings = DispatchChannelSettings;
+export type InstagramDispatchSettings = DispatchChannelSettings & {
+  profile: string;
+  profiles: string[];
+  delayMinutes: number;
+};
