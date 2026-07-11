@@ -242,12 +242,12 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
 }
 
 function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
-  const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<ChipConfigRecord>;
+  const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<ChipConfigRecord> & Record<string, unknown>;
   const rawStatus = data.status ?? row.status;
   const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
   const active = toBoolean(inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active, true);
   const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
-  const level = String(data.level ?? 'estabilizado');
+  const level = String(row.level ?? data.level ?? 'estabilizado');
   const levelDefaults = chipLevelDefaults(level);
   const blocks = row.blocks;
   const batches = Array.isArray(data.batches)
@@ -472,7 +472,7 @@ async function upsertChip(record: ChipConfigRecord) {
     paused: record.paused,
     kind: 'chips',
     channel: 'whatsapp',
-    data: { ...record, instance, status: persistedStatus },
+    data: { ...record, level: record.level, instance, status: persistedStatus },
     updated_at: nowIso(),
   };
   const response = existingByInstance || existingById
