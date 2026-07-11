@@ -101,8 +101,14 @@ async function whatsappChannelLimit() {
   return chips.reduce((total, chip) => total + Math.max(1, chip.dailyLimit), 0);
 }
 
+async function instagramChannelLimit(settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
+  const profiles = await loadActiveInstagramProfiles();
+  if (!profiles.length) return Math.max(1, instagramDispatch(settings).dailyLimit);
+  return profiles.reduce((total, profile) => total + Math.max(1, Number(profile.dailyLimit || 0)), 0);
+}
+
 async function channelLimit(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
-  return channel === 'WhatsApp' ? whatsappChannelLimit() : instagramDispatch(settings).dailyLimit;
+  return channel === 'WhatsApp' ? whatsappChannelLimit() : instagramChannelLimit(settings);
 }
 
 function channelDays(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
@@ -763,7 +769,7 @@ async function assignProfilesAndLimitCapacity(leads: PreSendLead[], options: Que
     const username = profile.username;
     const key = `${username}:${selectedDate}`;
     const current = instagramUsage.get(key) ?? 0;
-    if (current >= instagramDispatch(settings).dailyLimit) continue;
+    if (current >= Math.max(1, Number(profile.dailyLimit || settings.instagram.dailyLimit))) continue;
     instagramUsage.set(key, current + 1);
     assigned.push(lead.profile === username ? lead : { ...lead, profile: username });
   }
