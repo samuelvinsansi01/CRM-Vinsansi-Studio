@@ -210,9 +210,9 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
     setError(null);
   }, []);
 
-  const addApprovedToHome = useCallback(async () => {
+  const sendApprovedToPreSend = useCallback(async () => {
     const approved = sessionLeads.filter((lead) => isStatusGroup(lead.status, 'approved'));
-    return importService.addApprovedToHome(approved);
+    return importService.sendToPreSend(approved);
   }, [sessionLeads]);
 
   return {
@@ -228,6 +228,6 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
     moveLead,
     moveMany,
     clearSession,
-    addApprovedToHome,
+    sendApprovedToPreSend,
   };
 }

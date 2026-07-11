@@ -30,8 +30,6 @@ export type ExtensionRuntimeConfig = {
       type: string;
       message1: string;
       message2: string;
-      message3: string;
-      message4: string;
       active: boolean;
     }>;
   };

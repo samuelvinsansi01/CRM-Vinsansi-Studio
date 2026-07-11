@@ -16,7 +16,7 @@ type QueuePageProps = {
   channel: 'whatsapp' | 'instagram';
 };
 
-type QueueDraft = Pick<WhatsAppQueueLead, 'company' | 'phone' | 'branch' | 'type' | 'message1' | 'message2' | 'message3' | 'message4' | 'imageName'>;
+type QueueDraft = Pick<WhatsAppQueueLead, 'company' | 'phone' | 'branch' | 'type' | 'message1' | 'message2' | 'imageName'>;
 
 const legacyWhatsAppStatusLabel: Record<WhatsAppQueueStatus, string> = {
   queued: 'Em fila',
@@ -373,8 +373,6 @@ function WhatsAppBatch({
                 <div className="message-preview-grid">
                   <MessagePreview title="Mensagem 1" text={lead.message1} />
                   <MessagePreview title="Mensagem 2" text={lead.message2} />
-                  <MessagePreview title="Mensagem 3" text={lead.message3} />
-                  <MessagePreview title="Mensagem 4" text={lead.message4} />
                 </div>
               ) : null}
             </div>
@@ -415,8 +413,6 @@ function QueueLeadDrawer({
       type: lead.type,
       message1: lead.message1,
       message2: lead.message2,
-      message3: lead.message3,
-      message4: lead.message4,
       imageName: lead.imageName,
     });
   }, [lead]);
@@ -460,8 +456,6 @@ function QueueLeadDrawer({
           <Field label="Nome da imagem" value={draft.imageName ?? ''} readOnly={mode === 'view'} onChange={(value) => updateDraft('imageName', value)} />
           <Field as="textarea" label="Mensagem 1" value={draft.message1} readOnly={mode === 'view'} onChange={(value) => updateDraft('message1', value)} />
           <Field as="textarea" label="Mensagem 2" value={draft.message2} readOnly={mode === 'view'} onChange={(value) => updateDraft('message2', value)} />
-          <Field as="textarea" label="Mensagem 3" value={draft.message3} readOnly={mode === 'view'} onChange={(value) => updateDraft('message3', value)} />
-          <Field as="textarea" label="Mensagem 4" value={draft.message4} readOnly={mode === 'view'} onChange={(value) => updateDraft('message4', value)} />
         </div>
       ) : null}
     </Drawer>
@@ -563,7 +557,7 @@ function InstagramQueuePage() {
   );
 }
 
-type InstagramQueueDraft = Pick<InstagramQueueLead, 'company' | 'instagram' | 'branch' | 'type' | 'message1' | 'message2' | 'message3' | 'message4' | 'imageName' | 'invalidReason'>;
+type InstagramQueueDraft = Pick<InstagramQueueLead, 'company' | 'instagram' | 'branch' | 'type' | 'message1' | 'message2' | 'imageName' | 'invalidReason'>;
 
 function InstagramBatch({
   batch,
@@ -636,8 +630,6 @@ function InstagramBatch({
                 <div className="message-preview-grid">
                   <MessagePreview title="Mensagem 1" text={lead.message1} />
                   <MessagePreview title="Mensagem 2" text={lead.message2} />
-                  <MessagePreview title="Mensagem 3" text={lead.message3} />
-                  <MessagePreview title="Mensagem 4" text={lead.message4} />
                 </div>
               ) : null}
             </div>
@@ -678,8 +670,6 @@ function InstagramLeadDrawer({
       type: lead.type,
       message1: lead.message1,
       message2: lead.message2,
-      message3: lead.message3,
-      message4: lead.message4,
       imageName: lead.imageName,
       invalidReason: lead.invalidReason ?? '',
     });
@@ -725,8 +715,6 @@ function InstagramLeadDrawer({
           <Field label="Motivo de invalidação" value={draft.invalidReason ?? ''} readOnly={mode === 'view'} onChange={(value) => updateDraft('invalidReason', value)} />
           <Field as="textarea" label="Mensagem 1" value={draft.message1} readOnly={mode === 'view'} onChange={(value) => updateDraft('message1', value)} />
           <Field as="textarea" label="Mensagem 2" value={draft.message2} readOnly={mode === 'view'} onChange={(value) => updateDraft('message2', value)} />
-          <Field as="textarea" label="Mensagem 3" value={draft.message3} readOnly={mode === 'view'} onChange={(value) => updateDraft('message3', value)} />
-          <Field as="textarea" label="Mensagem 4" value={draft.message4} readOnly={mode === 'view'} onChange={(value) => updateDraft('message4', value)} />
         </div>
       ) : null}
     </Drawer>

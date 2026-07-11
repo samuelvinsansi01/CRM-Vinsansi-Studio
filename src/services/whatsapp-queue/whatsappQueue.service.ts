@@ -10,7 +10,6 @@ import type { UpdateWhatsAppQueueLeadInput, WhatsAppQueueFilters, WhatsAppQueueL
 import type { ChipConfigRecord, ConfigRecord } from '../config/types';
 import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperational';
 import { preSendService } from '../pre-send/preSend.service';
-import { settingsService } from '../settings/settings.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { renderTemplateVariables } from '../templates/templateVariables';
@@ -45,7 +44,6 @@ function queueRolloverTargetDate() {
 
 async function rolloverOverdueWhatsAppItems() {
   const targetDate = queueRolloverTargetDate();
-  const settings = await settingsService.getDispatchSettings();
   const chips = (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
   const chipMap = new Map(chips.map((chip) => [chipInstance(chip), chip]));
   if (!chipMap.size) return;
@@ -75,7 +73,7 @@ async function rolloverOverdueWhatsAppItems() {
     const chip = chipMap.get(instance);
     if (!chip) continue;
     const dailyLimit = Math.max(1, chip.dailyLimit);
-    const batchLimit = Math.max(1, settings.whatsapp.perBatch || chip.blockSize);
+    const batchLimit = Math.max(1, chip.blockSize);
     let scheduledDate = targetDate;
     let key = `${instance}:${scheduledDate}`;
 
@@ -158,8 +156,6 @@ async function logDispatchMessages(leads: WhatsAppQueueLead[], replayed = false)
       [
         { part: 'message_1', body: renderTemplateVariables(lead.message_1 || lead.message1, lead) },
         { part: 'message_2', body: renderTemplateVariables(lead.message_2 || lead.message2, lead) },
-        { part: 'message_3', body: renderTemplateVariables(lead.message_3 || lead.message3, lead) },
-        { part: 'message_4', body: renderTemplateVariables(lead.message_4 || lead.message4, lead) },
         { part: 'image', body: lead.image_url || lead.image_id || '' },
       ]
         .filter((item) => item.body.trim())
@@ -230,10 +226,7 @@ async function persistSentToBase(leads: WhatsAppQueueLead[]) {
         override_at: lead.override_at,
         status: 'sent',
         sentAt,
-        template: [lead.message1, lead.message2, lead.message3, lead.message4]
-          .map((message) => renderTemplateVariables(message, lead))
-          .filter(Boolean)
-          .join('\n\n'),
+        template: renderTemplateVariables(lead.message1, lead),
         chipOrProfile: lead.chip,
         notes: lead.imageName ? `Imagem: ${lead.imageName}` : '',
       }),

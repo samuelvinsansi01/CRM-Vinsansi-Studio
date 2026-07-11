@@ -25,8 +25,6 @@ const TEMPLATE_SELECT = [
   'channel',
   'part_1',
   'part_2',
-  'part_3',
-  'part_4',
   'active',
   'status',
   'kind',
@@ -222,8 +220,6 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
   const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
   const message1 = String(row.part_1 ?? row.message1 ?? data.message1 ?? '');
   const message2 = String(row.part_2 ?? row.message2 ?? data.message2 ?? '');
-  const message3 = String(row.part_3 ?? row.message3 ?? data.message3 ?? '');
-  const message4 = String(row.part_4 ?? row.message4 ?? data.message4 ?? '');
   const branch = resolveTemplateBranch(row, data, branches);
   const channel = normalizeTemplateChannel(row.channel ?? data.channel);
   const type = normalizeTemplateType(row.template_type ?? row.type ?? data.type);
@@ -236,8 +232,6 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
     type,
     message1,
     message2,
-    message3,
-    message4,
     preview: String(data.preview ?? message1),
     archivedPreviousActive: (data as Record<string, unknown>).archivedPreviousActive,
     active,
@@ -397,8 +391,6 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     type: record.type,
     message1: record.message1,
     message2: record.message2,
-    message3: record.message3,
-    message4: record.message4,
     preview: record.preview,
     active: record.active,
     status: record.status,
@@ -416,8 +408,6 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     channel: record.channel,
     part_1: record.message1,
     part_2: record.message2,
-    part_3: record.message3,
-    part_4: record.message4,
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
     kind: 'templates',

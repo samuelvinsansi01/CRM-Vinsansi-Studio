@@ -95,10 +95,6 @@ export type PreSendValidationSummary = {
   approved: number;
   /** Quantos aprovados foram conferidos novamente pelo worker/Evolution. */
   revalidated: number;
-  /** Quantos leads aprovados foram enviados automaticamente para a fila operacional. */
-  queued: number;
-  /** Quantos aprovados permaneceram no Pré-Envio por falta de capacidade/configuração/template. */
-  queueErrors: number;
   returned: number;
   requiresReview: number;
   errors: number;

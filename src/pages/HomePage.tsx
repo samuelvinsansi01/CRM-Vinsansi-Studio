@@ -1,4 +1,4 @@
-import { Check, Globe2, Instagram, Link2, MessageCircle, RefreshCcw, RotateCcw, Send, Users, X } from 'lucide-react';
+import { Archive, Check, Globe2, Instagram, Link2, MessageCircle, RefreshCcw, RotateCcw, Send, Users, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import {
@@ -156,8 +156,9 @@ export function HomePage() {
     !isStatusGroup(lead.status, 'approved') &&
     !isStatusGroup(lead.status, 'invalid')
   );
+  const canBulkArchive = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('import', lead.status).canArchive());
   const canBulkSent = selectedLeads.length > 0 && selectedLeads.every((lead) => !isStatusGroup(lead.status, 'sent'));
-  const hasBulkAction = canBulkApprove || canBulkUnapprove || canBulkInvalidate || canBulkSent;
+  const hasBulkAction = canBulkApprove || canBulkUnapprove || canBulkInvalidate || canBulkArchive || canBulkSent;
 
   const pushToast = (toast: Omit<ToastItem, 'id'>) => {
     const id = crypto.randomUUID?.() ?? String(Date.now());
@@ -258,6 +259,11 @@ export function HomePage() {
         return;
       }
 
+      if (action === 'archive') {
+        await dashboard.archiveLead(lead);
+        pushToast({ title: 'Lead arquivado', description: `${lead.empresa} saiu da lista operacional.`, tone: 'warning' });
+        return;
+      }
 
       if (action === 'sent') {
         await dashboard.markAlreadySent([lead.id]);
@@ -318,6 +324,7 @@ export function HomePage() {
             {canBulkUnapprove ? <Button size="sm" variant="secondary" iconLeft={RotateCcw} onClick={() => runBulkAction('voltaram para em aguarde', () => dashboard.unapproveMany(selectedIds))}>Desaprovar</Button> : null}
             {canBulkSent ? <Button size="sm" variant="secondary" iconLeft={Send} onClick={() => runBulkAction('marcados como ja enviados', async () => { await dashboard.markAlreadySent(selectedIds); })}>Já enviado</Button> : null}
             {canBulkInvalidate ? <Button size="sm" variant="secondary" iconLeft={X} onClick={() => runBulkAction('invalidados com motivo Outros', () => dashboard.invalidateMany(selectedIds))}>Invalidar</Button> : null}
+            {canBulkArchive ? <Button size="sm" variant="danger" iconLeft={Archive} onClick={() => runBulkAction('arquivados', () => dashboard.archiveMany(selectedIds))}>Arquivar</Button> : null}
             {!hasBulkAction ? <small>Nenhuma acao em massa disponivel para a selecao atual.</small> : null}
           </div>
         ) : null}
@@ -328,7 +335,7 @@ export function HomePage() {
           <DataTable
             columns={columns}
             rows={pagedRows}
-            actions={['view', 'whatsapp', 'instagram', 'approve', 'unapprove', 'sent', 'invalidate']}
+            actions={['view', 'whatsapp', 'instagram', 'approve', 'unapprove', 'sent', 'invalidate', 'archive']}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
             getRowActions={(row) => {
@@ -343,6 +350,7 @@ export function HomePage() {
                 ...(isStatusGroup(lead.status, 'approved') ? ['unapprove' as TableAction] : []),
                 'sent' as TableAction,
                 ...(permissionsFor('import', lead.status).canInvalidate() ? ['invalidate' as TableAction] : []),
+                'archive' as TableAction,
               ];
             }}
             onAction={handleAction}

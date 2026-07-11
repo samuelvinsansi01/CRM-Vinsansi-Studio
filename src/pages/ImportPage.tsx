@@ -15,10 +15,12 @@ import {
   TableCard,
   Tag,
   ToastViewport,
+  type TableAction,
   type TableColumn,
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { DestinationBadge } from '../components/DestinationBadge';
 import { useImportLeads } from '../hooks/useImportLeads';
 import { useImportSettings } from '../hooks/useImportSettings';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
@@ -75,58 +77,6 @@ function mapsHref(lead: ImportLead) {
   if (lead.normalizedMapsUrl?.trim()) return ensureUrl(lead.normalizedMapsUrl);
   const query = [lead.empresa, lead.cidade, lead.estado].filter(Boolean).join(' ');
   return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : '';
-}
-
-function destinationLabel(lead: ImportLead) {
-  if (lead.send_instagram) return 'Instagram';
-  const destination = lead.destination ?? lead.destino;
-  if (destination === 'Recusado') return 'Recusado';
-  if (destination === 'Já no banco') return 'Já no banco';
-  return destination || 'WhatsApp';
-}
-
-function destinationTone(value: string) {
-  if (value === 'Instagram') return 'primary';
-  if (value === 'Recusado') return 'danger';
-  if (value === 'Já no banco') return 'warning';
-  return 'success';
-}
-
-function splitSubcategories(value?: string | null) {
-  return String(value ?? '')
-    .split(/[;,|\n\/]+/g)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function SubcategoryPreview({ value }: { value?: string | null }) {
-  const items = splitSubcategories(value);
-
-  if (!items.length) {
-    return <span className="import-subcategory import-subcategory--empty">—</span>;
-  }
-
-  const label = items[0];
-  const extra = items.length - 1;
-
-  return (
-    <span className="import-subcategory" tabIndex={0} title={items.join(' • ')}>
-      <span className="import-subcategory__pill">
-        <span className="import-subcategory__text">{label}</span>
-        {extra > 0 ? <small className="import-subcategory__more">+{extra}</small> : null}
-      </span>
-      <span className="import-subcategory__card" role="tooltip">
-        <strong>Sub ramo</strong>
-        <div className="import-subcategory__list">
-          {items.map((item) => (
-            <span className="import-subcategory__tag" key={item}>
-              {item}
-            </span>
-          ))}
-        </div>
-      </span>
-    </span>
-  );
 }
 
 function toForm(lead: ImportLead): LeadForm {
@@ -192,7 +142,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const { settings: importSettings } = useImportSettings();
   const simulateImport = importSettings?.safeMode.simulationMode ?? true;
-  const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, addApprovedToHome: commitApprovedToHome } = useImportLeads(activeStatus, search);
+  const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToPreSend } = useImportLeads(activeStatus, search);
   const previewToken = useRef(0);
 
   const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
@@ -343,16 +293,43 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     }
   };
 
-  const addApprovedToHome = async () => {
+  const sendToPreSend = async () => {
     try {
-      const added = await commitApprovedToHome();
-      if (!added) {
-        pushToast({ title: 'Nada para adicionar', description: 'Nao ha aprovados novos para enviar ao Inicio.', tone: 'warning' });
+      const created = await sendApprovedToPreSend();
+      if (!created.length) {
+        pushToast({ title: 'Nada enviado', description: 'Nao ha aprovados novos para enviar ao pre-envio.', tone: 'warning' });
         return;
       }
-      pushToast({ title: 'Aprovados adicionados ao Inicio', description: `${added} lead(s) disponivel(is) no Inicio.`, tone: 'success' });
+      pushToast({ title: 'Enviado ao pre-envio', description: `${created.length} lead(s) disponivel(is) no pre-envio.`, tone: 'success' });
     } catch (err) {
-      pushToast({ title: 'Erro ao adicionar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      pushToast({ title: 'Erro ao enviar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
+  const handleAction = async (action: TableAction, lead: ImportLead) => {
+    if (action === 'edit' || action === 'view') {
+      openLeadDrawer(lead, action === 'edit' ? 'edit' : 'view');
+      return;
+    }
+
+    if (action === 'delete') {
+      setDeleteLead(lead);
+      return;
+    }
+
+    if (action === 'refresh' || action === 'archive') {
+      const permissions = permissionsFor('import', lead.status);
+      const nextStatus = permissions.canReject() ? 'rejected' : permissions.canApprove() ? 'approved' : null;
+      if (!nextStatus) {
+        pushToast({ title: 'Acao bloqueada', description: 'Este lead nao pode mudar de aprovacao neste estado.', tone: 'warning' });
+        return;
+      }
+      await moveLead(lead.id, nextStatus);
+      pushToast({
+        title: nextStatus === 'approved' ? 'Lead aprovado' : 'Lead recusado',
+        description: 'Lead movido entre as listas.',
+        tone: nextStatus === 'approved' ? 'success' : 'warning',
+      });
     }
   };
 
@@ -383,16 +360,17 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
   const columns: TableColumn<ImportLead>[] = [
-    { key: 'empresa', label: 'Nome da empresa', width: '36%', render: (lead) => silentLink(lead.empresa, mapsHref(lead)) },
-    { key: 'ramo', label: 'Ramo', width: '24%' },
-    { key: 'subcategoria', label: 'Sub ramo', width: '24%', render: (lead) => <SubcategoryPreview value={lead.subcategoria} /> },
+    { key: 'empresa', label: 'Nome da empresa', width: '42%', render: (lead) => silentLink(lead.empresa, mapsHref(lead)) },
+    { key: 'ramo', label: 'Ramo', width: '28%' },
     {
       key: 'destino',
       label: 'Destino',
-      width: '16%',
+      width: '20%',
       render: (lead) => {
-        const value = destinationLabel(lead);
-        return <Tag tone={destinationTone(value) as 'neutral' | 'success' | 'warning' | 'danger' | 'primary'}>{value}</Tag>;
+        const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
+        if (destination === 'Recusado') return <Tag tone="danger">Recusado</Tag>;
+        if (destination === 'Já no banco') return <Tag tone="warning">Já no banco</Tag>;
+        return <DestinationBadge value={destination} />;
       },
     },
   ];
@@ -426,7 +404,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           />
           <div className="import-json__actions">
             <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
-            <Button variant="secondary" disabled={summary.approved === 0} onClick={addApprovedToHome}>Adicionar aprovados ao Início</Button>
+            <Button variant="secondary" disabled={summary.approved === 0} onClick={sendToPreSend}>Enviar WhatsApp ao Pré-Envio</Button>
             <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={handleImport}>{simulateImport ? 'Simular regras' : 'Importar'}</Button>
           </div>
           {lastImport ? (
@@ -485,9 +463,18 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               selectable
               selectedRows={selectedRows}
               onSelectedRowsChange={setSelectedRows}
-              actions={[]}
+              actions={rejected ? ['view', 'refresh'] : ['view', 'archive']}
+              getRowActions={(lead) => {
+                const permissions = permissionsFor('import', lead.status);
+                return [
+                  'view' as TableAction,
+                  ...(permissions.canApprove() ? ['refresh' as TableAction] : []),
+                  ...(permissions.canReject() ? ['archive' as TableAction] : []),
+                ];
+              }}
               columns={columns}
               rows={pageRows}
+              onAction={handleAction}
             />
           ) : null}
         </TableCard>

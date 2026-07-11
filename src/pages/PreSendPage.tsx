@@ -364,7 +364,7 @@ function ValidationQueue({
       refreshQueue();
       onToast({
         title: 'Aprovados revalidados',
-        description: `${result.approved} confirmado(s)${result.queued ? `, ${result.queued} enviado(s) para a fila WhatsApp` : ''}${result.queueErrors ? `, ${result.queueErrors} aguardando fila/configuracao` : ''}${result.returned ? `, ${result.returned} encaminhado(s) ao Instagram` : ''}${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ignorado(s)` : ''}. Retornos com Instagram válido tentam entrar automaticamente na fila.`,
+        description: `${result.approved} confirmado(s)${result.returned ? `, ${result.returned} encaminhado(s) ao Instagram` : ''}${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ignorado(s)` : ''}. Retornos com Instagram válido tentam entrar automaticamente na fila.`,
         tone: result.errors || result.requiresReview ? 'warning' : 'success',
       });
     } catch (err) {
@@ -393,7 +393,7 @@ function ValidationQueue({
       refreshQueue();
       onToast({
         title: 'Leads validados',
-        description: `${result.approved} aprovado(s)${result.queued ? `, ${result.queued} enviado(s) para a fila WhatsApp` : ''}${result.queueErrors ? `, ${result.queueErrors} aguardando fila/configuracao` : ''}${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.returned ? `, ${result.returned} encaminhado(s) ao Instagram` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}. Retornos com Instagram válido tentam entrar automaticamente na fila.`,
+        description: `${result.approved} aprovado(s)${result.requiresReview ? `, ${result.requiresReview} para revisao` : ''}${result.returned ? `, ${result.returned} encaminhado(s) ao Instagram` : ''}${result.errors ? `, ${result.errors} erro(s) do provider` : ''}${result.skipped ? `, ${result.skipped} ja aprovado(s)` : ''}. Retornos com Instagram válido tentam entrar automaticamente na fila.`,
         tone: result.errors ? 'warning' : 'success',
       });
     } catch (err) {
