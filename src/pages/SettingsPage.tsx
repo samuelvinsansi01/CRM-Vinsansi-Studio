@@ -102,7 +102,7 @@ function SharedDispatchFields({ settings, saving, onUpdate }: { settings: Dispat
 
 function ChipLevelPresets({ settings, saving, onUpdate }: { settings: DispatchSettings; saving: boolean; onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>; }) {
   const updateLevel = (level: string, blockSize: string) => {
-    const nextBlockSize = toNumber(blockSize, Number(settings.chipLevels?.[level]?.blockSize ?? 0), 1);
+    const nextBlockSize = toNumber(blockSize, Number(settings.chipLevels?.[level]?.blockSize ?? 0));
     void onUpdate({ chipLevels: { ...(settings.chipLevels ?? {}), [level]: { ...(settings.chipLevels?.[level] ?? {}), blockSize: nextBlockSize } } as UpdateDispatchSettingsInput['chipLevels'] });
   };
 
