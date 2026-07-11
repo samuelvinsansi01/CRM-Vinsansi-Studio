@@ -558,39 +558,43 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
     updated_at: nowIso(),
   };
   const client = getSupabaseClient();
+
+  // Uma unica operacao e a fonte de verdade. Nao usamos RPC auxiliar porque o
+  // nome/tipo da tabela pode variar por ambiente e uma segunda gravacao criava
+  // falsos erros depois de um UPDATE valido.
   const response = existingByUsername || existingById
-    ? await client.from(table).update(payload).eq('id', targetId).eq('user_id', userId).select('*').single()
-    : await client.from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
-  if (response.error) throw new Error(response.error.message);
+    ? await client
+        .from(table)
+        .update({
+          username,
+          display_name: record.name,
+          active: payload.active,
+          status: record.status,
+          daily_limit: dailyLimit,
+          blocks: instagramDefaults.batches,
+          block_size: instagramDefaults.perBatch,
+          interval_minutes: instagramDefaults.delayMinutes,
+          data: dataPayload,
+          updated_at: payload.updated_at,
+        })
+        .eq('id', targetId)
+        .select('*')
+        .single()
+    : await client
+        .from(table)
+        .insert({ ...payload, created_at: record.createdAt || nowIso() })
+        .select('*')
+        .single();
 
-  // A coluna daily_limit e o JSON legado precisam permanecer sincronizados.
-  // Para registros existentes, a RPC dedicada confirma a persistencia dentro
-  // do banco e evita falso positivo causado por cache de schema/trigger antigo.
-  if (existingByUsername || existingById) {
-    const rpc = await client.rpc('save_instagram_profile_daily_limit', {
-      p_profile_id: targetId,
-      p_daily_limit: dailyLimit,
-    });
-    if (rpc.error) {
-      throw new Error(`Nao foi possivel persistir o limite diario no banco: ${rpc.error.message}. Aplique a migration V3.39.5.`);
-    }
-    const confirmed = Number(rpc.data);
-    if (!Number.isFinite(confirmed) || confirmed !== dailyLimit) {
-      throw new Error(`O banco retornou ${String(rpc.data)} ao salvar o limite diario de ${dailyLimit}.`);
-    }
+  if (response.error) {
+    throw new Error(`Nao foi possivel salvar o perfil Instagram: ${response.error.message}`);
   }
 
-  const verification = await client
-    .from(table)
-    .select('*')
-    .eq('id', targetId)
-    .eq('user_id', userId)
-    .single();
-  if (verification.error) throw new Error(`Perfil salvo, mas nao foi possivel confirmar o limite diario: ${verification.error.message}`);
-  const saved = rowToInstagramProfile(verification.data as Record<string, unknown>);
+  const saved = rowToInstagramProfile(response.data as Record<string, unknown>);
   if (saved.dailyLimit !== dailyLimit) {
-    throw new Error(`O banco nao confirmou o limite diario de ${dailyLimit}. Valor retornado: ${saved.dailyLimit}. Aplique a migration V3.39.5.`);
+    throw new Error(`O Supabase retornou limite ${saved.dailyLimit}, mas o valor solicitado foi ${dailyLimit}. Verifique se a coluna daily_limit existe na tabela ${table}.`);
   }
+
   return saved;
 }
 
