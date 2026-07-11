@@ -14,6 +14,7 @@ function branchToRule(branch: BranchConfigRecord): ImportBranchRule {
     branchSlug: branch.slug,
     branch: branch.name,
     subcategories: branch.subcategories,
+    associatedCategories: branch.associatedCategories,
     minRating: branch.minRating,
     minReviews: branch.minReviews,
     enabled: branch.active,

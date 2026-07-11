@@ -320,7 +320,9 @@ async function rolloverWhatsAppQueueAfterCutoff(targetDate: string) {
 
 async function rolloverInstagramQueueAfterCutoff(targetDate: string) {
   const settings = await settingsService.getDispatchSettings();
-  const dailyLimit = Math.max(1, settings.instagram.dailyLimit);
+  const profiles = await loadActiveInstagramProfiles();
+  const profileLimits = new Map(profiles.map((profile) => [profile.username, Math.max(1, profile.dailyLimit)]));
+  const fallbackDailyLimit = Math.max(1, settings.instagram.dailyLimit);
   const batchLimit = Math.max(1, settings.instagram.perBatch);
   const allLeads = (await repositories.instagramQueue.listBatches({})).flatMap((batch) => batch.leads);
   const candidates = allLeads
@@ -342,6 +344,7 @@ async function rolloverInstagramQueueAfterCutoff(targetDate: string) {
     let scheduledDate = targetDate;
     let key = `${lead.profile}:${scheduledDate}`;
 
+    const dailyLimit = profileLimits.get(lead.profile) ?? fallbackDailyLimit;
     while ((occupancy.get(key) ?? 0) >= dailyLimit) {
       scheduledDate = dateInputAddDays(scheduledDate, 1);
       key = `${lead.profile}:${scheduledDate}`;
@@ -1171,11 +1174,12 @@ async function queueCapacity(channel: PreSendChannel, requestedDayId: string, re
   }
 
   const profiles = await loadActiveInstagramProfiles();
-  const profile = requestedProfile
-    ? profiles.find((item) => item.username === normalizeInstagramUsername(requestedProfile))?.username ?? requestedProfile
-    : profiles[0]?.username ?? '';
+  const selectedProfile = requestedProfile
+    ? profiles.find((item) => item.username === normalizeInstagramUsername(requestedProfile))
+    : profiles[0];
+  const profile = selectedProfile?.username ?? requestedProfile ?? '';
   const batches = await repositories.instagramQueue.listBatches({});
-  const limit = Math.max(0, settings.instagram.dailyLimit);
+  const limit = Math.max(0, selectedProfile?.dailyLimit ?? settings.instagram.dailyLimit);
   const used = batches.flatMap((batch) => batch.leads).filter((lead) =>
     isActiveInstagramQueueStatus(lead.status) && lead.scheduled_date === scheduledDate && lead.profile === profile,
   ).length;

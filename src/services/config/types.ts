@@ -64,6 +64,7 @@ export type InstagramConfigRecord = ConfigBaseRecord & {
   kind: 'instagram';
   name: string;
   username: string;
+  dailyLimit: number;
 };
 
 export type ConfigRecord = BranchConfigRecord | TemplateConfigRecord | ChipConfigRecord | InstagramConfigRecord;

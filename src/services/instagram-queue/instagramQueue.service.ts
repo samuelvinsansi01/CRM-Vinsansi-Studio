@@ -70,6 +70,13 @@ function isInstagramProfile(record: ConfigRecord): record is InstagramConfigReco
   return record.kind === 'instagram';
 }
 
+
+async function activeInstagramProfileRecords() {
+  return (await repositories.config.list('instagram'))
+    .filter(isInstagramProfile)
+    .filter((profile) => profile.active && profile.status !== 'Arquivado' && profile.status !== 'deleted' && profile.username.trim());
+}
+
 async function activeInstagramProfiles() {
   return (await repositories.config.list('instagram'))
     .filter(isInstagramProfile)
@@ -85,7 +92,9 @@ function queueRolloverTargetDate() {
 async function rolloverOverdueInstagramItems() {
   const targetDate = queueRolloverTargetDate();
   const settings = await settingsService.getDispatchSettings();
-  const dailyLimit = Math.max(1, settings.instagram.dailyLimit);
+  const profiles = await activeInstagramProfileRecords();
+  const profileLimits = new Map(profiles.map((profile) => [profile.username, Math.max(1, profile.dailyLimit)]));
+  const fallbackDailyLimit = Math.max(1, settings.instagram.dailyLimit);
   const batchLimit = Math.max(1, settings.instagram.perBatch);
   const allLeads = (await repositories.instagramQueue.listBatches({})).flatMap((batch) => batch.leads);
   const candidates = allLeads
@@ -108,6 +117,7 @@ async function rolloverOverdueInstagramItems() {
     let scheduledDate = targetDate;
     let key = `${lead.profile}:${scheduledDate}`;
 
+    const dailyLimit = profileLimits.get(lead.profile) ?? fallbackDailyLimit;
     while ((occupancy.get(key) ?? 0) >= dailyLimit) {
       scheduledDate = dateInputAddDays(scheduledDate, 1);
       key = `${lead.profile}:${scheduledDate}`;

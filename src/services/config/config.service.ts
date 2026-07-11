@@ -293,6 +293,7 @@ function normalizeInstagramInput(input: CreateConfigRecordInput | UpdateConfigRe
     kind: 'instagram',
     name,
     username,
+    dailyLimit: toInteger(source.dailyLimit ?? source.daily_limit ?? source.limiteDiario, existing?.dailyLimit ?? 60, 1),
     active,
     status: statusFromActive(active),
     createdAt,

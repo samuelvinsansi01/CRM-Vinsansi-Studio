@@ -298,14 +298,19 @@ function getCategoryCandidates(raw: Record<string, unknown>, lead: NormalizedRaw
 }
 
 function matchBranch(lead: NormalizedRawLead, settings: ImportSettings) {
-  const candidates = getCategoryCandidates(lead.raw, lead);
+  // A Apify entrega a categoria oficial em categoryName. A entrada somente e
+  // aceita quando esse valor bate exatamente (apos normalizacao tecnica) com
+  // uma categoria/subramo cadastrado no banco para um ramo ativo.
+  const categoryName = normalizeComparable(readFirst(lead.raw, ['categoryName']));
+  if (!categoryName) return null;
+
   const enabledRules = settings.branchRules.filter((rule) => rule.enabled);
-
   for (const rule of enabledRules) {
-    const accepted = splitCandidateText(rule.subcategories);
-    const matches = candidates.some((candidate) => accepted.some((item) => exactNormalizedMatch(candidate, item)));
-
-    if (matches) return rule;
+    const accepted = splitCandidateText([
+      ...(rule.associatedCategories ?? []),
+      ...(rule.subcategories ?? []),
+    ]);
+    if (accepted.some((item) => exactNormalizedMatch(categoryName, item))) return rule;
   }
 
   return null;
@@ -546,6 +551,21 @@ function classifyDestination(lead: NormalizedRawLead, website: WebsiteClassifica
   return { rejection: reject('missing_contact'), reason: 'sem telefone e sem instagram' };
 }
 
+function canUseSecondaryInstagramRoute(lead: NormalizedRawLead, branchRule: ImportBranchRule | null, settings: ImportSettings) {
+  if (!branchRule || !settings.routes.instagram) return false;
+  const instagram = lead.identity.instagram || (isInstagramSite(lead.site) ? normalizeInstagram(lead.site) : '');
+  return Boolean(instagram);
+}
+
+function approveSecondaryInstagram(draft: ImportLeadInput, lead: NormalizedRawLead, reason: string) {
+  draft.instagram = draft.instagram || lead.instagram || (isInstagramSite(lead.site) ? lead.site : '');
+  draft.instagram_url = draft.instagram_url || draft.instagram;
+  draft.send_instagram = true;
+  draft.destination_override = 'Instagram';
+  draft.instagram_override_reason = `Rota secundaria de Instagram: ${reason}`;
+  approveDraft(draft, 'Instagram', draft.instagram_override_reason);
+}
+
 function applyRejection(draft: ImportLeadInput, rejection: Rejection, settings: ImportSettings) {
   draft.status = 'rejected';
   draft.destino = rejection.duplicate ? 'Já no banco' : 'Recusado';
@@ -682,6 +702,14 @@ export async function normalizeImportItems(rawItems: unknown[], context: ImportV
     const classification = classifyDestination(lead, website, settings);
 
     if (classification.rejection) {
+      if (canUseSecondaryInstagramRoute(lead, branchRule, settings)) {
+        approveSecondaryInstagram(draft, lead, classification.rejection.reason);
+        normalized.push({ input: draft, ignored: false, code: 'approved' });
+        incrementReason(reasons, 'approved');
+        rememberIdentity(payloadIdentity, lead);
+        continue;
+      }
+
       applyRejection(draft, classification.rejection, settings);
       normalized.push({ input: draft, ignored: false, reason: classification.rejection.reason, code: classification.rejection.code });
       incrementReason(reasons, classification.rejection.code);

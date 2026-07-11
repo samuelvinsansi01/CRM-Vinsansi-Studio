@@ -34,6 +34,7 @@ export type ImportBranchRule = {
   branchSlug?: string;
   branch: string;
   subcategories: string[];
+  associatedCategories: string[];
   minRating: number;
   minReviews: number;
   enabled: boolean;

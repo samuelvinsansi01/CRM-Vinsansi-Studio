@@ -269,12 +269,14 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelP
       ],
       columns: [
         { key: 'name', label: 'Nome', width: '36%' },
-        { key: 'username', label: '@Instagram', width: '36%' },
+        { key: 'username', label: '@Instagram', width: '28%' },
+        { key: 'dailyLimit', label: 'Limite diário', width: '18%' },
         { key: 'status', label: 'Status', width: '16%' },
       ],
       fields: [
         { key: 'name', label: 'Nome', placeholder: 'Ex.: Samuel' },
         { key: 'username', label: '@Instagram', placeholder: '@perfil' },
+        { key: 'dailyLimit', label: 'Limite diário', placeholder: '60', description: 'Capacidade diária deste perfil na fila e no Pré-Envio.' },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
       ],
     };
@@ -349,6 +351,7 @@ function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[], chipL
     return {
       name: '',
       username: '',
+      dailyLimit: String(60),
       active: 'Ativo',
     };
   }
@@ -403,6 +406,7 @@ function formFromRecord(record: ConfigRecord, chipLevelPresets: ChipLevelPresets
     return {
       name: record.name,
       username: record.username ? `@${record.username.replace(/^@/, '')}` : '',
+      dailyLimit: String(record.dailyLimit),
       active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
     };
   }
@@ -476,6 +480,7 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
       id: record.id,
       name: record.name,
       username: record.username ? `@${record.username.replace(/^@/, '')}` : '-',
+      dailyLimit: record.dailyLimit,
       status: statusTag(record),
     }));
   }
