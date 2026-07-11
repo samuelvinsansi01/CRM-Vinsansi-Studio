@@ -44,6 +44,8 @@ function dayId(channel: PreSendChannel, label: string) {
 }
 
 function startOfCurrentWeek(reference = new Date()) {
+  // Ancoragem fixa na semana corrente do calendário local.
+  // A virada só acontece quando o domingo local inicia a nova semana.
   const start = new Date(reference);
   start.setHours(12, 0, 0, 0);
   start.setDate(start.getDate() - start.getDay());
@@ -57,11 +59,7 @@ function addDays(date: Date, days: number) {
 }
 
 function dateForWeekdayIndex(index: number, reference = new Date()) {
-  const date = addDays(startOfCurrentWeek(reference), index);
-  const today = new Date(reference);
-  today.setHours(0, 0, 0, 0);
-  if (date < today) return addDays(date, 7);
-  return date;
+  return addDays(startOfCurrentWeek(reference), index);
 }
 
 function formatWeekDateLabel(weekday: string, date: Date) {

@@ -13,10 +13,6 @@ export type ResolvedChipLevelPreset = ChipLevelPreset & {
   blockSize: number;
 };
 
-type ChipOperationalShape = Pick<ChipLevelPreset, 'dailyLimit' | 'intervalSeconds' | 'startTime' | 'endTime'> & {
-  blockSize: number;
-};
-
 export const CHIP_LEVEL_OPTIONS = [
   { label: 'Recem ativado', value: 'recem-ativado' },
   { label: 'Aquecimento inicial', value: 'aquecimento-inicial' },
@@ -144,40 +140,13 @@ export function chipLevelDefaults(level: string, overrides?: Record<string, Part
   };
 }
 
-export function inferChipLevelFromShape(shape: Partial<ChipOperationalShape>, overrides?: Record<string, Partial<ChipLevelPreset>>) {
-  const normalized = {
-    dailyLimit: Math.max(1, Number(shape.dailyLimit ?? 0)),
-    blockSize: Math.max(1, Number(shape.blockSize ?? 0)),
-    intervalSeconds: Math.max(1, Number(shape.intervalSeconds ?? 0)),
-    startTime: String(shape.startTime ?? '').trim(),
-    endTime: String(shape.endTime ?? '').trim(),
-  };
-
-  for (const option of CHIP_LEVEL_OPTIONS) {
-    const preset = chipLevelDefaults(option.value, overrides);
-    if (
-      preset.dailyLimit === normalized.dailyLimit
-      && preset.blockSize === normalized.blockSize
-      && preset.intervalSeconds === normalized.intervalSeconds
-      && preset.startTime === normalized.startTime
-      && preset.endTime === normalized.endTime
-    ) {
-      return option.value;
-    }
-  }
-
-  return null;
-}
-
 export function resolveChipOperationalConfig(
   chip: Pick<ChipConfigRecord, 'instance' | 'name' | 'level' | 'dailyLimit' | 'blockSize' | 'intervalSeconds' | 'batches' | 'startTime' | 'endTime'>,
   overrides?: Record<string, Partial<ChipLevelPreset>>,
 ) {
-  const inferredLevel = inferChipLevelFromShape(chip, overrides) ?? chip.level;
-  const preset = chipLevelDefaults(inferredLevel, overrides);
+  const preset = chipLevelDefaults(chip.level, overrides);
   return {
     ...chip,
-    level: inferredLevel,
     ...preset,
   };
 }

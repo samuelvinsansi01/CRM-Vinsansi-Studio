@@ -10,7 +10,7 @@ import {
   DEFAULT_TEMPLATE_MESSAGE_2,
   MOVEIS_PLANEJADOS_KEYWORDS,
 } from './config.seed';
-import { chipLevelDefaults, inferChipLevelFromShape } from './chipOperational';
+import { chipLevelDefaults } from './chipOperational';
 import type {
   BranchConfigRecord,
   ChipConfigRecord,
@@ -240,24 +240,9 @@ async function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigR
   const source = { ...(existing ?? {}), ...input } as Record<string, unknown>;
   const active = toBoolean(source.active ?? source.status, existing?.active ?? true);
   const createdAt = String(existing?.createdAt ?? source.createdAt ?? nowIso());
-  const requestedLevel = firstString(source, ['level', 'nivel'], existing?.level ?? 'estabilizado');
+  const level = firstString(source, ['level', 'nivel'], existing?.level ?? 'estabilizado');
   const dispatchSettings = await settingsService.getDispatchSettings();
-  const requestedDefaults = chipLevelDefaults(requestedLevel, dispatchSettings.chipLevels);
-
-  const candidateDailyLimit = toInteger(source.dailyLimit ?? source.limiteDiario, existing?.dailyLimit ?? requestedDefaults.dailyLimit, 1);
-  const candidateBlockSize = toInteger(source.blockSize ?? source.tamanhoBloco, existing?.blockSize ?? requestedDefaults.blockSize, 1);
-  const candidateIntervalSeconds = toInteger(source.intervalSeconds ?? source.intervaloSegundos, existing?.intervalSeconds ?? requestedDefaults.intervalSeconds, 1);
-  const candidateStartTime = normalizeTime(source.startTime ?? source.horarioInicio, existing?.startTime ?? requestedDefaults.startTime);
-  const candidateEndTime = normalizeTime(source.endTime ?? source.horarioFim, existing?.endTime ?? requestedDefaults.endTime);
-  const inferredLevel = inferChipLevelFromShape({
-    dailyLimit: candidateDailyLimit,
-    blockSize: candidateBlockSize,
-    intervalSeconds: candidateIntervalSeconds,
-    startTime: candidateStartTime,
-    endTime: candidateEndTime,
-  }, dispatchSettings.chipLevels) ?? requestedLevel;
-
-  const defaults = chipLevelDefaults(inferredLevel, dispatchSettings.chipLevels);
+  const defaults = chipLevelDefaults(level, dispatchSettings.chipLevels);
   const batches = splitList(source.batches ?? source.blocks ?? source.lotes ?? existing?.batches ?? defaults.batches)
     .map((item) => normalizeTime(item, ''))
     .filter(Boolean);
@@ -267,17 +252,17 @@ async function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigR
     kind: 'chips',
     name: firstString(source, ['name', 'nome'], existing?.name ?? 'Novo chip'),
     number: firstString(source, ['number', 'numero', 'phone'], existing?.number ?? ''),
-    level: inferredLevel,
+    level,
     url: firstString(source, ['url', 'base_url', 'evolution_url'], existing?.url ?? ''),
     instance: firstString(source, ['instance', 'instanceName', 'instance_name'], existing?.instance ?? ''),
     apiKey: firstString(source, ['apiKey', 'api_key'], existing?.apiKey ?? ''),
     connectionStatus: firstString(source, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? existing?.status ?? ''),
     priority: toInteger(source.priority ?? source.prioridade, existing?.priority ?? 1, 1),
-    startTime: candidateStartTime || defaults.startTime,
-    endTime: candidateEndTime || defaults.endTime,
-    dailyLimit: candidateDailyLimit || defaults.dailyLimit,
-    intervalSeconds: candidateIntervalSeconds || defaults.intervalSeconds,
-    blockSize: candidateBlockSize || defaults.blockSize,
+    startTime: normalizeTime(source.startTime ?? source.horarioInicio, existing?.startTime ?? defaults.startTime),
+    endTime: normalizeTime(source.endTime ?? source.horarioFim, existing?.endTime ?? defaults.endTime),
+    dailyLimit: toInteger(source.dailyLimit ?? source.limiteDiario, existing?.dailyLimit ?? defaults.dailyLimit, 1),
+    intervalSeconds: toInteger(source.intervalSeconds ?? source.intervaloSegundos, existing?.intervalSeconds ?? defaults.intervalSeconds, 1),
+    blockSize: toInteger(source.blockSize ?? source.tamanhoBloco, existing?.blockSize ?? defaults.blockSize, 1),
     batches: batches.length ? batches : defaults.batches,
     paused: toBoolean(source.paused ?? source.pausado, existing?.paused ?? false),
     active,
