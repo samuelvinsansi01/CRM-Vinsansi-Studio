@@ -437,25 +437,49 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             <Button variant="secondary" disabled={summary.approved === 0} onClick={sendToPreSend}>Enviar WhatsApp ao Pré-Envio</Button>
             <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={handleImport}>{simulateImport ? 'Simular regras' : 'Importar'}</Button>
           </div>
-          {lastImport ? (
-            <div className="import-result">
-              <strong>Última importação</strong>
-              <span>{lastImport.report.simulation ? 'Simulação sem gravação' : `${lastImport.created} importado(s)`}</span>
-              <span>{lastImport.report.processed} processado(s)</span>
-              <span>{lastImport.approved} aprovado(s)</span>
-              <span>{lastImport.rejected} recusado(s)</span>
-              {lastImport.ignored > 0 ? <span>{lastImport.ignored} ignorado(s)</span> : null}
-              {lastImport.report.duplicates > 0 ? <span>{lastImport.report.duplicates} duplicado(s)</span> : null}
-              <span>{lastImport.report.durationMs}ms</span>
-              {lastImport.report.reasons.length ? (
-                <div className="import-result__reasons">
-                  {lastImport.report.reasons.map((reason) => (
-                    <span key={reason.code}>{reason.label}: {reason.count}</span>
+          {lastImport ? (() => {
+            const metrics = [
+              { value: String(lastImport.report.processed), label: 'Processados' },
+              { value: String(lastImport.approved), label: 'Aprovados', tone: 'success' as const },
+              { value: String(lastImport.rejected), label: 'Recusados', tone: 'danger' as const },
+              { value: String(lastImport.report.duplicates), label: 'Duplicados' },
+              ...(lastImport.ignored > 0 ? [{ value: String(lastImport.ignored), label: 'Ignorados' }] : []),
+            ];
+
+            return (
+              <div className="import-result">
+                <div className="import-result__header">
+                  <strong>Última importação</strong>
+                  <div className="import-result__meta">
+                    <span>{lastImport.report.simulation ? 'Simulação sem gravação' : `${lastImport.created} importado(s)`}</span>
+                    <span>{lastImport.report.durationMs}ms</span>
+                  </div>
+                </div>
+
+                <div className="metric-grid metric-grid--5 import-result__metrics">
+                  {metrics.map((metric) => (
+                    <MetricCard
+                      key={metric.label}
+                      value={metric.value}
+                      label={metric.label}
+                      tone={metric.tone ?? 'neutral'}
+                    />
                   ))}
                 </div>
-              ) : null}
-            </div>
-          ) : null}
+
+                {lastImport.report.reasons.length ? (
+                  <div className="import-result__details">
+                    <strong>Detalhes das regras aplicadas</strong>
+                    <div className="import-result__reasons">
+                      {lastImport.report.reasons.map((reason) => (
+                        <span key={reason.code}>{reason.label}: {reason.count}</span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })() : null}
         </Panel>
 
         <TableCard
