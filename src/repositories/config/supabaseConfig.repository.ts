@@ -313,7 +313,7 @@ function rowToInstagramProfile(row: Record<string, unknown>): InstagramConfigRec
     kind: 'instagram',
     name: String((row.display_name ?? row.name ?? data.name ?? username) || 'Perfil Instagram'),
     username,
-    dailyLimit: Number(row.daily_limit ?? data.dailyLimit ?? defaultDispatchSettings.instagram.dailyLimit),
+    dailyLimit: Number(row.daily_limit ?? row.dailyLimit ?? data.dailyLimit ?? defaultDispatchSettings.instagram.dailyLimit),
     archivedPreviousActive: (data as Record<string, unknown>).archivedPreviousActive,
     active,
     status: (deleted ? 'deleted' : archived ? 'Arquivado' : statusFromActive(active)) as ConfigStatus,
