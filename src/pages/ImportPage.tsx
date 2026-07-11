@@ -15,12 +15,10 @@ import {
   TableCard,
   Tag,
   ToastViewport,
-  type TableAction,
   type TableColumn,
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
-import { DestinationBadge } from '../components/DestinationBadge';
 import { useImportLeads } from '../hooks/useImportLeads';
 import { useImportSettings } from '../hooks/useImportSettings';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
@@ -77,6 +75,61 @@ function mapsHref(lead: ImportLead) {
   if (lead.normalizedMapsUrl?.trim()) return ensureUrl(lead.normalizedMapsUrl);
   const query = [lead.empresa, lead.cidade, lead.estado].filter(Boolean).join(' ');
   return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : '';
+}
+
+function splitSubcategories(value?: string | null) {
+  return String(value ?? '')
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function destinationLabel(value?: string | null) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized.includes('instagram')) return 'Instagram';
+  if (normalized.includes('site')) return 'Com site';
+  if (normalized.includes('agreg')) return 'Agregadores';
+  if (normalized.includes('banco')) return 'Já no banco';
+  if (normalized.includes('recus')) return 'Recusado';
+  return 'WhatsApp';
+}
+
+function destinationTone(value?: string | null): 'neutral' | 'success' | 'warning' | 'danger' | 'primary' {
+  const label = destinationLabel(value);
+  if (label === 'WhatsApp') return 'success';
+  if (label === 'Instagram') return 'primary';
+  if (label === 'Com site') return 'neutral';
+  if (label === 'Agregadores') return 'warning';
+  if (label === 'Recusado') return 'danger';
+  return 'warning';
+}
+
+function DestinationTextBadge({ value }: { value?: string | null }) {
+  const label = destinationLabel(value);
+  return <Tag tone={destinationTone(value)}>{label}</Tag>;
+}
+
+function SubcategoryTooltip({ value }: { value?: string | null }) {
+  const items = splitSubcategories(value);
+  if (!items.length) return <span className="import-subcategory import-subcategory--empty">—</span>;
+
+  const [first, ...rest] = items;
+  return (
+    <span className="import-subcategory" tabIndex={0}>
+      <span className="import-subcategory__chip" title={items.join(' • ')}>
+        <span>{first}</span>
+        {rest.length ? <em>+{rest.length}</em> : null}
+      </span>
+      <span className="import-subcategory__card" role="tooltip" aria-label={`Sub ramo: ${items.join(', ')}`}>
+        <strong>Sub ramo</strong>
+        <ul>
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </span>
+    </span>
+  );
 }
 
 function toForm(lead: ImportLead): LeadForm {
@@ -306,33 +359,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     }
   };
 
-  const handleAction = async (action: TableAction, lead: ImportLead) => {
-    if (action === 'edit' || action === 'view') {
-      openLeadDrawer(lead, action === 'edit' ? 'edit' : 'view');
-      return;
-    }
-
-    if (action === 'delete') {
-      setDeleteLead(lead);
-      return;
-    }
-
-    if (action === 'refresh' || action === 'archive') {
-      const permissions = permissionsFor('import', lead.status);
-      const nextStatus = permissions.canReject() ? 'rejected' : permissions.canApprove() ? 'approved' : null;
-      if (!nextStatus) {
-        pushToast({ title: 'Acao bloqueada', description: 'Este lead nao pode mudar de aprovacao neste estado.', tone: 'warning' });
-        return;
-      }
-      await moveLead(lead.id, nextStatus);
-      pushToast({
-        title: nextStatus === 'approved' ? 'Lead aprovado' : 'Lead recusado',
-        description: 'Lead movido entre as listas.',
-        tone: nextStatus === 'approved' ? 'success' : 'warning',
-      });
-    }
-  };
-
   const confirmDelete = async () => {
     if (!deleteLead) return;
 
@@ -360,17 +386,21 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
   const columns: TableColumn<ImportLead>[] = [
-    { key: 'empresa', label: 'Nome da empresa', width: '42%', render: (lead) => silentLink(lead.empresa, mapsHref(lead)) },
-    { key: 'ramo', label: 'Ramo', width: '28%' },
+    { key: 'empresa', label: 'Nome da empresa', width: '34%', render: (lead) => silentLink(lead.empresa, mapsHref(lead)) },
+    { key: 'ramo', label: 'Ramo', width: '21%' },
+    {
+      key: 'subcategoria',
+      label: 'Sub ramo',
+      width: '23%',
+      render: (lead) => <SubcategoryTooltip value={lead.subcategoria} />,
+    },
     {
       key: 'destino',
       label: 'Destino',
-      width: '20%',
+      width: '16%',
       render: (lead) => {
         const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-        if (destination === 'Recusado') return <Tag tone="danger">Recusado</Tag>;
-        if (destination === 'Já no banco') return <Tag tone="warning">Já no banco</Tag>;
-        return <DestinationBadge value={destination} />;
+        return <DestinationTextBadge value={destination} />;
       },
     },
   ];
@@ -463,18 +493,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               selectable
               selectedRows={selectedRows}
               onSelectedRowsChange={setSelectedRows}
-              actions={rejected ? ['view', 'refresh'] : ['view', 'archive']}
-              getRowActions={(lead) => {
-                const permissions = permissionsFor('import', lead.status);
-                return [
-                  'view' as TableAction,
-                  ...(permissions.canApprove() ? ['refresh' as TableAction] : []),
-                  ...(permissions.canReject() ? ['archive' as TableAction] : []),
-                ];
-              }}
+              actions={[]}
               columns={columns}
               rows={pageRows}
-              onAction={handleAction}
             />
           ) : null}
         </TableCard>
