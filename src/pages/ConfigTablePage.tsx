@@ -421,12 +421,12 @@ function formFromRecord(record: ConfigRecord, chipLevelPresets: ChipLevelPresets
     url: record.url,
     apiKey: record.apiKey,
     priority: String(record.priority),
-    startTime: record.startTime || defaults.startTime,
-    endTime: record.endTime || defaults.endTime,
-    dailyLimit: String(record.dailyLimit || defaults.dailyLimit),
-    blockSize: String(record.blockSize || defaults.blockSize),
-    intervalSeconds: String(record.intervalSeconds || defaults.intervalSeconds),
-    batches: toCsv(record.batches.length ? record.batches : defaults.batches),
+    startTime: record.startTime ?? defaults.startTime,
+    endTime: record.endTime ?? defaults.endTime,
+    dailyLimit: String(record.dailyLimit ?? defaults.dailyLimit),
+    blockSize: String(record.blockSize ?? defaults.blockSize),
+    intervalSeconds: String(record.intervalSeconds ?? defaults.intervalSeconds),
+    batches: toCsv(record.batches ?? defaults.batches),
     active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
   };
 }

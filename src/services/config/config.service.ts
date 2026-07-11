@@ -8,7 +8,6 @@ import {
   DEFAULT_BRANCH_MIN_REVIEWS,
   DEFAULT_TEMPLATE_MESSAGE_1,
   DEFAULT_TEMPLATE_MESSAGE_2,
-  MOVEIS_PLANEJADOS_KEYWORDS,
 } from './config.seed';
 import { chipLevelDefaults } from './chipOperational';
 import type {
@@ -41,16 +40,6 @@ export function normalizeText(value: unknown) {
     .toLowerCase()
     .trim()
     .replace(/\s+/g, ' ');
-}
-
-function firstString(source: Record<string, unknown>, keys: string[], fallback = '') {
-  for (const key of keys) {
-    const value = source[key];
-    if (value === null || value === undefined) continue;
-    const text = String(value).trim();
-    if (text) return text;
-  }
-  return fallback;
 }
 
 function toNumber(value: unknown, fallback: number, min?: number) {
@@ -139,46 +128,63 @@ function normalizeTime(value: unknown, fallback: string) {
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
-function isMoveisPlanejados(input: { id: string; name: string; keywords: string[] }) {
-  const haystack = [input.id, input.name, ...input.keywords].map(normalizeText);
-  return haystack.some((item) => MOVEIS_PLANEJADOS_KEYWORDS.some((keyword) => item.includes(normalizeText(keyword))));
+function hasOwn(source: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(source, key);
 }
 
-function mergeKeywords(current: string[], extra: string[]) {
-  return splitList([...current, ...extra]);
+function valueFromInput(
+  input: Record<string, unknown>,
+  keys: string[],
+  fallback: unknown,
+) {
+  for (const key of keys) {
+    if (hasOwn(input, key)) return input[key];
+  }
+  return fallback;
+}
+
+function stringFromInput(
+  input: Record<string, unknown>,
+  keys: string[],
+  fallback = '',
+  options: { required?: boolean } = {},
+) {
+  const raw = valueFromInput(input, keys, fallback);
+  const text = String(raw ?? '').trim();
+  if (options.required && !text) throw new Error(`O campo ${keys[0]} e obrigatorio.`);
+  return text;
 }
 
 function normalizeBranchInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: BranchConfigRecord): BranchConfigRecord {
-  const source = { ...(existing ?? {}), ...input } as Record<string, unknown>;
-  const createdAt = String(existing?.createdAt ?? source.createdAt ?? nowIso());
-  const name = firstString(source, ['name', 'ramo', 'branch', 'category'], existing?.name ?? 'Novo ramo');
-  const slug = firstString(source, ['slug'], existing?.slug ?? branchSlug(name));
-  const sourceId = firstString(source, ['id']);
+  const raw = input as Record<string, unknown>;
+  const createdAt = String(existing?.createdAt ?? raw.createdAt ?? nowIso());
+  const name = stringFromInput(raw, ['name', 'ramo', 'branch'], existing?.name ?? 'Novo ramo', { required: true });
+  const slugInput = stringFromInput(raw, ['slug'], existing?.slug ?? '');
+  const slug = slugInput || branchSlug(name);
+  const sourceId = stringFromInput(raw, ['id'], existing?.id ?? '');
   const id = String(existing?.id ?? normalizeBranchId(sourceId));
-  const subcategories = splitList(source.subcategories ?? source.subramos ?? source.keywords ?? existing?.subcategories ?? []);
-  const associatedCategories = splitList(source.associatedCategories ?? source.categories ?? source.categoria ?? existing?.associatedCategories ?? []);
-  const moveis = isMoveisPlanejados({ id, name, keywords: [...subcategories, ...associatedCategories] });
-  const normalizedName = moveis ? 'Moveis Planejados' : name.trim();
-  const normalizedSubcategories = moveis ? mergeKeywords(subcategories, MOVEIS_PLANEJADOS_KEYWORDS) : subcategories;
-  const active = toBoolean(source.active ?? source.status, existing?.active ?? true);
+  const subcategories = splitList(valueFromInput(raw, ['subcategories', 'subramos', 'keywords'], existing?.subcategories ?? []));
+  const associatedCategories = splitList(valueFromInput(raw, ['associatedCategories', 'categories', 'categoria'], existing?.associatedCategories ?? []));
+  const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
+  const imageName = stringFromInput(raw, ['imageName', 'image_name', 'imagem'], existing?.imageName ?? '');
 
   return {
     id,
     kind: 'branches',
-    slug: moveis ? 'moveis-planejados' : slug,
-    name: normalizedName,
-    category: firstString(source, ['category', 'ramo'], normalizedName),
-    subcategories: normalizedSubcategories.length ? normalizedSubcategories : [normalizedName],
-    associatedCategories: associatedCategories.length ? associatedCategories : [normalizedName],
-    order: toInteger(source.order ?? source.ordem, existing?.order ?? 0, 0),
+    slug,
+    name,
+    category: stringFromInput(raw, ['category', 'ramo'], existing?.category ?? name) || name,
+    // A lista cadastrada pelo usuario e a fonte de verdade. Nenhuma palavra-chave
+    // hardcoded e reintroduzida depois de uma exclusao intencional.
+    subcategories,
+    associatedCategories,
+    order: toInteger(valueFromInput(raw, ['order', 'ordem'], existing?.order ?? 0), existing?.order ?? 0, 0),
     active,
     status: statusFromActive(active),
-    minRating: toNumber(source.minRating ?? source.notaMinima, existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING, 0),
-    minReviews: toInteger(source.minReviews ?? source.reviewsMinimos, existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS, 0),
-    imageName: firstString(source, ['imageName', 'image_name', 'imagem'], existing?.imageName ?? ''),
-    // Em ramos antigos, um nome de imagem ja configurado representa o comportamento
-    // historico de enviar midia. Novos ramos podem optar por envio somente texto.
-    imageRequired: toBoolean(source.imageRequired ?? source.image_required, existing?.imageRequired ?? Boolean(firstString(source, ['imageName', 'image_name', 'imagem'], ''))),
+    minRating: toNumber(valueFromInput(raw, ['minRating', 'notaMinima'], existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING), existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING, 0),
+    minReviews: toInteger(valueFromInput(raw, ['minReviews', 'reviewsMinimos'], existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS), existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS, 0),
+    imageName,
+    imageRequired: toBoolean(valueFromInput(raw, ['imageRequired', 'image_required'], existing?.imageRequired ?? Boolean(imageName)), existing?.imageRequired ?? Boolean(imageName)),
     createdAt,
     updatedAt: nowIso(),
   };
@@ -210,22 +216,22 @@ function normalizeTemplateInput(
   existing: TemplateConfigRecord | undefined,
   branches: BranchConfigRecord[],
 ): TemplateConfigRecord {
-  const source = { ...(existing ?? {}), ...input } as Record<string, unknown>;
-  const createdAt = String(existing?.createdAt ?? source.createdAt ?? nowIso());
-  const branchId = firstString(source, ['branchId', 'ramoId'], existing?.branchId ?? '');
-  const branch = branches.find((item) => item.id === branchId) ?? branches.find((item) => normalizeText(item.name) === normalizeText(source.branchName ?? source.ramo));
-  const branchName = branch?.name ?? firstString(source, ['branchName', 'ramo'], existing?.branchName ?? '');
-  const active = toBoolean(source.active ?? source.status, existing?.active ?? true);
-  const message1 = firstString(source, ['message1', 'msg1', 'part_1', 'mensagem1', 'mensagem'], existing?.message1 ?? DEFAULT_TEMPLATE_MESSAGE_1);
-  const message2 = firstString(source, ['message2', 'msg2', 'part_2', 'mensagem2'], existing?.message2 ?? DEFAULT_TEMPLATE_MESSAGE_2);
+  const raw = input as Record<string, unknown>;
+  const createdAt = String(existing?.createdAt ?? raw.createdAt ?? nowIso());
+  const branchId = stringFromInput(raw, ['branchId', 'ramoId'], existing?.branchId ?? '', { required: true });
+  const branch = branches.find((item) => item.id === branchId) ?? branches.find((item) => normalizeText(item.name) === normalizeText(valueFromInput(raw, ['branchName', 'ramo'], existing?.branchName ?? '')));
+  const branchName = branch?.name ?? stringFromInput(raw, ['branchName', 'ramo'], existing?.branchName ?? '');
+  const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
+  const message1 = stringFromInput(raw, ['message1', 'msg1', 'part_1', 'mensagem1', 'mensagem'], existing?.message1 ?? DEFAULT_TEMPLATE_MESSAGE_1);
+  const message2 = stringFromInput(raw, ['message2', 'msg2', 'part_2', 'mensagem2'], existing?.message2 ?? DEFAULT_TEMPLATE_MESSAGE_2);
 
   return {
-    id: String(existing?.id ?? source.id ?? fallbackId('templates')),
+    id: String(existing?.id ?? raw.id ?? fallbackId('templates')),
     kind: 'templates',
     branchId: branch?.id ?? branchId,
     branchName,
-    channel: normalizeTemplateChannel(source.channel ?? source.canal ?? source.tipo, existing?.channel ?? 'WhatsApp'),
-    type: normalizeTemplateType(source.type ?? source.tipo, existing?.type ?? 'sem-site'),
+    channel: normalizeTemplateChannel(valueFromInput(raw, ['channel', 'canal'], existing?.channel ?? 'WhatsApp'), existing?.channel ?? 'WhatsApp'),
+    type: normalizeTemplateType(valueFromInput(raw, ['type', 'tipo'], existing?.type ?? 'sem-site'), existing?.type ?? 'sem-site'),
     message1,
     message2,
     preview: renderPreview(message1),
@@ -237,34 +243,34 @@ function normalizeTemplateInput(
 }
 
 async function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: ChipConfigRecord): Promise<ChipConfigRecord> {
-  const source = { ...(existing ?? {}), ...input } as Record<string, unknown>;
-  const active = toBoolean(source.active ?? source.status, existing?.active ?? true);
-  const createdAt = String(existing?.createdAt ?? source.createdAt ?? nowIso());
-  const level = firstString(source, ['level', 'nivel'], existing?.level ?? 'estabilizado');
+  const raw = input as Record<string, unknown>;
+  const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
+  const createdAt = String(existing?.createdAt ?? raw.createdAt ?? nowIso());
+  const level = stringFromInput(raw, ['level', 'nivel'], existing?.level ?? 'estabilizado') || 'estabilizado';
   const dispatchSettings = await settingsService.getDispatchSettings();
   const defaults = chipLevelDefaults(level, dispatchSettings.chipLevels);
-  const batches = splitList(source.batches ?? source.blocks ?? source.lotes ?? existing?.batches ?? defaults.batches)
+  const batches = splitList(valueFromInput(raw, ['batches', 'blocks', 'lotes'], existing?.batches ?? defaults.batches))
     .map((item) => normalizeTime(item, ''))
     .filter(Boolean);
 
   return {
-    id: String(existing?.id ?? source.id ?? fallbackId('chips')),
+    id: String(existing?.id ?? raw.id ?? fallbackId('chips')),
     kind: 'chips',
-    name: firstString(source, ['name', 'nome'], existing?.name ?? 'Novo chip'),
-    number: firstString(source, ['number', 'numero', 'phone'], existing?.number ?? ''),
+    name: stringFromInput(raw, ['name', 'nome'], existing?.name ?? 'Novo chip', { required: true }),
+    number: stringFromInput(raw, ['number', 'numero', 'phone'], existing?.number ?? ''),
     level,
-    url: firstString(source, ['url', 'base_url', 'evolution_url'], existing?.url ?? ''),
-    instance: firstString(source, ['instance', 'instanceName', 'instance_name'], existing?.instance ?? ''),
-    apiKey: firstString(source, ['apiKey', 'api_key'], existing?.apiKey ?? ''),
-    connectionStatus: firstString(source, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? existing?.status ?? ''),
-    priority: toInteger(source.priority ?? source.prioridade, existing?.priority ?? 1, 1),
-    startTime: normalizeTime(source.startTime ?? source.horarioInicio, existing?.startTime ?? defaults.startTime),
-    endTime: normalizeTime(source.endTime ?? source.horarioFim, existing?.endTime ?? defaults.endTime),
-    dailyLimit: toInteger(source.dailyLimit ?? source.limiteDiario, existing?.dailyLimit ?? defaults.dailyLimit, 1),
-    intervalSeconds: toInteger(source.intervalSeconds ?? source.intervaloSegundos, existing?.intervalSeconds ?? defaults.intervalSeconds, 1),
-    blockSize: toInteger(source.blockSize ?? source.tamanhoBloco, existing?.blockSize ?? defaults.blockSize, 1),
-    batches: batches.length ? batches : defaults.batches,
-    paused: toBoolean(source.paused ?? source.pausado, existing?.paused ?? false),
+    url: stringFromInput(raw, ['url', 'base_url', 'evolution_url'], existing?.url ?? ''),
+    instance: stringFromInput(raw, ['instance', 'instanceName', 'instance_name'], existing?.instance ?? ''),
+    apiKey: stringFromInput(raw, ['apiKey', 'api_key'], existing?.apiKey ?? ''),
+    connectionStatus: stringFromInput(raw, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? existing?.status ?? ''),
+    priority: toInteger(valueFromInput(raw, ['priority', 'prioridade'], existing?.priority ?? 1), existing?.priority ?? 1, 1),
+    startTime: normalizeTime(valueFromInput(raw, ['startTime', 'horarioInicio'], existing?.startTime ?? defaults.startTime), existing?.startTime ?? defaults.startTime),
+    endTime: normalizeTime(valueFromInput(raw, ['endTime', 'horarioFim'], existing?.endTime ?? defaults.endTime), existing?.endTime ?? defaults.endTime),
+    dailyLimit: toInteger(valueFromInput(raw, ['dailyLimit', 'limiteDiario'], existing?.dailyLimit ?? defaults.dailyLimit), existing?.dailyLimit ?? defaults.dailyLimit, 1),
+    intervalSeconds: toInteger(valueFromInput(raw, ['intervalSeconds', 'intervaloSegundos'], existing?.intervalSeconds ?? defaults.intervalSeconds), existing?.intervalSeconds ?? defaults.intervalSeconds, 1),
+    blockSize: toInteger(valueFromInput(raw, ['blockSize', 'tamanhoBloco'], existing?.blockSize ?? defaults.blockSize), existing?.blockSize ?? defaults.blockSize, 1),
+    batches,
+    paused: toBoolean(valueFromInput(raw, ['paused', 'pausado'], existing?.paused ?? false), existing?.paused ?? false),
     active,
     status: existing?.status ?? statusFromActive(active),
     createdAt,
@@ -282,18 +288,18 @@ function normalizeInstagramUsername(value: unknown) {
 }
 
 function normalizeInstagramInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: InstagramConfigRecord): InstagramConfigRecord {
-  const source = { ...(existing ?? {}), ...input } as Record<string, unknown>;
-  const active = toBoolean(source.active ?? source.status, existing?.active ?? true);
-  const createdAt = String(existing?.createdAt ?? source.createdAt ?? nowIso());
-  const username = normalizeInstagramUsername(source.username ?? source.instagram ?? source.profile ?? existing?.username);
-  const name = firstString(source, ['name', 'nome'], (existing?.name ?? username) || 'Novo perfil');
+  const raw = input as Record<string, unknown>;
+  const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
+  const createdAt = String(existing?.createdAt ?? raw.createdAt ?? nowIso());
+  const username = normalizeInstagramUsername(valueFromInput(raw, ['username', 'instagram', 'profile'], existing?.username ?? ''));
+  const name = stringFromInput(raw, ['name', 'nome'], (existing?.name ?? username) || 'Novo perfil', { required: true });
 
   return {
-    id: String(existing?.id ?? source.id ?? fallbackId('instagram')),
+    id: String(existing?.id ?? raw.id ?? fallbackId('instagram')),
     kind: 'instagram',
     name,
     username,
-    dailyLimit: toInteger(source.dailyLimit ?? source.daily_limit ?? source.limiteDiario, existing?.dailyLimit ?? 60, 1),
+    dailyLimit: toInteger(valueFromInput(raw, ['dailyLimit', 'daily_limit', 'limiteDiario'], existing?.dailyLimit ?? 60), existing?.dailyLimit ?? 60, 1),
     active,
     status: statusFromActive(active),
     createdAt,
@@ -357,6 +363,73 @@ async function assertTemplateContract(template: TemplateConfigRecord, editingId?
   }
 }
 
+function comparableList(items: string[]) {
+  return items.map((item) => normalizeText(item)).filter(Boolean);
+}
+
+function sameList(left: string[], right: string[]) {
+  const a = comparableList(left);
+  const b = comparableList(right);
+  return a.length === b.length && a.every((item, index) => item === b[index]);
+}
+
+function assertPersisted(expected: ConfigRecord, saved: ConfigRecord) {
+  if (expected.kind !== saved.kind || String(expected.id) !== String(saved.id)) {
+    throw new Error('O banco retornou um registro diferente do que foi salvo.');
+  }
+
+  const fail = (field: string, expectedValue: unknown, savedValue: unknown) => {
+    throw new Error(`Falha de persistencia no campo ${field}: enviado ${JSON.stringify(expectedValue)}, banco retornou ${JSON.stringify(savedValue)}.`);
+  };
+
+  if (expected.kind === 'branches' && saved.kind === 'branches') {
+    if (expected.name !== saved.name) fail('name', expected.name, saved.name);
+    if (expected.slug !== saved.slug) fail('slug', expected.slug, saved.slug);
+    if (!sameList(expected.subcategories, saved.subcategories)) fail('subcategories', expected.subcategories, saved.subcategories);
+    if (!sameList(expected.associatedCategories, saved.associatedCategories)) fail('associatedCategories', expected.associatedCategories, saved.associatedCategories);
+    if (expected.imageName !== saved.imageName) fail('imageName', expected.imageName, saved.imageName);
+    if (expected.imageRequired !== saved.imageRequired) fail('imageRequired', expected.imageRequired, saved.imageRequired);
+    if (expected.active !== saved.active) fail('active', expected.active, saved.active);
+    return;
+  }
+
+  if (expected.kind === 'templates' && saved.kind === 'templates') {
+    if (expected.branchId !== saved.branchId) fail('branchId', expected.branchId, saved.branchId);
+    if (expected.channel !== saved.channel) fail('channel', expected.channel, saved.channel);
+    if (expected.type !== saved.type) fail('type', expected.type, saved.type);
+    if (expected.message1 !== saved.message1) fail('message1', expected.message1, saved.message1);
+    if (expected.message2 !== saved.message2) fail('message2', expected.message2, saved.message2);
+    if (expected.active !== saved.active) fail('active', expected.active, saved.active);
+    return;
+  }
+
+  if (expected.kind === 'chips' && saved.kind === 'chips') {
+    for (const field of ['name', 'number', 'level', 'url', 'instance', 'apiKey', 'startTime', 'endTime'] as const) {
+      if (expected[field] !== saved[field]) fail(field, expected[field], saved[field]);
+    }
+    for (const field of ['priority', 'dailyLimit', 'intervalSeconds', 'blockSize'] as const) {
+      if (expected[field] !== saved[field]) fail(field, expected[field], saved[field]);
+    }
+    if (!sameList(expected.batches, saved.batches)) fail('batches', expected.batches, saved.batches);
+    if (expected.active !== saved.active) fail('active', expected.active, saved.active);
+    return;
+  }
+
+  if (expected.kind === 'instagram' && saved.kind === 'instagram') {
+    if (expected.name !== saved.name) fail('name', expected.name, saved.name);
+    if (expected.username !== saved.username) fail('username', expected.username, saved.username);
+    if (expected.dailyLimit !== saved.dailyLimit) fail('dailyLimit', expected.dailyLimit, saved.dailyLimit);
+    if (expected.active !== saved.active) fail('active', expected.active, saved.active);
+  }
+}
+
+async function confirmPersisted(kind: ConfigKind, expected: ConfigRecord) {
+  const persisted = (await repositories.config.list(kind)).find((record) => String(record.id) === String(expected.id));
+  if (!persisted) throw new Error('O banco nao retornou o registro apos o salvamento.');
+  assertPersisted(expected, persisted);
+  return persisted;
+}
+
 async function emitConfigChanged(kind: ConfigKind) {
   // A publicacao para extensao e secundaria. Uma falha nessa etapa nao pode
   // transformar uma gravacao concluida no banco em falso erro de salvamento.
@@ -379,8 +452,9 @@ export const configService = {
     if (normalized.kind === 'templates') await assertTemplateContract(normalized);
 
     const record = await repositories.config.create(kind, normalized);
+    const persisted = await confirmPersisted(kind, record);
     await emitConfigChanged(kind);
-    return record;
+    return persisted;
   },
 
   async update(kind: ConfigKind, id: string, input: UpdateConfigRecordInput) {
@@ -391,8 +465,10 @@ export const configService = {
     if (normalized.kind === 'templates') await assertTemplateContract(normalized, id);
 
     const record = await repositories.config.update(kind, id, normalized);
+    assertPersisted(normalized, record);
+    const persisted = await confirmPersisted(kind, normalized);
     await emitConfigChanged(kind);
-    return record;
+    return persisted;
   },
 
   async remove(kind: ConfigKind, id: string) {
