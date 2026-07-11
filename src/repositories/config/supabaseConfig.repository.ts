@@ -256,15 +256,7 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
       ? blocks.map(String)
       : levelDefaults.batches;
   const instance = String(row.instance ?? data.instance ?? row.name ?? row.label ?? 'Chip');
-  const connectionStatus = String(
-    row.connection_state
-    ?? row.connectionStatus
-    ?? data.connection_state
-    ?? data.connectionState
-    ?? data.connectionStatus
-    ?? row.status
-    ?? ''
-  ).trim();
+  const connectionStatus = String(row.status ?? data.connectionStatus ?? '');
   return {
     id: String(row.id),
     kind: 'chips',
@@ -453,7 +445,6 @@ async function upsertChip(record: ChipConfigRecord) {
   }
 
   const targetId = String(existingByInstance?.id ?? existingById?.id ?? record.id ?? createUuid());
-  const existingStatus = String(existingByInstance?.status ?? existingById?.status ?? '').trim();
   const payload = {
     id: targetId,
     user_id: userId,
@@ -466,7 +457,7 @@ async function upsertChip(record: ChipConfigRecord) {
     url: record.url,
     api_key: record.apiKey,
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
-    status: record.connectionStatus || existingStatus || 'inactive',
+    status: record.connectionStatus || 'inactive',
     daily_limit: record.dailyLimit || levelDefaults.dailyLimit,
     block_size: record.blockSize || levelDefaults.blockSize,
     interval_seconds: record.intervalSeconds || levelDefaults.intervalSeconds,

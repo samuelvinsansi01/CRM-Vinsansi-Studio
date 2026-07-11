@@ -78,7 +78,7 @@ export function isChipConnectionOpen(chip: Pick<ChipConfigRecord, 'connectionSta
   const status = normalizeComparable(chip.connectionStatus || chip.status);
   if (!status) return false;
   if (['inativo', 'offline', 'pausado', 'paused', 'closed', 'close', 'disconnected', 'disconnect', 'error', 'erro'].includes(status)) return false;
-  return ['open', 'opened', 'connected', 'conectado', 'online', 'ready'].includes(status);
+  return ['open', 'opened', 'connected', 'conectado', 'online', 'ready', 'ativo', 'active', 'ativado'].includes(status);
 }
 
 export function isOperationalWhatsAppChip(chip: ChipConfigRecord) {
@@ -95,11 +95,11 @@ export function isOperationalWhatsAppChip(chip: ChipConfigRecord) {
 export function chipStatusLabel(chip: ChipConfigRecord) {
   if (chip.status === 'deleted') return 'Excluido';
   if (chip.status === 'Arquivado') return 'Arquivado';
+  if (!chip.active) return 'Inativo';
   if (chip.paused) return 'Pausado';
   if (!chipInstance(chip)) return 'Sem instancia';
-  if (isChipConnectionOpen(chip)) return 'Ativo';
-  if (!chip.active) return 'Inativo';
-  return 'Offline';
+  if (!isChipConnectionOpen(chip)) return 'Offline';
+  return 'Ativo';
 }
 
 export function chipLevelDefaults(level: string) {
