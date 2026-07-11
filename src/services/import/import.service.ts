@@ -242,10 +242,12 @@ export const importService = {
       ...options,
       context: {
         ...(options?.context ?? {}),
+        baseLeadIds: compactStrings(baseLeads.map((lead) => lead.sourceLeadId)),
         basePhones,
         baseSites,
         baseInstagrams,
         baseMapsUrls,
+        sentLeadIds: compactStrings(sentLeads.map((lead) => lead.sourceLeadId)),
         sentPhones: [...sentIdentities.phones, ...sentLeads.map((lead) => lead.normalizedPhone ?? lead.phone).filter(Boolean)],
         sentSites: [...sentIdentities.sites, ...sentLeads.map((lead) => lead.normalizedSite ?? lead.site).filter(Boolean)],
         sentInstagrams: [...sentIdentities.instagrams, ...compactStrings(sentLeads.map((lead) => lead.normalizedInstagram ?? lead.instagram))],

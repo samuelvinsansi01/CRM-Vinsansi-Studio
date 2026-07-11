@@ -27,8 +27,6 @@ import {
   DEFAULT_BRANCH_MIN_REVIEWS,
   DEFAULT_TEMPLATE_MESSAGE_1,
   DEFAULT_TEMPLATE_MESSAGE_2,
-  DEFAULT_TEMPLATE_MESSAGE_3,
-  DEFAULT_TEMPLATE_MESSAGE_4,
 } from '../services/config/config.seed';
 import { CHIP_LEVEL_OPTIONS, chipLevelDefaults, chipStatusLabel, isOperationalWhatsAppChip } from '../services/config/chipOperational';
 import type {
@@ -233,8 +231,6 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
         { key: 'type', label: 'Tipo', type: 'select', options: templateTypeOptions },
         { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1 },
         { key: 'message2', label: 'Mensagem 2', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_2 },
-        { key: 'message3', label: 'Mensagem 3', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_3 },
-        { key: 'message4', label: 'Mensagem 4', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_4 },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
       ],
     };
@@ -342,8 +338,6 @@ function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[]): Reco
       type: 'sem-site',
       message1: DEFAULT_TEMPLATE_MESSAGE_1,
       message2: DEFAULT_TEMPLATE_MESSAGE_2,
-      message3: DEFAULT_TEMPLATE_MESSAGE_3,
-      message4: DEFAULT_TEMPLATE_MESSAGE_4,
       active: 'Ativo',
     };
   }
@@ -398,8 +392,6 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
       type: record.type,
       message1: record.message1,
       message2: record.message2,
-      message3: record.message3,
-      message4: record.message4,
       active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
     };
   }
@@ -469,12 +461,7 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
       branch: branchDisplayName(branches, record.branchId, record.branchName),
       channel: record.channel,
       type: formatTemplateType(record.type),
-      messages: [
-        previewMessage(record.message1),
-        record.message2 ? previewMessage(record.message2) : '',
-        record.message3 ? previewMessage(record.message3) : '',
-        record.message4 ? previewMessage(record.message4) : '',
-      ].filter(Boolean).join(' / '),
+      messages: [previewMessage(record.message1), record.message2 ? previewMessage(record.message2) : ''].filter(Boolean).join(' / '),
       status: statusTag(record),
     }));
   }
@@ -785,8 +772,6 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
               <strong>Preview</strong>
               <span>{previewMessage(form.message1)}</span>
               {form.message2 ? <span>{previewMessage(form.message2)}</span> : null}
-              {form.message3 ? <span>{previewMessage(form.message3)}</span> : null}
-              {form.message4 ? <span>{previewMessage(form.message4)}</span> : null}
             </div>
           ) : null}
         </div>

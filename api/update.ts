@@ -94,31 +94,11 @@ function renderTemplateVariables(message: string, context: TemplateVariableConte
 
 function renderLeadMessages<T extends TemplateVariableContext>(
   lead: T,
-  messages: {
-    message1?: string;
-    message2?: string;
-    message3?: string;
-    message4?: string;
-    message_1?: string;
-    message_2?: string;
-    message_3?: string;
-    message_4?: string;
-  },
+  messages: { message1?: string; message2?: string; message_1?: string; message_2?: string },
 ) {
   const message1 = renderTemplateVariables(messages.message1 ?? messages.message_1 ?? '', lead);
   const message2 = renderTemplateVariables(messages.message2 ?? messages.message_2 ?? '', lead);
-  const message3 = renderTemplateVariables(messages.message3 ?? messages.message_3 ?? '', lead);
-  const message4 = renderTemplateVariables(messages.message4 ?? messages.message_4 ?? '', lead);
-  return {
-    message1,
-    message2,
-    message3,
-    message4,
-    message_1: message1,
-    message_2: message2,
-    message_3: message3,
-    message_4: message4,
-  };
+  return { message1, message2, message_1: message1, message_2: message2 };
 }
 
 function envAny(...names: string[]) {
@@ -316,8 +296,6 @@ function itemFromRow(row: QueueRow) {
     instagram_username: username,
     message_1: text(row.message_1 ?? data.message_1 ?? data.message1),
     message_2: text(row.message_2 ?? data.message_2 ?? data.message2),
-    message_3: text(row.message_3 ?? data.message_3 ?? data.message3),
-    message_4: text(row.message_4 ?? data.message_4 ?? data.message4),
     image_name: text(data.imageName ?? data.image_name ?? row.image_url),
     image_required: booleanValue(data.imageRequired ?? data.image_required, Boolean(row.image_url ?? data.imageName)),
     image_url: text(row.image_url ?? data.image_url ?? data.imageName),
@@ -642,7 +620,7 @@ async function syncSentInstagramLead(client: ReturnType<typeof supabase>, item: 
     destination: 'Instagram',
     status: 'sent',
     sentAt: timestamp,
-    template: [item.message_1, item.message_2, item.message_3, item.message_4].filter(Boolean).join('\n\n'),
+    template: [item.message_1, item.message_2].filter(Boolean).join('\n\n'),
     chipOrProfile: item.profile_username,
     notes: item.instagram_url,
     history: [historyEntry, ...rowHistory(existingBase)],
