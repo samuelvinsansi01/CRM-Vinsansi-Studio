@@ -572,7 +572,7 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
       p_daily_limit: dailyLimit,
     });
     if (rpc.error) {
-      throw new Error(`Nao foi possivel persistir o limite diario no banco: ${rpc.error.message}. Aplique a migration V3.39.4.`);
+      throw new Error(`Nao foi possivel persistir o limite diario no banco: ${rpc.error.message}. Aplique a migration V3.39.5.`);
     }
     const confirmed = Number(rpc.data);
     if (!Number.isFinite(confirmed) || confirmed !== dailyLimit) {
@@ -589,7 +589,7 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
   if (verification.error) throw new Error(`Perfil salvo, mas nao foi possivel confirmar o limite diario: ${verification.error.message}`);
   const saved = rowToInstagramProfile(verification.data as Record<string, unknown>);
   if (saved.dailyLimit !== dailyLimit) {
-    throw new Error(`O banco nao confirmou o limite diario de ${dailyLimit}. Valor retornado: ${saved.dailyLimit}. Aplique a migration V3.39.4.`);
+    throw new Error(`O banco nao confirmou o limite diario de ${dailyLimit}. Valor retornado: ${saved.dailyLimit}. Aplique a migration V3.39.5.`);
   }
   return saved;
 }
