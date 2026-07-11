@@ -563,7 +563,7 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
   // nome/tipo da tabela pode variar por ambiente e uma segunda gravacao criava
   // falsos erros depois de um UPDATE valido.
   const response = existingByUsername || existingById
-    ? await client.rpc('save_instagram_profile_config', {
+    ? await client.rpc('save_instagram_profile_config_v2', {
         p_profile_id: targetId,
         p_username: username,
         p_display_name: record.name,
@@ -584,7 +584,7 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
 
   const rawSaved = Array.isArray(response.data) ? response.data[0] : response.data;
   if (!rawSaved || typeof rawSaved !== 'object') {
-    throw new Error('O banco nao retornou o perfil Instagram apos a gravacao. Aplique a migration V3.39.8.');
+    throw new Error('O banco nao retornou o perfil Instagram apos a gravacao. Aplique a migration V3.39.10.');
   }
 
   const saved = rowToInstagramProfile(rawSaved as Record<string, unknown>);
