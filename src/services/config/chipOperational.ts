@@ -87,7 +87,7 @@ const CONNECTION_OPEN_STATES = ['open', 'opened', 'connected', 'connectado', 'co
 const CONNECTION_CLOSED_STATES = ['inativo', 'offline', 'pausado', 'paused', 'closed', 'close', 'disconnected', 'disconnect', 'error', 'erro'];
 
 function connectionStateToken(chip: Pick<ChipConfigRecord, 'connectionStatus' | 'status'>) {
-  return normalizeComparable(chip.connectionStatus);
+  return normalizeComparable(chip.connectionStatus || chip.status);
 }
 
 export function isChipConnectionOpen(chip: Pick<ChipConfigRecord, 'connectionStatus' | 'status' | 'active' | 'paused'>) {

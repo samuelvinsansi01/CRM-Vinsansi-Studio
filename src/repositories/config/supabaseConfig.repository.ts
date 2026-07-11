@@ -256,7 +256,7 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
       ? blocks.map(String)
       : levelDefaults.batches;
   const instance = String(row.instance ?? data.instance ?? row.name ?? row.label ?? 'Chip');
-  const connectionStatus = String(data.connection_state ?? row.connection_state ?? data.connectionStatus ?? row.connectionStatus ?? '');
+  const connectionStatus = String(row.status ?? data.status ?? data.connectionStatus ?? row.connectionStatus ?? (active ? 'Ativo' : 'Inativo'));
   return {
     id: String(row.id),
     kind: 'chips',
@@ -446,10 +446,9 @@ async function upsertChip(record: ChipConfigRecord) {
 
   const targetId = String(existingByInstance?.id ?? existingById?.id ?? record.id ?? createUuid());
   const existingData = existingByInstance ?? existingById ?? {};
-  const preservedConnectionState = String(
-    (record.connectionStatus ?? existingData.connection_state ?? existingData.connectionStatus ?? '') || '',
+  const persistedStatus = String(
+    existingData.status ?? record.status ?? (record.active ? 'Ativo' : 'Inativo'),
   ).trim();
-  const persistedStatus = record.status === 'Arquivado' || record.status === 'deleted' ? record.status : (record.active ? 'Ativo' : 'Inativo');
   const payload = {
     id: targetId,
     user_id: userId,
@@ -463,7 +462,6 @@ async function upsertChip(record: ChipConfigRecord) {
     api_key: record.apiKey,
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: persistedStatus,
-    connection_state: preservedConnectionState || null,
     daily_limit: record.dailyLimit || levelDefaults.dailyLimit,
     block_size: record.blockSize || levelDefaults.blockSize,
     interval_seconds: record.intervalSeconds || levelDefaults.intervalSeconds,
@@ -474,7 +472,7 @@ async function upsertChip(record: ChipConfigRecord) {
     paused: record.paused,
     kind: 'chips',
     channel: 'whatsapp',
-    data: { ...record, instance, connection_state: preservedConnectionState || null, connectionStatus: preservedConnectionState || null, status: persistedStatus },
+    data: { ...record, instance, status: persistedStatus },
     updated_at: nowIso(),
   };
   const response = existingByInstance || existingById

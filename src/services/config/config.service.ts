@@ -256,7 +256,7 @@ async function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigR
     url: firstString(source, ['url', 'base_url', 'evolution_url'], existing?.url ?? ''),
     instance: firstString(source, ['instance', 'instanceName', 'instance_name'], existing?.instance ?? ''),
     apiKey: firstString(source, ['apiKey', 'api_key'], existing?.apiKey ?? ''),
-    connectionStatus: firstString(source, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? ''),
+    connectionStatus: firstString(source, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? existing?.status ?? ''),
     priority: toInteger(source.priority ?? source.prioridade, existing?.priority ?? 1, 1),
     startTime: normalizeTime(source.startTime ?? source.horarioInicio, existing?.startTime ?? defaults.startTime),
     endTime: normalizeTime(source.endTime ?? source.horarioFim, existing?.endTime ?? defaults.endTime),
@@ -266,7 +266,7 @@ async function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigR
     batches: batches.length ? batches : defaults.batches,
     paused: toBoolean(source.paused ?? source.pausado, existing?.paused ?? false),
     active,
-    status: statusFromActive(active),
+    status: existing?.status ?? statusFromActive(active),
     createdAt,
     updatedAt: nowIso(),
   };
