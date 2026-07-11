@@ -106,10 +106,27 @@ function normalizeDispatchSettings(raw: unknown): DispatchSettings {
       batchBehavior: safeString(instagram.batchBehavior, defaultDispatchSettings.instagram.batchBehavior),
     },
     chipLevels: Object.fromEntries(
-      Object.entries({ ...defaultDispatchSettings.chipLevels, ...((source.chipLevels ?? {}) as Record<string, unknown>) }).map(([level, preset]) => [
-        level,
-        { blockSize: safeNumber((preset as Record<string, unknown>).blockSize, defaultDispatchSettings.chipLevels[level]?.blockSize ?? 30, 1) },
-      ]),
+      Object.entries({ ...defaultDispatchSettings.chipLevels, ...((source.chipLevels ?? {}) as Record<string, unknown>) }).map(([level, preset]) => {
+        const raw = preset as Record<string, unknown>;
+        const fallback = defaultDispatchSettings.chipLevels[level] ?? defaultDispatchSettings.chipLevels.estabilizado;
+        const fallbackDailyLimit = Number(fallback.dailyLimit ?? 1);
+        const fallbackBatchCount = Number(fallback.batchCount ?? 1);
+        const dailyLimit = safeNumber(raw.dailyLimit, fallbackDailyLimit, 1);
+        const blockSize = safeNumber(raw.blockSize, 0, 1);
+        const batchCount = safeNumber(
+          raw.batchCount ?? raw.batches,
+          blockSize > 0 ? Math.max(1, Math.round(dailyLimit / blockSize)) : fallbackBatchCount,
+          1,
+        );
+
+        return [
+          level,
+          {
+            dailyLimit,
+            batchCount,
+          },
+        ];
+      }),
     ),
   };
 }

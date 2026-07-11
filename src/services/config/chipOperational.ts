@@ -1,6 +1,17 @@
 import type { ChipConfigRecord } from './types';
 
-export type ChipLevelPreset = Pick<ChipConfigRecord, 'dailyLimit' | 'blockSize' | 'intervalSeconds' | 'batches' | 'startTime' | 'endTime'>;
+export type ChipLevelPreset = {
+  dailyLimit: number;
+  batchCount: number;
+  intervalSeconds: number;
+  batches: string[];
+  startTime: string;
+  endTime: string;
+};
+
+export type ResolvedChipLevelPreset = ChipLevelPreset & {
+  blockSize: number;
+};
 
 export const CHIP_LEVEL_OPTIONS = [
   { label: 'Recem ativado', value: 'recem-ativado' },
@@ -13,31 +24,31 @@ export const CHIP_LEVEL_OPTIONS = [
 export const CHIP_LEVEL_LIMITS: Record<string, ChipLevelPreset> = {
   'recem-ativado': {
     dailyLimit: 40,
-    blockSize: 10,
+    batchCount: 1,
     intervalSeconds: 180,
-    batches: ['08:00', '10:00', '12:00', '14:00'],
+    batches: ['08:00'],
     startTime: '08:00',
     endTime: '18:00',
   },
   'aquecimento-inicial': {
     dailyLimit: 80,
-    blockSize: 20,
+    batchCount: 2,
     intervalSeconds: 150,
-    batches: ['08:00', '10:00', '12:00', '14:00'],
+    batches: ['08:00', '12:00'],
     startTime: '08:00',
     endTime: '18:00',
   },
   estabilizado: {
     dailyLimit: 120,
-    blockSize: 30,
+    batchCount: 3,
     intervalSeconds: 120,
-    batches: ['08:00', '10:00', '12:00', '14:00'],
+    batches: ['08:00', '11:00', '14:00'],
     startTime: '08:00',
     endTime: '18:00',
   },
   maduro: {
     dailyLimit: 160,
-    blockSize: 40,
+    batchCount: 4,
     intervalSeconds: 90,
     batches: ['08:00', '10:00', '12:00', '14:00'],
     startTime: '08:00',
@@ -45,9 +56,9 @@ export const CHIP_LEVEL_LIMITS: Record<string, ChipLevelPreset> = {
   },
   operacional: {
     dailyLimit: 200,
-    blockSize: 50,
+    batchCount: 5,
     intervalSeconds: 75,
-    batches: ['08:00', '10:00', '12:00', '14:00'],
+    batches: ['08:00', '09:30', '11:00', '12:30', '14:00'],
     startTime: '08:00',
     endTime: '18:00',
   },
@@ -61,6 +72,11 @@ function normalizeComparable(value: unknown) {
     .trim()
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ');
+}
+
+function computeBlockSize(preset: Pick<ChipLevelPreset, 'dailyLimit' | 'batchCount'>) {
+  const batchCount = Math.max(1, Number(preset.batchCount || 1));
+  return Math.max(1, Math.floor(Number(preset.dailyLimit || 1) / batchCount));
 }
 
 export function chipInstance(chip: Pick<ChipConfigRecord, 'instance' | 'name'>) {
@@ -95,14 +111,19 @@ export function chipStatusLabel(chip: ChipConfigRecord) {
   return 'Ativo';
 }
 
-export function chipLevelDefaults(level: string, overrides?: Record<string, Partial<ChipLevelPreset>>) {
+export function chipLevelDefaults(level: string, overrides?: Record<string, Partial<ChipLevelPreset>>): ResolvedChipLevelPreset {
   const base = CHIP_LEVEL_LIMITS[level] ?? CHIP_LEVEL_LIMITS.estabilizado;
-  const override = overrides?.[level];
-  if (!override) return base;
-  return {
+  const override = overrides?.[level] ?? {};
+  const resolved: ChipLevelPreset = {
     ...base,
     ...override,
+    batchCount: Number(override.batchCount ?? base.batchCount ?? 1),
     batches: override.batches?.length ? override.batches : base.batches,
+  };
+
+  return {
+    ...resolved,
+    blockSize: computeBlockSize(resolved),
   };
 }
 
@@ -116,4 +137,3 @@ export function resolveChipOperationalConfig(
     ...preset,
   };
 }
-

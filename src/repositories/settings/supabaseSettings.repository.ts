@@ -49,6 +49,31 @@ async function readExtensionRuntimeConfig(): Promise<ExtensionRuntimeConfig | nu
   return (data?.value ?? null) as ExtensionRuntimeConfig | null;
 }
 
+function normalizeDispatchSettings(raw: unknown) {
+  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const whatsapp = (source.whatsapp ?? {}) as Record<string, unknown>;
+  const instagram = (source.instagram ?? {}) as Record<string, unknown>;
+  const chipLevelsRaw = (source.chipLevels ?? {}) as Record<string, unknown>;
+  const chipLevels = Object.fromEntries(
+    Object.entries({ ...defaultDispatchSettings.chipLevels, ...chipLevelsRaw }).map(([level, preset]) => {
+      const raw = preset as Record<string, unknown>;
+      const fallback = defaultDispatchSettings.chipLevels[level] ?? defaultDispatchSettings.chipLevels.estabilizado;
+      const dailyLimit = Number(raw.dailyLimit ?? fallback.dailyLimit ?? 1);
+      const blockSizeRaw = Number(raw.blockSize ?? 0);
+      const batchCount = Number(
+        raw.batchCount ?? (blockSizeRaw > 0 ? Math.max(1, Math.round(dailyLimit / blockSizeRaw)) : fallback.batchCount ?? 1),
+      );
+      return [level, { dailyLimit, batchCount }];
+    }),
+  );
+
+  return {
+    whatsapp: { ...defaultDispatchSettings.whatsapp, ...whatsapp },
+    instagram: { ...defaultDispatchSettings.instagram, ...instagram },
+    chipLevels,
+  } as DispatchSettings;
+}
+
 function mergeImportSettings(current: ImportSettings, input: UpdateImportSettingsInput): ImportSettings {
   return {
     ...current,
@@ -86,11 +111,16 @@ export const supabaseSettingsRepository: SettingsRepository = {
   },
 
   async getDispatchSettings() {
-    return readSetting('dispatch', defaultDispatchSettings);
+    const table = getSupabaseConfig().tables.settings;
+    const userId = await getCurrentUserId();
+    const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', 'dispatch').maybeSingle();
+    if (error) throw new Error(error.message);
+    return normalizeDispatchSettings(data?.value ?? defaultDispatchSettings);
   },
 
   async updateDispatchSettings(input) {
-    return writeSetting('dispatch', mergeDispatchSettings(await this.getDispatchSettings(), input));
+    const current = await this.getDispatchSettings();
+    return writeSetting('dispatch', normalizeDispatchSettings(mergeDispatchSettings(current, input)));
   },
 
   async resetDispatchSettings() {

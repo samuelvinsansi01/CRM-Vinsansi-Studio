@@ -75,7 +75,7 @@ type ConfigTableRow = Record<string, ReactNode> & {
   id: string;
 };
 
-type ChipLevelPresetsMap = Record<string, Partial<{ dailyLimit: number; blockSize: number; intervalSeconds: number; batches: string[]; startTime: string; endTime: string }>>;
+type ChipLevelPresetsMap = Record<string, Partial<{ dailyLimit: number; batchCount: number; blockSize: number; intervalSeconds: number; batches: string[]; startTime: string; endTime: string }>>;
 
 const statusOptions = [
   { label: 'Todos', value: 'Todos' },
