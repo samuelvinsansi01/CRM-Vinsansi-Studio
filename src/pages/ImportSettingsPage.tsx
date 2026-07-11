@@ -7,6 +7,7 @@ import { useState } from 'react';
 
 type BooleanPath =
   | 'safeMode.simulationMode'
+  | 'instagramLowRating.enabled'
   | 'deduplication.enabled'
   | 'deduplication.byPhone'
   | 'deduplication.bySite'
@@ -65,8 +66,14 @@ export function ImportSettingsPage() {
   };
 
   const updateBoolean = async (path: BooleanPath, value: boolean) => {
-    const [group, key] = path.split('.') as ['safeMode' | 'deduplication' | 'routes' | 'logs', string];
+    const [group, key] = path.split('.') as ['safeMode' | 'instagramLowRating' | 'deduplication' | 'routes' | 'logs', string];
     await updateSettings({ [group]: { [key]: value } });
+  };
+
+  const updateInstagramLowRatingNumber = async (key: 'minRating' | 'maxRatingExclusive' | 'minReviews', value: string) => {
+    const parsed = key === 'minReviews' ? Number.parseInt(value, 10) : Number(value.replace(',', '.'));
+    if (!Number.isFinite(parsed)) return;
+    await updateSettings({ instagramLowRating: { [key]: parsed } });
   };
 
   const updateBranchRule = async (id: string, key: 'minRating' | 'minReviews' | 'enabled', value: string | boolean) => {
@@ -118,6 +125,19 @@ export function ImportSettingsPage() {
           <Field label="Reviews mínimos global" value={String(settings.minReviews)} onChange={(value) => updateNumber('minReviews', value)} />
           <BooleanSetting label="Modo simulação" description="Executa validações e relatório sem gravar no banco. Recomendado para testar regras." value={getBoolean(settings, 'safeMode.simulationMode')} onChange={(value) => updateBoolean('safeMode.simulationMode', value)} />
           <p className="settings-note">Leads abaixo desses critérios entram em Recusados com motivo automático. Regras por ramo têm prioridade sobre o global.</p>
+        </Panel>
+
+        <Panel title="Exceção de nota para Instagram" className="settings-card import-settings-card">
+          <BooleanSetting
+            label="Ativar exceção"
+            description="Permite leads abaixo da nota normal somente na trilha do Instagram, sem enviar para WhatsApp."
+            value={getBoolean(settings, 'instagramLowRating.enabled')}
+            onChange={(value) => updateBoolean('instagramLowRating.enabled', value)}
+          />
+          <Field label="Nota mínima da exceção" value={String(settings.instagramLowRating.minRating)} onChange={(value) => updateInstagramLowRatingNumber('minRating', value)} />
+          <Field label="Nota limite (não inclusiva)" value={String(settings.instagramLowRating.maxRatingExclusive)} onChange={(value) => updateInstagramLowRatingNumber('maxRatingExclusive', value)} />
+          <Field label="Mínimo de avaliações" value={String(settings.instagramLowRating.minReviews)} onChange={(value) => updateInstagramLowRatingNumber('minReviews', value)} />
+          <p className="settings-note">Padrão: nota de 3,7 até abaixo de 4,0, com pelo menos 5 avaliações. O lead entra no Início com destino Instagram e só segue para a fila após receber um link válido.</p>
         </Panel>
 
         <Panel title="Regras por ramo" className="settings-card import-settings-card import-branch-rules">

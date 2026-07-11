@@ -28,6 +28,13 @@ export type ImportSafeModeSettings = {
   simulationMode: boolean;
 };
 
+export type ImportInstagramLowRatingSettings = {
+  enabled: boolean;
+  minRating: number;
+  maxRatingExclusive: number;
+  minReviews: number;
+};
+
 export type ImportBranchRule = {
   id: string;
   branchId?: string;
@@ -44,6 +51,7 @@ export type ImportSettings = {
   minRating: number;
   minReviews: number;
   safeMode: ImportSafeModeSettings;
+  instagramLowRating: ImportInstagramLowRatingSettings;
   branchRules: ImportBranchRule[];
   deduplication: ImportDeduplicationSettings;
   routes: ImportRouteSettings;
@@ -54,6 +62,7 @@ export type UpdateImportSettingsInput = Partial<{
   minRating: number;
   minReviews: number;
   safeMode: Partial<ImportSafeModeSettings>;
+  instagramLowRating: Partial<ImportInstagramLowRatingSettings>;
   branchRules: ImportBranchRule[];
   deduplication: Partial<ImportDeduplicationSettings>;
   routes: Partial<ImportRouteSettings>;

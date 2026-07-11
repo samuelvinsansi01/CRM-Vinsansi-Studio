@@ -60,6 +60,13 @@ function normalizeImportSettings(raw: unknown): ImportSettings {
       ...defaultImportSettings.safeMode,
       ...(source.safeMode ?? {}),
     },
+    instagramLowRating: {
+      ...defaultImportSettings.instagramLowRating,
+      ...(source.instagramLowRating ?? {}),
+      minRating: safeNumber(source.instagramLowRating?.minRating, defaultImportSettings.instagramLowRating.minRating, 0),
+      maxRatingExclusive: safeNumber(source.instagramLowRating?.maxRatingExclusive, defaultImportSettings.instagramLowRating.maxRatingExclusive, 0),
+      minReviews: safeNumber(source.instagramLowRating?.minReviews, defaultImportSettings.instagramLowRating.minReviews, 0),
+    },
     branchRules: Array.isArray(source.branchRules) ? source.branchRules : defaultImportSettings.branchRules,
     logs: {
       ...defaultImportSettings.logs,
@@ -162,6 +169,10 @@ function mergeImportSettings(current: ImportSettings, input: UpdateImportSetting
     safeMode: {
       ...current.safeMode,
       ...(input.safeMode ?? {}),
+    },
+    instagramLowRating: {
+      ...current.instagramLowRating,
+      ...(input.instagramLowRating ?? {}),
     },
     branchRules: input.branchRules ?? current.branchRules,
     logs: {

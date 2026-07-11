@@ -81,6 +81,7 @@ function mergeImportSettings(current: ImportSettings, input: UpdateImportSetting
     deduplication: { ...current.deduplication, ...(input.deduplication ?? {}) },
     routes: { ...current.routes, ...(input.routes ?? {}) },
     safeMode: { ...current.safeMode, ...(input.safeMode ?? {}) },
+    instagramLowRating: { ...current.instagramLowRating, ...(input.instagramLowRating ?? {}) },
     branchRules: input.branchRules ?? current.branchRules,
     logs: { ...current.logs, ...(input.logs ?? {}) },
   };
