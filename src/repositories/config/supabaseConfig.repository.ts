@@ -527,6 +527,22 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
   }
 
   const targetId = String(existingByUsername?.id ?? existingById?.id ?? uuidOrNull(record.id) ?? createUuid());
+  const dailyLimit = Math.max(1, Number(record.dailyLimit || instagramDefaults.dailyLimit));
+  const existingData = ((existingByUsername?.data ?? existingById?.data) && typeof (existingByUsername?.data ?? existingById?.data) === 'object'
+    ? (existingByUsername?.data ?? existingById?.data)
+    : {}) as Record<string, unknown>;
+  const dataPayload = {
+    ...existingData,
+    id: targetId,
+    kind: 'instagram',
+    name: record.name,
+    username,
+    dailyLimit,
+    active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
+    status: record.status,
+    createdAt: record.createdAt,
+    updatedAt: nowIso(),
+  };
   const payload = {
     id: targetId,
     user_id: userId,
@@ -534,17 +550,28 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
     display_name: record.name,
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
     status: record.status,
-    daily_limit: Math.max(1, Number(record.dailyLimit || instagramDefaults.dailyLimit)),
+    daily_limit: dailyLimit,
     blocks: instagramDefaults.batches,
     block_size: instagramDefaults.perBatch,
     interval_minutes: instagramDefaults.delayMinutes,
+    data: dataPayload,
     updated_at: nowIso(),
   };
   const response = existingByUsername || existingById
     ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select('*').single()
     : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
   if (response.error) throw new Error(response.error.message);
-  return rowToInstagramProfile(response.data ?? { ...payload, created_at: record.createdAt });
+
+  // Confirma o valor diretamente no banco antes de informar sucesso à interface.
+  // Isso evita falso positivo quando uma migration/trigger/schema remoto não
+  // persiste a coluna esperada.
+  const verification = await getSupabaseClient().from(table).select('*').eq('id', targetId).single();
+  if (verification.error) throw new Error(`Perfil salvo, mas nao foi possivel confirmar o limite diario: ${verification.error.message}`);
+  const saved = rowToInstagramProfile(verification.data as Record<string, unknown>);
+  if (saved.dailyLimit !== dailyLimit) {
+    throw new Error(`O banco nao confirmou o limite diario de ${dailyLimit}. Valor retornado: ${saved.dailyLimit}. Aplique a migration V3.39.2.`);
+  }
+  return saved;
 }
 
 
