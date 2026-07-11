@@ -57,11 +57,10 @@ function addDays(date: Date, days: number) {
 }
 
 function dateForWeekdayIndex(index: number, reference = new Date()) {
-  const date = addDays(startOfCurrentWeek(reference), index);
-  const today = new Date(reference);
-  today.setHours(0, 0, 0, 0);
-  if (date < today) return addDays(date, 7);
-  return date;
+  // A semana do Pré-Envio deve refletir o calendário real da semana corrente.
+  // Não avançamos dias passados para a próxima semana; a virada ocorre apenas
+  // quando o calendário muda (e os rollovers operacionais continuam separados).
+  return addDays(startOfCurrentWeek(reference), index);
 }
 
 function formatWeekDateLabel(weekday: string, date: Date) {
@@ -94,10 +93,6 @@ function isInstagramProfile(record: ConfigRecord): record is InstagramConfigReco
 
 function channelLimit(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
   return channel === 'WhatsApp' ? settings.whatsapp.dailyLimit : settings.instagram.dailyLimit;
-}
-
-function whatsappBatchLimit(settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>, fallback?: number) {
-  return Math.max(1, settings.whatsapp.perBatch || fallback || 1);
 }
 
 function channelDays(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
@@ -295,7 +290,6 @@ type QueueAllocationSnapshot = {
 };
 
 async function rolloverWhatsAppQueueAfterCutoff(targetDate: string) {
-  const settings = await settingsService.getDispatchSettings();
   const chips = (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
   const chipMap = new Map(chips.map((chip) => [chipInstance(chip), chip]));
   if (!chipMap.size) return 0;
@@ -324,7 +318,7 @@ async function rolloverWhatsAppQueueAfterCutoff(targetDate: string) {
     const chip = chipMap.get(instance);
     if (!chip) continue;
     const dailyLimit = Math.max(1, chip.dailyLimit);
-    const batchLimit = whatsappBatchLimit(settings, chip.blockSize);
+    const batchLimit = Math.max(1, chip.blockSize);
     let scheduledDate = targetDate;
     let key = `${instance}:${scheduledDate}`;
 
@@ -774,7 +768,6 @@ async function assignProfilesAndLimitCapacity(leads: PreSendLead[], options: Que
 }
 
 async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAppQueueLeadInput[]> {
-  const settings = await settingsService.getDispatchSettings();
   const chips = await loadActiveChips();
   if (!chips.length) throw new Error('Nenhum chip ativo configurado.');
   const branches = await loadBranches();
@@ -840,7 +833,7 @@ async function toWhatsAppQueueLeads(leads: PreSendLead[]): Promise<CreateWhatsAp
       site: lead.site,
       instagram: lead.instagram,
       mapsUrl: lead.mapsUrl,
-      batchLimit: whatsappBatchLimit(settings, availableChip.blockSize),
+      batchLimit: availableChip.blockSize,
     });
   }
 

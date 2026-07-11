@@ -171,11 +171,6 @@ function importLeadToBaseInput(lead: ImportLead, sentAt: string, reason: string)
   };
 }
 
-function importLeadToCreateInput(lead: ImportLead): ImportLeadInput {
-  const { id: _id, ...input } = lead;
-  return input;
-}
-
 async function routeApprovedInstagramToQueue(leads: ImportLead[]) {
   const eligible = leads.filter((lead) =>
     isStatusGroup(lead.status, 'approved') &&
@@ -320,25 +315,6 @@ export const importService = {
     const created = await preSendService.addFromImport(approved);
     eventBus.emit('import:changed', { source: 'move' });
     return created;
-  },
-
-  async addApprovedToHome(leads: ImportLead[]) {
-    const approved = leads.filter((lead) => isStatusGroup(lead.status, 'approved'));
-    if (!approved.length) return 0;
-
-    const current = await listOperationalLeads();
-    const currentById = new Map(current.map((lead) => [lead.id, lead]));
-    let processed = 0;
-
-    for (const lead of approved) {
-      const existing = currentById.get(lead.id);
-      const target = existing ? { ...existing, ...lead, status: 'approved' } : lead;
-      await repositories.import.create(importLeadToCreateInput(target));
-      processed += 1;
-    }
-
-    eventBus.emit('import:changed', { source: 'move' });
-    return processed;
   },
 
   async approveMany(ids: string[]) {
