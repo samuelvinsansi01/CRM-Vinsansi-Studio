@@ -46,42 +46,6 @@ function createSessionId() {
   return `session-lead-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-
-function leadToImportInput(lead: ImportLead, status: ImportLeadStatus = 'approved'): ImportLeadInput {
-  return {
-    empresa: lead.empresa,
-    ramo: lead.ramo,
-    subcategoria: lead.subcategoria,
-    destino: lead.destino,
-    original_destination: lead.original_destination ?? lead.destino,
-    destination: lead.destination ?? (lead.send_instagram ? 'Instagram' : lead.destino),
-    destination_override: lead.destination_override ?? (lead.send_instagram ? 'Instagram' : undefined),
-    send_instagram: lead.send_instagram ?? false,
-    instagram_url: lead.instagram_url ?? lead.instagram,
-    instagram_override_reason: lead.instagram_override_reason ?? '',
-    override_by: lead.override_by ?? '',
-    override_at: lead.override_at ?? '',
-    status,
-    motivo: lead.motivo ?? '',
-    rejectionCode: lead.rejectionCode,
-    rating: lead.rating,
-    reviews: lead.reviews,
-    whatsapp: lead.whatsapp ?? '',
-    instagram: lead.instagram ?? '',
-    site: lead.site ?? '',
-    cidade: lead.cidade ?? '',
-    estado: lead.estado ?? '',
-    existingId: lead.existingId,
-    normalizedPhone: lead.normalizedPhone,
-    normalizedSite: lead.normalizedSite,
-    normalizedInstagram: lead.normalizedInstagram,
-    normalizedMapsUrl: lead.normalizedMapsUrl,
-    returned_from_queue: lead.returned_from_queue,
-    returned_at: lead.returned_at,
-    return_reason: lead.return_reason,
-  };
-}
-
 function toSessionLead(input: ImportLeadInput): ImportLead {
   return {
     id: createSessionId(),
@@ -246,14 +210,9 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
     setError(null);
   }, []);
 
-  const sendApprovedToInicio = useCallback(async (sourceLeads: ImportLead[] = sessionLeads) => {
-    const approved = sourceLeads.filter((lead) => isStatusGroup(lead.status, 'approved'));
-    const created: ImportLead[] = [];
-    for (const lead of approved) {
-      const createdLead = await importService.create(leadToImportInput(lead, 'approved'));
-      created.push(createdLead);
-    }
-    return created;
+  const sendApprovedToPreSend = useCallback(async () => {
+    const approved = sessionLeads.filter((lead) => isStatusGroup(lead.status, 'approved'));
+    return importService.sendToPreSend(approved);
   }, [sessionLeads]);
 
   return {
@@ -269,6 +228,6 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
     moveLead,
     moveMany,
     clearSession,
-    sendApprovedToInicio,
+    sendApprovedToPreSend,
   };
 }

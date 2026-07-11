@@ -8,8 +8,7 @@ import { whatsappBatchGateway, type WhatsAppBatchState } from './whatsapp.batch.
 import { hasWhatsAppWorkerContract, missingWhatsAppWorkerFields } from './whatsappQueue.guards';
 import type { UpdateWhatsAppQueueLeadInput, WhatsAppQueueFilters, WhatsAppQueueLead } from './types';
 import type { ChipConfigRecord, ConfigRecord } from '../config/types';
-import { chipInstance, chipLevelDefaults, isOperationalWhatsAppChip } from '../config/chipOperational';
-import { settingsService } from '../settings';
+import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperational';
 import { preSendService } from '../pre-send/preSend.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
@@ -26,17 +25,8 @@ async function getSelectedLeads(ids: string[]) {
   return batches.flatMap((batch) => batch.leads).filter((lead) => idSet.has(lead.id));
 }
 
-async function loadActiveChips() {
-  const settings = await settingsService.getDispatchSettings();
-  const chips = (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
-  return chips.map((chip) => ({
-    ...chip,
-    ...chipLevelDefaults(chip.level, settings.chipLevels),
-  }));
-}
-
 async function assertLeadsUseOperationalChips(leads: WhatsAppQueueLead[]) {
-  const operational = new Set((await loadActiveChips()).map(chipInstance));
+  const operational = new Set((await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip).map(chipInstance));
   const blocked = leads.find((lead) => !operational.has(lead.chip_instance || lead.chip));
   if (blocked) {
     throw new Error(`Chip desconectado ou inativo: ${blocked.chip_instance || blocked.chip}.`);
@@ -54,7 +44,7 @@ function queueRolloverTargetDate() {
 
 async function rolloverOverdueWhatsAppItems() {
   const targetDate = queueRolloverTargetDate();
-  const chips = await loadActiveChips();
+  const chips = (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
   const chipMap = new Map(chips.map((chip) => [chipInstance(chip), chip]));
   if (!chipMap.size) return;
 
@@ -267,7 +257,7 @@ export const whatsappQueueService = {
   async listQueuedForWorker(limit = 50) {
     await rolloverOverdueWhatsAppItems();
     const batches = await repositories.whatsappQueue.listBatches({});
-    const operational = new Set((await loadActiveChips()).map(chipInstance));
+    const operational = new Set((await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip).map(chipInstance));
     return batches
       .flatMap((batch) => batch.leads)
       .filter((lead) => isStatusGroup(lead.status, 'queued') && hasWhatsAppWorkerContract(lead) && operational.has(lead.chip_instance || lead.chip))
@@ -304,7 +294,7 @@ export const whatsappQueueService = {
   },
 
   async listChips() {
-    const configuredChips = await loadActiveChips();
+    const configuredChips = (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
     return configuredChips.sort((a, b) => a.priority - b.priority).map(chipInstance);
   },
 

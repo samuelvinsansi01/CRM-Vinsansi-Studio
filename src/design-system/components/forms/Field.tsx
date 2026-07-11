@@ -12,7 +12,6 @@ type BaseFieldProps = {
   iconLeft?: LucideIcon;
   as?: 'input' | 'textarea';
   className?: string;
-  density?: 'regular' | 'compact';
   onChange?: (value: string) => void;
 };
 
@@ -30,7 +29,6 @@ export function Field({
   iconRight: IconRight,
   as = 'input',
   className = '',
-  density = 'regular',
   onChange,
   ...props
 }: FieldProps) {
@@ -66,7 +64,7 @@ export function Field({
     );
 
   return (
-    <label className={`field ${density === 'compact' ? 'field--compact' : ''} ${as === 'textarea' ? 'field--textarea' : ''} ${className}`}>
+    <label className={`field ${as === 'textarea' ? 'field--textarea' : ''} ${className}`}>
       {label ? <span className="field__label">{label}</span> : null}
       <span className="field__control">
         {IconLeft ? <IconLeft size={16} strokeWidth={1.8} /> : null}
@@ -102,7 +100,6 @@ type SelectFieldProps = {
   placeholder?: string;
   onChange?: (value: string) => void;
   className?: string;
-  density?: 'regular' | 'compact';
 };
 
 export function SelectField({
@@ -113,7 +110,6 @@ export function SelectField({
   placeholder,
   onChange,
   className = '',
-  density = 'regular',
 }: SelectFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -164,9 +160,9 @@ export function SelectField({
   };
 
   return (
-    <div className={`select-field-wrap ${density === 'compact' ? 'select-field-wrap--compact' : ''} ${className}`} ref={rootRef}>
+    <div className={`select-field-wrap ${className}`} ref={rootRef}>
       <button
-        className={`select-field ${density === 'compact' ? 'select-field--compact' : ''} ${isOpen ? 'select-field--open' : ''}`}
+        className={`select-field ${isOpen ? 'select-field--open' : ''}`}
         type="button"
         aria-haspopup="listbox"
         aria-expanded={isOpen}

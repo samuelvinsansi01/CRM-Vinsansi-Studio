@@ -602,25 +602,6 @@
   color: var(--app-muted);
 }
 
-.field--compact {
-  gap: var(--space-06);
-  font-size: 14px;
-  line-height: 22px;
-}
-
-.field--compact .field__control,
-.select-field--compact {
-  min-height: 40px;
-  height: 40px;
-  padding: 0 16px;
-  font-size: 14px;
-  line-height: 22px;
-}
-
-.field--compact .field__control {
-  gap: var(--space-08);
-}
-
 .field__control {
   gap: var(--space-08);
   padding: 0 var(--space-12);
@@ -658,14 +639,6 @@
   padding: 0 var(--space-12);
   font-size: 12px;
   line-height: 14px;
-}
-
-.select-field-wrap--compact .select-field {
-  min-height: 40px;
-  height: 40px;
-  padding: 0 16px;
-  font-size: 14px;
-  line-height: 22px;
 }
 
 .select-field:hover,

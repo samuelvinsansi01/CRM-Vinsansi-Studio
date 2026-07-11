@@ -49,31 +49,6 @@ async function readExtensionRuntimeConfig(): Promise<ExtensionRuntimeConfig | nu
   return (data?.value ?? null) as ExtensionRuntimeConfig | null;
 }
 
-function normalizeDispatchSettings(raw: unknown) {
-  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
-  const whatsapp = (source.whatsapp ?? {}) as Record<string, unknown>;
-  const instagram = (source.instagram ?? {}) as Record<string, unknown>;
-  const chipLevelsRaw = (source.chipLevels ?? {}) as Record<string, unknown>;
-  const chipLevels = Object.fromEntries(
-    Object.entries({ ...defaultDispatchSettings.chipLevels, ...chipLevelsRaw }).map(([level, preset]) => {
-      const raw = preset as Record<string, unknown>;
-      const fallback = defaultDispatchSettings.chipLevels[level] ?? defaultDispatchSettings.chipLevels.estabilizado;
-      const dailyLimit = Number(raw.dailyLimit ?? fallback.dailyLimit ?? 1);
-      const blockSizeRaw = Number(raw.blockSize ?? 0);
-      const batchCount = Number(
-        raw.batchCount ?? (blockSizeRaw > 0 ? Math.max(1, Math.round(dailyLimit / blockSizeRaw)) : fallback.batchCount ?? 1),
-      );
-      return [level, { dailyLimit, batchCount }];
-    }),
-  );
-
-  return {
-    whatsapp: { ...defaultDispatchSettings.whatsapp, ...whatsapp },
-    instagram: { ...defaultDispatchSettings.instagram, ...instagram },
-    chipLevels,
-  } as DispatchSettings;
-}
-
 function mergeImportSettings(current: ImportSettings, input: UpdateImportSettingsInput): ImportSettings {
   return {
     ...current,
@@ -81,6 +56,7 @@ function mergeImportSettings(current: ImportSettings, input: UpdateImportSetting
     deduplication: { ...current.deduplication, ...(input.deduplication ?? {}) },
     routes: { ...current.routes, ...(input.routes ?? {}) },
     safeMode: { ...current.safeMode, ...(input.safeMode ?? {}) },
+    instagramSecondary: { ...current.instagramSecondary, ...(input.instagramSecondary ?? {}) },
     branchRules: input.branchRules ?? current.branchRules,
     logs: { ...current.logs, ...(input.logs ?? {}) },
   };
@@ -90,10 +66,6 @@ function mergeDispatchSettings(current: DispatchSettings, input: UpdateDispatchS
   return {
     whatsapp: { ...current.whatsapp, ...(input.whatsapp ?? {}) },
     instagram: { ...current.instagram, ...(input.instagram ?? {}) },
-    chipLevels: {
-      ...current.chipLevels,
-      ...((input as UpdateDispatchSettingsInput & { chipLevels?: DispatchSettings['chipLevels'] }).chipLevels ?? {}),
-    },
   };
 }
 
@@ -111,16 +83,11 @@ export const supabaseSettingsRepository: SettingsRepository = {
   },
 
   async getDispatchSettings() {
-    const table = getSupabaseConfig().tables.settings;
-    const userId = await getCurrentUserId();
-    const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', 'dispatch').maybeSingle();
-    if (error) throw new Error(error.message);
-    return normalizeDispatchSettings(data?.value ?? defaultDispatchSettings);
+    return readSetting('dispatch', defaultDispatchSettings);
   },
 
   async updateDispatchSettings(input) {
-    const current = await this.getDispatchSettings();
-    return writeSetting('dispatch', normalizeDispatchSettings(mergeDispatchSettings(current, input)));
+    return writeSetting('dispatch', mergeDispatchSettings(await this.getDispatchSettings(), input));
   },
 
   async resetDispatchSettings() {

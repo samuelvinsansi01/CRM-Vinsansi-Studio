@@ -6,6 +6,11 @@ export const defaultImportSettings: ImportSettings = {
   safeMode: {
     simulationMode: true,
   },
+  instagramSecondary: {
+    enabled: true,
+    minRating: 4,
+    minReviews: 5,
+  },
   branchRules: [],
   deduplication: {
     enabled: true,
