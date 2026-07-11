@@ -714,7 +714,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
           <DataTable
             columns={screen.columns}
             rows={pageRows}
-            actions={['view', 'archive']}
+            actions={['edit', 'archive']}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
             getRowActions={(row) => {
@@ -722,7 +722,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
               if (!record) return [];
               return isArchivedConfig(record)
                 ? ['view' as TableAction, 'restore' as TableAction, 'delete' as TableAction]
-                : ['view' as TableAction, 'archive' as TableAction];
+                : ['edit' as TableAction, 'archive' as TableAction];
             }}
             onAction={handleAction}
           />
