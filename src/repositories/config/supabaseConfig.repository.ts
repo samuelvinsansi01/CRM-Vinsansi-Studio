@@ -506,7 +506,6 @@ async function upsertChip(record: ChipConfigRecord) {
 async function upsertInstagramProfile(record: InstagramConfigRecord) {
   const userId = await getCurrentUserId();
   const table = tableForKind('instagram');
-  const instagramDefaults = defaultDispatchSettings.instagram;
   const username = normalizeInstagramUsername(record.username);
   const existingById = await findRowById(table, record.id);
   let existingByUsername: Record<string, unknown> | null = null;
@@ -531,10 +530,14 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
   if (!Number.isFinite(parsedDailyLimit) || parsedDailyLimit < 1) {
     throw new Error('Informe um limite diario valido.');
   }
+
   const dailyLimit = parsedDailyLimit;
-  const existingData = ((existingByUsername?.data ?? existingById?.data) && typeof (existingByUsername?.data ?? existingById?.data) === 'object'
-    ? (existingByUsername?.data ?? existingById?.data)
+  const existingRow = existingByUsername ?? existingById;
+  const existingData = (existingRow?.data && typeof existingRow.data === 'object' && !Array.isArray(existingRow.data)
+    ? existingRow.data
     : {}) as Record<string, unknown>;
+  const active = record.status !== 'Arquivado' && record.status !== 'deleted' && record.active;
+  const timestamp = nowIso();
   const dataPayload = {
     ...existingData,
     id: targetId,
@@ -542,92 +545,49 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
     name: record.name,
     username,
     dailyLimit,
-    active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
+    active,
     status: record.status,
-    createdAt: record.createdAt,
-    updatedAt: nowIso(),
+    createdAt: record.createdAt || existingData.createdAt || timestamp,
+    updatedAt: timestamp,
   };
-  const active = record.status !== 'Arquivado' && record.status !== 'deleted' && record.active;
+
+  const payload = {
+    username,
+    display_name: record.name,
+    active,
+    status: record.status,
+    daily_limit: dailyLimit,
+    data: dataPayload,
+    updated_at: timestamp,
+  };
+
   const client = getSupabaseClient();
+  const response = existingRow
+    ? await client
+        .from(table)
+        .update(payload)
+        .eq('id', targetId)
+        .eq('user_id', userId)
+        .select('*')
+        .single()
+    : await client
+        .from(table)
+        .insert({
+          id: targetId,
+          user_id: userId,
+          ...payload,
+          created_at: record.createdAt || timestamp,
+        })
+        .select('*')
+        .single();
 
-  if (existingByUsername || existingById) {
-    // 1) Atualiza somente os metadados. O limite nao participa desta operacao,
-    // evitando qualquer fallback/default sobrescrever o valor digitado.
-    const metadataResponse = await client
-      .from(table)
-      .update({
-        username,
-        display_name: record.name,
-        active,
-        status: record.status,
-        updated_at: nowIso(),
-      })
-      .eq('id', targetId)
-      .eq('user_id', userId)
-      .select('id')
-      .single();
-
-    if (metadataResponse.error) {
-      throw new Error(`Nao foi possivel atualizar os dados do perfil Instagram: ${metadataResponse.error.message}`);
-    }
-
-    // 2) Ultima escrita: replica exatamente o UPDATE SQL validado manualmente.
-    // Esta RPC altera apenas daily_limit e data.dailyLimit.
-    const limitResponse = await client.rpc('set_instagram_profile_daily_limit_v4', {
-      p_profile_id: targetId,
-      p_daily_limit: dailyLimit,
-    });
-
-    if (limitResponse.error) {
-      throw new Error(`Nao foi possivel persistir o limite diario: ${limitResponse.error.message}`);
-    }
-  } else {
-    // Criacao sem campos operacionais legados (blocks, block_size, interval_minutes).
-    const insertResponse = await client
-      .from(table)
-      .insert({
-        id: targetId,
-        user_id: userId,
-        username,
-        display_name: record.name,
-        active,
-        status: record.status,
-        daily_limit: dailyLimit,
-        data: dataPayload,
-        created_at: record.createdAt || nowIso(),
-        updated_at: nowIso(),
-      })
-      .select('id')
-      .single();
-
-    if (insertResponse.error) {
-      throw new Error(`Nao foi possivel criar o perfil Instagram: ${insertResponse.error.message}`);
-    }
-
-    const limitResponse = await client.rpc('set_instagram_profile_daily_limit_v4', {
-      p_profile_id: targetId,
-      p_daily_limit: dailyLimit,
-    });
-    if (limitResponse.error) {
-      throw new Error(`Perfil criado, mas nao foi possivel confirmar o limite diario: ${limitResponse.error.message}`);
-    }
+  if (response.error) {
+    throw new Error(`Nao foi possivel salvar o perfil Instagram: ${response.error.message}`);
   }
 
-  // Releitura independente da linha realmente persistida.
-  const verifyResponse = await client
-    .from(table)
-    .select('*')
-    .eq('id', targetId)
-    .eq('user_id', userId)
-    .single();
-
-  if (verifyResponse.error) {
-    throw new Error(`O perfil foi salvo, mas nao foi possivel confirmar a leitura: ${verifyResponse.error.message}`);
-  }
-
-  const saved = rowToInstagramProfile(verifyResponse.data as Record<string, unknown>);
+  const saved = rowToInstagramProfile(response.data as Record<string, unknown>);
   if (saved.dailyLimit !== dailyLimit) {
-    throw new Error(`Falha de confirmacao: foi solicitado ${dailyLimit}, mas o banco retornou ${saved.dailyLimit}.`);
+    throw new Error(`Falha de confirmacao imediata: foi solicitado ${dailyLimit}, mas o UPDATE retornou ${saved.dailyLimit}.`);
   }
 
   return saved;
