@@ -358,7 +358,13 @@ async function assertTemplateContract(template: TemplateConfigRecord, editingId?
 }
 
 async function emitConfigChanged(kind: ConfigKind) {
-  await platformConfigService.publishExtensionRuntimeConfig();
+  // A publicacao para extensao e secundaria. Uma falha nessa etapa nao pode
+  // transformar uma gravacao concluida no banco em falso erro de salvamento.
+  try {
+    await platformConfigService.publishExtensionRuntimeConfig();
+  } catch (error) {
+    console.warn('Falha ao publicar configuracao de runtime apos salvar:', error);
+  }
   eventBus.emit('config:changed', { kind });
   if (kind === 'branches') eventBus.emit('import-settings:changed', { source: 'branches' });
 }

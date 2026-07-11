@@ -563,23 +563,18 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
   // nome/tipo da tabela pode variar por ambiente e uma segunda gravacao criava
   // falsos erros depois de um UPDATE valido.
   const response = existingByUsername || existingById
-    ? await client
-        .from(table)
-        .update({
-          username,
-          display_name: record.name,
-          active: payload.active,
-          status: record.status,
-          daily_limit: dailyLimit,
-          blocks: instagramDefaults.batches,
-          block_size: instagramDefaults.perBatch,
-          interval_minutes: instagramDefaults.delayMinutes,
-          data: dataPayload,
-          updated_at: payload.updated_at,
-        })
-        .eq('id', targetId)
-        .select('*')
-        .single()
+    ? await client.rpc('save_instagram_profile_config', {
+        p_profile_id: targetId,
+        p_username: username,
+        p_display_name: record.name,
+        p_active: payload.active,
+        p_status: record.status,
+        p_daily_limit: dailyLimit,
+        p_blocks: instagramDefaults.batches,
+        p_block_size: instagramDefaults.perBatch,
+        p_interval_minutes: instagramDefaults.delayMinutes,
+        p_data: dataPayload,
+      })
     : await client
         .from(table)
         .insert({ ...payload, created_at: record.createdAt || nowIso() })
@@ -590,7 +585,12 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
     throw new Error(`Nao foi possivel salvar o perfil Instagram: ${response.error.message}`);
   }
 
-  const saved = rowToInstagramProfile(response.data as Record<string, unknown>);
+  const rawSaved = Array.isArray(response.data) ? response.data[0] : response.data;
+  if (!rawSaved || typeof rawSaved !== 'object') {
+    throw new Error('O banco nao retornou o perfil Instagram apos a gravacao. Aplique a migration V3.39.7.');
+  }
+
+  const saved = rowToInstagramProfile(rawSaved as Record<string, unknown>);
   if (saved.dailyLimit !== dailyLimit) {
     throw new Error(`O Supabase retornou limite ${saved.dailyLimit}, mas o valor solicitado foi ${dailyLimit}. Verifique se a coluna daily_limit existe na tabela ${table}.`);
   }
