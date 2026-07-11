@@ -256,7 +256,7 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
       ? blocks.map(String)
       : levelDefaults.batches;
   const instance = String(row.instance ?? data.instance ?? row.name ?? row.label ?? 'Chip');
-  const connectionStatus = String(row.status ?? data.connectionStatus ?? '');
+  const connectionStatus = String(data.connection_state ?? row.connection_state ?? data.connectionStatus ?? row.connectionStatus ?? row.status ?? '');
   return {
     id: String(row.id),
     kind: 'chips',
