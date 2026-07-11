@@ -124,6 +124,68 @@ export function chipStatusLabel(chip: ChipConfigRecord) {
   return 'Ativo';
 }
 
+
+
+function levelByName(level: string) {
+  const normalized = normalizeComparable(level);
+  return Object.entries(CHIP_LEVEL_LIMITS).find(([key]) => normalizeComparable(key) === normalized)?.[0];
+}
+
+function batchesSignature(batches: string[]) {
+  return batches.map((batch) => normalizeComparable(batch)).join('|');
+}
+
+function presetMatches(
+  preset: ChipLevelPreset,
+  candidate: Pick<ChipLevelPreset, 'dailyLimit' | 'batchCount' | 'intervalSeconds' | 'batches' | 'startTime' | 'endTime'>,
+) {
+  const candidateBatches = candidate.batches ?? [];
+  return (
+    Number(candidate.dailyLimit ?? 0) === Number(preset.dailyLimit ?? 0) &&
+    Number(candidate.batchCount ?? 0) === Number(preset.batchCount ?? 0) &&
+    Number(candidate.intervalSeconds ?? 0) === Number(preset.intervalSeconds ?? 0) &&
+    batchesSignature(candidateBatches) === batchesSignature(preset.batches) &&
+    normalizeComparable(candidate.startTime ?? '') === normalizeComparable(preset.startTime ?? '') &&
+    normalizeComparable(candidate.endTime ?? '') === normalizeComparable(preset.endTime ?? '')
+  );
+}
+
+export function inferChipLevelFromConfig(
+  chip: Partial<Pick<ChipLevelPreset, 'dailyLimit' | 'batchCount' | 'intervalSeconds' | 'batches' | 'startTime' | 'endTime'>> & { level?: string },
+  overrides?: Record<string, Partial<ChipLevelPreset>>,
+) {
+  const explicit = levelByName(chip.level ?? '');
+  if (explicit) {
+    const explicitPreset = chipLevelDefaults(explicit, overrides);
+    if (presetMatches(explicitPreset, {
+      dailyLimit: chip.dailyLimit ?? explicitPreset.dailyLimit,
+      batchCount: chip.batchCount ?? explicitPreset.batchCount,
+      intervalSeconds: chip.intervalSeconds ?? explicitPreset.intervalSeconds,
+      batches: chip.batches ?? explicitPreset.batches,
+      startTime: chip.startTime ?? explicitPreset.startTime,
+      endTime: chip.endTime ?? explicitPreset.endTime,
+    })) {
+      return explicit;
+    }
+  }
+
+  for (const level of Object.keys(CHIP_LEVEL_LIMITS)) {
+    const resolved = chipLevelDefaults(level, overrides);
+    if (presetMatches(resolved, {
+      dailyLimit: chip.dailyLimit ?? resolved.dailyLimit,
+      batchCount: chip.batchCount ?? resolved.batchCount,
+      intervalSeconds: chip.intervalSeconds ?? resolved.intervalSeconds,
+      batches: chip.batches ?? resolved.batches,
+      startTime: chip.startTime ?? resolved.startTime,
+      endTime: chip.endTime ?? resolved.endTime,
+    })) {
+      return level;
+    }
+  }
+
+  return explicit ?? 'estabilizado';
+}
+
 export function chipLevelDefaults(level: string, overrides?: Record<string, Partial<ChipLevelPreset>>): ResolvedChipLevelPreset {
   const base = CHIP_LEVEL_LIMITS[level] ?? CHIP_LEVEL_LIMITS.estabilizado;
   const override = overrides?.[level] ?? {};
