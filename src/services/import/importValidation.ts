@@ -298,9 +298,7 @@ function matchBranch(lead: NormalizedRawLead, settings: ImportSettings) {
     const branch = normalizeComparable(rule.branch);
     const subs = splitCandidateText(rule.subcategories);
     const accepted = [branch, ...subs].filter(Boolean);
-    const matches = candidates.some((candidate) =>
-      accepted.some((item) => candidate === item || candidate.includes(item) || item.includes(candidate)),
-    );
+    const matches = candidates.some((candidate) => accepted.some((item) => candidate === item));
 
     if (matches) return rule;
   }
