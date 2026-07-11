@@ -4,7 +4,7 @@ import type { EventLogInput } from '../../repositories/events/eventLog.repositor
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 import { settingsService } from '../settings/settings.service';
 import type { BranchConfigRecord, ChipConfigRecord, ConfigRecord, InstagramConfigRecord, TemplateConfigRecord } from '../config/types';
-import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperational';
+import { chipInstance, chipLevelDefaults, isOperationalWhatsAppChip } from '../config/chipOperational';
 import { normalizePhone } from '../import/importValidation';
 import { isValidInstagram, normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { sortByLeadScore } from '../lead-score/leadScore.service';
@@ -652,12 +652,16 @@ function assertTemplate(lead: PreSendLead, template: TemplateConfigRecord | unde
 }
 
 async function loadActiveChips() {
+  const settings = await settingsService.getDispatchSettings();
   const chips = (await repositories.config.list('chips'))
     .filter(isChip)
     .filter(isOperationalWhatsAppChip)
     .sort((a, b) => a.priority - b.priority);
 
-  return chips;
+  return chips.map((chip) => ({
+    ...chip,
+    ...chipLevelDefaults(chip.level, settings.chipLevels),
+  }));
 }
 
 async function loadActiveInstagramProfiles() {

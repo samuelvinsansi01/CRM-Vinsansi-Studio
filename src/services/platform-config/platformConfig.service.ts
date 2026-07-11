@@ -1,4 +1,5 @@
 import { repositories } from '../../repositories';
+import { chipLevelDefaults } from '../config/chipOperational';
 import type { ChipConfigRecord, ConfigRecord, InstagramConfigRecord, TemplateConfigRecord } from '../config/types';
 import type { ExtensionRuntimeConfig } from './types';
 
@@ -42,19 +43,22 @@ export const platformConfigService = {
     const chips = chipRecords
       .filter(isChip)
       .filter(isOperationalStatus)
-      .map((chip) => ({
-        id: chip.id,
-        name: chip.name,
-        instance: chip.instance,
-        number: chip.number,
-        active: chip.active,
-        status: chip.status,
-        connectionStatus: chip.connectionStatus,
-        dailyLimit: chip.dailyLimit,
-        blockSize: chip.blockSize,
-        intervalSeconds: chip.intervalSeconds,
-        batches: chip.batches,
-      }));
+      .map((chip) => {
+        const preset = chipLevelDefaults(chip.level, dispatch.chipLevels);
+        return {
+          id: chip.id,
+          name: chip.name,
+          instance: chip.instance,
+          number: chip.number,
+          active: chip.active,
+          status: chip.status,
+          connectionStatus: chip.connectionStatus,
+          dailyLimit: preset.dailyLimit,
+          blockSize: preset.blockSize,
+          intervalSeconds: preset.intervalSeconds,
+          batches: preset.batches,
+        };
+      });
 
     const templates = templateRecords
       .filter(isTemplate)

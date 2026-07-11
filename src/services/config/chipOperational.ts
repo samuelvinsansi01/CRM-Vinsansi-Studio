@@ -8,7 +8,6 @@ export const CHIP_LEVEL_OPTIONS = [
   { label: 'Estabilizado', value: 'estabilizado' },
   { label: 'Maduro', value: 'maduro' },
   { label: 'Operacional', value: 'operacional' },
-  { label: 'Premium', value: 'premium' },
 ];
 
 export const CHIP_LEVEL_LIMITS: Record<string, ChipLevelPreset> = {
@@ -48,14 +47,6 @@ export const CHIP_LEVEL_LIMITS: Record<string, ChipLevelPreset> = {
     dailyLimit: 200,
     blockSize: 50,
     intervalSeconds: 75,
-    batches: ['08:00', '10:00', '12:00', '14:00'],
-    startTime: '08:00',
-    endTime: '18:00',
-  },
-  premium: {
-    dailyLimit: 240,
-    blockSize: 60,
-    intervalSeconds: 60,
     batches: ['08:00', '10:00', '12:00', '14:00'],
     startTime: '08:00',
     endTime: '18:00',
@@ -114,3 +105,15 @@ export function chipLevelDefaults(level: string, overrides?: Record<string, Part
     batches: override.batches?.length ? override.batches : base.batches,
   };
 }
+
+export function resolveChipOperationalConfig(
+  chip: Pick<ChipConfigRecord, 'instance' | 'name' | 'level' | 'dailyLimit' | 'blockSize' | 'intervalSeconds' | 'batches' | 'startTime' | 'endTime'>,
+  overrides?: Record<string, Partial<ChipLevelPreset>>,
+) {
+  const preset = chipLevelDefaults(chip.level, overrides);
+  return {
+    ...chip,
+    ...preset,
+  };
+}
+
