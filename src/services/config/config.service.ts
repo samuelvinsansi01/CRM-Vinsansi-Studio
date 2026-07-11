@@ -1,6 +1,7 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { platformConfigService } from '../platform-config/platformConfig.service';
+import { settingsService } from '../settings';
 import { branchSlug, normalizeBranchId } from './branchIdentity';
 import {
   DEFAULT_BRANCH_MIN_RATING,
@@ -235,12 +236,13 @@ function normalizeTemplateInput(
   };
 }
 
-function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: ChipConfigRecord): ChipConfigRecord {
+async function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: ChipConfigRecord): Promise<ChipConfigRecord> {
   const source = { ...(existing ?? {}), ...input } as Record<string, unknown>;
   const active = toBoolean(source.active ?? source.status, existing?.active ?? true);
   const createdAt = String(existing?.createdAt ?? source.createdAt ?? nowIso());
   const level = firstString(source, ['level', 'nivel'], existing?.level ?? 'estabilizado');
-  const defaults = chipLevelDefaults(level);
+  const dispatchSettings = await settingsService.getDispatchSettings();
+  const defaults = chipLevelDefaults(level, dispatchSettings.chipLevels);
   const batches = splitList(source.batches ?? source.blocks ?? source.lotes ?? existing?.batches ?? defaults.batches)
     .map((item) => normalizeTime(item, ''))
     .filter(Boolean);
@@ -254,7 +256,7 @@ function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordI
     url: firstString(source, ['url', 'base_url', 'evolution_url'], existing?.url ?? ''),
     instance: firstString(source, ['instance', 'instanceName', 'instance_name'], existing?.instance ?? ''),
     apiKey: firstString(source, ['apiKey', 'api_key'], existing?.apiKey ?? ''),
-    connectionStatus: firstString(source, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? ''),
+    connectionStatus: firstString(source, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? existing?.status ?? ''),
     priority: toInteger(source.priority ?? source.prioridade, existing?.priority ?? 1, 1),
     startTime: normalizeTime(source.startTime ?? source.horarioInicio, existing?.startTime ?? defaults.startTime),
     endTime: normalizeTime(source.endTime ?? source.horarioFim, existing?.endTime ?? defaults.endTime),
@@ -264,7 +266,7 @@ function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordI
     batches: batches.length ? batches : defaults.batches,
     paused: toBoolean(source.paused ?? source.pausado, existing?.paused ?? false),
     active,
-    status: statusFromActive(active),
+    status: existing?.status ?? statusFromActive(active),
     createdAt,
     updatedAt: nowIso(),
   };

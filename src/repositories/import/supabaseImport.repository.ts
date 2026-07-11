@@ -46,6 +46,10 @@ function normalizeComparable(value: unknown) {
     .replace(/\s+/g, ' ');
 }
 
+function exactNormalizedMatch(a: unknown, b: unknown) {
+  return normalizeComparable(a) === normalizeComparable(b);
+}
+
 function textFrom(...values: unknown[]) {
   const found = values.find((value) => String(value ?? '').trim());
   return String(found ?? '');
@@ -116,7 +120,8 @@ function resolveParentBranch(branchRules: BranchRule[], ...values: unknown[]) {
 
   for (const branch of branchRules) {
     const terms = [branch.id, branch.slug, branch.name, ...branch.terms].map(normalizeComparable).filter(Boolean);
-    if (candidates.some((candidate) => terms.includes(candidate))) return branch;
+    const matches = candidates.some((candidate) => terms.some((term) => exactNormalizedMatch(candidate, term)));
+    if (matches) return branch;
   }
 
   return null;
@@ -133,8 +138,28 @@ function rowToLead(row: Record<string, unknown>, branchRules: BranchRule[]): Imp
   const website = textFrom(row.website, data.site, raw.site, (raw as Record<string, unknown>).website);
   const instagram = textFrom(row.instagram_url, row.instagram, data.instagram_url, data.instagram, raw.instagram_url, raw.instagram);
   const destino = classifyLegacyDestination(row, data, raw);
-  const branchRule = resolveParentBranch(branchRules, row.branch_id, (data as Record<string, unknown>).branch_id, row.parent_category, (data as Record<string, unknown>).parent_category, data.ramo, raw.ramo, row.category, row.category_name, (raw as Record<string, unknown>).categoryName);
-  const parentBranch = branchRule?.name ?? normalizeParentBranch(branchRules, row.parent_category, (data as Record<string, unknown>).parent_category, data.ramo, raw.ramo, row.category, row.category_name, (raw as Record<string, unknown>).categoryName);
+  const branchRule = resolveParentBranch(
+    branchRules,
+    row.branch_id,
+    (data as Record<string, unknown>).branch_id,
+    row.category_name,
+    (data as Record<string, unknown>).subcategoria,
+    (raw as Record<string, unknown>).categoryName,
+    row.parent_category,
+    (data as Record<string, unknown>).parent_category,
+    data.ramo,
+    raw.ramo,
+  );
+  const parentBranch = branchRule?.name ?? normalizeParentBranch(
+    branchRules,
+    row.parent_category,
+    (data as Record<string, unknown>).parent_category,
+    data.ramo,
+    raw.ramo,
+    row.category_name,
+    (data as Record<string, unknown>).subcategoria,
+    (raw as Record<string, unknown>).categoryName,
+  );
   return {
     id: String(row.id),
     empresa: textFrom(row.company_name, data.empresa, raw.empresa, (raw as Record<string, unknown>).title),
@@ -166,6 +191,7 @@ function rowToLead(row: Record<string, unknown>, branchRules: BranchRule[]): Imp
     normalizedSite: String(row.website_domain ?? data.normalizedSite ?? normalizeDomain(website)),
     normalizedInstagram: String(row.instagram_username ?? data.normalizedInstagram ?? normalizeInstagramUsername(instagram)),
     normalizedMapsUrl: String(row.maps_url ?? data.normalizedMapsUrl ?? ''),
+    sourceLeadId: String((data as Record<string, unknown>).sourceLeadId ?? row.sourceLeadId ?? ''),
     returned_from_queue: Boolean((data as Record<string, unknown>).returned_from_queue ?? false),
     returned_at: String((data as Record<string, unknown>).returned_at ?? ''),
     return_reason: String((data as Record<string, unknown>).return_reason ?? ''),
@@ -196,7 +222,7 @@ function calculateSummary(records: ImportLead[]): ImportSummary {
   };
 }
 
-function idMap(records: ImportLead[], key: 'normalizedPhone' | 'normalizedSite' | 'normalizedInstagram' | 'normalizedMapsUrl') {
+function idMap(records: ImportLead[], key: 'normalizedPhone' | 'normalizedSite' | 'normalizedInstagram' | 'normalizedMapsUrl' | 'sourceLeadId') {
   const map = new Map<string, string>();
   for (const lead of records) {
     const value = String(lead[key] ?? '').trim();
@@ -260,13 +286,8 @@ async function loadBranchRules(): Promise<BranchRule[]> {
         id,
         slug,
         name,
-        record.category,
-        config.category,
         ...(Array.isArray(record.subcategories) ? record.subcategories : []),
         ...(Array.isArray(config.subcategories) ? config.subcategories : []),
-        ...(Array.isArray(record.associated_categories) ? record.associated_categories : []),
-        ...(Array.isArray(record.associatedCategories) ? record.associatedCategories : []),
-        ...(Array.isArray(config.associatedCategories) ? config.associatedCategories : []),
       ].map(String);
 
       return { id, slug, name, terms };
@@ -278,7 +299,7 @@ function dbLeadPayload(lead: ImportLead, userId: string) {
   const site = lead.site ?? '';
   const instagram = lead.instagram_url ?? lead.instagram ?? '';
   const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-  const normalizedLead = { ...lead, estado: normalizeBrazilState(lead.estado) };
+  const normalizedLead = { ...lead, estado: normalizeBrazilState(lead.estado), sourceLeadId: lead.sourceLeadId ?? '' };
   return {
     id: lead.id,
     user_id: userId,
@@ -358,6 +379,7 @@ async function rememberLeadImports(userId: string, batchId: string, leads: Impor
 async function rememberRegistries(userId: string, leads: ImportLead[]) {
   const identityRows = leads.flatMap((lead) => {
     const identities = [
+      ['lead_id', lead.sourceLeadId ?? ''],
       ['phone', lead.normalizedPhone || normalizePhone(lead.whatsapp)],
       ['site', lead.normalizedSite || normalizeDomain(lead.site)],
       ['instagram', lead.normalizedInstagram || normalizeInstagramUsername(lead.instagram_url ?? lead.instagram)],
@@ -405,18 +427,22 @@ export const supabaseImportRepository: ImportRepository = {
     const existing = await allLeads(true);
     const startedAt = performance.now?.() ?? Date.now();
     const normalized = await normalizeImportItems(extractImportItems(parsed), {
+      existingLeadIds: new Set(existing.map((lead) => String(lead.sourceLeadId ?? '').trim()).filter(Boolean)),
       existingPhones: new Set(existing.map((lead) => normalizePhone(lead.whatsapp)).filter(Boolean)),
       existingSites: new Set(existing.map((lead) => normalizeDomain(lead.site)).filter(Boolean)),
       existingInstagrams: new Set(existing.map((lead) => String(lead.normalizedInstagram ?? '').trim()).filter(Boolean)),
       existingMapsUrls: new Set(existing.map((lead) => String(lead.normalizedMapsUrl ?? '').trim()).filter(Boolean)),
+      existingLeadIdToId: idMap(existing, 'sourceLeadId'),
       existingPhoneToId: idMap(existing, 'normalizedPhone'),
       existingSiteToId: idMap(existing, 'normalizedSite'),
       existingInstagramToId: idMap(existing, 'normalizedInstagram'),
       existingMapsUrlToId: idMap(existing, 'normalizedMapsUrl'),
+      baseLeadIds: new Set(options.context?.baseLeadIds ?? []),
       basePhones: new Set(options.context?.basePhones ?? []),
       baseSites: new Set(options.context?.baseSites ?? []),
       baseInstagrams: new Set(options.context?.baseInstagrams ?? []),
       baseMapsUrls: new Set(options.context?.baseMapsUrls ?? []),
+      sentLeadIds: new Set(options.context?.sentLeadIds ?? []),
       sentPhones: new Set(options.context?.sentPhones ?? []),
       sentSites: new Set(options.context?.sentSites ?? []),
       sentInstagrams: new Set(options.context?.sentInstagrams ?? []),

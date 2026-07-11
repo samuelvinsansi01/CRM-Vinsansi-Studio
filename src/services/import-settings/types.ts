@@ -39,17 +39,10 @@ export type ImportBranchRule = {
   enabled: boolean;
 };
 
-export type ImportInstagramSecondarySettings = {
-  enabled: boolean;
-  minRating: number;
-  minReviews: number;
-};
-
 export type ImportSettings = {
   minRating: number;
   minReviews: number;
   safeMode: ImportSafeModeSettings;
-  instagramSecondary: ImportInstagramSecondarySettings;
   branchRules: ImportBranchRule[];
   deduplication: ImportDeduplicationSettings;
   routes: ImportRouteSettings;
@@ -60,7 +53,6 @@ export type UpdateImportSettingsInput = Partial<{
   minRating: number;
   minReviews: number;
   safeMode: Partial<ImportSafeModeSettings>;
-  instagramSecondary: Partial<ImportInstagramSecondarySettings>;
   branchRules: ImportBranchRule[];
   deduplication: Partial<ImportDeduplicationSettings>;
   routes: Partial<ImportRouteSettings>;

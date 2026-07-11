@@ -15,12 +15,10 @@ import {
   TableCard,
   Tag,
   ToastViewport,
-  type TableAction,
   type TableColumn,
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
-import { DestinationBadge } from '../components/DestinationBadge';
 import { useImportLeads } from '../hooks/useImportLeads';
 import { useImportSettings } from '../hooks/useImportSettings';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
@@ -77,6 +75,61 @@ function mapsHref(lead: ImportLead) {
   if (lead.normalizedMapsUrl?.trim()) return ensureUrl(lead.normalizedMapsUrl);
   const query = [lead.empresa, lead.cidade, lead.estado].filter(Boolean).join(' ');
   return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : '';
+}
+
+function splitSubcategories(value?: string | null) {
+  return String(value ?? '')
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function destinationLabel(value?: string | null) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized.includes('instagram')) return 'Instagram';
+  if (normalized.includes('site')) return 'Com site';
+  if (normalized.includes('agreg')) return 'Agregadores';
+  if (normalized.includes('banco')) return 'Já no banco';
+  if (normalized.includes('recus')) return 'Recusado';
+  return 'WhatsApp';
+}
+
+function destinationTone(value?: string | null): 'neutral' | 'success' | 'warning' | 'danger' | 'primary' {
+  const label = destinationLabel(value);
+  if (label === 'WhatsApp') return 'success';
+  if (label === 'Instagram') return 'primary';
+  if (label === 'Com site') return 'neutral';
+  if (label === 'Agregadores') return 'warning';
+  if (label === 'Recusado') return 'danger';
+  return 'warning';
+}
+
+function DestinationTextBadge({ value }: { value?: string | null }) {
+  const label = destinationLabel(value);
+  return <Tag tone={destinationTone(value)}>{label}</Tag>;
+}
+
+function SubcategoryTooltip({ value }: { value?: string | null }) {
+  const items = splitSubcategories(value);
+  if (!items.length) return <span className="import-subcategory import-subcategory--empty">—</span>;
+
+  const [first, ...rest] = items;
+  return (
+    <span className="import-subcategory" tabIndex={0}>
+      <span className="import-subcategory__chip" title={items.join(' • ')}>
+        <span>{first}</span>
+        {rest.length ? <em>+{rest.length}</em> : null}
+      </span>
+      <span className="import-subcategory__card" role="tooltip" aria-label={`Sub ramo: ${items.join(', ')}`}>
+        <strong>Sub ramo</strong>
+        <ul>
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </span>
+    </span>
+  );
 }
 
 function toForm(lead: ImportLead): LeadForm {
@@ -142,7 +195,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const { settings: importSettings } = useImportSettings();
   const simulateImport = importSettings?.safeMode.simulationMode ?? true;
-  const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToPreSend } = useImportLeads(activeStatus, search);
+  const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToInicio } = useImportLeads(activeStatus, search);
   const previewToken = useRef(0);
 
   const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
@@ -293,43 +346,24 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     }
   };
 
-  const sendToPreSend = async () => {
+  const approveLeads = async () => {
     try {
-      const created = await sendApprovedToPreSend();
+      const result = await importJson(jsonText, { simulate: simulateImport });
+      const created = await sendApprovedToInicio(result.leads);
+      setLastImport(result);
+      setPage(1);
+      setSelectedRows([]);
       if (!created.length) {
-        pushToast({ title: 'Nada enviado', description: 'Nao ha aprovados novos para enviar ao pre-envio.', tone: 'warning' });
+        pushToast({ title: 'Nada aprovado', description: 'Nao ha aprovados novos para mandar ao Inicio.', tone: 'warning' });
         return;
       }
-      pushToast({ title: 'Enviado ao pre-envio', description: `${created.length} lead(s) disponivel(is) no pre-envio.`, tone: 'success' });
-    } catch (err) {
-      pushToast({ title: 'Erro ao enviar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    }
-  };
-
-  const handleAction = async (action: TableAction, lead: ImportLead) => {
-    if (action === 'edit' || action === 'view') {
-      openLeadDrawer(lead, action === 'edit' ? 'edit' : 'view');
-      return;
-    }
-
-    if (action === 'delete') {
-      setDeleteLead(lead);
-      return;
-    }
-
-    if (action === 'refresh' || action === 'archive') {
-      const permissions = permissionsFor('import', lead.status);
-      const nextStatus = permissions.canReject() ? 'rejected' : permissions.canApprove() ? 'approved' : null;
-      if (!nextStatus) {
-        pushToast({ title: 'Acao bloqueada', description: 'Este lead nao pode mudar de aprovacao neste estado.', tone: 'warning' });
-        return;
-      }
-      await moveLead(lead.id, nextStatus);
       pushToast({
-        title: nextStatus === 'approved' ? 'Lead aprovado' : 'Lead recusado',
-        description: 'Lead movido entre as listas.',
-        tone: nextStatus === 'approved' ? 'success' : 'warning',
+        title: 'Leads aprovados',
+        description: `${created.length} lead(s) aprovados e enviados ao Inicio.`,
+        tone: 'success',
       });
+    } catch (err) {
+      pushToast({ title: 'Erro ao aprovar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
   };
 
@@ -360,17 +394,21 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
   const columns: TableColumn<ImportLead>[] = [
-    { key: 'empresa', label: 'Nome da empresa', width: '42%', render: (lead) => silentLink(lead.empresa, mapsHref(lead)) },
-    { key: 'ramo', label: 'Ramo', width: '28%' },
+    { key: 'empresa', label: 'Nome da empresa', width: '34%', render: (lead) => silentLink(lead.empresa, mapsHref(lead)) },
+    { key: 'ramo', label: 'Ramo', width: '21%' },
+    {
+      key: 'subcategoria',
+      label: 'Sub ramo',
+      width: '23%',
+      render: (lead) => <SubcategoryTooltip value={lead.subcategoria} />,
+    },
     {
       key: 'destino',
       label: 'Destino',
-      width: '20%',
+      width: '16%',
       render: (lead) => {
         const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-        if (destination === 'Recusado') return <Tag tone="danger">Recusado</Tag>;
-        if (destination === 'Já no banco') return <Tag tone="warning">Já no banco</Tag>;
-        return <DestinationBadge value={destination} />;
+        return <DestinationTextBadge value={destination} />;
       },
     },
   ];
@@ -404,28 +442,51 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           />
           <div className="import-json__actions">
             <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
-            <Button variant="secondary" disabled={summary.approved === 0} onClick={sendToPreSend}>Enviar WhatsApp ao Pré-Envio</Button>
-            <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={handleImport}>{simulateImport ? 'Simular regras' : 'Importar'}</Button>
+            <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>Aprovar leads</Button>
           </div>
-          {lastImport ? (
-            <div className="import-result">
-              <strong>Última importação</strong>
-              <span>{lastImport.report.simulation ? 'Simulação sem gravação' : `${lastImport.created} importado(s)`}</span>
-              <span>{lastImport.report.processed} processado(s)</span>
-              <span>{lastImport.approved} aprovado(s)</span>
-              <span>{lastImport.rejected} recusado(s)</span>
-              {lastImport.ignored > 0 ? <span>{lastImport.ignored} ignorado(s)</span> : null}
-              {lastImport.report.duplicates > 0 ? <span>{lastImport.report.duplicates} duplicado(s)</span> : null}
-              <span>{lastImport.report.durationMs}ms</span>
-              {lastImport.report.reasons.length ? (
-                <div className="import-result__reasons">
-                  {lastImport.report.reasons.map((reason) => (
-                    <span key={reason.code}>{reason.label}: {reason.count}</span>
+          {lastImport ? (() => {
+            const metrics = [
+              { value: String(lastImport.report.processed), label: 'Processados' },
+              { value: String(lastImport.approved), label: 'Aprovados', tone: 'success' as const },
+              { value: String(lastImport.rejected), label: 'Recusados', tone: 'danger' as const },
+              { value: String(lastImport.report.duplicates), label: 'Duplicados' },
+              ...(lastImport.ignored > 0 ? [{ value: String(lastImport.ignored), label: 'Ignorados' }] : []),
+            ];
+
+            return (
+              <div className="import-result">
+                <div className="import-result__header">
+                  <strong>Última importação</strong>
+                  <div className="import-result__meta">
+                    <span>{lastImport.report.simulation ? 'Simulação sem gravação' : `${lastImport.created} importado(s)`}</span>
+                    <span>{lastImport.report.durationMs}ms</span>
+                  </div>
+                </div>
+
+                <div className="metric-grid metric-grid--5 import-result__metrics">
+                  {metrics.map((metric) => (
+                    <MetricCard
+                      key={metric.label}
+                      value={metric.value}
+                      label={metric.label}
+                      tone={metric.tone ?? 'neutral'}
+                    />
                   ))}
                 </div>
-              ) : null}
-            </div>
-          ) : null}
+
+                {lastImport.report.reasons.length ? (
+                  <div className="import-result__details">
+                    <strong>Detalhes das regras aplicadas</strong>
+                    <div className="import-result__reasons">
+                      {lastImport.report.reasons.map((reason) => (
+                        <span key={reason.code}>{reason.label}: {reason.count}</span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })() : null}
         </Panel>
 
         <TableCard
@@ -463,18 +524,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               selectable
               selectedRows={selectedRows}
               onSelectedRowsChange={setSelectedRows}
-              actions={rejected ? ['view', 'refresh'] : ['view', 'archive']}
-              getRowActions={(lead) => {
-                const permissions = permissionsFor('import', lead.status);
-                return [
-                  'view' as TableAction,
-                  ...(permissions.canApprove() ? ['refresh' as TableAction] : []),
-                  ...(permissions.canReject() ? ['archive' as TableAction] : []),
-                ];
-              }}
+              actions={[]}
               columns={columns}
               rows={pageRows}
-              onAction={handleAction}
             />
           ) : null}
         </TableCard>

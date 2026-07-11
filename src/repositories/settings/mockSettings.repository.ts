@@ -60,10 +60,6 @@ function normalizeImportSettings(raw: unknown): ImportSettings {
       ...defaultImportSettings.safeMode,
       ...(source.safeMode ?? {}),
     },
-    instagramSecondary: {
-      ...defaultImportSettings.instagramSecondary,
-      ...(source.instagramSecondary ?? {}),
-    },
     branchRules: Array.isArray(source.branchRules) ? source.branchRules : defaultImportSettings.branchRules,
     logs: {
       ...defaultImportSettings.logs,
@@ -109,6 +105,29 @@ function normalizeDispatchSettings(raw: unknown): DispatchSettings {
       activeDays: safeStringList(instagram.activeDays, DEFAULT_ACTIVE_DAYS),
       batchBehavior: safeString(instagram.batchBehavior, defaultDispatchSettings.instagram.batchBehavior),
     },
+    chipLevels: Object.fromEntries(
+      Object.entries({ ...defaultDispatchSettings.chipLevels, ...((source.chipLevels ?? {}) as Record<string, unknown>) }).map(([level, preset]) => {
+        const raw = preset as Record<string, unknown>;
+        const fallback = defaultDispatchSettings.chipLevels[level] ?? defaultDispatchSettings.chipLevels.estabilizado;
+        const fallbackDailyLimit = Number(fallback.dailyLimit ?? 1);
+        const fallbackBatchCount = Number(fallback.batchCount ?? 1);
+        const dailyLimit = safeNumber(raw.dailyLimit, fallbackDailyLimit, 1);
+        const blockSize = safeNumber(raw.blockSize, 0, 1);
+        const batchCount = safeNumber(
+          raw.batchCount ?? raw.batches,
+          blockSize > 0 ? Math.max(1, Math.round(dailyLimit / blockSize)) : fallbackBatchCount,
+          1,
+        );
+
+        return [
+          level,
+          {
+            dailyLimit,
+            batchCount,
+          },
+        ];
+      }),
+    ),
   };
 }
 
@@ -161,6 +180,10 @@ function mergeDispatchSettings(current: DispatchSettings, input: UpdateDispatchS
     instagram: {
       ...current.instagram,
       ...(input.instagram ?? {}),
+    },
+    chipLevels: {
+      ...current.chipLevels,
+      ...((input as UpdateDispatchSettingsInput & { chipLevels?: DispatchSettings['chipLevels'] }).chipLevels ?? {}),
     },
   });
 }

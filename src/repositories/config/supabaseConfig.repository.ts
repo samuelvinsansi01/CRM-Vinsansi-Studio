@@ -1,6 +1,6 @@
 import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
 import { branchIdOrNull, branchSlug, normalizeBranchId, normalizeBranchText } from '../../services/config/branchIdentity';
-import { chipLevelDefaults } from '../../services/config/chipOperational';
+import { chipLevelDefaults, inferChipLevelFromConfig } from '../../services/config/chipOperational';
 import type { BranchConfigRecord, ChipConfigRecord, ConfigKind, ConfigRecord, ConfigStatus, InstagramConfigRecord, TemplateConfigRecord, TemplateType } from '../../services/config/types';
 import { defaultDispatchSettings } from '../../services/settings/settings.seed';
 import { createUuid, getCurrentUserId, nowIso } from '../supabase.helpers';
@@ -242,21 +242,31 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
 }
 
 function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
-  const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<ChipConfigRecord>;
+  const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<ChipConfigRecord> & Record<string, unknown>;
   const rawStatus = data.status ?? row.status;
   const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
   const active = toBoolean(inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active, true);
   const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
-  const level = String(data.level ?? 'estabilizado');
-  const levelDefaults = chipLevelDefaults(level);
+  const rawLevel = String(row.level ?? data.level ?? 'estabilizado');
   const blocks = row.blocks;
   const batches = Array.isArray(data.batches)
     ? data.batches
     : Array.isArray(blocks)
       ? blocks.map(String)
-      : levelDefaults.batches;
+      : chipLevelDefaults(rawLevel).batches;
+  const inferredLevel = inferChipLevelFromConfig({
+    level: rawLevel,
+    dailyLimit: Number(row.daily_limit ?? row.dailyLimit ?? data.dailyLimit ?? 0),
+    batchCount: batches.length || Number((row as Record<string, unknown>).batchCount ?? data.batchCount ?? 0),
+    intervalSeconds: Number(row.interval_seconds ?? row.intervalSeconds ?? data.intervalSeconds ?? 0),
+    batches,
+    startTime: String(row.start_time ?? row.startTime ?? data.startTime ?? ''),
+    endTime: String(row.end_time ?? row.endTime ?? data.endTime ?? ''),
+  });
+  const level = inferredLevel || rawLevel;
+  const levelDefaults = chipLevelDefaults(level);
   const instance = String(row.instance ?? data.instance ?? row.name ?? row.label ?? 'Chip');
-  const connectionStatus = String(row.status ?? data.connectionStatus ?? '');
+  const connectionStatus = String(row.status ?? data.status ?? data.connectionStatus ?? row.connectionStatus ?? (active ? 'Ativo' : 'Inativo'));
   return {
     id: String(row.id),
     kind: 'chips',
@@ -445,6 +455,20 @@ async function upsertChip(record: ChipConfigRecord) {
   }
 
   const targetId = String(existingByInstance?.id ?? existingById?.id ?? record.id ?? createUuid());
+  const existingData = existingByInstance ?? existingById ?? {};
+  const persistedStatus = String(
+    existingData.status ?? record.status ?? (record.active ? 'Ativo' : 'Inativo'),
+  ).trim();
+  const effectiveLevel = inferChipLevelFromConfig({
+    level: record.level,
+    dailyLimit: record.dailyLimit,
+    batchCount: record.batches?.length || (record.blockSize > 0 && record.dailyLimit > 0 ? Math.max(1, Math.round(record.dailyLimit / record.blockSize)) : 0),
+    intervalSeconds: record.intervalSeconds,
+    batches: record.batches,
+    startTime: record.startTime,
+    endTime: record.endTime,
+  }) || record.level || 'estabilizado';
+  const effectiveDefaults = chipLevelDefaults(effectiveLevel);
   const payload = {
     id: targetId,
     user_id: userId,
@@ -457,18 +481,18 @@ async function upsertChip(record: ChipConfigRecord) {
     url: record.url,
     api_key: record.apiKey,
     active: record.status !== 'Arquivado' && record.status !== 'deleted' && record.active,
-    status: record.connectionStatus || 'inactive',
-    daily_limit: record.dailyLimit || levelDefaults.dailyLimit,
-    block_size: record.blockSize || levelDefaults.blockSize,
-    interval_seconds: record.intervalSeconds || levelDefaults.intervalSeconds,
-    blocks: record.batches?.length ? record.batches : levelDefaults.batches,
+    status: persistedStatus,
+    daily_limit: record.dailyLimit || effectiveDefaults.dailyLimit,
+    block_size: record.blockSize || effectiveDefaults.blockSize,
+    interval_seconds: record.intervalSeconds || effectiveDefaults.intervalSeconds,
+    blocks: record.batches?.length ? record.batches : effectiveDefaults.batches,
     priority: record.priority,
-    start_time: record.startTime || levelDefaults.startTime,
-    end_time: record.endTime || levelDefaults.endTime,
+    start_time: record.startTime || effectiveDefaults.startTime,
+    end_time: record.endTime || effectiveDefaults.endTime,
     paused: record.paused,
     kind: 'chips',
     channel: 'whatsapp',
-    data: { ...record, instance },
+    data: { ...record, level: effectiveLevel, instance, status: persistedStatus },
     updated_at: nowIso(),
   };
   const response = existingByInstance || existingById

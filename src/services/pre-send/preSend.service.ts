@@ -4,7 +4,7 @@ import type { EventLogInput } from '../../repositories/events/eventLog.repositor
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 import { settingsService } from '../settings/settings.service';
 import type { BranchConfigRecord, ChipConfigRecord, ConfigRecord, InstagramConfigRecord, TemplateConfigRecord } from '../config/types';
-import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperational';
+import { chipInstance, chipLevelDefaults, inferChipLevelFromConfig, isOperationalWhatsAppChip } from '../config/chipOperational';
 import { normalizePhone } from '../import/importValidation';
 import { isValidInstagram, normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { sortByLeadScore } from '../lead-score/leadScore.service';
@@ -57,11 +57,7 @@ function addDays(date: Date, days: number) {
 }
 
 function dateForWeekdayIndex(index: number, reference = new Date()) {
-  const date = addDays(startOfCurrentWeek(reference), index);
-  const today = new Date(reference);
-  today.setHours(0, 0, 0, 0);
-  if (date < today) return addDays(date, 7);
-  return date;
+  return addDays(startOfCurrentWeek(reference), index);
 }
 
 function formatWeekDateLabel(weekday: string, date: Date) {
@@ -92,12 +88,25 @@ function isInstagramProfile(record: ConfigRecord): record is InstagramConfigReco
   return record.kind === 'instagram';
 }
 
-function channelLimit(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
-  return channel === 'WhatsApp' ? settings.whatsapp.dailyLimit : settings.instagram.dailyLimit;
+function whatsappDispatch(settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
+  return settings.whatsapp;
+}
+
+function instagramDispatch(settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
+  return settings.instagram;
+}
+
+async function whatsappChannelLimit() {
+  const chips = await loadActiveChips();
+  return chips.reduce((total, chip) => total + Math.max(1, chip.dailyLimit), 0);
+}
+
+async function channelLimit(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
+  return channel === 'WhatsApp' ? whatsappChannelLimit() : instagramDispatch(settings).dailyLimit;
 }
 
 function channelDays(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
-  return channel === 'WhatsApp' ? settings.whatsapp.activeDays : settings.instagram.activeDays;
+  return channel === 'WhatsApp' ? whatsappDispatch(settings).activeDays : instagramDispatch(settings).activeDays;
 }
 
 function firstDayId(channel: PreSendChannel, settings: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>) {
@@ -392,7 +401,12 @@ async function queueAllocationsByDate(): Promise<QueueAllocationSnapshot> {
 async function scheduledDayCards(): Promise<PreSendDayCard[]> {
   await rolloverPreSendAfterCutoff();
   const settings = await settingsService.getDispatchSettings();
-  const [leads, queueAllocations] = await Promise.all([listAllLeads(), queueAllocationsByDate()]);
+  const [leads, queueAllocations, whatsappLimit] = await Promise.all([
+    listAllLeads(),
+    queueAllocationsByDate(),
+    channelLimit('WhatsApp', settings),
+  ]);
+  const instagramLimit = await channelLimit('Instagram', settings);
   const todayIndex = new Date().getDay();
 
   return (['WhatsApp', 'Instagram'] as PreSendChannel[]).flatMap((channel) =>
@@ -415,7 +429,7 @@ async function scheduledDayCards(): Promise<PreSendDayCard[]> {
         channel,
         label: formatWeekDateLabel(weekday, date),
         queued,
-        limit: channelLimit(channel, settings),
+        limit: channel === 'WhatsApp' ? whatsappLimit : instagramLimit,
         isToday: index === todayIndex,
       };
     }),
@@ -424,7 +438,11 @@ async function scheduledDayCards(): Promise<PreSendDayCard[]> {
 
 async function assertQueueLimits(ids: string[]) {
   const settings = await settingsService.getDispatchSettings();
-  const leads = await listAllLeads();
+  const [leads, whatsappLimit, instagramLimit] = await Promise.all([
+    listAllLeads(),
+    channelLimit('WhatsApp', settings),
+    channelLimit('Instagram', settings),
+  ]);
   const selected = leads.filter((lead) => ids.includes(lead.id) && isStatusGroup(lead.status, 'approved'));
   const queuedByDay = new Map<string, number>();
 
@@ -436,7 +454,7 @@ async function assertQueueLimits(ids: string[]) {
 
   for (const lead of selected) {
     const key = `${lead.channel}:${lead.dayId}`;
-    const limit = channelLimit(lead.channel, settings);
+    const limit = lead.channel === 'WhatsApp' ? whatsappLimit : instagramLimit;
     const current = queuedByDay.get(key) ?? 0;
     if (current >= limit) throw new Error(`Limite diario atingido para ${lead.channel}.`);
     queuedByDay.set(key, current + 1);
@@ -652,12 +670,29 @@ function assertTemplate(lead: PreSendLead, template: TemplateConfigRecord | unde
 }
 
 async function loadActiveChips() {
+  const settings = await settingsService.getDispatchSettings();
   const chips = (await repositories.config.list('chips'))
     .filter(isChip)
     .filter(isOperationalWhatsAppChip)
     .sort((a, b) => a.priority - b.priority);
 
-  return chips;
+  return chips.map((chip) => {
+    const inferredLevel = inferChipLevelFromConfig({
+      level: chip.level,
+      dailyLimit: chip.dailyLimit,
+      batchCount: Math.max(1, Array.isArray(chip.batches) && chip.batches.length ? chip.batches.length : Math.round(Number(chip.dailyLimit || 0) / Math.max(1, Number(chip.blockSize || 1)))),
+      intervalSeconds: chip.intervalSeconds,
+      batches: Array.isArray(chip.batches) ? chip.batches : [],
+      startTime: chip.startTime,
+      endTime: chip.endTime,
+    }, settings.chipLevels);
+
+    return {
+      ...chip,
+      level: inferredLevel,
+      ...chipLevelDefaults(inferredLevel, settings.chipLevels),
+    };
+  });
 }
 
 async function loadActiveInstagramProfiles() {
@@ -725,7 +760,7 @@ async function assignProfilesAndLimitCapacity(leads: PreSendLead[], options: Que
     const username = profile.username;
     const key = `${username}:${selectedDate}`;
     const current = instagramUsage.get(key) ?? 0;
-    if (current >= settings.instagram.dailyLimit) continue;
+    if (current >= instagramDispatch(settings).dailyLimit) continue;
     instagramUsage.set(key, current + 1);
     assigned.push(lead.profile === username ? lead : { ...lead, profile: username });
   }
@@ -808,7 +843,7 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
   const settings = await settingsService.getDispatchSettings();
   const activeProfiles = await loadActiveInstagramProfiles();
   const branches = await loadBranches();
-  const limit = settings.instagram.perBatch;
+  const limit = instagramDispatch(settings).perBatch;
   const baseLeads = await repositories.base.list({});
   const baseInstagrams = new Set(baseLeads.map((lead) => normalizeInstagramUsername(lead.normalizedInstagram ?? lead.instagram)).filter(Boolean));
 

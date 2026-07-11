@@ -3,7 +3,17 @@ import { useState } from 'react';
 import { Button, Field, Panel, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useDispatchSettings } from '../hooks/useDispatchSettings';
+import { CHIP_LEVEL_OPTIONS, chipLevelDefaults } from '../services/config/chipOperational';
 import type { DispatchSettings, UpdateDispatchSettingsInput } from '../services/settings';
+
+type InstagramFieldsProps = {
+  settings: DispatchSettings;
+  saving: boolean;
+  onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>;
+};
+
+type DispatchPatch = Partial<DispatchSettings['whatsapp']>;
+type InstagramPatch = Partial<DispatchSettings['instagram']>;
 
 function toNumber(value: string, fallback: number) {
   const parsed = Number.parseInt(value, 10);
@@ -22,94 +32,130 @@ function formatList(value: string[]) {
   return value.join(', ');
 }
 
-type ChannelKey = 'whatsapp' | 'instagram';
-
-type ChannelFieldsProps = {
-  kind: ChannelKey;
-  settings: DispatchSettings;
-  saving: boolean;
-  onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>;
-  onSave: (kind: ChannelKey) => void;
-};
-
-function ChannelFields({ kind, settings, saving, onUpdate, onSave }: ChannelFieldsProps) {
-  const current = settings[kind];
-
-  const updateChannel = (input: Record<string, unknown>) => onUpdate({ [kind]: input });
+function InstagramFields({ settings, saving, onUpdate }: InstagramFieldsProps) {
+  const updateInstagram = (input: InstagramPatch) => void onUpdate({ instagram: input });
 
   return (
-    <>
-      {kind === 'instagram' ? (
-        <>
-          <Field
-            label="Perfil principal"
-            value={settings.instagram.profile}
-            onChange={(profile) => updateChannel({ profile, profiles: toList(profile, settings.instagram.profiles) })}
-          />
-          <Field
-            label="Perfis Instagram"
-            value={formatList(settings.instagram.profiles)}
-            onChange={(value) => {
-              const profiles = toList(value, settings.instagram.profiles);
-              updateChannel({ profiles, profile: profiles[0] ?? settings.instagram.profile });
-            }}
-          />
-        </>
-      ) : null}
+    <Panel title="Instagram" className="settings-card settings-card--compact">
       <Field
-        label="Horario inicial"
-        value={current.startTime}
-        onChange={(startTime) => updateChannel({ startTime })}
+        label="Perfil principal"
+        value={settings.instagram.profile}
+        density="compact"
+        onChange={(profile) => updateInstagram({ profile, profiles: toList(profile, settings.instagram.profiles) })}
       />
       <Field
-        label="Horario final"
-        value={current.endTime}
-        onChange={(endTime) => updateChannel({ endTime })}
+        label="Perfis Instagram"
+        value={formatList(settings.instagram.profiles)}
+        density="compact"
+        onChange={(value) => {
+          const profiles = toList(value, settings.instagram.profiles);
+          updateInstagram({ profiles, profile: profiles[0] ?? settings.instagram.profile });
+        }}
       />
+      <p className="settings-note">Usado pelo Pré-Envio e pela fila Instagram, sem depender dos níveis dos chips.</p>
+      <div className="settings-card__actions">
+        <Button iconLeft={Save} loading={saving} onClick={() => void onUpdate({ instagram: settings.instagram })}>
+          Salvar
+        </Button>
+      </div>
+    </Panel>
+  );
+}
+
+function SharedDispatchFields({ settings, saving, onUpdate }: { settings: DispatchSettings; saving: boolean; onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>; }) {
+  const current = settings.whatsapp;
+
+  const updateShared = (input: DispatchPatch) =>
+    void onUpdate({
+      whatsapp: input,
+      instagram: {
+        delayMinSeconds: input.delayMinSeconds ?? current.delayMinSeconds,
+        delayMaxSeconds: input.delayMaxSeconds ?? current.delayMaxSeconds,
+        batchDelayMinutes: input.batchDelayMinutes ?? settings.instagram.batchDelayMinutes,
+        delayMinutes: input.batchDelayMinutes ?? settings.instagram.delayMinutes,
+      },
+    });
+
+  return (
+    <Panel title="Parametros fixos globais" className="settings-card settings-card--compact">
       <Field
         label="Delay minimo entre leads (segundos)"
         value={String(current.delayMinSeconds)}
-        onChange={(value) => updateChannel({ delayMinSeconds: toNumber(value, current.delayMinSeconds) })}
+        density="compact"
+        onChange={(value) => updateShared({ delayMinSeconds: toNumber(value, current.delayMinSeconds) })}
       />
       <Field
         label="Delay maximo entre leads (segundos)"
         value={String(current.delayMaxSeconds)}
-        onChange={(value) => updateChannel({ delayMaxSeconds: toNumber(value, current.delayMaxSeconds) })}
-      />
-      <Field
-        label="Quantidade por lote"
-        value={String(current.perBatch)}
-        onChange={(value) => updateChannel({ perBatch: toNumber(value, current.perBatch) })}
-      />
-      <Field
-        label="Quantidade de lotes"
-        value={String(current.batches)}
-        onChange={(value) => updateChannel({ batches: toNumber(value, current.batches) })}
+        density="compact"
+        onChange={(value) => updateShared({ delayMaxSeconds: toNumber(value, current.delayMaxSeconds) })}
       />
       <Field
         label="Espera entre lotes (minutos)"
         value={String(current.batchDelayMinutes)}
-        onChange={(value) => updateChannel({ batchDelayMinutes: toNumber(value, current.batchDelayMinutes), delayMinutes: toNumber(value, current.batchDelayMinutes) })}
-      />
-      <Field
-        label="Limite diario"
-        value={String(current.dailyLimit)}
-        onChange={(value) => updateChannel({ dailyLimit: toNumber(value, current.dailyLimit) })}
-      />
-      <Field
-        label="Dias ativos"
-        value={formatList(current.activeDays)}
-        onChange={(value) => updateChannel({ activeDays: toList(value, current.activeDays) })}
-      />
-      <Field
-        label="Comportamento do lote"
-        value={current.batchBehavior}
-        onChange={(batchBehavior) => updateChannel({ batchBehavior })}
+        density="compact"
+        onChange={(value) => updateShared({ batchDelayMinutes: toNumber(value, current.batchDelayMinutes) })}
       />
       <div className="settings-card__actions">
-        <Button iconLeft={Save} loading={saving} onClick={() => onSave(kind)}>Salvar</Button>
+        <Button iconLeft={Save} loading={saving} onClick={() => void onUpdate({ whatsapp: current, instagram: settings.instagram })}>
+          Salvar
+        </Button>
       </div>
-    </>
+    </Panel>
+  );
+}
+
+function ChipLevelPresets({ settings, saving, onUpdate }: { settings: DispatchSettings; saving: boolean; onUpdate: (input: UpdateDispatchSettingsInput) => Promise<void>; }) {
+  const updateLevel = (level: string, patch: Partial<NonNullable<DispatchSettings['chipLevels']>[string]>) => {
+    void onUpdate({
+      chipLevels: {
+        ...(settings.chipLevels ?? {}),
+        [level]: {
+          ...(settings.chipLevels?.[level] ?? {}),
+          ...patch,
+        },
+      } as UpdateDispatchSettingsInput['chipLevels'],
+    });
+  };
+
+  return (
+    <Panel title="Niveis dos chips" className="settings-card settings-card--compact settings-card--chip-levels">
+      <p className="settings-note">
+        Cada nivel define o volume base do chip. O sistema calcula automaticamente a quantidade por lote a partir de <strong>Limite diário ÷ Qtd de lotes</strong>.
+      </p>
+      <div className="settings-chip-level-grid settings-chip-level-grid--cards">
+        {CHIP_LEVEL_OPTIONS.map((option) => {
+          const defaults = chipLevelDefaults(option.value, settings.chipLevels);
+          const current = settings.chipLevels?.[option.value] ?? {};
+          const batchCount = Number(current.batchCount ?? defaults.batchCount);
+          const dailyLimit = Number(current.dailyLimit ?? defaults.dailyLimit);
+          const blockSize = Math.max(1, Math.floor(dailyLimit / Math.max(1, batchCount)));
+
+          return (
+            <article className="settings-chip-level-card" key={option.value}>
+              <header className="settings-chip-level-card__header">
+                <strong>{option.label}</strong>
+                <span>{blockSize} por lote • {dailyLimit} por dia</span>
+              </header>
+              <div className="settings-chip-level-card__fields">
+                <Field
+                  label="Qtd de lotes"
+                  value={String(batchCount)}
+                  density="compact"
+                  onChange={(value) => updateLevel(option.value, { batchCount: toNumber(value, defaults.batchCount) })}
+                />
+                <Field
+                  label="Limite diário"
+                  value={String(dailyLimit)}
+                  density="compact"
+                  onChange={(value) => updateLevel(option.value, { dailyLimit: toNumber(value, defaults.dailyLimit) })}
+                />
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </Panel>
   );
 }
 
@@ -129,10 +175,6 @@ export function SettingsPage() {
     } catch (err) {
       pushToast({ title: 'Erro ao salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
-  };
-
-  const save = (kind: ChannelKey) => {
-    pushToast({ title: 'Configuracoes salvas', description: `${kind === 'whatsapp' ? 'WhatsApp' : 'Instagram'} atualizado com sucesso.`, tone: 'success' });
   };
 
   const reset = async () => {
@@ -164,13 +206,10 @@ export function SettingsPage() {
         }
       />
       {error ? <div className="table-message">{error}</div> : null}
-      <section className="settings-grid">
-        <Panel title="WhatsApp" className="settings-card">
-          <ChannelFields kind="whatsapp" settings={settings} saving={saving} onUpdate={update} onSave={save} />
-        </Panel>
-        <Panel title="Instagram" className="settings-card">
-          <ChannelFields kind="instagram" settings={settings} saving={saving} onUpdate={update} onSave={save} />
-        </Panel>
+      <section className="settings-grid settings-grid--three">
+        <SharedDispatchFields settings={settings} saving={saving} onUpdate={update} />
+        <InstagramFields settings={settings} saving={saving} onUpdate={update} />
+        <ChipLevelPresets settings={settings} saving={saving} onUpdate={update} />
       </section>
 
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />

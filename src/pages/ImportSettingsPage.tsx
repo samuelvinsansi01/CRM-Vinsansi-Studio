@@ -23,8 +23,7 @@ type BooleanPath =
   | 'routes.rejectOutOfProfile'
   | 'logs.enabled'
   | 'logs.logRejected'
-  | 'logs.logRejectionReason'
-  | 'instagramSecondary.enabled';
+  | 'logs.logRejectionReason';
 
 const booleanOptions = [
   { label: 'Ligado', value: 'true' },
@@ -65,14 +64,8 @@ export function ImportSettingsPage() {
     await updateSettings({ [key]: nextValue });
   };
 
-  const updateInstagramSecondaryNumber = async (key: 'minRating' | 'minReviews', value: string) => {
-    const nextValue = key === 'minRating' ? Number(value.replace(',', '.')) : Number.parseInt(value, 10);
-    if (!Number.isFinite(nextValue)) return;
-    await updateSettings({ instagramSecondary: { [key]: nextValue } });
-  };
-
   const updateBoolean = async (path: BooleanPath, value: boolean) => {
-    const [group, key] = path.split('.') as ['safeMode' | 'deduplication' | 'routes' | 'logs' | 'instagramSecondary', string];
+    const [group, key] = path.split('.') as ['safeMode' | 'deduplication' | 'routes' | 'logs', string];
     await updateSettings({ [group]: { [key]: value } });
   };
 
@@ -125,18 +118,6 @@ export function ImportSettingsPage() {
           <Field label="Reviews mínimos global" value={String(settings.minReviews)} onChange={(value) => updateNumber('minReviews', value)} />
           <BooleanSetting label="Modo simulação" description="Executa validações e relatório sem gravar no banco. Recomendado para testar regras." value={getBoolean(settings, 'safeMode.simulationMode')} onChange={(value) => updateBoolean('safeMode.simulationMode', value)} />
           <p className="settings-note">Leads abaixo desses critérios entram em Recusados com motivo automático. Regras por ramo têm prioridade sobre o global.</p>
-        </Panel>
-
-        <Panel title="Instagram secundário" className="settings-card import-settings-card">
-          <BooleanSetting
-            label="Habilitar rota secundária Instagram"
-            description="Se o ramo e subramo baterem, mas a nota/reviews ficarem abaixo do fluxo principal, o lead segue só para Instagram."
-            value={getBoolean(settings, 'instagramSecondary.enabled')}
-            onChange={(value) => updateBoolean('instagramSecondary.enabled', value)}
-          />
-          <Field label="Nota mínima Instagram" value={String(settings.instagramSecondary.minRating)} onChange={(value) => updateInstagramSecondaryNumber('minRating', value)} />
-          <Field label="Reviews mínimos Instagram" value={String(settings.instagramSecondary.minReviews)} onChange={(value) => updateInstagramSecondaryNumber('minReviews', value)} />
-          <p className="settings-note">Essa trilha só entra quando o ramo/subramo confere e a regra principal reprova por nota/reviews.</p>
         </Panel>
 
         <Panel title="Regras por ramo" className="settings-card import-settings-card import-branch-rules">

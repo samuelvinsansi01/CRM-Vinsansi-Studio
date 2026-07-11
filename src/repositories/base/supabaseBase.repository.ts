@@ -29,6 +29,10 @@ function normalize(value: unknown) {
   return String(value ?? '').trim().toLowerCase();
 }
 
+function exactNormalizedMatch(a: unknown, b: unknown) {
+  return normalizeComparable(a) === normalizeComparable(b);
+}
+
 function normalizeComparable(value: unknown) {
   return String(value ?? '')
     .normalize('NFD')
@@ -109,7 +113,8 @@ function resolveParentBranch(branchRules: BranchRule[], ...values: unknown[]) {
 
   for (const branch of branchRules) {
     const terms = [branch.id, branch.slug, branch.name, ...branch.terms].map(normalizeComparable).filter(Boolean);
-    if (candidates.some((candidate) => terms.includes(candidate))) return branch;
+    const matches = candidates.some((candidate) => terms.some((term) => exactNormalizedMatch(candidate, term)));
+    if (matches) return branch;
   }
 
   return null;
@@ -129,13 +134,22 @@ function rowToBaseLead(row: Record<string, unknown>, branchRules: BranchRule[]):
     branchRules,
     row.branch_id,
     (data as Record<string, unknown>).branch_id,
+    row.category_name,
+    (data as Record<string, unknown>).subcategoria,
     row.parent_category,
     row.category,
-    row.category_name,
     data.branch,
     (data as Record<string, unknown>).parent_category,
   );
-  const branch = branchRule?.name ?? normalizeParentBranch(branchRules, row.parent_category, row.category, row.category_name, data.branch, (data as Record<string, unknown>).parent_category);
+  const branch = branchRule?.name ?? normalizeParentBranch(
+    branchRules,
+    row.parent_category,
+    row.category,
+    row.category_name,
+    (data as Record<string, unknown>).subcategoria,
+    data.branch,
+    (data as Record<string, unknown>).parent_category,
+  );
 
   return {
     id: String(row.id),
@@ -247,13 +261,8 @@ async function loadBranchRules(): Promise<BranchRule[]> {
         id,
         slug,
         name,
-        record.category,
-        config.category,
         ...(Array.isArray(record.subcategories) ? record.subcategories : []),
         ...(Array.isArray(config.subcategories) ? config.subcategories : []),
-        ...(Array.isArray(record.associated_categories) ? record.associated_categories : []),
-        ...(Array.isArray(record.associatedCategories) ? record.associatedCategories : []),
-        ...(Array.isArray(config.associatedCategories) ? config.associatedCategories : []),
       ].map(String);
 
       return { id, slug, name, terms };

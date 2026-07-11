@@ -22,6 +22,7 @@ import {
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useConfigRecords } from '../hooks/useConfigRecords';
+import { useDispatchSettings } from '../hooks/useDispatchSettings';
 import {
   DEFAULT_BRANCH_MIN_RATING,
   DEFAULT_BRANCH_MIN_REVIEWS,
@@ -73,6 +74,8 @@ type ScreenDefinition = {
 type ConfigTableRow = Record<string, ReactNode> & {
   id: string;
 };
+
+type ChipLevelPresetsMap = Record<string, Partial<{ dailyLimit: number; batchCount: number; blockSize: number; intervalSeconds: number; batches: string[]; startTime: string; endTime: string }>>;
 
 const statusOptions = [
   { label: 'Todos', value: 'Todos' },
@@ -173,7 +176,7 @@ function configRecordLabel(record: ConfigRecord | null | undefined, branches: Br
   return 'name' in record && record.name ? String(record.name) : record.id;
 }
 
-function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDefinition {
+function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelPresets: ChipLevelPresetsMap = {}): ScreenDefinition {
   const branchSelectOptions = branchOptions(branches);
 
   if (kind === 'branches') {
@@ -291,7 +294,7 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
         icon: Send,
         label: 'Capacidade/dia',
         tone: 'warning',
-        getValue: (records) => records.filter(isChip).filter(isOperationalWhatsAppChip).reduce((total, record) => total + record.dailyLimit, 0),
+        getValue: (records) => records.filter(isChip).filter(isOperationalWhatsAppChip).reduce((total, record) => total + chipLevelDefaults(record.level, chipLevelPresets).dailyLimit, 0),
       },
     ],
     columns: [
@@ -315,7 +318,7 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[]): ScreenDef
   };
 }
 
-function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[]): Record<string, string> {
+function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelPresets: ChipLevelPresetsMap = {}): Record<string, string> {
   if (kind === 'branches') {
     return {
       name: '',
@@ -350,7 +353,7 @@ function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[]): Reco
     };
   }
 
-  const defaults = chipLevelDefaults('estabilizado');
+  const defaults = chipLevelDefaults('estabilizado', chipLevelPresets);
   return {
     instance: '',
     name: '',
@@ -369,7 +372,7 @@ function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[]): Reco
   };
 }
 
-function formFromRecord(record: ConfigRecord): Record<string, string> {
+function formFromRecord(record: ConfigRecord, chipLevelPresets: ChipLevelPresetsMap = {}): Record<string, string> {
   if (isBranch(record)) {
     return {
       name: record.name,
@@ -404,6 +407,8 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
     };
   }
 
+  const defaults = chipLevelDefaults(record.level, chipLevelPresets);
+
   return {
     instance: record.instance,
     name: record.name,
@@ -412,17 +417,17 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
     url: record.url,
     apiKey: record.apiKey,
     priority: String(record.priority),
-    startTime: record.startTime,
-    endTime: record.endTime,
-    dailyLimit: String(record.dailyLimit),
-    blockSize: String(record.blockSize),
-    intervalSeconds: String(record.intervalSeconds),
-    batches: toCsv(record.batches),
+    startTime: record.startTime || defaults.startTime,
+    endTime: record.endTime || defaults.endTime,
+    dailyLimit: String(record.dailyLimit || defaults.dailyLimit),
+    blockSize: String(record.blockSize || defaults.blockSize),
+    intervalSeconds: String(record.intervalSeconds || defaults.intervalSeconds),
+    batches: toCsv(record.batches.length ? record.batches : defaults.batches),
     active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
   };
 }
 
-function toInputPayload(kind: ConfigKind, form: Record<string, string>) {
+function toInputPayload(kind: ConfigKind, form: Record<string, string>, chipLevelPresets: ChipLevelPresetsMap = {}) {
   if (kind !== 'chips') {
     return {
       ...form,
@@ -431,7 +436,7 @@ function toInputPayload(kind: ConfigKind, form: Record<string, string>) {
     };
   }
 
-  const levelDefaults = chipLevelDefaults(form.level);
+  const levelDefaults = chipLevelDefaults(form.level, chipLevelPresets);
   return {
     ...form,
     active: form.active === 'Ativo',
@@ -506,7 +511,9 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
 
   const branchRecords = useConfigRecords('branches', { search: '', status: 'Todos' });
   const branches = useMemo(() => branchRecords.records.filter(isBranch), [branchRecords.records]);
-  const screen = useMemo(() => makeScreen(kind, branches), [kind, branches]);
+  const { settings: dispatchSettings } = useDispatchSettings();
+  const chipLevelPresets = dispatchSettings?.chipLevels ?? {};
+  const screen = useMemo(() => makeScreen(kind, branches, chipLevelPresets), [kind, branches, chipLevelPresets]);
   const [form, setForm] = useState<Record<string, string>>(() => createEmptyForm(kind, branches));
 
   const { records, loading, error, createRecord, updateRecord, removeRecord, toggleArchive, bulkArchive, bulkRestore, bulkRemove } = useConfigRecords(kind, {
@@ -545,7 +552,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   const openCreateDrawer = () => {
     setDrawerMode('create');
     setEditingId(null);
-    setForm(createEmptyForm(kind, branches));
+    setForm(createEmptyForm(kind, branches, chipLevelPresets));
     setDrawerOpen(true);
   };
 
@@ -554,7 +561,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
     if (!record) return;
     setDrawerMode(mode);
     setEditingId(record.id);
-    setForm(formFromRecord(record));
+    setForm(formFromRecord(record, chipLevelPresets));
     setDrawerOpen(true);
   };
 
@@ -566,7 +573,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   const updateForm = (key: string, value: string) => {
     setForm((current) => {
       if (kind === 'chips' && key === 'level') {
-        const defaults = chipLevelDefaults(value);
+        const defaults = chipLevelDefaults(value, chipLevelPresets);
         return {
           ...current,
           level: value,
@@ -594,7 +601,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
 
     try {
       validateForm();
-      const payload = toInputPayload(kind, form);
+      const payload = toInputPayload(kind, form, chipLevelPresets);
 
       if (drawerMode === 'create') {
         await createRecord(payload);
