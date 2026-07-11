@@ -1,3 +1,4 @@
+import { CHIP_LEVEL_LIMITS } from '../config/chipOperational';
 import type { DispatchSettings } from './types';
 
 export const DEFAULT_ACTIVE_DAYS = ['Segunda', 'Terca', 'Quarta', 'Quinta', 'Sexta'];
@@ -30,4 +31,5 @@ export const defaultDispatchSettings: DispatchSettings = {
     activeDays: DEFAULT_ACTIVE_DAYS,
     batchBehavior: 'Respeitar lotes e janela',
   },
+  chipLevels: CHIP_LEVEL_LIMITS,
 };

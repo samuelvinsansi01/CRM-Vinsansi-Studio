@@ -105,6 +105,12 @@ function normalizeDispatchSettings(raw: unknown): DispatchSettings {
       activeDays: safeStringList(instagram.activeDays, DEFAULT_ACTIVE_DAYS),
       batchBehavior: safeString(instagram.batchBehavior, defaultDispatchSettings.instagram.batchBehavior),
     },
+    chipLevels: Object.fromEntries(
+      Object.entries({ ...defaultDispatchSettings.chipLevels, ...((source.chipLevels ?? {}) as Record<string, unknown>) }).map(([level, preset]) => [
+        level,
+        { blockSize: safeNumber((preset as Record<string, unknown>).blockSize, defaultDispatchSettings.chipLevels[level]?.blockSize ?? 30, 1) },
+      ]),
+    ),
   };
 }
 
@@ -157,6 +163,10 @@ function mergeDispatchSettings(current: DispatchSettings, input: UpdateDispatchS
     instagram: {
       ...current.instagram,
       ...(input.instagram ?? {}),
+    },
+    chipLevels: {
+      ...current.chipLevels,
+      ...((input as UpdateDispatchSettingsInput & { chipLevels?: DispatchSettings['chipLevels'] }).chipLevels ?? {}),
     },
   });
 }

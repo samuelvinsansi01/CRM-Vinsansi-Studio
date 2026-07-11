@@ -1,5 +1,7 @@
 import type { ChipConfigRecord } from './types';
 
+export type ChipLevelPreset = Pick<ChipConfigRecord, 'dailyLimit' | 'blockSize' | 'intervalSeconds' | 'batches' | 'startTime' | 'endTime'>;
+
 export const CHIP_LEVEL_OPTIONS = [
   { label: 'Recem ativado', value: 'recem-ativado' },
   { label: 'Aquecimento inicial', value: 'aquecimento-inicial' },
@@ -9,7 +11,7 @@ export const CHIP_LEVEL_OPTIONS = [
   { label: 'Premium', value: 'premium' },
 ];
 
-export const CHIP_LEVEL_LIMITS: Record<string, Pick<ChipConfigRecord, 'dailyLimit' | 'blockSize' | 'intervalSeconds' | 'batches' | 'startTime' | 'endTime'>> = {
+export const CHIP_LEVEL_LIMITS: Record<string, ChipLevelPreset> = {
   'recem-ativado': {
     dailyLimit: 40,
     blockSize: 10,
@@ -102,6 +104,13 @@ export function chipStatusLabel(chip: ChipConfigRecord) {
   return 'Ativo';
 }
 
-export function chipLevelDefaults(level: string) {
-  return CHIP_LEVEL_LIMITS[level] ?? CHIP_LEVEL_LIMITS.estabilizado;
+export function chipLevelDefaults(level: string, overrides?: Record<string, Partial<ChipLevelPreset>>) {
+  const base = CHIP_LEVEL_LIMITS[level] ?? CHIP_LEVEL_LIMITS.estabilizado;
+  const override = overrides?.[level];
+  if (!override) return base;
+  return {
+    ...base,
+    ...override,
+    batches: override.batches?.length ? override.batches : base.batches,
+  };
 }

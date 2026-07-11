@@ -65,6 +65,10 @@ function mergeDispatchSettings(current: DispatchSettings, input: UpdateDispatchS
   return {
     whatsapp: { ...current.whatsapp, ...(input.whatsapp ?? {}) },
     instagram: { ...current.instagram, ...(input.instagram ?? {}) },
+    chipLevels: {
+      ...current.chipLevels,
+      ...((input as UpdateDispatchSettingsInput & { chipLevels?: DispatchSettings['chipLevels'] }).chipLevels ?? {}),
+    },
   };
 }
 
