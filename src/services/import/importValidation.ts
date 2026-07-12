@@ -510,11 +510,11 @@ function validateBranch(lead: NormalizedRawLead, branchRule: ImportBranchRule | 
   return reject('category_out_of_profile', detail);
 }
 
-function qualifiesForLowRatingInstagram(lead: NormalizedRawLead, branchRule: ImportBranchRule | null, settings: ImportSettings) {
+function qualifiesForInstagramException(lead: NormalizedRawLead, branchRule: ImportBranchRule | null, settings: ImportSettings) {
   const rule = settings.instagramLowRating;
   if (!rule?.enabled || !settings.routes.instagram || !branchRule) return false;
+
   return lead.rating >= rule.minRating
-    && lead.rating < rule.maxRatingExclusive
     && lead.reviews >= rule.minReviews;
 }
 
@@ -528,7 +528,7 @@ function routeLowRatingLeadToInstagramReview(draft: ImportLeadInput, lead: Norma
   draft.send_instagram = true;
   draft.instagram = draft.instagram || lead.instagram || (isInstagramSite(lead.site) ? lead.site : '');
   draft.instagram_url = draft.instagram_url || draft.instagram;
-  draft.instagram_override_reason = `Excecao de nota para Instagram: nota ${lead.rating}, minimo ${rule.minRating}, abaixo de ${rule.maxRatingExclusive}, com ${lead.reviews} reviews.`;
+  draft.instagram_override_reason = `Excecao de qualificacao para Instagram: nota ${lead.rating} (minimo ${rule.minRating}) e ${lead.reviews} reviews (minimo ${rule.minReviews}).`;
   draft.motivo = draft.instagram
     ? `${draft.instagram_override_reason} Revisar e aprovar no Inicio.`
     : `${draft.instagram_override_reason} Adicione o link do Instagram no Inicio para aprovar.`;
@@ -714,7 +714,7 @@ export async function normalizeImportItems(rawItems: unknown[], context: ImportV
 
     const qualificationRejection = validateQualification(lead, branchRule, settings);
     if (qualificationRejection) {
-      if (qualificationRejection.code === 'rating_below_minimum' && qualifiesForLowRatingInstagram(lead, branchRule, settings)) {
+      if (qualifiesForInstagramException(lead, branchRule, settings)) {
         routeLowRatingLeadToInstagramReview(draft, lead, settings);
         normalized.push({ input: draft, ignored: false, code: 'approved' });
         incrementReason(reasons, 'approved');

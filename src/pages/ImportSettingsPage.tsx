@@ -70,7 +70,7 @@ export function ImportSettingsPage() {
     await updateSettings({ [group]: { [key]: value } });
   };
 
-  const updateInstagramLowRatingNumber = async (key: 'minRating' | 'maxRatingExclusive' | 'minReviews', value: string) => {
+  const updateInstagramLowRatingNumber = async (key: 'minRating' | 'minReviews', value: string) => {
     const parsed = key === 'minReviews' ? Number.parseInt(value, 10) : Number(value.replace(',', '.'));
     if (!Number.isFinite(parsed)) return;
     await updateSettings({ instagramLowRating: { [key]: parsed } });
@@ -127,17 +127,16 @@ export function ImportSettingsPage() {
           <p className="settings-note">Leads abaixo desses critérios entram em Recusados com motivo automático. Regras por ramo têm prioridade sobre o global.</p>
         </Panel>
 
-        <Panel title="Exceção de nota para Instagram" className="settings-card import-settings-card">
+        <Panel title="Exceção de qualificação para Instagram" className="settings-card import-settings-card">
           <BooleanSetting
             label="Ativar exceção"
-            description="Permite leads abaixo da nota normal somente na trilha do Instagram, sem enviar para WhatsApp."
+            description="Direciona ao Instagram os leads que não atingem nota ou avaliações do fluxo normal, mas atingem os mínimos desta exceção."
             value={getBoolean(settings, 'instagramLowRating.enabled')}
             onChange={(value) => updateBoolean('instagramLowRating.enabled', value)}
           />
           <Field label="Nota mínima da exceção" value={String(settings.instagramLowRating.minRating)} onChange={(value) => updateInstagramLowRatingNumber('minRating', value)} />
-          <Field label="Nota limite (não inclusiva)" value={String(settings.instagramLowRating.maxRatingExclusive)} onChange={(value) => updateInstagramLowRatingNumber('maxRatingExclusive', value)} />
           <Field label="Mínimo de avaliações" value={String(settings.instagramLowRating.minReviews)} onChange={(value) => updateInstagramLowRatingNumber('minReviews', value)} />
-          <p className="settings-note">Padrão: nota de 3,7 até abaixo de 4,0, com pelo menos 5 avaliações. O lead entra no Início com destino Instagram e só segue para a fila após receber um link válido.</p>
+          <p className="settings-note">Fluxo normal: atende aos mínimos gerais ou do ramo. Exceção Instagram: nota mínima 3,7 e pelo menos 5 avaliações, quando não atingir o fluxo normal. As regras de ramo, duplicidade e Base Permanente continuam obrigatórias.</p>
         </Panel>
 
         <Panel title="Regras por ramo" className="settings-card import-settings-card import-branch-rules">
