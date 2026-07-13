@@ -224,6 +224,8 @@ function normalizeTemplateInput(
   const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
   const message1 = stringFromInput(raw, ['message1', 'msg1', 'part_1', 'mensagem1', 'mensagem'], existing?.message1 ?? DEFAULT_TEMPLATE_MESSAGE_1);
   const message2 = stringFromInput(raw, ['message2', 'msg2', 'part_2', 'mensagem2'], existing?.message2 ?? DEFAULT_TEMPLATE_MESSAGE_2);
+  const message3 = stringFromInput(raw, ['message3', 'msg3', 'part_3', 'mensagem3'], existing?.message3 ?? '');
+  const message4 = stringFromInput(raw, ['message4', 'msg4', 'part_4', 'mensagem4'], existing?.message4 ?? '');
 
   return {
     id: String(existing?.id ?? raw.id ?? fallbackId('templates')),
@@ -234,6 +236,8 @@ function normalizeTemplateInput(
     type: normalizeTemplateType(valueFromInput(raw, ['type', 'tipo'], existing?.type ?? 'sem-site'), existing?.type ?? 'sem-site'),
     message1,
     message2,
+    message3,
+    message4,
     preview: renderPreview(message1),
     active,
     status: statusFromActive(active),

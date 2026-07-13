@@ -38,6 +38,8 @@ export type TemplateConfigRecord = ConfigBaseRecord & {
   type: TemplateType;
   message1: string;
   message2: string;
+  message3: string;
+  message4: string;
   preview: string;
 };
 

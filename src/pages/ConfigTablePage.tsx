@@ -234,6 +234,8 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelP
         { key: 'type', label: 'Tipo', type: 'select', options: templateTypeOptions },
         { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1 },
         { key: 'message2', label: 'Mensagem 2', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_2 },
+        { key: 'message3', label: 'Mensagem 3', type: 'textarea', placeholder: 'Digite a terceira mensagem' },
+        { key: 'message4', label: 'Mensagem 4', type: 'textarea', placeholder: 'Digite a quarta mensagem' },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
       ],
     };

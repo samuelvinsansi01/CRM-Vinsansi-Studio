@@ -35,6 +35,10 @@ export type InstagramQueueLead = {
   message_1: string;
   message2: string;
   message_2: string;
+  message3: string;
+  message_3: string;
+  message4: string;
+  message_4: string;
   imageName?: string;
   imageRequired?: boolean;
   image_url?: string;
@@ -68,6 +72,8 @@ export type CreateInstagramQueueLeadInput = Omit<
   | 'chip_id'
   | 'message_1'
   | 'message_2'
+  | 'message_3'
+  | 'message_4'
   | 'retry_count'
   | 'error_message'
   | 'sent_at'
@@ -112,6 +118,8 @@ export type UpdateInstagramQueueLeadInput = Partial<
     | 'status'
     | 'message1'
     | 'message2'
+    | 'message3'
+    | 'message4'
     | 'imageName'
     | 'imageRequired'
     | 'image_url'
