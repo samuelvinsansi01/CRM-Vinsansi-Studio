@@ -30,11 +30,12 @@ function calculateSummary(records: ImportLead[]): ImportSummary {
   return {
     total: records.length,
     approved: approved.length,
+    pending: pending.length,
     rejected: rejected.length,
     whatsapp: approved.filter((lead) => finalDestination(lead) === 'WhatsApp').length,
     ownSite: operational.filter((lead) => finalDestination(lead) === 'Com site').length,
     aggregators: operational.filter((lead) => finalDestination(lead) === 'Agregadores').length,
-    instagram: approved.filter((lead) => finalDestination(lead) === 'Instagram').length,
+    instagram: operational.filter((lead) => finalDestination(lead) === 'Instagram').length,
   };
 }
 

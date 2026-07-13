@@ -23,6 +23,7 @@ import { useImportLeads } from '../hooks/useImportLeads';
 import { useImportSettings } from '../hooks/useImportSettings';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
 import { permissionsFor } from '../services/permissions';
+import { isStatusGroup } from '../services/status/status.mapper';
 import type { ImportLead, ImportLeadDestination, ImportLeadInput, ImportLeadStatus, ImportParseResult } from '../services/import/types';
 
 type ImportPageProps = {
@@ -417,9 +418,10 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     <div className="import-page">
       <PageHeader title="Importar" />
       <section className="import-metrics">
-        <div className="metric-grid metric-grid--3">
+        <div className="metric-grid metric-grid--4">
           <MetricCard icon={Users} value={String(summary.total)} label="Total" />
           <MetricCard icon={Globe2} value={String(summary.approved)} label="Aprovados" tone="success" />
+          <MetricCard value={String(summary.pending)} label="Em aguarde" tone="warning" />
           <MetricCard icon={X} value={String(summary.rejected)} label="Recusados" tone="danger" />
         </div>
         <div className="metric-grid metric-grid--4">
@@ -445,9 +447,12 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>Aprovar leads</Button>
           </div>
           {lastImport ? (() => {
+            const pendingCount = lastImport.leads.filter((lead) => isStatusGroup(lead.status, 'pending')).length;
+            const approvedCount = lastImport.leads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
             const metrics = [
               { value: String(lastImport.report.processed), label: 'Processados' },
-              { value: String(lastImport.approved), label: 'Aprovados', tone: 'success' as const },
+              { value: String(approvedCount), label: 'Aprovados', tone: 'success' as const },
+              { value: String(pendingCount), label: 'Em aguarde', tone: 'warning' as const },
               { value: String(lastImport.rejected), label: 'Recusados', tone: 'danger' as const },
               { value: String(lastImport.report.duplicates), label: 'Duplicados' },
               ...(lastImport.ignored > 0 ? [{ value: String(lastImport.ignored), label: 'Ignorados' }] : []),
@@ -479,7 +484,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                     <strong>Detalhes das regras aplicadas</strong>
                     <div className="import-result__reasons">
                       {lastImport.report.reasons.map((reason) => (
-                        <span key={reason.code}>{reason.label}: {reason.count}</span>
+                        <span key={reason.code}>{reason.code === 'approved' ? 'Aptos para entrada' : reason.label}: {reason.count}</span>
                       ))}
                     </div>
                   </div>
@@ -491,7 +496,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
         <TableCard
           title="Prévia"
-          footerText={`Mostrando ${pageRows.length} de ${leads.length} ${rejected ? 'recusados' : 'aprovados'}`}
+          footerText={`Mostrando ${pageRows.length} de ${leads.length} ${rejected ? 'recusados' : 'leads aptos'}`}
           footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setPage(1); setSelectedRows([]); }} />}
           page={currentPage}
           totalPages={totalPages}
@@ -499,8 +504,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         >
           <div className="preview-tabs">
             <SegmentedControl
-              items={['Aprovados', 'Recusados']}
-              active={rejected ? 'Recusados' : 'Aprovados'}
+              items={['Leads aptos', 'Recusados']}
+              active={rejected ? 'Recusados' : 'Leads aptos'}
               compact
               onChange={(item) => changeStatus(item === 'Recusados')}
             />

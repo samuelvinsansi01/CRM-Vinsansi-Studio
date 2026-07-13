@@ -68,6 +68,7 @@ export type ImportListFilters = {
 export type ImportSummary = {
   total: number;
   approved: number;
+  pending: number;
   rejected: number;
   whatsapp: number;
   ownSite: number;
