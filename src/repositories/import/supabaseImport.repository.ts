@@ -247,6 +247,10 @@ function findDuplicateLead(records: ImportLead[], lead: ImportLead) {
   );
 }
 
+function isOperationalStoredLead(lead: ImportLead) {
+  return !isStatusGroup(lead.status, 'rejected') && !isStatusGroup(lead.status, 'deleted');
+}
+
 async function allLeads(includeDeleted = false) {
   const branchRules = await loadBranchRules();
   const pageSize = 1000;
@@ -351,7 +355,7 @@ async function rememberImportBatch(
   auditLeads: ImportLead[],
   operationalLeads: ImportLead[],
   duplicateCount: number,
-  parsed: unknown,
+  rejectedCount: number,
   source = 'react',
 ) {
   const batchId = createUuid();
@@ -361,9 +365,10 @@ async function rememberImportBatch(
     source,
     quantity_total: auditLeads.length,
     quantity_created: operationalLeads.length,
-    quantity_blocked: operationalLeads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length,
+    quantity_blocked: rejectedCount,
     quantity_duplicate: duplicateCount,
-    raw_metadata: { source: 'react', parsed },
+    // Nao persiste o JSON importado. Recusados ficam somente na sessao da tela.
+    raw_metadata: { source },
     created_at: nowIso(),
   });
   if (error) throw new Error(error.message);
@@ -442,7 +447,9 @@ export const supabaseImportRepository: ImportRepository = {
       throw new Error('JSON invalido. Revise o conteudo colado e tente novamente.');
     }
 
-    const existing = await allLeads(true);
+    // Registros recusados de importacoes antigas nao podem bloquear uma nova
+    // tentativa depois que ramos/sub-ramos ou criterios forem atualizados.
+    const existing = (await allLeads(true)).filter(isOperationalStoredLead);
     const startedAt = performance.now?.() ?? Date.now();
     const normalized = await normalizeImportItems(extractImportItems(parsed), {
       existingLeadIds: new Set(existing.map((lead) => String(lead.sourceLeadId ?? '').trim()).filter(Boolean)),
@@ -479,39 +486,50 @@ export const supabaseImportRepository: ImportRepository = {
       ...item,
       lead: { id: createId('lead'), ...normalizeLeadInput(item.input) } as ImportLead,
     }));
-    const auditLeads = preparedItems.filter((item) => !item.ignored).map((item) => item.lead);
-    const duplicateAuditItems = preparedItems.filter((item) => !item.ignored && duplicateCodes.has(String(item.code)));
-    const leads = preparedItems
+    const sessionLeads = preparedItems
       .filter((item) => !item.ignored && !duplicateCodes.has(String(item.code)))
       .map((item) => item.lead);
+    const duplicateAuditItems = preparedItems.filter((item) => !item.ignored && duplicateCodes.has(String(item.code)));
+    // Somente os leads que realmente entram na plataforma sao persistidos.
+    // Recusados permanecem apenas na memoria da sessao para consulta da previa.
+    const operationalLeads = sessionLeads.filter((lead) =>
+      isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')
+    );
     const simulation = Boolean(options.simulate);
+    const approved = sessionLeads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
+    const rejected = sessionLeads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length;
 
     if (!simulation) {
       const userId = await getCurrentUserId();
-      const batchId = await rememberImportBatch(userId, auditLeads, leads, normalized.duplicates, parsed);
-      if (leads.length) {
-        const { error } = await getSupabaseClient().from(table()).insert(leads.map((lead) => dbLeadPayload(lead, userId)));
+      const batchId = await rememberImportBatch(
+        userId,
+        operationalLeads,
+        operationalLeads,
+        normalized.duplicates,
+        rejected,
+      );
+      if (operationalLeads.length) {
+        const { error } = await getSupabaseClient().from(table()).insert(operationalLeads.map((lead) => dbLeadPayload(lead, userId)));
         if (error) throw new Error(error.message);
       }
-      await rememberLeadImports(userId, batchId, auditLeads, new Set(leads.map((lead) => lead.id)));
-      await rememberRegistries(userId, leads);
+      // O historico detalhado tambem recebe apenas leads operacionais.
+      await rememberLeadImports(userId, batchId, operationalLeads, new Set(operationalLeads.map((lead) => lead.id)));
+      await rememberRegistries(userId, operationalLeads);
     }
 
-    const approved = leads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
-    const rejected = leads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length;
     const ignored = normalized.items.filter((item) => item.ignored).length + duplicateAuditItems.length;
 
     return {
-      created: simulation ? 0 : leads.length,
+      created: simulation ? 0 : operationalLeads.length,
       approved,
       rejected,
       ignored,
       errors: normalized.errors,
-      leads,
+      leads: sessionLeads,
       report: {
         simulation,
         processed: normalized.processed,
-        created: simulation ? 0 : leads.length,
+        created: simulation ? 0 : operationalLeads.length,
         approved,
         rejected,
         ignored,
@@ -524,7 +542,7 @@ export const supabaseImportRepository: ImportRepository = {
 
   async create(input) {
     const lead = { id: createId('lead'), ...normalizeLeadInput(input) } as ImportLead;
-    const existing = findDuplicateLead(await allLeads(true), lead);
+    const existing = findDuplicateLead((await allLeads(true)).filter(isOperationalStoredLead), lead);
     if (existing) return existing;
     const userId = await getCurrentUserId();
     const { error } = await getSupabaseClient().from(table()).insert(dbLeadPayload(lead, userId));
