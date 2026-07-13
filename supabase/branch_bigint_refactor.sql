@@ -135,6 +135,8 @@ begin
 end $$;
 
 alter table public.branches add column if not exists legacy_text_before_bigint text;
+alter table public.branches alter column legacy_text_before_bigint drop not null;
+alter table public.branches alter column legacy_text_before_bigint drop default;
 alter table public.branches add column if not exists slug text;
 alter table public.branches add column if not exists name text;
 alter table public.branches add column if not exists category text;
