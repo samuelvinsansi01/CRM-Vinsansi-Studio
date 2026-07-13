@@ -366,12 +366,19 @@ async function rememberImportBatch(
   return batchId;
 }
 
-async function rememberLeadImports(userId: string, batchId: string, leads: ImportLead[]) {
+async function rememberLeadImports(
+  userId: string,
+  batchId: string,
+  leads: ImportLead[],
+  persistedLeadIds: Set<string>,
+) {
   const rows = leads.map((lead) => ({
     id: createUuid(),
     user_id: userId,
     import_batch_id: batchId,
-    lead_id: lead.id,
+    // lead_imports.lead_id referencia leads.id. Duplicados ficam apenas na
+    // auditoria e, portanto, nao possuem um novo registro em leads.
+    lead_id: persistedLeadIds.has(lead.id) ? lead.id : null,
     status: lead.status,
     reason: lead.motivo,
     original_payload: lead,
@@ -482,7 +489,7 @@ export const supabaseImportRepository: ImportRepository = {
         const { error } = await getSupabaseClient().from(table()).insert(leads.map((lead) => dbLeadPayload(lead, userId)));
         if (error) throw new Error(error.message);
       }
-      await rememberLeadImports(userId, batchId, auditLeads);
+      await rememberLeadImports(userId, batchId, auditLeads, new Set(leads.map((lead) => lead.id)));
       await rememberRegistries(userId, leads);
     }
 
