@@ -18,6 +18,8 @@ const emptySummary: ImportSummary = {
 
 function calculateSummary(records: ImportLead[]): ImportSummary {
   const approved = records.filter((lead) => isStatusGroup(lead.status, 'approved'));
+  const pending = records.filter((lead) => isStatusGroup(lead.status, 'pending'));
+  const operational = [...approved, ...pending];
   const rejected = records.filter((lead) => isStatusGroup(lead.status, 'rejected'));
   const finalDestination = (lead: ImportLead) => (lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino);
 
@@ -26,8 +28,8 @@ function calculateSummary(records: ImportLead[]): ImportSummary {
     approved: approved.length,
     rejected: rejected.length,
     whatsapp: approved.filter((lead) => finalDestination(lead) === 'WhatsApp').length,
-    ownSite: approved.filter((lead) => finalDestination(lead) === 'Com site').length,
-    aggregators: approved.filter((lead) => finalDestination(lead) === 'Agregadores').length,
+    ownSite: operational.filter((lead) => finalDestination(lead) === 'Com site').length,
+    aggregators: operational.filter((lead) => finalDestination(lead) === 'Agregadores').length,
     instagram: approved.filter((lead) => finalDestination(lead) === 'Instagram').length,
   };
 }
@@ -36,7 +38,9 @@ function applySessionFilters(records: ImportLead[], status: ImportLeadStatus, se
   const query = search.trim().toLowerCase();
 
   return records.filter((lead) => {
-    const matchesStatus = isStatusGroup(lead.status, status);
+    const matchesStatus = status === 'approved'
+      ? isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')
+      : isStatusGroup(lead.status, status);
     const matchesQuery = !query || Object.values(lead).some((item) => String(item ?? '').toLowerCase().includes(query));
     return matchesStatus && matchesQuery;
   });
@@ -247,10 +251,13 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
   }, []);
 
   const sendApprovedToInicio = useCallback(async (sourceLeads: ImportLead[] = sessionLeads) => {
-    const approved = sourceLeads.filter((lead) => isStatusGroup(lead.status, 'approved'));
+    const operational = sourceLeads.filter((lead) =>
+      isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')
+    );
     const created: ImportLead[] = [];
-    for (const lead of approved) {
-      const createdLead = await importService.create(leadToImportInput(lead, 'approved'));
+    for (const lead of operational) {
+      const targetStatus: ImportLeadStatus = isStatusGroup(lead.status, 'pending') ? 'pending' : 'approved';
+      const createdLead = await importService.create(leadToImportInput(lead, targetStatus));
       created.push(createdLead);
     }
     return created;

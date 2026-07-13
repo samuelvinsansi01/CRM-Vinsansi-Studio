@@ -354,12 +354,12 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       setPage(1);
       setSelectedRows([]);
       if (!created.length) {
-        pushToast({ title: 'Nada aprovado', description: 'Nao ha aprovados novos para mandar ao Inicio.', tone: 'warning' });
+        pushToast({ title: 'Nenhum lead elegível', description: 'Nao ha aprovados ou leads em aguarde novos para mandar ao Inicio.', tone: 'warning' });
         return;
       }
       pushToast({
-        title: 'Leads aprovados',
-        description: `${created.length} lead(s) aprovados e enviados ao Inicio.`,
+        title: 'Leads enviados ao Início',
+        description: `${created.length} lead(s) aprovado(s) ou em aguarde enviado(s) ao Início.`,
         tone: 'success',
       });
     } catch (err) {

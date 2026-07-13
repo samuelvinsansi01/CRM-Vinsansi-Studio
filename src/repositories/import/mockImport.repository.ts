@@ -22,6 +22,8 @@ function applyFilters(records: ImportLead[], filters: ImportListFilters) {
 
 function calculateSummary(records: ImportLead[]): ImportSummary {
   const approved = records.filter((lead) => isStatusGroup(lead.status, 'approved'));
+  const pending = records.filter((lead) => isStatusGroup(lead.status, 'pending'));
+  const operational = [...approved, ...pending];
   const rejected = records.filter((lead) => isStatusGroup(lead.status, 'rejected'));
   const finalDestination = (lead: ImportLead) => (lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino);
 
@@ -30,8 +32,8 @@ function calculateSummary(records: ImportLead[]): ImportSummary {
     approved: approved.length,
     rejected: rejected.length,
     whatsapp: approved.filter((lead) => finalDestination(lead) === 'WhatsApp').length,
-    ownSite: approved.filter((lead) => finalDestination(lead) === 'Com site').length,
-    aggregators: approved.filter((lead) => finalDestination(lead) === 'Agregadores').length,
+    ownSite: operational.filter((lead) => finalDestination(lead) === 'Com site').length,
+    aggregators: operational.filter((lead) => finalDestination(lead) === 'Agregadores').length,
     instagram: approved.filter((lead) => finalDestination(lead) === 'Instagram').length,
   };
 }
