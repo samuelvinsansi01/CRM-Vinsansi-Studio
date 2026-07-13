@@ -233,7 +233,9 @@ export const importService = {
       repositories.base.list({}),
       repositories.base.listSentIdentities(),
     ]);
-    const basePhones = baseLeads.map((lead) => lead.phone).filter(Boolean);
+    const basePhones = compactStrings(
+      baseLeads.map((lead) => normalizePhone(lead.normalizedPhone ?? lead.phone)),
+    );
     const baseSites = baseLeads.map((lead) => lead.site).filter(Boolean);
     const baseInstagrams = compactStrings(baseLeads.map((lead) => lead.normalizedInstagram ?? lead.instagram));
     const baseMapsUrls = compactStrings(baseLeads.map((lead) => lead.mapsUrl));
@@ -248,7 +250,10 @@ export const importService = {
         baseInstagrams,
         baseMapsUrls,
         sentLeadIds: compactStrings(sentLeads.map((lead) => lead.sourceLeadId)),
-        sentPhones: [...sentIdentities.phones, ...sentLeads.map((lead) => lead.normalizedPhone ?? lead.phone).filter(Boolean)],
+        sentPhones: compactStrings([
+          ...sentIdentities.phones.map((phone) => normalizePhone(phone)),
+          ...sentLeads.map((lead) => normalizePhone(lead.normalizedPhone ?? lead.phone)),
+        ]),
         sentSites: [...sentIdentities.sites, ...sentLeads.map((lead) => lead.normalizedSite ?? lead.site).filter(Boolean)],
         sentInstagrams: [...sentIdentities.instagrams, ...compactStrings(sentLeads.map((lead) => lead.normalizedInstagram ?? lead.instagram))],
         sentMapsUrls: [...sentIdentities.mapsUrls, ...compactStrings(sentLeads.map((lead) => lead.mapsUrl))],

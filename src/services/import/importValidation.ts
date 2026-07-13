@@ -639,6 +639,8 @@ function rememberIdentity(target: Pick<ImportValidationContext, 'existingLeadIds
 
 export async function normalizeImportItems(rawItems: unknown[], context: ImportValidationContext = {}): Promise<ImportValidationResult> {
   const settings = await importSettingsService.get();
+  const normalizePhoneSet = (values: Iterable<unknown>) =>
+    new Set(Array.from(values, (value) => normalizePhone(value)).filter(Boolean));
   const normalizedContext: Required<ImportValidationContext> = {
     existingLeadIds: new Set(context.existingLeadIds ?? []),
     existingPhones: new Set(context.existingPhones ?? []),
@@ -651,12 +653,12 @@ export async function normalizeImportItems(rawItems: unknown[], context: ImportV
     existingInstagramToId: new Map(context.existingInstagramToId ?? []),
     existingMapsUrlToId: new Map(context.existingMapsUrlToId ?? []),
     baseLeadIds: new Set(context.baseLeadIds ?? []),
-    basePhones: new Set(context.basePhones ?? []),
+    basePhones: normalizePhoneSet(context.basePhones ?? []),
     baseSites: new Set(context.baseSites ?? []),
     baseInstagrams: new Set(context.baseInstagrams ?? []),
     baseMapsUrls: new Set(context.baseMapsUrls ?? []),
     sentLeadIds: new Set(context.sentLeadIds ?? []),
-    sentPhones: new Set(context.sentPhones ?? []),
+    sentPhones: normalizePhoneSet(context.sentPhones ?? []),
     sentSites: new Set(context.sentSites ?? []),
     sentInstagrams: new Set(context.sentInstagrams ?? []),
     sentMapsUrls: new Set(context.sentMapsUrls ?? []),
