@@ -337,21 +337,29 @@ function dbLeadPayload(lead: ImportLead, userId: string) {
     instagram_override_reason: lead.instagram_override_reason,
     override_by: lead.override_by,
     override_at: lead.override_at || null,
+    normalized_phone: lead.normalizedPhone || normalizePhone(lead.whatsapp),
     updated_at: nowIso(),
     created_at: nowIso(),
   };
 }
 
-async function rememberImportBatch(userId: string, leads: ImportLead[], parsed: unknown, source = 'react') {
+async function rememberImportBatch(
+  userId: string,
+  auditLeads: ImportLead[],
+  operationalLeads: ImportLead[],
+  duplicateCount: number,
+  parsed: unknown,
+  source = 'react',
+) {
   const batchId = createUuid();
   const { error } = await getSupabaseClient().from(getSupabaseConfig().tables.importBatches).insert({
     id: batchId,
     user_id: userId,
     source,
-    quantity_total: leads.length,
-    quantity_created: leads.filter((lead) => isStatusGroup(lead.status, 'approved')).length,
-    quantity_blocked: leads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length,
-    quantity_duplicate: 0,
+    quantity_total: auditLeads.length,
+    quantity_created: operationalLeads.length,
+    quantity_blocked: operationalLeads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length,
+    quantity_duplicate: duplicateCount,
     raw_metadata: { source: 'react', parsed },
     created_at: nowIso(),
   });
@@ -449,24 +457,39 @@ export const supabaseImportRepository: ImportRepository = {
       sentMapsUrls: new Set(options.context?.sentMapsUrls ?? []),
     });
 
-    const leads = normalized.items
-      .filter((item) => !item.ignored)
-      .map(({ input }) => ({ id: createId('lead'), ...normalizeLeadInput(input) } as ImportLead));
+    const duplicateCodes = new Set([
+      'payload_duplicate',
+      'duplicate_phone',
+      'duplicate_site',
+      'already_in_base',
+      'duplicate_lead_id',
+      'already_sent',
+    ]);
+    const preparedItems = normalized.items.map((item) => ({
+      ...item,
+      lead: { id: createId('lead'), ...normalizeLeadInput(item.input) } as ImportLead,
+    }));
+    const auditLeads = preparedItems.filter((item) => !item.ignored).map((item) => item.lead);
+    const duplicateAuditItems = preparedItems.filter((item) => !item.ignored && duplicateCodes.has(String(item.code)));
+    const leads = preparedItems
+      .filter((item) => !item.ignored && !duplicateCodes.has(String(item.code)))
+      .map((item) => item.lead);
     const simulation = Boolean(options.simulate);
 
     if (!simulation) {
       const userId = await getCurrentUserId();
-      const batchId = await rememberImportBatch(userId, leads, parsed);
-      await Promise.all(leads.map((lead) => getSupabaseClient().from(table()).insert(dbLeadPayload(lead, userId)).then(({ error }) => {
+      const batchId = await rememberImportBatch(userId, auditLeads, leads, normalized.duplicates, parsed);
+      if (leads.length) {
+        const { error } = await getSupabaseClient().from(table()).insert(leads.map((lead) => dbLeadPayload(lead, userId)));
         if (error) throw new Error(error.message);
-      })));
-      await rememberLeadImports(userId, batchId, leads);
+      }
+      await rememberLeadImports(userId, batchId, auditLeads);
       await rememberRegistries(userId, leads);
     }
 
     const approved = leads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
     const rejected = leads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length;
-    const ignored = normalized.items.filter((item) => item.ignored).length;
+    const ignored = normalized.items.filter((item) => item.ignored).length + duplicateAuditItems.length;
 
     return {
       created: simulation ? 0 : leads.length,
