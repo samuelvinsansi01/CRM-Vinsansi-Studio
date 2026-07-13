@@ -114,6 +114,8 @@ begin
 end $$;
 
 alter table public.branches add column if not exists uuid_before_bigint text;
+alter table public.branches alter column uuid_before_bigint drop not null;
+alter table public.branches alter column uuid_before_bigint drop default;
 
 do $$
 begin
