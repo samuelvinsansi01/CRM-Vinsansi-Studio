@@ -1,7 +1,7 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { preSendService } from '../pre-send/preSend.service';
-import { normalizeDomain, normalizePhone } from './importValidation';
+import { normalizePhone, normalizeSiteIdentity } from './importValidation';
 import { isValidInstagram } from '../instagram/instagram.utils';
 import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { assertTransition } from '../state-machine';
@@ -143,7 +143,7 @@ function importLeadToBaseInput(lead: ImportLead, sentAt: string, reason: string)
     phone: lead.whatsapp ?? '',
     site: lead.site ?? '',
     normalizedPhone: normalizePhone(lead.whatsapp),
-    normalizedSite: normalizeDomain(lead.site),
+    normalizedSite: normalizeSiteIdentity(lead.site),
     instagram,
     normalizedInstagram: normalizeInstagramUsername(instagram),
     mapsUrl: lead.normalizedMapsUrl ?? '',
@@ -236,7 +236,7 @@ export const importService = {
     const basePhones = compactStrings(
       baseLeads.map((lead) => normalizePhone(lead.normalizedPhone ?? lead.phone)),
     );
-    const baseSites = baseLeads.map((lead) => lead.site).filter(Boolean);
+    const baseSites = compactStrings(baseLeads.map((lead) => normalizeSiteIdentity(lead.normalizedSite ?? lead.site)));
     const baseInstagrams = compactStrings(baseLeads.map((lead) => lead.normalizedInstagram ?? lead.instagram));
     const baseMapsUrls = compactStrings(baseLeads.map((lead) => lead.mapsUrl));
     const sentLeads = baseLeads.filter((lead) => isStatusGroup(lead.status, 'sent'));
@@ -254,7 +254,10 @@ export const importService = {
           ...sentIdentities.phones.map((phone) => normalizePhone(phone)),
           ...sentLeads.map((lead) => normalizePhone(lead.normalizedPhone ?? lead.phone)),
         ]),
-        sentSites: [...sentIdentities.sites, ...sentLeads.map((lead) => lead.normalizedSite ?? lead.site).filter(Boolean)],
+        sentSites: compactStrings([
+          ...sentIdentities.sites.map((site) => normalizeSiteIdentity(site)),
+          ...sentLeads.map((lead) => normalizeSiteIdentity(lead.normalizedSite ?? lead.site)),
+        ]),
         sentInstagrams: [...sentIdentities.instagrams, ...compactStrings(sentLeads.map((lead) => lead.normalizedInstagram ?? lead.instagram))],
         sentMapsUrls: [...sentIdentities.mapsUrls, ...compactStrings(sentLeads.map((lead) => lead.mapsUrl))],
       },

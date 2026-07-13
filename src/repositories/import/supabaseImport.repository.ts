@@ -296,7 +296,11 @@ async function loadBranchRules(): Promise<BranchRule[]> {
 }
 
 function dbLeadPayload(lead: ImportLead, userId: string) {
-  const site = lead.site ?? '';
+  const rawSite = lead.site ?? '';
+  // Encurtadores ficam preservados no payload JSON, mas nao sao gravados na
+  // coluna website. Isso evita que validacoes/triggers legados do banco usem
+  // dominios compartilhados como bit.ly como identidade unica de empresa.
+  const site = normalizeSiteIdentity(rawSite) ? rawSite : '';
   const instagram = lead.instagram_url ?? lead.instagram ?? '';
   const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
   const normalizedLead = { ...lead, estado: normalizeBrazilState(lead.estado), sourceLeadId: lead.sourceLeadId ?? '' };
@@ -395,7 +399,7 @@ async function rememberRegistries(userId: string, leads: ImportLead[]) {
     const identities = [
       ['lead_id', lead.sourceLeadId ?? ''],
       ['phone', lead.normalizedPhone || normalizePhone(lead.whatsapp)],
-      ['site', lead.normalizedSite || normalizeSiteIdentity(lead.site)],
+      ['site', normalizeSiteIdentity(lead.normalizedSite || lead.site)],
       ['instagram', lead.normalizedInstagram || normalizeInstagramUsername(lead.instagram_url ?? lead.instagram)],
       ['maps', lead.normalizedMapsUrl],
     ].filter(([, value]) => value);
@@ -443,12 +447,12 @@ export const supabaseImportRepository: ImportRepository = {
     const normalized = await normalizeImportItems(extractImportItems(parsed), {
       existingLeadIds: new Set(existing.map((lead) => String(lead.sourceLeadId ?? '').trim()).filter(Boolean)),
       existingPhones: new Set(existing.map((lead) => normalizePhone(lead.whatsapp)).filter(Boolean)),
-      existingSites: new Set(existing.map((lead) => normalizeDomain(lead.site)).filter(Boolean)),
+      existingSites: new Set(existing.map((lead) => normalizeSiteIdentity(lead.normalizedSite || lead.site)).filter(Boolean)),
       existingInstagrams: new Set(existing.map((lead) => String(lead.normalizedInstagram ?? '').trim()).filter(Boolean)),
       existingMapsUrls: new Set(existing.map((lead) => String(lead.normalizedMapsUrl ?? '').trim()).filter(Boolean)),
       existingLeadIdToId: idMap(existing, 'sourceLeadId'),
       existingPhoneToId: idMap(existing, 'normalizedPhone'),
-      existingSiteToId: idMap(existing, 'normalizedSite'),
+      existingSiteToId: new Map(existing.map((lead) => [normalizeSiteIdentity(lead.normalizedSite || lead.site), lead.id] as const).filter(([value]) => Boolean(value))),
       existingInstagramToId: idMap(existing, 'normalizedInstagram'),
       existingMapsUrlToId: idMap(existing, 'normalizedMapsUrl'),
       baseLeadIds: new Set(options.context?.baseLeadIds ?? []),
