@@ -109,7 +109,7 @@ export function HomePage() {
   const [rowsPerPage, setRowsPerPage] = useState(PAGE_SIZE);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [activeLead, setActiveLead] = useState<ImportLead | null>(null);
-  const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
+  const [savingLead, setSavingLead] = useState(false);
   const [leadForm, setLeadForm] = useState({
     empresa: '',
     ramo: '',
@@ -172,9 +172,8 @@ export function HomePage() {
 
   const findLead = (row: DashboardRow) => visibleLeadById.get(row.id);
 
-  const openLeadDrawer = (lead: ImportLead, mode: 'view' | 'edit' = 'view') => {
+  const openLeadDrawer = (lead: ImportLead) => {
     setActiveLead(lead);
-    setDrawerMode(mode);
     setLeadForm({
       empresa: lead.empresa,
       ramo: lead.ramo,
@@ -193,6 +192,7 @@ export function HomePage() {
 
   const saveLead = async () => {
     if (!activeLead) return;
+    setSavingLead(true);
     try {
       await dashboard.updateLead(activeLead, {
         empresa: leadForm.empresa,
@@ -207,9 +207,11 @@ export function HomePage() {
         estado: leadForm.estado,
       });
       pushToast({ title: 'Lead atualizado', description: 'Alteracao salva na camada de importacao.', tone: 'success' });
-      setDrawerMode('view');
+      setActiveLead(null);
     } catch (err) {
       pushToast({ title: 'Nao foi possivel salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setSavingLead(false);
     }
   };
 
@@ -227,8 +229,8 @@ export function HomePage() {
     const lead = findLead(row);
     if (!lead) return;
 
-    if (action === 'view') {
-      openLeadDrawer(lead, 'view');
+    if (action === 'edit') {
+      openLeadDrawer(lead);
       return;
     }
 
@@ -331,7 +333,7 @@ export function HomePage() {
           <DataTable
             columns={columns}
             rows={pagedRows}
-            actions={['view', 'whatsapp', 'instagram', 'approve', 'unapprove', 'invalidate']}
+            actions={['edit', 'whatsapp', 'instagram', 'approve', 'unapprove', 'invalidate']}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
             getRowActions={(row) => {
@@ -339,7 +341,7 @@ export function HomePage() {
               if (!lead) return [];
               const channel = leadChannel(lead);
               return [
-                'view' as TableAction,
+                ...(permissionsFor('import', lead.status).canEdit() ? ['edit' as TableAction] : []),
                 ...(channel === 'WhatsApp' && hasInstagram(lead) ? ['instagram' as TableAction] : []),
                 ...(channel === 'Instagram' && hasPhone(lead) ? ['whatsapp' as TableAction] : []),
                 ...(permissionsFor('import', lead.status).canApprove() && !isStatusGroup(lead.status, 'approved') ? ['approve' as TableAction] : []),
@@ -354,46 +356,33 @@ export function HomePage() {
 
       <Drawer
         open={Boolean(activeLead)}
-        title={drawerMode === 'edit' ? 'Editar lead' : 'Detalhes do lead'}
+        title="Editar lead"
         description={activeLead?.empresa ?? ''}
-        onClose={() => { setActiveLead(null); setDrawerMode('view'); }}
+        onClose={() => { if (!savingLead) setActiveLead(null); }}
         footer={
-          drawerMode === 'edit' ? (
-            <>
-              <Button variant="secondary" onClick={() => setDrawerMode('view')}>Cancelar</Button>
-              <Button onClick={saveLead}>Salvar</Button>
-            </>
-          ) : (
-            <>
-              <Button variant="secondary" onClick={() => { setActiveLead(null); setDrawerMode('view'); }}>Fechar</Button>
-              {activeLead && permissionsFor('import', activeLead.status).canEdit() ? (
-                <Button onClick={() => openLeadDrawer(activeLead, 'edit')}>Editar</Button>
-              ) : null}
-            </>
-          )
+          <>
+            <Button variant="secondary" disabled={savingLead} onClick={() => setActiveLead(null)}>Cancelar</Button>
+            <Button disabled={savingLead} onClick={saveLead}>{savingLead ? 'Salvando...' : 'Salvar alterações'}</Button>
+          </>
         }
       >
         {activeLead ? (
-          <div className={`drawer-form ${drawerMode === 'view' ? 'drawer-form--readonly' : ''}`}>
-            <Field label="Nome da empresa" value={leadForm.empresa} readOnly={drawerMode === 'view'} onChange={(value) => updateLeadForm('empresa', value)} />
-            <Field label="Ramo" value={leadForm.ramo} readOnly={drawerMode === 'view'} onChange={(value) => updateLeadForm('ramo', value)} />
+          <div className="drawer-form">
+            <Field label="Nome da empresa" value={leadForm.empresa} onChange={(value) => updateLeadForm('empresa', value)} />
+            <Field label="Ramo" value={leadForm.ramo} onChange={(value) => updateLeadForm('ramo', value)} />
             <div className="drawer-grid drawer-grid--2">
-              <Field label="Estado" value={leadForm.estado} readOnly={drawerMode === 'view'} onChange={(value) => updateLeadForm('estado', value)} />
-              <Field label="Cidade" value={leadForm.cidade} readOnly={drawerMode === 'view'} onChange={(value) => updateLeadForm('cidade', value)} />
+              <Field label="Estado" value={leadForm.estado} onChange={(value) => updateLeadForm('estado', value)} />
+              <Field label="Cidade" value={leadForm.cidade} onChange={(value) => updateLeadForm('cidade', value)} />
             </div>
-            <Field label="Telefone" value={leadForm.whatsapp} readOnly={drawerMode === 'view'} onChange={(value) => updateLeadForm('whatsapp', value)} />
-            <Field label="Instagram" value={leadForm.instagram} readOnly={drawerMode === 'view'} onChange={(value) => updateLeadForm('instagram', value)} />
-            <Field label="Site" value={leadForm.site} readOnly={drawerMode === 'view'} onChange={(value) => updateLeadForm('site', value)} />
+            <Field label="Telefone" value={leadForm.whatsapp} onChange={(value) => updateLeadForm('whatsapp', value)} />
+            <Field label="Instagram" value={leadForm.instagram} onChange={(value) => updateLeadForm('instagram', value)} />
+            <Field label="Site" value={leadForm.site} onChange={(value) => updateLeadForm('site', value)} />
             <div className="drawer-grid drawer-grid--2">
               <Field label="Destino original" value={activeLead.original_destination ?? activeLead.destino} readOnly />
-              {drawerMode === 'view' ? (
-                <Field label="Destino operacional" value={leadForm.destino} readOnly />
-              ) : (
-                <label className="drawer-field">
-                  <span>Destino operacional</span>
-                  <SelectField value={leadForm.destino} options={destinationOptions} onChange={(value) => updateLeadForm('destino', value)} />
-                </label>
-              )}
+              <label className="drawer-field">
+                <span>Destino operacional</span>
+                <SelectField value={leadForm.destino} options={destinationOptions} onChange={(value) => updateLeadForm('destino', value)} />
+              </label>
             </div>
             <Field label="Situacao" value={statusLabel(activeLead.status)} readOnly />
             {activeLead.motivo ? <Field label="Observacao" value={activeLead.motivo} readOnly /> : null}
