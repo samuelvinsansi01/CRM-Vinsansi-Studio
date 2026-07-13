@@ -220,10 +220,11 @@ function rowToTemplate(row: Record<string, unknown>, branches: BranchConfigRecor
   const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
   const active = toBoolean(inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active, true);
   const status = isDeletedStatus(rawStatus) ? 'deleted' : normalizeComparable(rawStatus) === 'arquivado' ? 'Arquivado' : statusFromActive(active);
-  const message1 = String(row.part_1 ?? row.message1 ?? data.message1 ?? '');
-  const message2 = String(row.part_2 ?? row.message2 ?? data.message2 ?? '');
-  const message3 = String(row.part_3 ?? row.message3 ?? data.message3 ?? '');
-  const message4 = String(row.part_4 ?? row.message4 ?? data.message4 ?? '');
+  const dataRecord = data as Record<string, unknown>;
+  const message1 = textFrom(row.part_1, row.message1, data.message1, dataRecord.part_1);
+  const message2 = textFrom(row.part_2, row.message2, data.message2, dataRecord.part_2);
+  const message3 = textFrom(row.part_3, row.message3, data.message3, dataRecord.part_3);
+  const message4 = textFrom(row.part_4, row.message4, data.message4, dataRecord.part_4);
   const branch = resolveTemplateBranch(row, data, branches);
   const channel = normalizeTemplateChannel(row.channel ?? data.channel);
   const type = normalizeTemplateType(row.template_type ?? row.type ?? data.type);

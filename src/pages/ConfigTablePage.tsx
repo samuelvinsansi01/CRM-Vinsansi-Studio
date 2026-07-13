@@ -345,6 +345,8 @@ function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[], chipL
       type: 'sem-site',
       message1: DEFAULT_TEMPLATE_MESSAGE_1,
       message2: DEFAULT_TEMPLATE_MESSAGE_2,
+      message3: '',
+      message4: '',
       active: 'Ativo',
     };
   }
@@ -400,6 +402,8 @@ function formFromRecord(record: ConfigRecord, chipLevelPresets: ChipLevelPresets
       type: record.type,
       message1: record.message1,
       message2: record.message2,
+      message3: record.message3,
+      message4: record.message4,
       active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
     };
   }
@@ -506,6 +510,7 @@ function previewMessage(message: string) {
 export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
+  const [templateBranchFilter, setTemplateBranchFilter] = useState('Todos');
   const [drawerMode, setDrawerMode] = useState<DrawerMode>('create');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -528,11 +533,29 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
     status: statusFilter,
   });
 
-  const rows = useMemo(() => toTableRows(kind, records, branches), [kind, records, branches]);
+  const visibleRecords = useMemo(() => {
+    if (kind !== 'templates' || templateBranchFilter === 'Todos') return records;
+
+    const selectedBranch = branches.find((branch) => branch.id === templateBranchFilter);
+    return records.filter((record) => {
+      if (!isTemplate(record)) return false;
+      if (record.branchId === templateBranchFilter) return true;
+      return selectedBranch
+        ? record.branchName.trim().toLowerCase() === selectedBranch.name.trim().toLowerCase()
+        : false;
+    });
+  }, [kind, records, branches, templateBranchFilter]);
+
+  const templateBranchFilterOptions = useMemo<SelectOption[]>(() => [
+    { label: 'Todos os ramos', value: 'Todos' },
+    ...branches.map((branch) => ({ label: branch.name, value: branch.id })),
+  ], [branches]);
+
+  const rows = useMemo(() => toTableRows(kind, visibleRecords, branches), [kind, visibleRecords, branches]);
   const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
   const pageRows = useMemo(() => rows.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage), [rows, currentPage, rowsPerPage]);
-  const recordById = useMemo(() => new Map(records.map((record) => [record.id, record])), [records]);
+  const recordById = useMemo(() => new Map(visibleRecords.map((record) => [record.id, record])), [visibleRecords]);
   const selectedRecords = useMemo(
     () => selectedRows.map((rowIndex) => recordById.get(pageRows[rowIndex]?.id)).filter((record): record is ConfigRecord => Boolean(record)),
     [pageRows, recordById, selectedRows],
@@ -545,7 +568,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
 
   const recordMetrics = screen.metrics.map((metric) => ({
     ...metric,
-    value: String(metric.getValue(records)),
+    value: String(metric.getValue(visibleRecords)),
   }));
 
   const pushToast = (toast: Omit<ToastItem, 'id'>) => {
@@ -690,6 +713,14 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
       </section>
       <FiltersBar>
         <SelectField value={statusFilter} options={statusOptions} placeholder="Status" onChange={(value) => { setStatusFilter(value); setPage(1); setSelectedRows([]); }} />
+        {kind === 'templates' ? (
+          <SelectField
+            value={templateBranchFilter}
+            options={templateBranchFilterOptions}
+            placeholder="Ramo"
+            onChange={(value) => { setTemplateBranchFilter(value); setPage(1); setSelectedRows([]); }}
+          />
+        ) : null}
         <SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); setSelectedRows([]); }} />
       </FiltersBar>
       <TableCard
