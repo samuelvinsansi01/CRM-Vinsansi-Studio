@@ -337,7 +337,6 @@ function dbLeadPayload(lead: ImportLead, userId: string) {
     instagram_override_reason: lead.instagram_override_reason,
     override_by: lead.override_by,
     override_at: lead.override_at || null,
-    normalized_phone: lead.normalizedPhone || normalizePhone(lead.whatsapp),
     updated_at: nowIso(),
     created_at: nowIso(),
   };
