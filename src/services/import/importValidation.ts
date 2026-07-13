@@ -635,9 +635,9 @@ function applyRejection(draft: ImportLeadInput, rejection: Rejection, settings: 
 }
 
 function approveDraft(draft: ImportLeadInput, destination: ImportLeadDestination, reason: string) {
-  // WhatsApp e Instagram seguem aprovados automaticamente. Leads com site
-  // proprio ou agregador exigem revisao manual no Inicio antes de avançar.
-  draft.status = destination === 'Com site' || destination === 'Agregadores' ? 'pending' : 'approved';
+  // Apenas WhatsApp segue aprovado automaticamente. Instagram, site proprio
+  // e agregadores exigem revisao manual no Inicio antes de avançar.
+  draft.status = destination === 'WhatsApp' ? 'approved' : 'pending';
   draft.destino = destination;
   draft.original_destination = draft.original_destination && draft.original_destination !== 'Recusado' ? draft.original_destination : destination;
   draft.destination = draft.send_instagram ? 'Instagram' : destination;
