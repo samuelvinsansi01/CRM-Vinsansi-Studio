@@ -48,6 +48,12 @@ function applySessionFilters(records: ImportLead[], status: ImportLeadStatus, se
   });
 }
 
+
+function isDuplicateIdentityError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /duplicate_identity:|duplicate key value violates unique constraint|already exists/i.test(message);
+}
+
 function createSessionId() {
   return `session-lead-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -257,10 +263,28 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
       isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')
     );
     const created: ImportLead[] = [];
+    const duplicateIds = new Set<string>();
     for (const lead of operational) {
       const targetStatus: ImportLeadStatus = isStatusGroup(lead.status, 'pending') ? 'pending' : 'approved';
-      const createdLead = await importService.create(leadToImportInput(lead, targetStatus));
-      created.push(createdLead);
+      try {
+        const createdLead = await importService.create(leadToImportInput(lead, targetStatus));
+        created.push(createdLead);
+      } catch (error) {
+        if (!isDuplicateIdentityError(error)) throw error;
+        duplicateIds.add(lead.id);
+      }
+    }
+    if (duplicateIds.size) {
+      setSessionLeads((current) => current.map((lead) => duplicateIds.has(lead.id)
+        ? {
+            ...lead,
+            status: 'rejected',
+            destino: 'Recusado',
+            destination: 'Recusado',
+            motivo: 'Lead duplicado: identidade já existente na plataforma.',
+            rejectionCode: 'duplicate_site',
+          }
+        : lead));
     }
     return created;
   }, [sessionLeads]);

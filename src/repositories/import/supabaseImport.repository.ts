@@ -353,6 +353,12 @@ function dbLeadPayload(lead: ImportLead, userId: string) {
   };
 }
 
+
+function isDuplicateIdentityDatabaseError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /duplicate_identity:|duplicate key value violates unique constraint/i.test(message);
+}
+
 async function rememberImportBatch(
   userId: string,
   auditLeads: ImportLead[],
@@ -502,41 +508,64 @@ export const supabaseImportRepository: ImportRepository = {
     const approved = sessionLeads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
     const rejected = sessionLeads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length;
 
+    let persistedOperationalLeads = operationalLeads;
+    let databaseDuplicateLeads: ImportLead[] = [];
     if (!simulation) {
       const userId = await getCurrentUserId();
+      const persisted: ImportLead[] = [];
+      const blocked: ImportLead[] = [];
+      for (const lead of operationalLeads) {
+        const { error } = await getSupabaseClient().from(table()).insert(dbLeadPayload(lead, userId));
+        if (!error) {
+          persisted.push(lead);
+          continue;
+        }
+        if (!isDuplicateIdentityDatabaseError(new Error(error.message))) throw new Error(error.message);
+        blocked.push({
+          ...lead,
+          status: 'rejected',
+          destino: 'Recusado',
+          destination: 'Recusado',
+          motivo: 'Lead duplicado: identidade já existente na plataforma.',
+          rejectionCode: 'duplicate_site',
+        });
+      }
+      persistedOperationalLeads = persisted;
+      databaseDuplicateLeads = blocked;
       const batchId = await rememberImportBatch(
         userId,
-        operationalLeads,
-        operationalLeads,
-        normalized.duplicates,
-        rejected,
+        persistedOperationalLeads,
+        persistedOperationalLeads,
+        normalized.duplicates + databaseDuplicateLeads.length,
+        rejected + databaseDuplicateLeads.length,
       );
-      if (operationalLeads.length) {
-        const { error } = await getSupabaseClient().from(table()).insert(operationalLeads.map((lead) => dbLeadPayload(lead, userId)));
-        if (error) throw new Error(error.message);
-      }
-      // O historico detalhado tambem recebe apenas leads operacionais.
-      await rememberLeadImports(userId, batchId, operationalLeads, new Set(operationalLeads.map((lead) => lead.id)));
-      await rememberRegistries(userId, operationalLeads);
+      // O historico detalhado tambem recebe apenas leads realmente persistidos.
+      await rememberLeadImports(userId, batchId, persistedOperationalLeads, new Set(persistedOperationalLeads.map((lead) => lead.id)));
+      await rememberRegistries(userId, persistedOperationalLeads);
     }
 
-    const ignored = normalized.items.filter((item) => item.ignored).length + duplicateAuditItems.length;
+    const finalSessionLeads = databaseDuplicateLeads.length
+      ? sessionLeads.map((lead) => databaseDuplicateLeads.find((blocked) => blocked.id === lead.id) ?? lead)
+      : sessionLeads;
+    const finalApproved = finalSessionLeads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
+    const finalRejected = finalSessionLeads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length;
+    const ignored = normalized.items.filter((item) => item.ignored).length + duplicateAuditItems.length + databaseDuplicateLeads.length;
 
     return {
-      created: simulation ? 0 : operationalLeads.length,
-      approved,
-      rejected,
+      created: simulation ? 0 : persistedOperationalLeads.length,
+      approved: finalApproved,
+      rejected: finalRejected,
       ignored,
       errors: normalized.errors,
-      leads: sessionLeads,
+      leads: finalSessionLeads,
       report: {
         simulation,
         processed: normalized.processed,
-        created: simulation ? 0 : operationalLeads.length,
-        approved,
-        rejected,
+        created: simulation ? 0 : persistedOperationalLeads.length,
+        approved: finalApproved,
+        rejected: finalRejected,
         ignored,
-        duplicates: normalized.duplicates,
+        duplicates: normalized.duplicates + databaseDuplicateLeads.length,
         durationMs: Math.max(0, Math.round((performance.now?.() ?? Date.now()) - startedAt)),
         reasons: normalized.reasons,
       },
