@@ -1,7 +1,7 @@
 import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
 import { branchIdOrNull } from '../../services/config/branchIdentity';
 import { normalizeBrazilState } from '../../services/geo/brazilState';
-import { extractImportItems, normalizeDomain, normalizeImportItems, normalizePhone } from '../../services/import/importValidation';
+import { extractImportItems, normalizeDomain, normalizeImportItems, normalizePhone, normalizeSiteIdentity } from '../../services/import/importValidation';
 import type { ImportExecutionOptions, ImportLead, ImportLeadDestination, ImportLeadInput, ImportListFilters, ImportParseResult, ImportSummary } from '../../services/import/types';
 import { normalizeInstagramUsername } from '../../services/instagram/instagram.utils';
 import { isStatusGroup } from '../../services/status/status.mapper';
@@ -395,7 +395,7 @@ async function rememberRegistries(userId: string, leads: ImportLead[]) {
     const identities = [
       ['lead_id', lead.sourceLeadId ?? ''],
       ['phone', lead.normalizedPhone || normalizePhone(lead.whatsapp)],
-      ['site', lead.normalizedSite || normalizeDomain(lead.site)],
+      ['site', lead.normalizedSite || normalizeSiteIdentity(lead.site)],
       ['instagram', lead.normalizedInstagram || normalizeInstagramUsername(lead.instagram_url ?? lead.instagram)],
       ['maps', lead.normalizedMapsUrl],
     ].filter(([, value]) => value);

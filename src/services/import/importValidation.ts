@@ -44,6 +44,18 @@ export type ImportValidationResult = {
 
 const AGGREGATOR_DOMAINS = ['linktr.ee', 'beacons', 'bio.site', 'taplink', 'msha.ke', 'carrd.co'];
 
+const URL_SHORTENER_DOMAINS = [
+  'tinyurl.com',
+  'bit.ly',
+  'goo.gl',
+  't.co',
+  'ow.ly',
+  'is.gd',
+  'cutt.ly',
+  'rebrand.ly',
+  'shorturl.at',
+];
+
 const SITE_BLOCKLIST_DOMAINS = [
   'google.com',
   'google.com.br',
@@ -60,6 +72,13 @@ const SITE_BLOCKLIST_DOMAINS = [
   'maps.google.com',
   'goo.gl',
   'bit.ly',
+  'tinyurl.com',
+  't.co',
+  'ow.ly',
+  'is.gd',
+  'cutt.ly',
+  'rebrand.ly',
+  'shorturl.at',
   'linktr.ee',
   'wix.com',
   'wordpress.com',
@@ -166,6 +185,16 @@ export function normalizeDomain(value: unknown) {
   } catch {
     return raw.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
   }
+}
+
+export function isSharedShortenerDomain(value: unknown) {
+  const domain = normalizeDomain(value);
+  return URL_SHORTENER_DOMAINS.some((item) => domain === item || domain.endsWith(`.${item}`));
+}
+
+export function normalizeSiteIdentity(value: unknown) {
+  const domain = normalizeDomain(value);
+  return isSharedShortenerDomain(domain) ? '' : domain;
 }
 
 function normalizeIdentityUrl(value: unknown) {
@@ -388,7 +417,7 @@ function normalizeRawLead(raw: Record<string, unknown>): NormalizedRawLead {
     reviews: readReviewsCount(raw),
     identity: {
       phone: normalizePhone(whatsapp),
-      site: normalizeDomain(site),
+      site: normalizeSiteIdentity(site),
       instagram: normalizeInstagram(instagram),
       mapsUrl: normalizeIdentityUrl(googleUrl),
     },
