@@ -200,6 +200,132 @@ function setCors(res: ApiResponse) {
   res.setHeader('Cache-Control', 'no-store');
 }
 
+function baseTableName() {
+  return envAny('SUPABASE_TABLE_BASE_PERMANENTE', 'VITE_SUPABASE_TABLE_BASE_PERMANENTE') || 'base_permanente';
+}
+
+function missingColumn(message: string) {
+  const match = message.match(/column ["']?([a-zA-Z0-9_]+)["']? (?:of relation ["'][^"']+["'] )?does not exist/i)
+    ?? message.match(/Could not find the ['"]([a-zA-Z0-9_]+)['"] column/i);
+  return match?.[1] ?? '';
+}
+
+async function updateFlexible(
+  client: ReturnType<typeof supabase>,
+  table: string,
+  id: string,
+  originalPatch: JsonRecord,
+) {
+  const patch = { ...originalPatch };
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const { error } = await client.from(table).update(patch).eq('id', id);
+    if (!error) return;
+    const column = missingColumn(error.message);
+    if (!column || !(column in patch)) throw new Error(error.message);
+    delete patch[column];
+  }
+  throw new Error(`Nao foi possivel atualizar ${table}: muitas incompatibilidades de schema.`);
+}
+
+async function upsertFlexible(
+  client: ReturnType<typeof supabase>,
+  table: string,
+  originalPayload: JsonRecord,
+) {
+  const payload = { ...originalPayload };
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const { error } = await client.from(table).upsert(payload, { onConflict: 'id' });
+    if (!error) return;
+    const column = missingColumn(error.message);
+    if (!column || !(column in payload)) throw new Error(error.message);
+    delete payload[column];
+  }
+  throw new Error(`Nao foi possivel gravar ${table}: muitas incompatibilidades de schema.`);
+}
+
+function firstText(...values: unknown[]) {
+  for (const value of values) {
+    const normalized = text(value);
+    if (normalized) return normalized;
+  }
+  return '';
+}
+
+function invalidBasePayload(row: JsonRecord, timestamp: string, reason: string): JsonRecord {
+  const data = dataRecord(row.data);
+  const crm = dataRecord(row.crm_data);
+  const raw = dataRecord(row.raw_payload);
+  const websites = rowWebsites(row);
+  const website = firstText(row.website, row.site, data.website, data.site, crm.website, crm.site, raw.website, raw.site, websites[0]?.raw);
+  const phone = firstText(row.phone, row.phone_number, data.phone, data.telefone, crm.phone, raw.phone);
+  const company = firstText(row.company_name, row.company, row.name, data.company_name, data.company, data.title, crm.company_name, raw.title);
+  const branchName = firstText(row.branch_name, row.category_name, row.category, data.branch_name, data.branch, data.ramo, crm.branch_name, raw.categoryName);
+  const instagram = firstText(row.instagram_url, row.instagram, data.instagram_url, data.instagram, crm.instagram_url, raw.instagram);
+  const mapsUrl = firstText(row.maps_url, row.google_maps_url, data.maps_url, data.url, crm.maps_url, raw.url);
+  const sourceId = text(row.id);
+  const baseId = `site-invalid-${sourceId}`;
+  const normalizedData: JsonRecord = {
+    ...raw,
+    ...crm,
+    ...data,
+    id: baseId,
+    sourceLeadId: sourceId,
+    company,
+    company_name: company,
+    phone,
+    site: website,
+    website,
+    instagram,
+    instagram_url: instagram,
+    mapsUrl,
+    maps_url: mapsUrl,
+    branch: branchName,
+    branch_name: branchName,
+    status: 'invalid',
+    destination: 'Com site',
+    destino: 'Com site',
+    destination_override: 'Com site',
+    send_instagram: false,
+    reason,
+    motivo: reason,
+    invalidatedBy: 'site-leads-extension',
+    invalidatedAt: timestamp,
+  };
+
+  return {
+    id: baseId,
+    user_id: row.user_id ?? data.user_id ?? null,
+    company_name: company,
+    phone,
+    normalized_phone: firstText(row.normalized_phone, data.normalized_phone),
+    website,
+    website_domain: domainOf(website),
+    instagram_url: instagram,
+    instagram_username: firstText(row.instagram_username, data.instagram_username),
+    maps_url: mapsUrl,
+    status: 'invalid',
+    source: 'Extensao Com site',
+    notes: reason,
+    raw_payload: normalizedData,
+    data: normalizedData,
+    active: true,
+    kind: 'base_permanente',
+    channel: 'Com site',
+    branch_id: row.branch_id ?? data.branch_id ?? null,
+    branch_name: branchName,
+    destination: 'Com site',
+    original_destination: firstText(row.original_destination, data.original_destination, 'Com site'),
+    destination_override: 'Com site',
+    send_instagram: false,
+    category: branchName,
+    category_name: branchName,
+    city: firstText(row.city, data.city, raw.city),
+    state: firstText(row.state, data.state, raw.state),
+    last_channel: 'Com site',
+    updated_at: timestamp,
+  };
+}
+
 async function updateRow(client: ReturnType<typeof supabase>, row: JsonRecord, action: Action) {
   const timestamp = new Date().toISOString();
   const nextStatus = action === 'approve' ? 'approved' : 'invalid';
@@ -210,19 +336,42 @@ async function updateRow(client: ReturnType<typeof supabase>, row: JsonRecord, a
     ? 'Aprovado manualmente pela extensão de validação de sites.'
     : 'Invalidado manualmente pela extensão de validação de sites.';
 
+  const commonData: JsonRecord = {
+    status: nextStatus,
+    motivo: reason,
+    destination: 'Com site',
+    destino: 'Com site',
+    destination_override: 'Com site',
+    send_instagram: false,
+    instagram_override_reason: null,
+    instagramOverrideReason: null,
+    site_validation_action: action,
+    site_validation_at: timestamp,
+  };
+
+  // Invalidação precisa aparecer na Base Permanente e bloquear reimportações.
+  // O ID derivado do lead torna a operação idempotente.
+  if (action === 'invalidate') {
+    await upsertFlexible(client, baseTableName(), invalidBasePayload(row, timestamp, reason));
+  }
+
   const patch: JsonRecord = {
     status: nextStatus,
     current_status: nextStatus,
     pipeline_status: nextStatus,
+    destination: 'Com site',
+    original_destination: firstText(row.original_destination, data.original_destination, 'Com site'),
+    destination_override: 'Com site',
+    send_instagram: false,
+    instagram_override_reason: null,
     rejected_reason: action === 'invalidate' ? reason : null,
-    data: { ...data, status: nextStatus, motivo: reason, site_validation_action: action, site_validation_at: timestamp },
-    crm_data: { ...crm, status: nextStatus, motivo: reason, site_validation_action: action, site_validation_at: timestamp },
-    raw_payload: { ...raw, status: nextStatus, motivo: reason, site_validation_action: action, site_validation_at: timestamp },
+    data: { ...data, ...commonData },
+    crm_data: { ...crm, ...commonData },
+    raw_payload: { ...raw, ...commonData },
     updated_at: timestamp,
   };
 
-  const { error } = await client.from(tableName()).update(patch).eq('id', text(row.id));
-  if (error) throw new Error(error.message);
+  await updateFlexible(client, tableName(), text(row.id), patch);
 }
 
 async function handle(body: JsonRecord) {
