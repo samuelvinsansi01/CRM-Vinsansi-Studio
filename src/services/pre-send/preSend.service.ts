@@ -1030,7 +1030,7 @@ async function moveInvalidWhatsAppToInstagram(lead: PreSendLead, reason: string)
     instagramPendingLink: !hasValidInstagram,
     instagramReadyAt: hasValidInstagram ? routedAt : '',
     queueWaitReason: hasValidInstagram
-      ? 'Instagram já informado. Aguardando tentativa automática de entrada na fila.'
+      ? 'Instagram já informado. Em aguarde para aprovação manual.'
       : 'Aguardando link do Instagram.',
     override_by: 'Sistema',
     override_at: routedAt,
@@ -1043,16 +1043,31 @@ async function moveInvalidWhatsAppToInstagram(lead: PreSendLead, reason: string)
     lastValidatedAt: routedAt,
   });
 
+  if (lead.sourceImportId) {
+    await repositories.import.update(lead.sourceImportId, {
+      status: 'pending',
+      destino: 'Instagram',
+      original_destination: lead.original_destination ?? lead.destination ?? 'WhatsApp',
+      destination: 'Instagram',
+      destination_override: 'Instagram',
+      send_instagram: true,
+      instagram_url: instagram,
+      instagram: instagram || lead.instagram,
+      instagram_override_reason: 'whatsapp_invalid',
+      motivo: `${reason} WhatsApp inválido; lead movido para Instagram e mantido Em aguarde para aprovação manual.`,
+    });
+  }
+
   await appendValidationAudit({
     source: 'pre-send',
     action: hasValidInstagram
-      ? 'whatsapp_invalid_to_instagram_ready_for_auto_queue'
+      ? 'whatsapp_invalid_to_instagram_pending_approval'
       : 'whatsapp_invalid_to_instagram_pending_link',
     channel: 'instagram',
     leadId: lead.sourceImportId ?? lead.id,
     status: 'review',
     message: hasValidInstagram
-      ? `${reason} Instagram existente preservado; o sistema tentará inserir o retorno automaticamente na fila Instagram.`
+      ? `${reason} Instagram existente preservado; lead mantido Em aguarde para aprovação manual.`
       : `${reason} Lead mantido no Pré-Envio Instagram aguardando link.`,
     metadata: {
       pre_send_id: lead.id,
@@ -1063,7 +1078,7 @@ async function moveInvalidWhatsAppToInstagram(lead: PreSendLead, reason: string)
       normalized_phone: normalizePhone(lead.phone),
       validation_reason: reason,
       instagram_url: instagram,
-      instagram_ready_for_auto_queue: hasValidInstagram,
+      instagram_ready_for_auto_queue: false,
     },
   });
 }
@@ -1701,7 +1716,6 @@ export const preSendService = {
     }
 
     if (returnedIds.size) {
-      await autoQueueReadyInstagramReturns(returnedIds);
       eventBus.emit('import:changed', { source: 'pre-send' });
     }
     eventBus.emit('pre-send:changed', { action: returnedIds.size ? 'whatsapp-invalid-return' : reviewIds.size ? 'whatsapp-validation-review' : 'validate' });
@@ -1817,7 +1831,6 @@ export const preSendService = {
     }
 
     if (returnedIds.size) {
-      await autoQueueReadyInstagramReturns(returnedIds);
       eventBus.emit('import:changed', { source: 'pre-send' });
     }
     eventBus.emit('pre-send:changed', { action: returnedIds.size ? 'whatsapp-invalid-return' : reviewIds.size ? 'whatsapp-revalidation-review' : 'whatsapp-revalidate' });

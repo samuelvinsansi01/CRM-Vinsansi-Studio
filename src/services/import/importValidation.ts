@@ -549,7 +549,7 @@ function qualifiesForInstagramException(lead: NormalizedRawLead, branchRule: Imp
 
 function routeLowRatingLeadToInstagramReview(draft: ImportLeadInput, lead: NormalizedRawLead, settings: ImportSettings) {
   const rule = settings.instagramLowRating;
-  draft.status = 'approved';
+  draft.status = 'pending';
   draft.destino = 'Instagram';
   draft.original_destination = 'Instagram';
   draft.destination = 'Instagram';
