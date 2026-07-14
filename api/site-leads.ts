@@ -128,20 +128,63 @@ function normalizeLinks(value: unknown) {
   return Array.from(unique.values()).slice(0, 500);
 }
 
-function rowWebsite(row: JsonRecord) {
+function collectStrings(value: unknown, keys: Set<string>, output: string[], depth = 0) {
+  if (depth > 4 || value === null || value === undefined) return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectStrings(item, keys, output, depth + 1);
+    return;
+  }
+  if (typeof value !== 'object') return;
+  for (const [key, nested] of Object.entries(value as JsonRecord)) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (keys.has(normalizedKey) && typeof nested === 'string' && text(nested)) output.push(text(nested));
+    if (nested && typeof nested === 'object') collectStrings(nested, keys, output, depth + 1);
+  }
+}
+
+const WEBSITE_KEYS = new Set([
+  'website', 'site', 'websiteurl', 'siteurl', 'webpage', 'urlsite', 'companywebsite',
+]);
+
+function rowWebsites(row: JsonRecord) {
+  const values: string[] = [];
+  const direct = [
+    row.website, row.site, row.website_url, row.site_url,
+    dataRecord(row.data).website, dataRecord(row.data).site,
+    dataRecord(row.crm_data).website, dataRecord(row.crm_data).site,
+    dataRecord(row.raw_payload).website, dataRecord(row.raw_payload).site,
+  ];
+  for (const value of direct) if (text(value)) values.push(text(value));
+  collectStrings(row, WEBSITE_KEYS, values);
+
+  const unique = new Map<string, string>();
+  for (const value of values) {
+    const normalized = normalizeUrl(value);
+    if (normalized) unique.set(normalized, value);
+  }
+  return Array.from(unique.entries()).map(([normalized, raw]) => ({
+    raw,
+    normalized,
+    domain: domainOf(normalized),
+  }));
+}
+
+function rowDestinationValues(row: JsonRecord) {
   const data = dataRecord(row.data);
   const crm = dataRecord(row.crm_data);
   const raw = dataRecord(row.raw_payload);
-  return text(row.website ?? data.site ?? data.website ?? crm.site ?? crm.website ?? raw.site ?? raw.website);
-}
-
-function rowDestination(row: JsonRecord) {
-  const data = dataRecord(row.data);
-  return text(row.destination ?? row.lead_channel ?? row.lead_type ?? data.destination ?? data.destino);
+  return [
+    row.destination, row.original_destination, row.destination_override,
+    row.lead_channel, row.lead_type,
+    data.destination, data.destino, data.original_destination, data.destination_override,
+    crm.destination, crm.destino, crm.original_destination, crm.destination_override,
+    raw.destination, raw.destino, raw.original_destination, raw.destination_override,
+  ].map((value) => text(value).toLowerCase()).filter(Boolean);
 }
 
 function isOwnSite(row: JsonRecord) {
-  return row.has_own_site === true || rowDestination(row).toLowerCase() === 'com site';
+  if (row.has_own_site === true) return true;
+  return rowDestinationValues(row).some((value) => ['com site', 'com-site', 'website', 'site'].includes(value));
 }
 
 function currentStatus(row: JsonRecord) {
@@ -196,9 +239,15 @@ async function handle(body: JsonRecord) {
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []) as JsonRecord[];
-  const candidates = rows.filter(isOwnSite).map((row) => {
-    const website = rowWebsite(row);
-    return { row, website, normalized: normalizeUrl(website), domain: domainOf(website), status: currentStatus(row) };
+  const candidates = rows.filter(isOwnSite).flatMap((row) => {
+    const websites = rowWebsites(row);
+    return websites.map((website) => ({
+      row,
+      website: website.raw,
+      normalized: website.normalized,
+      domain: website.domain,
+      status: currentStatus(row),
+    }));
   });
 
   const usedIds = new Set<string>();
@@ -210,6 +259,7 @@ async function handle(body: JsonRecord) {
     let options = candidates.filter((candidate) => candidate.normalized && candidate.normalized === link.normalized);
     if (!options.length && link.domain) options = candidates.filter((candidate) => candidate.domain === link.domain);
     options = options.filter((candidate) => !usedIds.has(text(candidate.row.id)));
+    options = Array.from(new Map(options.map((candidate) => [text(candidate.row.id), candidate])).values());
     if (!options.length) {
       notFound.push(link.raw);
       continue;
