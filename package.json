@@ -1,6 +1,6 @@
 {
   "name": "gease-visual-shell",
-  "version": "3.39.44",
+  "version": "3.39.45",
   "private": true,
   "type": "module",
   "scripts": {
