@@ -283,7 +283,15 @@ function rowToChip(row: Record<string, unknown>): ChipConfigRecord {
     number: String(row.phone ?? row.number ?? data.number ?? ''),
     level,
     url: String(row.url ?? row.evolution_url ?? row.base_url ?? data.url ?? ''),
-    apiKey: String(row.api_key ?? data.apiKey ?? ''),
+    apiKey: String(
+      row.api_key ??
+      row.apiKey ??
+      row.apikey ??
+      data.api_key ??
+      data.apiKey ??
+      data.apikey ??
+      ''
+    ),
     priority: Number(row.priority ?? data.priority ?? 1),
     startTime: String(row.start_time ?? row.startTime ?? data.startTime ?? levelDefaults.startTime),
     endTime: String(row.end_time ?? row.endTime ?? data.endTime ?? levelDefaults.endTime),
@@ -504,7 +512,14 @@ async function upsertChip(record: ChipConfigRecord) {
     paused: record.paused,
     kind: 'chips',
     channel: 'whatsapp',
-    data: { ...record, level: effectiveLevel, instance, status: persistedStatus },
+    data: {
+      ...record,
+      level: effectiveLevel,
+      instance,
+      status: persistedStatus,
+      apiKey: record.apiKey,
+      api_key: record.apiKey,
+    },
     updated_at: nowIso(),
   };
   const response = existingByInstance || existingById
