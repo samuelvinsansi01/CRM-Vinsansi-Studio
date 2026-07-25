@@ -1,25 +1,20 @@
-# Painel CRM — base limpa
+# Painel CRM — interface preservada
 
-Esta pasta é a nova aplicação ativa. O CRM anterior foi preservado em `legacy-reference/` apenas para consulta de regras e telas; ele não participa do build.
+Esta versão mantém a interface, navegação, páginas, componentes e estilos do CRM original.
 
-## Começar
+A camada de persistência antiga foi removida. Os repositórios ativos retornam estados vazios de leitura e bloqueiam alterações com uma mensagem clara até que cada módulo seja ligado ao banco novo.
 
-```bash
-cp .env.example .env
-npm install
-npm run dev
-```
+## Mantido
+- Design e estilos originais
+- Layout e navegação
+- Páginas, tabelas, filtros, modais e componentes
+- Tipos usados pela interface
 
-## Regra arquitetural
+## Removido
+- Repositórios Supabase antigos
+- Repositórios mock com regras duplicadas
+- APIs e migrations do banco antigo
+- Documentação de releases antigas
 
-Cada domínio novo deve ficar em `src/modules/<dominio>` e acessar o Supabase por uma camada própria. Não recrie helpers genéricos baseados em campos `data`, `status`, `active` ou tabelas antigas.
-
-## Ordem sugerida
-
-1. Gerar os tipos oficiais do banco.
-2. Confirmar RLS da tabela `users`.
-3. Implementar `leads`.
-4. Implementar importações.
-5. Implementar fila única.
-6. Implementar disparos e histórico.
-7. Implementar templates e configurações.
+## Próximo passo
+Implementar os repositórios por domínio usando somente o novo schema do Supabase.
