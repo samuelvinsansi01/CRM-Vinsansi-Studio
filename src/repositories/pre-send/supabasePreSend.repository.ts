@@ -53,7 +53,7 @@ type LeadRow = Record<string, unknown> & {
   contact_sources?: Relation;
 };
 
-function related(row: Relation, key: string) {
+function related(row: Relation | undefined, key: string) {
   const value = Array.isArray(row) ? row[0] : row;
   return String(value?.[key] ?? '');
 }
@@ -173,11 +173,11 @@ export const supabasePreSendRepository: PreSendRepository = {
   },
 
   async addLeads(inputLeads: CreatePreSendLeadInput[]) {
-    const ids = Array.from(new Set(inputLeads.map((lead) => Number(lead.sourceImportId || lead.id)).filter(Number.isFinite)));
+    const ids = Array.from(new Set(inputLeads.map((lead) => Number(lead.sourceImportId)).filter(Number.isFinite)));
     if (!ids.length) return [];
 
     const userId = Number(await getCurrentUserId());
-    const inputById = new Map(inputLeads.map((lead) => [Number(lead.sourceImportId || lead.id), lead]));
+    const inputById = new Map(inputLeads.map((lead) => [Number(lead.sourceImportId), lead]));
 
     // Pré-envio não duplica o lead. Ele apenas muda o estado do registro oficial
     // e ajusta o canal quando a regra já foi definida pelo fluxo de importação.
