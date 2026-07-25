@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
+import { ensurePublicUser } from '../services/auth/publicUser.service';
 
 type AuthUser = {
   /** UUID do Supabase Auth. */
@@ -23,32 +24,12 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
 };
 
-type PublicUserRow = {
-  users_id: number | string;
-  auth_user_id: string;
-  status_id: number | string;
-};
-
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 async function loadAuthUser(authUser: User | null): Promise<AuthUser | null> {
   if (!authUser) return null;
 
-  const { data, error } = await getSupabaseClient()
-    .from('users')
-    .select('users_id, auth_user_id, status_id')
-    .eq('auth_user_id', authUser.id)
-    .maybeSingle<PublicUserRow>();
-
-  if (error) {
-    throw new Error(`Falha ao carregar o usuário interno: ${error.message}`);
-  }
-
-  if (!data) {
-    throw new Error(
-      'Usuário autenticado sem cadastro em public.users. Cadastre o auth_user_id antes de acessar o CRM.',
-    );
-  }
+  const data = await ensurePublicUser(authUser);
 
   const metadata = authUser.user_metadata ?? {};
   const name = String(

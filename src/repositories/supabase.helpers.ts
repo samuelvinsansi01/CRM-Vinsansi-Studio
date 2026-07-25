@@ -1,5 +1,6 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { toLocalDateInputValue } from '../utils/date';
+import { getCurrentPublicUser } from '../services/auth/publicUser.service';
 
 export type JsonRecordRow<T> = {
   id: string;
@@ -21,31 +22,14 @@ export function createUuid() {
 }
 
 export async function getCurrentUserId() {
-  const client = getSupabaseClient();
-  const { data: authData, error: authError } = await client.auth.getUser();
-
-  if (!authError && authData.user?.id) {
-    const { data: publicUser, error: publicUserError } = await client
-      .from('users')
-      .select('users_id')
-      .eq('auth_user_id', authData.user.id)
-      .maybeSingle<{ users_id: number | string }>();
-
-    if (publicUserError) {
-      throw new Error(`Falha ao resolver public.users: ${publicUserError.message}`);
-    }
-
-    if (publicUser?.users_id !== undefined && publicUser?.users_id !== null) {
-      return String(publicUser.users_id);
-    }
-
-    throw new Error('Usuário autenticado sem vínculo em public.users.');
+  try {
+    const publicUser = await getCurrentPublicUser();
+    return String(publicUser.users_id);
+  } catch (error) {
+    const fallback = import.meta.env.VITE_DEFAULT_USER_ID ?? '';
+    if (fallback) return String(fallback);
+    throw error;
   }
-
-  const fallback = import.meta.env.VITE_DEFAULT_USER_ID ?? '';
-  if (fallback) return String(fallback);
-
-  throw new Error('Usuário não autenticado ou sem users_id interno.');
 }
 
 export function nowIso() {
