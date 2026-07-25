@@ -212,15 +212,17 @@ export const importService = {
   },
 
   async listHomeOperationalLeads() {
-    const [pending, approved, allocatedKeys] = await Promise.all([
+    // No banco normalizado, a etapa do funil pertence ao próprio lead.
+    // A tela Início mostra apenas os status operacionais importado/validado
+    // (mapeados pela camada legada como pending/approved), sem consultar
+    // whatsapp_queue_items, instagram_queue_items ou pre_send_leads.
+    const [pending, approved] = await Promise.all([
       repositories.import.list({ status: 'pending' }),
       repositories.import.list({ status: 'approved' }),
-      activePipelineAllocationKeys(),
     ]);
+
     const byId = new Map<string, ImportLead>();
-    [...pending, ...approved].forEach((lead) => {
-      if (!isAllocatedInPipeline(lead, allocatedKeys)) byId.set(lead.id, lead);
-    });
+    [...pending, ...approved].forEach((lead) => byId.set(lead.id, lead));
     return Array.from(byId.values());
   },
 

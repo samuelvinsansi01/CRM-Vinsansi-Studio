@@ -110,6 +110,38 @@ export function useBaseRecords(filters: BaseFilters) {
     [refresh],
   );
 
+  const restoreLead = useCallback(
+    async (lead: BaseLead) => {
+      await baseService.restore(lead.id);
+      refresh();
+    },
+    [refresh],
+  );
+
+  const restoreMany = useCallback(
+    async (ids: string[]) => {
+      await baseService.restoreMany(ids);
+      refresh();
+    },
+    [refresh],
+  );
+
+  const removeLead = useCallback(
+    async (lead: BaseLead) => {
+      await baseService.remove(lead.id);
+      refresh();
+    },
+    [refresh],
+  );
+
+  const removeMany = useCallback(
+    async (ids: string[]) => {
+      await baseService.removeMany(ids);
+      refresh();
+    },
+    [refresh],
+  );
+
   return {
     records,
     summary,
@@ -121,5 +153,9 @@ export function useBaseRecords(filters: BaseFilters) {
     updateLead,
     archiveLead,
     archiveMany,
+    restoreLead,
+    restoreMany,
+    removeLead,
+    removeMany,
   };
 }

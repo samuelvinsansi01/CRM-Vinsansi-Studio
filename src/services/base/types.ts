@@ -1,6 +1,5 @@
 export type BaseLeadStatus = 'importado' | 'validado' | 'pre_envio' | 'na_fila' | 'enviado' | 'invalido' | 'duplicado' | 'arquivado';
 export type BaseLeadOrigin = 'WhatsApp' | 'Instagram';
-export type BaseLeadDataOrigin = 'manual' | 'apify' | 'csv' | 'api';
 export type BaseLeadDestination = 'WhatsApp' | 'Instagram' | 'Com site' | 'Agregador';
 
 export type BaseLead = {
@@ -21,7 +20,6 @@ export type BaseLead = {
   mapsUrl?: string;
   placeId?: string;
   origin: BaseLeadOrigin;
-  dataOrigin?: BaseLeadDataOrigin;
   destination: BaseLeadDestination;
   original_destination?: string;
   destination_override?: string;
