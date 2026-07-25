@@ -1,18 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
-import { AppProviders } from './providers';
-import { applyThemeVariables } from './design-system/theme/applyTheme';
-import './styles/base.css';
-import './styles/components.css';
-import './styles/pages.css';
+import { AuthProvider } from './app/providers/AuthProvider';
+import './shared/styles/index.css';
 
-applyThemeVariables();
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <AppProviders>
-      <App />
-    </AppProviders>
-  </React.StrictMode>,
-);
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AuthProvider><App /></AuthProvider></React.StrictMode>);

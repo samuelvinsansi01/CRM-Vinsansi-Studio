@@ -1,55 +1,26 @@
-import { useEffect, useState } from 'react';
-import { DashboardLayout } from './design-system/layouts/DashboardLayout';
-import { BasePage } from './pages/BasePage';
-import { ConfigTablePage } from './pages/ConfigTablePage';
-import { HomePage } from './pages/HomePage';
-import { ImportPage } from './pages/ImportPage';
-import { ImportSettingsPage } from './pages/ImportSettingsPage';
-import { LoginPage } from './pages/LoginPage';
-import { PreSendPage } from './pages/PreSendPage';
-import { QueuePage } from './pages/QueuePage';
-import { SettingsPage } from './pages/SettingsPage';
-import type { PageId } from './pages/pageRegistry';
-import { useAuthContext } from './providers/AuthProvider';
-import { platformConfigService } from './services/platform-config';
+import { useState } from 'react';
+import { useAuth } from './app/providers/AuthProvider';
+import { modules, type ModuleId } from './modules/registry';
+import { ModulePlaceholder } from './shared/components/ModulePlaceholder';
 
 export function App() {
-  const { isAuthenticated, loading } = useAuthContext();
-  const [activePage, setActivePage] = useState<PageId>('home');
+  const auth = useAuth();
+  const [active, setActive] = useState<ModuleId>('leads');
+  const module = modules.find((item) => item.id === active) ?? modules[0];
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    void platformConfigService.publishExtensionRuntimeConfig().catch(() => undefined);
-  }, [isAuthenticated]);
+  if (auth.loading) return <main className="center"><p>Carregando...</p></main>;
 
-  if (loading) {
-    return (
-      <div className="login-page">
-        <div className="login-panel login-panel--loading">Carregando sessao...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
-
-  return (
-    <DashboardLayout activePage={activePage} onNavigate={setActivePage}>
-      {activePage === 'home' ? <HomePage /> : null}
-      {activePage === 'import-approved' || activePage === 'import-rejected' ? (
-        <ImportPage rejected={activePage === 'import-rejected'} onStatusChange={(isRejected) => setActivePage(isRejected ? 'import-rejected' : 'import-approved')} />
-      ) : null}
-      {activePage === 'base' ? <BasePage /> : null}
-      {activePage === 'pre-send' ? <PreSendPage /> : null}
-      {activePage === 'whatsapp' ? <QueuePage channel="whatsapp" /> : null}
-      {activePage === 'instagram' ? <QueuePage channel="instagram" /> : null}
-      {activePage === 'chips' ? <ConfigTablePage kind="chips" /> : null}
-      {activePage === 'instagram-settings' ? <ConfigTablePage kind="instagram" /> : null}
-      {activePage === 'branches' ? <ConfigTablePage kind="branches" /> : null}
-      {activePage === 'templates' ? <ConfigTablePage kind="templates" /> : null}
-      {activePage === 'import-settings' ? <ImportSettingsPage /> : null}
-      {activePage === 'settings' ? <SettingsPage /> : null}
-    </DashboardLayout>
-  );
+  return <div className="app-shell">
+    <aside>
+      <div><span className="eyebrow">Painel CRM</span><h1>Nova base</h1><p className="muted">Arquitetura limpa para o banco novo.</p></div>
+      <nav>{modules.map((item) => <button className={active === item.id ? 'active' : ''} key={item.id} onClick={() => setActive(item.id)}>{item.title}</button>)}</nav>
+      <div className="status"><strong>Supabase</strong><span>{auth.configured ? 'Configurado' : 'Configure o .env'}</span>{auth.appUser ? <small>users_id: {auth.appUser.users_id}</small> : null}</div>
+    </aside>
+    <main>
+      <header><div><span className="eyebrow">Reconstrução controlada</span><h1>{module.title}</h1></div>{auth.session ? <button className="secondary" onClick={() => void auth.signOut()}>Sair</button> : null}</header>
+      {!auth.configured ? <section className="notice"><strong>Configuração pendente</strong><p>Copie <code>.env.example</code> para <code>.env</code> e informe URL e chave anônima do Supabase.</p></section> : null}
+      <ModulePlaceholder {...module} />
+      <section className="card"><h2>Próximo passo</h2><p>Implementar este módulo com repository, service, hooks e componentes próprios, usando somente as tabelas novas.</p></section>
+    </main>
+  </div>;
 }
