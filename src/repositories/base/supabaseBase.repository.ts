@@ -261,11 +261,5 @@ export const supabaseBaseRepository: BaseRepository = {
     return updateLeadRow(id, { status: 'arquivado' });
   },
 
-  async restore() {
-    throw new Error('A regra de restauração ainda precisa ser mapeada para o banco novo; o status anterior não pode ser presumido.');
-  },
 
-  async remove() {
-    throw new Error('A regra de exclusão ainda precisa ser confirmada; nenhum status ou exclusão física será presumido.');
-  },
 };

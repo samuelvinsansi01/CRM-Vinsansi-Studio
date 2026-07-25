@@ -236,11 +236,5 @@ export const mockBaseRepository: BaseRepository = {
     return mockBaseRepository.setStatus(id, 'arquivado');
   },
 
-  async restore(id: string) {
-    return mockBaseRepository.setStatus(id, 'enviado');
-  },
 
-  async remove(id: string) {
-    throw new Error('A exclusão não será presumida no banco novo.');
-  },
 };
