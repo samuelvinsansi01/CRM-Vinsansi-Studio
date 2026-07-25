@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Lead Certo — Validação de Sites",
+  "version": "1.0.0",
+  "description": "Aprova ou invalida, em massa, leads com site no Lead Certo CRM.",
+  "permissions": ["storage", "sidePanel"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": { "default_title": "Abrir Validação de Sites" }
+}
