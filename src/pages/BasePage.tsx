@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Archive, Instagram, MessageCircle, Save, Send, Users, X } from 'lucide-react';
+import { Archive, Check, Instagram, MessageCircle, Save, Send, Users, X } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -141,7 +141,7 @@ const columns: TableColumn<BaseTableRow>[] = [
   },
 ];
 
-const tableActions: TableAction[] = ['view', 'archive'];
+const tableActions: TableAction[] = ['view', 'validate', 'archive'];
 type ConfirmAction = 'archive';
 
 export function BasePage() {
@@ -156,9 +156,10 @@ export function BasePage() {
   const [confirmAction, setConfirmAction] = useState<{ lead: BaseLead; action: ConfirmAction } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [validating, setValidating] = useState(false);
 
   const effectiveFilters = useMemo<BaseFilters>(() => ({ ...filters, search }), [filters, search]);
-  const { records, summary, options, loading, error, updateLead, archiveLead, archiveMany } = useBaseRecords(effectiveFilters);
+  const { records, summary, options, loading, error, updateLead, archiveLead, archiveMany, validateLead, validateMany } = useBaseRecords(effectiveFilters);
 
   const visibleRecords = useMemo(() => records.filter((lead) => matchesDateFilter(lead.sentAt, dateFilter)), [dateFilter, records]);
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / rowsPerPage));
@@ -185,7 +186,8 @@ export function BasePage() {
   const selectedLeads = selectedRows.map((rowIndex) => pagedRecords[rowIndex]).filter((lead): lead is BaseLead => Boolean(lead));
   const selectedIds = selectedLeads.map((lead) => lead.id);
   const canBulkArchive = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('base', lead.status).canArchive());
-  const hasBulkAction = canBulkArchive;
+  const canBulkValidate = selectedLeads.some((lead) => lead.status === 'importado');
+  const hasBulkAction = canBulkArchive || canBulkValidate;
 
   const pushToast = (toast: Omit<ToastItem, 'id'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -215,6 +217,24 @@ export function BasePage() {
 
     if (action === 'edit') {
       openLead(lead, 'edit');
+      return;
+    }
+
+    if (action === 'validate') {
+      if (lead.status !== 'importado') {
+        pushToast({ title: 'Validação indisponível', description: 'Somente leads importados podem ser validados.', tone: 'warning' });
+        return;
+      }
+      setValidating(true);
+      void validateLead(lead.id)
+        .then((result) => {
+          const description = result.status === 'validado'
+            ? `${lead.company} foi validado.`
+            : result.reason ?? `${lead.company} foi marcado como ${result.status}.`;
+          pushToast({ title: 'Validação concluída', description, tone: result.status === 'validado' ? 'success' : 'warning' });
+        })
+        .catch((err) => pushToast({ title: 'Erro na validação', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' }))
+        .finally(() => setValidating(false));
       return;
     }
 
@@ -248,6 +268,44 @@ export function BasePage() {
     pushToast({ title: 'Lead arquivado', description: `${lead.company} foi arquivado.`, tone: 'warning' });
   };
 
+
+  const handleBulkValidate = async () => {
+    const importedIds = selectedLeads.filter((lead) => lead.status === 'importado').map((lead) => lead.id);
+    if (!importedIds.length) return;
+    try {
+      setValidating(true);
+      const result = await validateMany(importedIds);
+      setSelectedRows([]);
+      pushToast({
+        title: 'Validação em massa concluída',
+        description: `${result.validated} validado(s), ${result.invalid} inválido(s) e ${result.duplicated} duplicado(s).`,
+        tone: result.invalid || result.duplicated ? 'warning' : 'success',
+      });
+    } catch (err) {
+      pushToast({ title: 'Erro na validação', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleValidateAllImported = async () => {
+    try {
+      setValidating(true);
+      const result = await validateMany();
+      pushToast({
+        title: 'Validação concluída',
+        description: result.processed
+          ? `${result.validated} validado(s), ${result.invalid} inválido(s) e ${result.duplicated} duplicado(s).`
+          : 'Não há leads importados pendentes de validação.',
+        tone: result.invalid || result.duplicated ? 'warning' : 'success',
+      });
+    } catch (err) {
+      pushToast({ title: 'Erro na validação', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const handleBulkArchive = async () => {
     try {
       await archiveMany(selectedIds);
@@ -274,7 +332,10 @@ export function BasePage() {
 
   return (
     <div className="dashboard-table-page lead-list-page lead-list-page--base">
-      <PageHeader title="Base Permanente" />
+      <PageHeader
+        title="Base Permanente"
+        action={<Button iconLeft={Check} onClick={handleValidateAllImported} disabled={validating}>{validating ? 'Validando...' : 'Validar importados'}</Button>}
+      />
 
       <section className="metric-grid metric-grid--6">
         <MetricCard icon={Users} value={String(summary.total)} label="Total" />
@@ -311,6 +372,7 @@ export function BasePage() {
         {selectedLeads.length ? (
           <div className="lead-bulk-actions">
             <span>{selectedLeads.length} selecionado(s)</span>
+            {canBulkValidate ? <Button size="sm" iconLeft={Check} onClick={handleBulkValidate} disabled={validating}>{validating ? 'Validando...' : 'Validar'}</Button> : null}
             {canBulkArchive ? <Button size="sm" variant="danger" iconLeft={Archive} onClick={handleBulkArchive}>Arquivar</Button> : null}
             {!hasBulkAction ? <small>Nenhuma acao disponivel para a selecao atual.</small> : null}
           </div>
@@ -328,6 +390,7 @@ export function BasePage() {
               if (!lead) return [];
               return [
                 'view' as TableAction,
+                ...(lead.status === 'importado' ? ['validate' as TableAction] : []),
                 ...(permissionsFor('base', lead.status).canArchive()
                   ? ['archive' as TableAction]
                   : []),

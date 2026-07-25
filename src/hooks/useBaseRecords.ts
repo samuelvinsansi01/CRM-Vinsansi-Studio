@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { baseService } from '../services/base/base.service';
+import { leadValidationService } from '../services/leads/lead-validation.service';
 import type { BaseFilters, BaseLead, BaseSummary, UpdateBaseLeadInput } from '../services/base/types';
 
 type BaseOptions = {
@@ -110,6 +111,24 @@ export function useBaseRecords(filters: BaseFilters) {
     [refresh],
   );
 
+  const validateLead = useCallback(
+    async (id: string) => {
+      const result = await leadValidationService.validateLead(id);
+      refresh();
+      return result;
+    },
+    [refresh],
+  );
+
+  const validateMany = useCallback(
+    async (ids?: string[]) => {
+      const result = await leadValidationService.validateMany(ids);
+      refresh();
+      return result;
+    },
+    [refresh],
+  );
+
   return {
     records,
     summary,
@@ -121,5 +140,7 @@ export function useBaseRecords(filters: BaseFilters) {
     updateLead,
     archiveLead,
     archiveMany,
+    validateLead,
+    validateMany,
   };
 }

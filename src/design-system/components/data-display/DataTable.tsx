@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { IconButton } from '../action/IconButton';
 
-export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'invalidate' | 'refresh' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'approve' | 'unapprove' | 'sent';
+export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'invalidate' | 'refresh' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'approve' | 'unapprove' | 'sent' | 'validate';
 
 export type TableColumn<T> = {
   key: keyof T | string;
@@ -37,6 +37,7 @@ const actionIcon = {
   approve: Check,
   unapprove: X,
   sent: Send,
+  validate: Check,
 };
 
 const actionLabel = {
@@ -53,6 +54,7 @@ const actionLabel = {
   approve: 'Aprovar',
   unapprove: 'Desaprovar',
   sent: 'Marcar como enviado',
+  validate: 'Validar',
 };
 
 const actionTone = {
@@ -69,6 +71,7 @@ const actionTone = {
   approve: 'success',
   unapprove: 'warning',
   sent: 'success',
+  validate: 'success',
 } as const;
 
 export function DataTable<T extends Record<string, ReactNode>>({
