@@ -17,6 +17,7 @@ import type {
   ImportSummary,
 } from '../../services/import/types';
 import { normalizeInstagramUsername } from '../../services/instagram/instagram.utils';
+import { classifyLeadContact, normalizeLeadContact } from '../../services/import/leadNormalization';
 import { isStatusGroup } from '../../services/status/status.mapper';
 import { LEAD_STATUS } from '../../types/lead.types';
 import { createId, getCurrentUserId } from '../supabase.helpers';
@@ -153,7 +154,7 @@ function rowToLead(row: NormalizedLeadRow): ImportLead {
     normalizedSite: normalizeDomain(website),
     normalizedInstagram: normalizeInstagramUsername(instagram),
     normalizedMapsUrl: row.leads_maps ?? '',
-    sourceLeadId: row.apify_import_jobs_id ? String(row.apify_import_jobs_id) : undefined,
+    sourceLeadId: undefined,
   };
 }
 
@@ -187,19 +188,39 @@ async function resolveLookup(config: LookupConfig, value: unknown, userId?: stri
   return Number(match[config.id]);
 }
 
+
+async function resolveCityId(city: unknown, stateId: number | null): Promise<number | null> {
+  const wanted = comparable(city);
+  if (!wanted) return null;
+
+  type CityRow = { cities_id: number; cities_name: string; states_id: number | null };
+  type Result = { data: CityRow[] | null; error: { message: string } | null };
+  const baseQuery = getSupabaseClient().from('cities') as unknown as {
+    select(columns: string): {
+      eq(column: string, value: number): PromiseLike<Result>;
+      then<TResult1 = Result, TResult2 = never>(
+        onfulfilled?: ((value: Result) => TResult1 | PromiseLike<TResult1>) | null,
+        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+      ): PromiseLike<TResult1 | TResult2>;
+    };
+  };
+
+  const selected = baseQuery.select('cities_id,cities_name,states_id');
+  const { data, error } = stateId ? await selected.eq('states_id', stateId) : await selected;
+  if (error) throw new Error(error.message);
+  const match = (data ?? []).find((row) => comparable(row.cities_name) === wanted);
+  return match ? Number(match.cities_id) : null;
+}
+
 async function normalizedPayload(lead: ImportLead, userId: string) {
   const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
   const branchId = Number(lead.branch_id) || await resolveLookup({ table: 'branches', id: 'branches_id', name: 'branches_name' }, lead.ramo, userId);
   if (!branchId) throw new Error(`Ramo não encontrado no banco: ${lead.ramo || lead.subcategoria || 'não informado'}.`);
 
-  const stateId = await resolveLookup({ table: 'states', id: 'states_id', name: 'states_name', alternateName: 'states_code' }, lead.estado);
-  const cityId = await resolveLookup({ table: 'cities', id: 'cities_id', name: 'cities_name' }, lead.cidade);
-  const website = normalizeSiteIdentity(lead.site ?? '') ? String(lead.site ?? '').trim() : null;
-  const instagram = String(lead.instagram_url ?? lead.instagram ?? '').trim() || null;
-
-  const isInstagram = destination === 'Instagram';
-  const contactSourceId = isInstagram ? 4 : destination === 'Com site' ? 2 : destination === 'Agregadores' ? 3 : 1;
-  const channelId = isInstagram ? 2 : 1;
+  const contact = normalizeLeadContact(lead);
+  const stateId = await resolveLookup({ table: 'states', id: 'states_id', name: 'states_name', alternateName: 'states_code' }, contact.state);
+  const cityId = await resolveCityId(contact.city, stateId);
+  const { channelId, contactSourceId } = classifyLeadContact(destination);
 
   return {
     users_id: Number(userId),
@@ -212,13 +233,13 @@ async function normalizedPayload(lead: ImportLead, userId: string) {
     apify_import_jobs_id: null,
     contact_sources_id: contactSourceId,
     leads_name: lead.empresa.trim(),
-    leads_phone: String(lead.whatsapp ?? '').trim() || null,
-    leads_instagram: instagram,
-    leads_website: website,
-    leads_maps: String(lead.normalizedMapsUrl ?? '').trim() || null,
+    leads_phone: contact.phone,
+    leads_instagram: contact.instagram,
+    leads_website: contact.website,
+    leads_maps: contact.mapsUrl,
     leads_street: null,
     leads_postal_code: null,
-    leads_categories: [lead.subcategoria, lead.ramo].map((item) => String(item ?? '').trim()).filter((item, index, all) => item && all.indexOf(item) === index),
+    leads_categories: contact.categories,
     leads_score: Number(lead.rating ?? 0),
     leads_reviews_count: Number(lead.reviews ?? 0),
     leads_origin: 'csv' as const,
