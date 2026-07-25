@@ -1,0 +1,7 @@
+-- V3.18: Legacy queue idempotency note
+--
+-- The current panel uses a pre-insert duplicate lookup for source_pre_send_id
+-- because the legacy schema created a partial unique index. A future normalized
+-- schema should enforce a non-partial unique constraint per user/source when
+-- source_pre_send_id becomes canonical. No production migration is required for
+-- this compatibility fix.
