@@ -106,10 +106,19 @@ async function resolveLookupId(table: string, idColumn: string, nameColumn: stri
   const normalized = normalizeText(value);
   if (!normalized) return null;
 
-  const { data, error } = await getSupabaseClient().from(table).select(`${idColumn},${nameColumn}`);
+  type LookupQueryResult = {
+    data: Record<string, unknown>[] | null;
+    error: { message: string } | null;
+  };
+
+  const lookupQuery = getSupabaseClient().from(table) as unknown as {
+    select: (columns: string) => PromiseLike<LookupQueryResult>;
+  };
+
+  const { data, error } = await lookupQuery.select(`${idColumn},${nameColumn}`);
   if (error) throw new Error(error.message);
 
-  const row = (data ?? []).find((item: Record<string, unknown>) => normalizeText(item[nameColumn]) === normalized);
+  const row = (data ?? []).find((item) => normalizeText(item[nameColumn]) === normalized);
   return row ? Number(row[idColumn]) : null;
 }
 
