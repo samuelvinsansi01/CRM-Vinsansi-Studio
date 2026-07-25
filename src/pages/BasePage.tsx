@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Archive, Instagram, MessageCircle, RotateCcw, Save, Send, Trash2, Users, X } from 'lucide-react';
+import { Archive, Instagram, MessageCircle, Save, Send, Users, X } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -24,7 +24,7 @@ import { useBaseRecords } from '../hooks/useBaseRecords';
 import { permissionsFor } from '../services/permissions';
 import { baseStatusLabel } from '../services/base/status.mapper';
 import type { BaseFilters, BaseLead, BaseLeadDestination, BaseLeadOrigin, BaseLeadStatus, UpdateBaseLeadInput } from '../services/base/types';
-import { isStatusGroup, statusLabel, statusTone } from '../services/status/status.mapper';
+import { statusLabel, statusTone } from '../services/status/status.mapper';
 
 type BaseLeadDraft = Pick<
   BaseLead,
@@ -141,8 +141,8 @@ const columns: TableColumn<BaseTableRow>[] = [
   },
 ];
 
-const tableActions: TableAction[] = ['view', 'archive', 'restore', 'delete'];
-type ConfirmAction = 'archive' | 'restore' | 'delete';
+const tableActions: TableAction[] = ['view', 'archive'];
+type ConfirmAction = 'archive';
 
 export function BasePage() {
   const [search, setSearch] = useState('');
@@ -158,7 +158,7 @@ export function BasePage() {
   const [saving, setSaving] = useState(false);
 
   const effectiveFilters = useMemo<BaseFilters>(() => ({ ...filters, search }), [filters, search]);
-  const { records, summary, options, loading, error, updateLead, archiveLead, archiveMany, restoreLead, restoreMany, removeLead, removeMany } = useBaseRecords(effectiveFilters);
+  const { records, summary, options, loading, error, updateLead, archiveLead, archiveMany } = useBaseRecords(effectiveFilters);
 
   const visibleRecords = useMemo(() => records.filter((lead) => matchesDateFilter(lead.sentAt, dateFilter)), [dateFilter, records]);
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / rowsPerPage));
@@ -185,9 +185,7 @@ export function BasePage() {
   const selectedLeads = selectedRows.map((rowIndex) => pagedRecords[rowIndex]).filter((lead): lead is BaseLead => Boolean(lead));
   const selectedIds = selectedLeads.map((lead) => lead.id);
   const canBulkArchive = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('base', lead.status).canArchive());
-  const canBulkRestore = selectedLeads.length > 0 && selectedLeads.every((lead) => isStatusGroup(lead.status, 'archived'));
-  const canBulkRemove = selectedLeads.length > 0 && selectedLeads.every((lead) => isStatusGroup(lead.status, 'archived'));
-  const hasBulkAction = canBulkArchive || canBulkRestore || canBulkRemove;
+  const hasBulkAction = canBulkArchive;
 
   const pushToast = (toast: Omit<ToastItem, 'id'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -229,22 +227,6 @@ export function BasePage() {
       return;
     }
 
-    if (action === 'restore') {
-      if (!isStatusGroup(lead.status, 'archived')) {
-        pushToast({ title: 'Acao bloqueada', description: 'Somente registros arquivados podem ser restaurados.', tone: 'warning' });
-        return;
-      }
-      setConfirmAction({ lead, action: 'restore' });
-      return;
-    }
-
-    if (action === 'delete') {
-      if (!isStatusGroup(lead.status, 'archived')) {
-        pushToast({ title: 'Acao bloqueada', description: 'Exclusao definitiva exige registro arquivado.', tone: 'warning' });
-        return;
-      }
-      setConfirmAction({ lead, action: 'delete' });
-    }
   };
 
   const handleSaveLead = async (input: UpdateBaseLeadInput) => {
@@ -260,15 +242,11 @@ export function BasePage() {
   const handleConfirmAction = async () => {
     if (!confirmAction) return;
     const { lead, action } = confirmAction;
-    if (action === 'archive') await archiveLead(lead);
-    if (action === 'restore') await restoreLead(lead);
-    if (action === 'delete') await removeLead(lead);
+    await archiveLead(lead);
     setConfirmAction(null);
     setSelectedRows([]);
     const messages: Record<ConfirmAction, Omit<ToastItem, 'id'>> = {
       archive: { title: 'Lead arquivado', description: `${lead.company} foi arquivado.`, tone: 'warning' },
-      restore: { title: 'Lead restaurado', description: `${lead.company} voltou para a Base Permanente.`, tone: 'success' },
-      delete: { title: 'Lead excluido', description: `${lead.company} saiu da listagem operacional.`, tone: 'danger' },
     };
     pushToast(messages[action]);
   };
@@ -283,43 +261,15 @@ export function BasePage() {
     }
   };
 
-  const handleBulkRestore = async () => {
-    try {
-      await restoreMany(selectedIds);
-      setSelectedRows([]);
-      pushToast({ title: 'Leads restaurados', description: `${selectedIds.length} lead(s) restaurado(s).`, tone: 'success' });
-    } catch (err) {
-      pushToast({ title: 'Acao em massa bloqueada', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    }
-  };
 
-  const handleBulkRemove = async () => {
-    try {
-      await removeMany(selectedIds);
-      setSelectedRows([]);
-      pushToast({ title: 'Leads excluidos', description: `${selectedIds.length} lead(s) removido(s) da listagem operacional.`, tone: 'danger' });
-    } catch (err) {
-      pushToast({ title: 'Acao em massa bloqueada', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    }
-  };
+
+
 
   const confirmCopy: Record<ConfirmAction, { title: string; description: string; confirmLabel: string; danger: boolean }> = {
     archive: {
       title: 'Arquivar lead?',
       description: 'Essa acao muda o status do lead para arquivado.',
       confirmLabel: 'Arquivar',
-      danger: true,
-    },
-    restore: {
-      title: 'Restaurar lead?',
-      description: 'Essa acao devolve o lead arquivado para a Base Permanente.',
-      confirmLabel: 'Restaurar',
-      danger: false,
-    },
-    delete: {
-      title: 'Excluir lead definitivamente?',
-      description: 'Essa acao remove o lead arquivado das listagens operacionais via soft delete.',
-      confirmLabel: 'Excluir',
       danger: true,
     },
   };
@@ -365,8 +315,6 @@ export function BasePage() {
           <div className="lead-bulk-actions">
             <span>{selectedLeads.length} selecionado(s)</span>
             {canBulkArchive ? <Button size="sm" variant="danger" iconLeft={Archive} onClick={handleBulkArchive}>Arquivar</Button> : null}
-            {canBulkRestore ? <Button size="sm" variant="secondary" iconLeft={RotateCcw} onClick={handleBulkRestore}>Restaurar</Button> : null}
-            {canBulkRemove ? <Button size="sm" variant="danger" iconLeft={Trash2} onClick={handleBulkRemove}>Excluir</Button> : null}
             {!hasBulkAction ? <small>Nenhuma acao disponivel para a selecao atual.</small> : null}
           </div>
         ) : null}
@@ -383,11 +331,9 @@ export function BasePage() {
               if (!lead) return [];
               return [
                 'view' as TableAction,
-                ...(isStatusGroup(lead.status, 'archived')
-                  ? ['restore' as TableAction, 'delete' as TableAction]
-                  : permissionsFor('base', lead.status).canArchive()
-                    ? ['archive' as TableAction]
-                    : []),
+                ...(permissionsFor('base', lead.status).canArchive()
+                  ? ['archive' as TableAction]
+                  : []),
               ];
             }}
             selectedRows={selectedRows}
