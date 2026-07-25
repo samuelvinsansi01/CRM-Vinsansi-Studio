@@ -178,7 +178,7 @@ async function persistSentToBase(leads: InstagramQueueLead[]) {
         instagram_override_reason: lead.instagram_override_reason,
         override_by: lead.override_by,
         override_at: lead.override_at,
-        status: 'sent',
+        status: 'enviado',
         sentAt,
         template: renderTemplateVariables(lead.message1, lead),
         chipOrProfile: lead.profile,

@@ -940,7 +940,7 @@ function preSendLeadToBaseInput(lead: PreSendLead, sentAt: string, reason: strin
     instagram_override_reason: lead.instagram_override_reason,
     override_by: lead.override_by,
     override_at: lead.override_at,
-    status: 'sent',
+    status: 'enviado',
     sentAt,
     template: '',
     chipOrProfile: lead.profile,

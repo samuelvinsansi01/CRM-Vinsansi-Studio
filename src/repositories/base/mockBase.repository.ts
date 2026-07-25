@@ -148,7 +148,7 @@ export const mockBaseRepository: BaseRepository = {
       states: ['Todos', ...uniqueBy('state')],
       cities: ['Todos', ...uniqueBy('city')],
       destinations: ['Todos', 'WhatsApp', 'Instagram', 'Com site', 'Agregador'],
-      statuses: ['Todos', 'sent', 'archived', 'invalid', 'error'],
+      statuses: ['Todos', 'importado', 'validado', 'pre_envio', 'na_fila', 'enviado', 'invalido', 'duplicado', 'arquivado'],
     };
   },
 
@@ -233,14 +233,14 @@ export const mockBaseRepository: BaseRepository = {
   },
 
   async archive(id: string) {
-    return mockBaseRepository.setStatus(id, 'archived');
+    return mockBaseRepository.setStatus(id, 'arquivado');
   },
 
   async restore(id: string) {
-    return mockBaseRepository.setStatus(id, 'sent');
+    return mockBaseRepository.setStatus(id, 'enviado');
   },
 
   async remove(id: string) {
-    await mockBaseRepository.setStatus(id, 'deleted');
+    throw new Error('A exclusão não será presumida no banco novo.');
   },
 };

@@ -1,4 +1,4 @@
-export type BaseLeadStatus = 'sent' | 'archived' | 'invalid' | 'error' | 'deleted';
+export type BaseLeadStatus = 'importado' | 'validado' | 'pre_envio' | 'na_fila' | 'enviado' | 'invalido' | 'duplicado' | 'arquivado';
 export type BaseLeadOrigin = 'WhatsApp' | 'Instagram';
 export type BaseLeadDestination = 'WhatsApp' | 'Instagram' | 'Com site' | 'Agregador';
 

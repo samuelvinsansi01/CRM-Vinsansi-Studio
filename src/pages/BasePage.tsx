@@ -58,10 +58,14 @@ type BaseTableRow = Record<string, ReactNode> & {
 const PAGE_SIZE = 20;
 
 const statusOptions = [
-  { value: 'sent', label: baseStatusLabel.sent },
-  { value: 'archived', label: baseStatusLabel.archived },
-  { value: 'invalid', label: baseStatusLabel.invalid },
-  { value: 'error', label: baseStatusLabel.error },
+  { value: 'importado', label: baseStatusLabel.importado },
+  { value: 'validado', label: baseStatusLabel.validado },
+  { value: 'pre_envio', label: baseStatusLabel.pre_envio },
+  { value: 'na_fila', label: baseStatusLabel.na_fila },
+  { value: 'enviado', label: baseStatusLabel.enviado },
+  { value: 'invalido', label: baseStatusLabel.invalido },
+  { value: 'duplicado', label: baseStatusLabel.duplicado },
+  { value: 'arquivado', label: baseStatusLabel.arquivado },
 ];
 
 const originOptions = ['WhatsApp', 'Instagram'];

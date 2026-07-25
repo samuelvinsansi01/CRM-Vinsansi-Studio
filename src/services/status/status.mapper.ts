@@ -46,13 +46,13 @@ const STATUS_GROUPS: Record<StatusGroup, { canonical: CanonicalStatus; label: st
     canonical: 'APPROVED',
     label: 'Aprovado',
     tone: 'success',
-    aliases: ['approved', 'aprovado', 'aprovados', 'approved_for_queue', 'approved for queue', 'approved_for_instagram_queue', 'approved for instagram queue', 'whatsapp_valid'],
+    aliases: ['approved', 'aprovado', 'validado', 'aprovados', 'approved_for_queue', 'approved for queue', 'approved_for_instagram_queue', 'approved for instagram queue', 'whatsapp_valid'],
   },
   pending: {
     canonical: 'PENDING',
     label: 'Em aguarde',
     tone: 'warning',
-    aliases: ['pending', 'pendente', 'pendentes', 'aguardando', 'em aguarde', 'waiting', 'not_sent', 'not sent', 'nao enviada', 'nao enviado', 'nao contatado', 'aguardando alocacao instagram', 'new'],
+    aliases: ['pending', 'pendente', 'importado', 'pendentes', 'aguardando', 'em aguarde', 'waiting', 'not_sent', 'not sent', 'nao enviada', 'nao enviado', 'nao contatado', 'aguardando alocacao instagram', 'new'],
   },
   sent: {
     canonical: 'SENT',
@@ -70,13 +70,13 @@ const STATUS_GROUPS: Record<StatusGroup, { canonical: CanonicalStatus; label: st
     canonical: 'QUEUED',
     label: 'Em fila',
     tone: 'primary',
-    aliases: ['queued', 'em_fila', 'em fila', 'fila', 'ready', 'ready_to_dispatch', 'ready to dispatch', 'dispatch_queue', 'dispatch queue', 'scheduled', 'pronto'],
+    aliases: ['queued', 'na_fila', 'pre_envio', 'em_fila', 'em fila', 'fila', 'ready', 'ready_to_dispatch', 'ready to dispatch', 'dispatch_queue', 'dispatch queue', 'scheduled', 'pronto'],
   },
   invalid: {
     canonical: 'INVALID',
     label: 'Inv\u00e1lido',
     tone: 'danger',
-    aliases: ['invalid', 'invalido', 'invalida', 'invalidado', 'invalidada', 'invalidated', 'invalidado instagram', 'fora_do_ramo', 'fora do ramo', 'out_of_profile', 'out of profile', 'invalid_manual', 'whatsapp_invalid', 'duplicado'],
+    aliases: ['invalid', 'invalido', 'duplicado', 'invalida', 'invalidado', 'invalidada', 'invalidated', 'invalidado instagram', 'fora_do_ramo', 'fora do ramo', 'out_of_profile', 'out of profile', 'invalid_manual', 'whatsapp_invalid', 'duplicado'],
   },
   error: {
     canonical: 'ERROR',

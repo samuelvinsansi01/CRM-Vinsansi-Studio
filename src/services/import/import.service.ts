@@ -155,7 +155,7 @@ function importLeadToBaseInput(lead: ImportLead, sentAt: string, reason: string)
     instagram_override_reason: lead.instagram_override_reason,
     override_by: lead.override_by,
     override_at: lead.override_at,
-    status: 'sent',
+    status: 'enviado',
     sentAt,
     template: '',
     chipOrProfile: '',
