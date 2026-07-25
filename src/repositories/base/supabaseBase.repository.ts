@@ -68,7 +68,7 @@ function filterRecords(records: BaseLead[], filters: BaseFilters = {}) {
     ].join(' '));
 
     return (!query || searchable.includes(query))
-      && (!filters.origin || filters.origin === 'Todos' || lead.origin === filters.origin)
+      && (!filters.origin || filters.origin === 'Todos' || lead.dataOrigin === filters.origin)
       && (!filters.branch || filters.branch === 'Todos' || lead.branch === filters.branch)
       && (!filters.state || filters.state === 'Todos' || normalizeText(lead.state) === normalizeText(filters.state))
       && (!filters.city || filters.city === 'Todos' || lead.city === filters.city)
@@ -83,7 +83,7 @@ function calculateSummary(records: BaseLead[]): BaseSummary {
     total: records.length,
     sent: sent.length,
     sentWhatsApp: sent.filter((lead) => lead.origin === 'WhatsApp').length,
-    sentInstagram: sent.filter((lead) => lead.origin === 'Instagram' || lead.destination === 'Instagram').length,
+    sentInstagram: sent.filter((lead) => lead.origin === 'Instagram').length,
     archived: records.filter((lead) => lead.status === 'arquivado').length,
     invalid: records.filter((lead) => lead.status === 'invalido' || lead.status === 'duplicado').length,
     errors: 0,
@@ -180,7 +180,7 @@ export const supabaseBaseRepository: BaseRepository = {
     const records = await listAll();
     const unique = (values: string[]) => ['Todos', ...Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'))];
     return {
-      origins: unique(records.map((lead) => lead.origin)),
+      origins: unique(records.map((lead) => lead.dataOrigin ?? '')),
       branches: unique(records.map((lead) => lead.branch)),
       states: unique(records.map((lead) => lead.state)),
       cities: unique(records.map((lead) => lead.city)),

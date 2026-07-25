@@ -1,4 +1,4 @@
-import type { BaseLead, BaseLeadDestination, BaseLeadOrigin } from '../services/base/types';
+import type { BaseLead, BaseLeadDataOrigin, BaseLeadDestination, BaseLeadOrigin } from '../services/base/types';
 import { normalizeBrazilState } from '../services/geo/brazilState';
 import type { LeadDatabaseRow, LeadRelation, LeadStatusName } from '../types/lead.types';
 
@@ -35,8 +35,12 @@ function normalizeInstagram(value: string | null) {
     .split(/[/?#\s]/)[0];
 }
 
+function dataOrigin(value: string): BaseLeadDataOrigin {
+  return value === 'manual' || value === 'apify' || value === 'csv' || value === 'api' ? value : 'manual';
+}
+
 function originFromChannel(channelName: string | undefined): BaseLeadOrigin {
-  return channelName?.toLowerCase() === 'instagram' ? 'Instagram' : 'WhatsApp';
+  return channelName?.trim().toLowerCase() === 'instagram' ? 'Instagram' : 'WhatsApp';
 }
 
 function destinationFromLead(channelName: string | undefined, sourceId: number, website: string): BaseLeadDestination {
@@ -57,6 +61,7 @@ export function mapLead(row: LeadDatabaseRow): BaseLead {
   const phone = row.leads_phone ?? '';
   const instagram = row.leads_instagram ?? '';
   const origin = originFromChannel(channel?.channels_name);
+  const sourceOrigin = dataOrigin(row.leads_origin);
   const destination = destinationFromLead(channel?.channels_name, row.contact_sources_id, website);
   const statusName = (status?.lead_status_name ?? '') as LeadStatusName;
 
@@ -76,6 +81,7 @@ export function mapLead(row: LeadDatabaseRow): BaseLead {
     normalizedInstagram: normalizeInstagram(instagram),
     mapsUrl: row.leads_maps ?? '',
     origin,
+    dataOrigin: sourceOrigin,
     destination,
     original_destination: destination,
     send_instagram: destination === 'Instagram',

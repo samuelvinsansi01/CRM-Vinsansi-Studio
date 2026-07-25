@@ -22,9 +22,8 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { DestinationBadge } from '../components/DestinationBadge';
 import { useBaseRecords } from '../hooks/useBaseRecords';
 import { permissionsFor } from '../services/permissions';
-import { baseStatusLabel } from '../services/base/status.mapper';
-import type { BaseFilters, BaseLead, BaseLeadDestination, BaseLeadOrigin, BaseLeadStatus, UpdateBaseLeadInput } from '../services/base/types';
-import { statusLabel, statusTone } from '../services/status/status.mapper';
+import { baseStatusLabel, baseStatusTone } from '../services/base/status.mapper';
+import type { BaseFilters, BaseLead, BaseLeadStatus, UpdateBaseLeadInput } from '../services/base/types';
 
 type BaseLeadDraft = Pick<
   BaseLead,
@@ -37,6 +36,7 @@ type BaseLeadDraft = Pick<
   | 'instagram'
   | 'mapsUrl'
   | 'origin'
+  | 'dataOrigin'
   | 'destination'
   | 'original_destination'
   | 'destination_override'
@@ -68,8 +68,6 @@ const statusOptions = [
   { value: 'arquivado', label: baseStatusLabel.arquivado },
 ];
 
-const originOptions = ['WhatsApp', 'Instagram'];
-const destinationOptions = ['WhatsApp', 'Instagram', 'Com site', 'Agregador'];
 const dateOptions = [
   { value: 'Todos', label: 'Data' },
   { value: 'Hoje', label: 'Hoje' },
@@ -136,7 +134,7 @@ const columns: TableColumn<BaseTableRow>[] = [
     label: 'Situacao',
     width: '10%',
     render: (row) => {
-      return <Tag tone={statusTone(row.statusValue)}>{statusLabel(row.statusValue)}</Tag>;
+      return <Tag tone={baseStatusTone[row.statusValue]}>{baseStatusLabel[row.statusValue]}</Tag>;
     },
   },
 ];
@@ -232,11 +230,16 @@ export function BasePage() {
   const handleSaveLead = async (input: UpdateBaseLeadInput) => {
     if (!activeLead) return;
     setSaving(true);
-    await updateLead(activeLead.id, input);
-    setSaving(false);
-    setDrawerMode(null);
-    setActiveLead(null);
-    pushToast({ title: 'Lead atualizado', description: 'Alterações salvas localmente na Base Permanente.', tone: 'success' });
+    try {
+      await updateLead(activeLead.id, input);
+      setDrawerMode(null);
+      setActiveLead(null);
+      pushToast({ title: 'Lead atualizado', description: 'Alterações salvas no banco.', tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Erro ao atualizar', description: err instanceof Error ? err.message : 'Não foi possível salvar o lead.', tone: 'danger' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleConfirmAction = async () => {
@@ -290,7 +293,7 @@ export function BasePage() {
 
       <FiltersBar>
         <SelectField value={dateFilter} options={dateOptions} placeholder="Data" onChange={(value) => { setDateFilter(value); setPage(1); setSelectedRows([]); }} />
-        <SelectField value={filters.origin ?? 'Todos'} options={options.origins} placeholder="Origem disparo" onChange={(value) => updateFilter('origin', value)} />
+        <SelectField value={filters.origin ?? 'Todos'} options={options.origins} placeholder="Origem" onChange={(value) => updateFilter('origin', value)} />
         <SelectField value={filters.branch ?? 'Todos'} options={options.branches} placeholder="Ramo" onChange={(value) => updateFilter('branch', value)} />
         <SelectField value={filters.state ?? 'Todos'} options={options.states} placeholder="Estado" onChange={(value) => updateFilter('state', value)} />
         <SelectField value={filters.destination ?? 'Todos'} options={options.destinations} placeholder="Destino" onChange={(value) => updateFilter('destination', value)} />
@@ -402,6 +405,7 @@ function BaseLeadDrawer({
       instagram: lead.instagram ?? '',
       mapsUrl: lead.mapsUrl ?? '',
       origin: lead.origin,
+      dataOrigin: lead.dataOrigin,
       destination: lead.destination,
       original_destination: lead.original_destination ?? lead.destination,
       destination_override: lead.destination_override ?? '',
@@ -427,7 +431,7 @@ function BaseLeadDrawer({
     <Drawer
       open={Boolean(lead)}
       title={mode === 'view' ? 'Detalhes do lead' : 'Editar lead permanente'}
-      description={`${lead.company} - ${statusLabel(lead.status)}`}
+      description={`${lead.company} - ${baseStatusLabel[lead.status]}`}
       onClose={onClose}
       footer={
         mode === 'edit' ? (
@@ -456,30 +460,13 @@ function BaseLeadDrawer({
         <Field label="Site" value={draft.site} readOnly={readOnly} onChange={(value) => updateDraft('site', value)} />
         <Field label="Instagram" value={draft.instagram ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('instagram', value)} />
         <Field label="Maps URL / Place ID" value={draft.mapsUrl ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('mapsUrl', value)} />
-        {readOnly ? (
-          <div className="drawer-grid drawer-grid--2">
-            <Field label="Origem" value={draft.origin} readOnly />
-            <Field label="Destino" value={draft.destination} readOnly />
-            <Field label="Destino original" value={draft.original_destination ?? ''} readOnly />
-            <Field label="Override aplicado" value={draft.send_instagram ? 'Instagram' : draft.destination_override ?? ''} readOnly />
-          </div>
-        ) : (
-          <div className="drawer-grid drawer-grid--2">
-            <label className="field">
-              <span className="field__label">Origem</span>
-              <SelectField value={draft.origin} options={originOptions} onChange={(value) => updateDraft('origin', value as BaseLeadOrigin)} />
-            </label>
-            <label className="field">
-              <span className="field__label">Destino</span>
-              <SelectField value={draft.destination} options={destinationOptions} onChange={(value) => updateDraft('destination', value as BaseLeadDestination)} />
-            </label>
-          </div>
-        )}
-        {readOnly ? (
-          <Field label="Status" value={statusLabel(draft.status)} readOnly />
-        ) : (
-          <Field label="Status" value={statusLabel(draft.status)} readOnly />
-        )}
+        <div className="drawer-grid drawer-grid--2">
+          <Field label="Origem" value={draft.dataOrigin ?? ''} readOnly />
+          <Field label="Destino" value={draft.destination} readOnly />
+          <Field label="Destino original" value={draft.original_destination ?? ''} readOnly />
+          <Field label="Override aplicado" value={draft.send_instagram ? 'Instagram' : draft.destination_override ?? ''} readOnly />
+        </div>
+        <Field label="Status" value={baseStatusLabel[draft.status]} readOnly />
         <Field label="Template utilizado" value={draft.template} readOnly={readOnly} onChange={(value) => updateDraft('template', value)} />
         <Field label="Chip / Perfil" value={draft.chipOrProfile} readOnly={readOnly} onChange={(value) => updateDraft('chipOrProfile', value)} />
         <Field label="Motivo override Instagram" value={draft.instagram_override_reason ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('instagram_override_reason', value)} />
