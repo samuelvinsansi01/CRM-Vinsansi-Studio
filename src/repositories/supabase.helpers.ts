@@ -21,13 +21,31 @@ export function createUuid() {
 }
 
 export async function getCurrentUserId() {
-  const { data, error } = await getSupabaseClient().auth.getUser();
-  if (!error && data.user?.id) return data.user.id;
+  const client = getSupabaseClient();
+  const { data: authData, error: authError } = await client.auth.getUser();
+
+  if (!authError && authData.user?.id) {
+    const { data: publicUser, error: publicUserError } = await client
+      .from('users')
+      .select('users_id')
+      .eq('auth_user_id', authData.user.id)
+      .maybeSingle<{ users_id: number | string }>();
+
+    if (publicUserError) {
+      throw new Error(`Falha ao resolver public.users: ${publicUserError.message}`);
+    }
+
+    if (publicUser?.users_id !== undefined && publicUser?.users_id !== null) {
+      return String(publicUser.users_id);
+    }
+
+    throw new Error('Usuário autenticado sem vínculo em public.users.');
+  }
 
   const fallback = import.meta.env.VITE_DEFAULT_USER_ID ?? '';
-  if (fallback) return fallback;
+  if (fallback) return String(fallback);
 
-  throw new Error('Supabase user_id ausente. Defina VITE_DEFAULT_USER_ID enquanto nao houver auth real.');
+  throw new Error('Usuário não autenticado ou sem users_id interno.');
 }
 
 export function nowIso() {
