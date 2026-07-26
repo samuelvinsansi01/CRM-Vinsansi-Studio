@@ -21,8 +21,8 @@ export const navGroups = [
     id: 'pre-send',
     label: 'Envios',
     items: [
-      { id: 'valid', label: 'Válidos' },
       { id: 'pre-send', label: 'Pré-Envio' },
+      { id: 'valid', label: 'Válidos' },
       { id: 'whatsapp', label: 'Fila WhatsApp' },
       { id: 'instagram', label: 'Fila Instagram' },
     ],

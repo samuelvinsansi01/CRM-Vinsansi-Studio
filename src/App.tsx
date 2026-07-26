@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { DashboardLayout } from './design-system/layouts/DashboardLayout';
 import { BasePage } from './pages/BasePage';
 import { ConfigTablePage } from './pages/ConfigTablePage';
@@ -11,16 +11,10 @@ import { QueuePage } from './pages/QueuePage';
 import { SettingsPage } from './pages/SettingsPage';
 import type { PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
-import { platformConfigService } from './services/platform-config';
 
 export function App() {
   const { isAuthenticated, loading } = useAuthContext();
   const [activePage, setActivePage] = useState<PageId>('home');
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    void platformConfigService.publishExtensionRuntimeConfig().catch(() => undefined);
-  }, [isAuthenticated]);
 
   if (loading) {
     return (

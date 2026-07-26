@@ -159,6 +159,7 @@ export function useDashboardData(filters: HomeFilters, mode: 'home' | 'valid' = 
       branches: unique(operationalLeads.map((lead) => lead.ramo)),
       states: unique(operationalLeads.map((lead) => lead.estado), normalizeBrazilState),
       destinations: ['Todos', 'WhatsApp', 'Com site', 'Agregadores', 'Instagram'],
+      channels: ['Todos', 'WhatsApp', 'Instagram'],
       instagram: ['Todos', 'Com Instagram', 'Sem Instagram'],
       sites: ['Todos', 'Com site', 'Sem site'],
       situations: ['Todos', 'Em aguarde', 'Aprovado'],
@@ -173,7 +174,10 @@ export function useDashboardData(filters: HomeFilters, mode: 'home' | 'valid' = 
         const situation = leadSituation(lead);
         const matchesBranch = filters.branch === 'Todos' || lead.ramo === filters.branch;
         const matchesState = filters.state === 'Todos' || normalizeBrazilState(lead.estado) === normalizeBrazilState(filters.state);
-        const matchesDestination = filters.destination === 'Todos' || destination === filters.destination;
+        const channel = destination === 'Instagram' ? 'Instagram' : 'WhatsApp';
+        const matchesDestination = mode === 'valid'
+          ? filters.destination === 'Todos' || channel === filters.destination
+          : filters.destination === 'Todos' || destination === filters.destination;
         const hasInstagram = isValidInstagram(lead.instagram_url ?? lead.instagram ?? '');
         const matchesInstagram =
           filters.instagram === 'Todos' ||
@@ -187,7 +191,7 @@ export function useDashboardData(filters: HomeFilters, mode: 'home' | 'valid' = 
         const matchesSituation = filters.situation === 'Todos' || filters.situation === situation || (filters.situation === 'Aprovado' && isStatusGroup(lead.status, 'approved'));
         return matchesBranch && matchesState && matchesDestination && matchesInstagram && matchesSite && matchesSituation && includesSearch(lead, filters.search);
       }),
-    [operationalLeads, filters],
+    [operationalLeads, filters, mode],
   );
 
   const updateDestination = useCallback(async (lead: ImportLead, channel: 'WhatsApp' | 'Instagram') => {

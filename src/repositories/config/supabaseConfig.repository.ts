@@ -358,7 +358,9 @@ async function listChips() {
 
 async function listInstagramProfiles() {
   const { data, error } = await getSupabaseClient().from(tableForKind('instagram')).select('*');
-  if (error) throw new Error(error.message);
+  // O banco normalizado atual ainda não possui a tabela legada instagram_profiles.
+  // Nesse caso, a configuração fica vazia sem interromper as telas operacionais.
+  if (error) return [];
   return (data ?? []).map((row) => rowToInstagramProfile(row));
 }
 

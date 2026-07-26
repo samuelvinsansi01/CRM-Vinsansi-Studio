@@ -13,7 +13,7 @@ async function readSetting<T>(key: SettingsKey, fallback: T): Promise<T> {
   const table = getSupabaseConfig().tables.settings;
   const userId = await getCurrentUserId();
   const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', key).maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) return fallback;
   return data?.value ? ({ ...fallback, ...data.value } as T) : fallback;
 }
 
@@ -45,7 +45,7 @@ async function readExtensionRuntimeConfig(): Promise<ExtensionRuntimeConfig | nu
   const table = getSupabaseConfig().tables.settings;
   const userId = await getCurrentUserId();
   const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', 'extension_runtime').maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) return null;
   return (data?.value ?? null) as ExtensionRuntimeConfig | null;
 }
 
@@ -115,7 +115,7 @@ export const supabaseSettingsRepository: SettingsRepository = {
     const table = getSupabaseConfig().tables.settings;
     const userId = await getCurrentUserId();
     const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', 'dispatch').maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) return normalizeDispatchSettings(defaultDispatchSettings);
     return normalizeDispatchSettings(data?.value ?? defaultDispatchSettings);
   },
 

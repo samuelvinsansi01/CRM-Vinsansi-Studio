@@ -1,4 +1,4 @@
-import { Check, Globe2, Instagram, Link2, MessageCircle, RefreshCcw, RotateCcw, Users, X } from 'lucide-react';
+import { Check, Instagram, MessageCircle, RefreshCcw, RotateCcw, Users, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import {
@@ -293,21 +293,36 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
         }
       />
 
-      <section className="metric-grid metric-grid--5">
-        <MetricCard icon={Users} value={isValidPage ? String(dashboard.metrics.total.total) : `${dashboard.metrics.total.approved}/${dashboard.metrics.total.total}`} label="Total" />
-        <MetricCard icon={MessageCircle} value={isValidPage ? String(dashboard.metrics.whatsapp.total) : `${dashboard.metrics.whatsapp.approved}/${dashboard.metrics.whatsapp.total}`} label="WhatsApp" tone="success" />
-        <MetricCard icon={Globe2} value={isValidPage ? String(dashboard.metrics.ownSite.total) : `${dashboard.metrics.ownSite.approved}/${dashboard.metrics.ownSite.total}`} label="Com site" />
-        <MetricCard icon={Link2} value={isValidPage ? String(dashboard.metrics.aggregators.total) : `${dashboard.metrics.aggregators.approved}/${dashboard.metrics.aggregators.total}`} label="Agregadores" tone="warning" />
-        <MetricCard icon={Instagram} value={isValidPage ? String(dashboard.metrics.instagram.total) : `${dashboard.metrics.instagram.approved}/${dashboard.metrics.instagram.total}`} label="Instagram" />
-      </section>
+      {isValidPage ? (
+        <section className="metric-grid metric-grid--3">
+          <MetricCard icon={Users} value={String(dashboard.metrics.total.total)} label="Total" />
+          <MetricCard icon={MessageCircle} value={String(dashboard.metrics.total.total - dashboard.metrics.instagram.total)} label="WhatsApp" tone="success" />
+          <MetricCard icon={Instagram} value={String(dashboard.metrics.instagram.total)} label="Instagram" />
+        </section>
+      ) : (
+        <section className="metric-grid metric-grid--5">
+          <MetricCard icon={Users} value={`${dashboard.metrics.total.approved}/${dashboard.metrics.total.total}`} label="Total" />
+          <MetricCard icon={MessageCircle} value={`${dashboard.metrics.whatsapp.approved}/${dashboard.metrics.whatsapp.total}`} label="WhatsApp" tone="success" />
+          <MetricCard icon={Instagram} value={`${dashboard.metrics.instagram.approved}/${dashboard.metrics.instagram.total}`} label="Instagram" />
+        </section>
+      )}
 
       <FiltersBar>
-        <SelectField value={filters.branch} options={dashboard.options.branches} placeholder="Ramo" onChange={(value) => updateFilter('branch', value)} />
-        <SelectField value={filters.state} options={dashboard.options.states} placeholder="Estado" onChange={(value) => updateFilter('state', value)} />
-        <SelectField value={filters.destination} options={dashboard.options.destinations} placeholder="Destino" onChange={(value) => updateFilter('destination', value)} />
-        <SelectField value={filters.instagram} options={dashboard.options.instagram} placeholder="Instagram" onChange={(value) => updateFilter('instagram', value)} />
-        <SelectField value={filters.site} options={dashboard.options.sites} placeholder="Site" onChange={(value) => updateFilter('site', value)} />
-        {!isValidPage ? <SelectField value={filters.situation} options={dashboard.options.situations} placeholder="Status" onChange={(value) => updateFilter('situation', value as HomeFilters['situation'])} /> : null}
+        {isValidPage ? (
+          <>
+            <SelectField value={filters.destination} options={dashboard.options.channels} placeholder="Canal" onChange={(value) => updateFilter('destination', value)} />
+            <SelectField value={filters.branch} options={dashboard.options.branches} placeholder="Ramo" onChange={(value) => updateFilter('branch', value)} />
+          </>
+        ) : (
+          <>
+            <SelectField value={filters.branch} options={dashboard.options.branches} placeholder="Ramo" onChange={(value) => updateFilter('branch', value)} />
+            <SelectField value={filters.state} options={dashboard.options.states} placeholder="Estado" onChange={(value) => updateFilter('state', value)} />
+            <SelectField value={filters.destination} options={dashboard.options.destinations} placeholder="Destino" onChange={(value) => updateFilter('destination', value)} />
+            <SelectField value={filters.instagram} options={dashboard.options.instagram} placeholder="Instagram" onChange={(value) => updateFilter('instagram', value)} />
+            <SelectField value={filters.site} options={dashboard.options.sites} placeholder="Site" onChange={(value) => updateFilter('site', value)} />
+            <SelectField value={filters.situation} options={dashboard.options.situations} placeholder="Status" onChange={(value) => updateFilter('situation', value as HomeFilters['situation'])} />
+          </>
+        )}
         <SearchInput value={filters.search} onChange={(value) => updateFilter('search', value)} placeholder="Buscar empresa" />
       </FiltersBar>
 
