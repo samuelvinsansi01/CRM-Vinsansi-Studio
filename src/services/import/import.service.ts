@@ -212,18 +212,11 @@ export const importService = {
   },
 
   async listHomeOperationalLeads() {
-    // No banco normalizado, a etapa do funil pertence ao próprio lead.
-    // A tela Início mostra apenas os status operacionais importado/validado
-    // (mapeados pela camada legada como pending/approved), sem consultar
-    // whatsapp_queue_items, instagram_queue_items ou pre_send_leads.
-    const [pending, approved] = await Promise.all([
-      repositories.import.list({ status: 'pending' }),
-      repositories.import.list({ status: 'approved' }),
-    ]);
-
-    const byId = new Map<string, ImportLead>();
-    [...pending, ...approved].forEach((lead) => byId.set(lead.id, lead));
-    return Array.from(byId.values());
+    // Início é exclusivamente o começo do ciclo: lead_status_id = 1
+    // (importado / em aguarde). Leads validados pertencem à tela de validados,
+    // e nunca devem continuar aparecendo aqui.
+    const pending = await repositories.import.list({ status: 'pending' });
+    return pending.filter((lead) => isStatusGroup(lead.status, 'pending'));
   },
 
   async summary() {

@@ -13,6 +13,9 @@ import { LEAD_STATUS, type LeadDatabaseRow } from '../../types/lead.types';
 import { getCurrentUserId } from '../supabase.helpers';
 import type { BaseRepository } from './base.repository';
 
+const FINAL_LEAD_STATUS_IDS = [5, 6, 7, 8] as const;
+const FINAL_LEAD_STATUSES = new Set<BaseLeadStatus>(['enviado', 'invalido', 'duplicado', 'arquivado']);
+
 const LEADS_SELECT = `
   leads_id,
   users_id,
@@ -102,7 +105,7 @@ async function listAll(): Promise<BaseLead[]> {
       .from('leads')
       .select(LEADS_SELECT)
       .eq('users_id', userId)
-      .in('lead_status_id', [5, 6, 7, 8])
+      .in('lead_status_id', [...FINAL_LEAD_STATUS_IDS])
       .order('leads_created_at', { ascending: false })
       .order('leads_id', { ascending: false })
       .range(from, from + pageSize - 1);
@@ -114,7 +117,12 @@ async function listAll(): Promise<BaseLead[]> {
     if (page.length < pageSize) break;
   }
 
-  return rows.map(mapLead);
+  // Defesa adicional: mesmo que uma política/view do banco altere o resultado da
+  // consulta, nenhuma etapa ativa pode vazar para a Base Permanente.
+  return rows
+    .filter((row) => FINAL_LEAD_STATUS_IDS.includes(Number(row.lead_status_id) as 5 | 6 | 7 | 8))
+    .map(mapLead)
+    .filter((lead) => FINAL_LEAD_STATUSES.has(lead.status));
 }
 
 async function resolveLookupId(table: string, idColumn: string, nameColumn: string, value: string): Promise<number | null> {

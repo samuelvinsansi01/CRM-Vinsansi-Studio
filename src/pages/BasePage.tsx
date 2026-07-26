@@ -58,10 +58,6 @@ type BaseTableRow = Record<string, ReactNode> & {
 const PAGE_SIZE = 20;
 
 const statusOptions = [
-  { value: 'importado', label: baseStatusLabel.importado },
-  { value: 'validado', label: baseStatusLabel.validado },
-  { value: 'pre_envio', label: baseStatusLabel.pre_envio },
-  { value: 'na_fila', label: baseStatusLabel.na_fila },
   { value: 'enviado', label: baseStatusLabel.enviado },
   { value: 'invalido', label: baseStatusLabel.invalido },
   { value: 'duplicado', label: baseStatusLabel.duplicado },
@@ -141,7 +137,7 @@ const columns: TableColumn<BaseTableRow>[] = [
   },
 ];
 
-const tableActions: TableAction[] = ['view', 'validate', 'archive'];
+const tableActions: TableAction[] = ['view', 'archive'];
 type ConfirmAction = 'archive';
 
 export function BasePage() {
@@ -332,10 +328,7 @@ export function BasePage() {
 
   return (
     <div className="dashboard-table-page lead-list-page lead-list-page--base">
-      <PageHeader
-        title="Base Permanente"
-        action={<Button iconLeft={Check} onClick={handleValidateAllImported} disabled={validating}>{validating ? 'Validando...' : 'Validar importados'}</Button>}
-      />
+      <PageHeader title="Base Permanente" />
 
       <section className="metric-grid metric-grid--6">
         <MetricCard icon={Users} value={String(summary.total)} label="Total" />
