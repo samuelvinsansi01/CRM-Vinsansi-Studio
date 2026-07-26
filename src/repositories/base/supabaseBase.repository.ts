@@ -102,6 +102,7 @@ async function listAll(): Promise<BaseLead[]> {
       .from('leads')
       .select(LEADS_SELECT)
       .eq('users_id', userId)
+      .in('lead_status_id', [5, 6, 7, 8])
       .order('leads_created_at', { ascending: false })
       .order('leads_id', { ascending: false })
       .range(from, from + pageSize - 1);

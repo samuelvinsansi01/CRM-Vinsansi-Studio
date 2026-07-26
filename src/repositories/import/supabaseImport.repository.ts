@@ -331,6 +331,7 @@ async function allLeads(includeDeleted = false) {
       .from('leads')
       .select(NORMALIZED_LEADS_SELECT)
       .eq('users_id', userId)
+      .in('lead_status_id', [1, 2])
       .order('leads_created_at', { ascending: false })
       .order('leads_id', { ascending: false })
       .range(from, from + pageSize - 1);

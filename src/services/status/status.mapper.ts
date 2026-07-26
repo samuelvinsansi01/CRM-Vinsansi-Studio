@@ -70,7 +70,7 @@ const STATUS_GROUPS: Record<StatusGroup, { canonical: CanonicalStatus; label: st
     canonical: 'QUEUED',
     label: 'Em fila',
     tone: 'primary',
-    aliases: ['queued', 'na_fila', 'pre_envio', 'em_fila', 'em fila', 'fila', 'ready', 'ready_to_dispatch', 'ready to dispatch', 'dispatch_queue', 'dispatch queue', 'scheduled', 'pronto'],
+    aliases: ['queued', 'na_fila', 'em_fila', 'em fila', 'fila', 'ready', 'ready_to_dispatch', 'ready to dispatch', 'dispatch_queue', 'dispatch queue', 'scheduled', 'pronto'],
   },
   invalid: {
     canonical: 'INVALID',
@@ -88,7 +88,7 @@ const STATUS_GROUPS: Record<StatusGroup, { canonical: CanonicalStatus; label: st
     canonical: 'REVIEW',
     label: 'Em revis\u00e3o',
     tone: 'warning',
-    aliases: ['review', 'em revisao', 'revisao', 'validation retry'],
+    aliases: ['review', 'pre_envio', 'pre envio', 'pré-envio', 'em revisao', 'revisao', 'validation retry'],
   },
   archived: {
     canonical: 'ARCHIVED',

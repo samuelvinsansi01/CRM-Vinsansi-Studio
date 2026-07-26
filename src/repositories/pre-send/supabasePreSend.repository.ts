@@ -58,7 +58,7 @@ async function allLeads() {
       id: lead.id ?? String(row.id),
       status: normalizePreSendStatus(row.status ?? lead.status),
     });
-  }).filter((lead) => !isStatusGroup(lead.status, 'deleted'));
+  }).filter((lead) => isStatusGroup(lead.status, 'review'));
 }
 
 export const supabasePreSendRepository: PreSendRepository = {

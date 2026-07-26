@@ -132,6 +132,7 @@ async function allLeads() {
   return (queueResponse.data ?? [])
     .filter((row) => !isDeletedRow(row))
     .map((row) => rowToLead(row))
+    .filter((lead) => isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'sending') || isStatusGroup(lead.status, 'paused'))
     .map((lead) => applyCurrentBranchMedia(lead, branchForBoundRecord(lead, branches)));
 }
 
