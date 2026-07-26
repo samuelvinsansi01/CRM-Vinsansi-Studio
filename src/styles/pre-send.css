@@ -308,3 +308,7 @@
   align-items: center;
   gap: var(--space-08);
 }
+
+.metric-grid--1 {
+  grid-template-columns: minmax(0, 1fr);
+}

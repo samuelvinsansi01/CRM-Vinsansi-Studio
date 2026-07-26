@@ -219,6 +219,13 @@ export const importService = {
     return pending.filter((lead) => isStatusGroup(lead.status, 'pending'));
   },
 
+
+  async listValidatedLeads() {
+    // A tela fixa Válidos exibe exclusivamente lead_status_id = 2.
+    const approved = await repositories.import.list({ status: 'approved' });
+    return approved.filter((lead) => isStatusGroup(lead.status, 'approved'));
+  },
+
   async summary() {
     return repositories.import.summary();
   },

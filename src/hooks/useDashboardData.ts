@@ -90,7 +90,7 @@ function nextWhatsAppDestination(lead: ImportLead): ImportLeadDestination {
   return 'WhatsApp';
 }
 
-export function useDashboardData(filters: HomeFilters) {
+export function useDashboardData(filters: HomeFilters, mode: 'home' | 'valid' = 'home') {
   const [records, setRecords] = useState<ImportLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -124,7 +124,9 @@ export function useDashboardData(filters: HomeFilters) {
       setError(null);
 
       try {
-        const operational = await importService.listHomeOperationalLeads();
+        const operational = mode === 'valid'
+          ? await importService.listValidatedLeads()
+          : await importService.listHomeOperationalLeads();
         if (active) setRecords(operational);
       } catch (err) {
         if (!active) return;
@@ -144,7 +146,7 @@ export function useDashboardData(filters: HomeFilters) {
     return () => {
       active = false;
     };
-  }, [refreshIndex]);
+  }, [refreshIndex, mode]);
 
   const operationalLeads = useMemo(
     () => sortByLeadScore(records.filter((lead) => isStatusGroup(lead.status, 'pending') || isStatusGroup(lead.status, 'approved'))),

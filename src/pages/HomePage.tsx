@@ -122,7 +122,7 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
     estado: '',
   });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const dashboard = useDashboardData(filters);
+  const dashboard = useDashboardData(filters, mode);
 
   const rows = useMemo<DashboardRow[]>(
     () =>
@@ -285,6 +285,7 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
     <div className="dashboard-table-page lead-list-page lead-list-page--home">
       <PageHeader
         title={isValidPage ? "Válidos" : "Inicio"}
+        description={isValidPage ? "Leads validados e prontos para serem distribuídos às filas de envio." : undefined}
         action={
           <Button variant="secondary" iconLeft={RefreshCcw} disabled={dashboard.loading} onClick={dashboard.refresh}>
             Atualizar
@@ -293,11 +294,11 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
       />
 
       <section className="metric-grid metric-grid--5">
-        <MetricCard icon={Users} value={`${dashboard.metrics.total.approved}/${dashboard.metrics.total.total}`} label="Total" />
-        <MetricCard icon={MessageCircle} value={`${dashboard.metrics.whatsapp.approved}/${dashboard.metrics.whatsapp.total}`} label="WhatsApp" tone="success" />
-        <MetricCard icon={Globe2} value={`${dashboard.metrics.ownSite.approved}/${dashboard.metrics.ownSite.total}`} label="Com site" />
-        <MetricCard icon={Link2} value={`${dashboard.metrics.aggregators.approved}/${dashboard.metrics.aggregators.total}`} label="Agregadores" tone="warning" />
-        <MetricCard icon={Instagram} value={`${dashboard.metrics.instagram.approved}/${dashboard.metrics.instagram.total}`} label="Instagram" />
+        <MetricCard icon={Users} value={isValidPage ? dashboard.metrics.total.total : `${dashboard.metrics.total.approved}/${dashboard.metrics.total.total}`} label="Total" />
+        <MetricCard icon={MessageCircle} value={isValidPage ? dashboard.metrics.whatsapp.total : `${dashboard.metrics.whatsapp.approved}/${dashboard.metrics.whatsapp.total}`} label="WhatsApp" tone="success" />
+        <MetricCard icon={Globe2} value={isValidPage ? dashboard.metrics.ownSite.total : `${dashboard.metrics.ownSite.approved}/${dashboard.metrics.ownSite.total}`} label="Com site" />
+        <MetricCard icon={Link2} value={isValidPage ? dashboard.metrics.aggregators.total : `${dashboard.metrics.aggregators.approved}/${dashboard.metrics.aggregators.total}`} label="Agregadores" tone="warning" />
+        <MetricCard icon={Instagram} value={isValidPage ? dashboard.metrics.instagram.total : `${dashboard.metrics.instagram.approved}/${dashboard.metrics.instagram.total}`} label="Instagram" />
       </section>
 
       <FiltersBar>
