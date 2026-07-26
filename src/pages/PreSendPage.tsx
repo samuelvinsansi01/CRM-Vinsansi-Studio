@@ -152,7 +152,7 @@ export function PreSendPage() {
       />
 
       <section className="metric-grid metric-grid--1">
-        <MetricCard icon={PhoneCall} value={leads.length} label="WhatsApp para validar" tone="success" />
+        <MetricCard icon={PhoneCall} value={String(leads.length)} label="WhatsApp para validar" tone="success" />
       </section>
 
       <TableCard

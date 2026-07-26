@@ -294,11 +294,11 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
       />
 
       <section className="metric-grid metric-grid--5">
-        <MetricCard icon={Users} value={isValidPage ? dashboard.metrics.total.total : `${dashboard.metrics.total.approved}/${dashboard.metrics.total.total}`} label="Total" />
-        <MetricCard icon={MessageCircle} value={isValidPage ? dashboard.metrics.whatsapp.total : `${dashboard.metrics.whatsapp.approved}/${dashboard.metrics.whatsapp.total}`} label="WhatsApp" tone="success" />
-        <MetricCard icon={Globe2} value={isValidPage ? dashboard.metrics.ownSite.total : `${dashboard.metrics.ownSite.approved}/${dashboard.metrics.ownSite.total}`} label="Com site" />
-        <MetricCard icon={Link2} value={isValidPage ? dashboard.metrics.aggregators.total : `${dashboard.metrics.aggregators.approved}/${dashboard.metrics.aggregators.total}`} label="Agregadores" tone="warning" />
-        <MetricCard icon={Instagram} value={isValidPage ? dashboard.metrics.instagram.total : `${dashboard.metrics.instagram.approved}/${dashboard.metrics.instagram.total}`} label="Instagram" />
+        <MetricCard icon={Users} value={isValidPage ? String(dashboard.metrics.total.total) : `${dashboard.metrics.total.approved}/${dashboard.metrics.total.total}`} label="Total" />
+        <MetricCard icon={MessageCircle} value={isValidPage ? String(dashboard.metrics.whatsapp.total) : `${dashboard.metrics.whatsapp.approved}/${dashboard.metrics.whatsapp.total}`} label="WhatsApp" tone="success" />
+        <MetricCard icon={Globe2} value={isValidPage ? String(dashboard.metrics.ownSite.total) : `${dashboard.metrics.ownSite.approved}/${dashboard.metrics.ownSite.total}`} label="Com site" />
+        <MetricCard icon={Link2} value={isValidPage ? String(dashboard.metrics.aggregators.total) : `${dashboard.metrics.aggregators.approved}/${dashboard.metrics.aggregators.total}`} label="Agregadores" tone="warning" />
+        <MetricCard icon={Instagram} value={isValidPage ? String(dashboard.metrics.instagram.total) : `${dashboard.metrics.instagram.approved}/${dashboard.metrics.instagram.total}`} label="Instagram" />
       </section>
 
       <FiltersBar>
