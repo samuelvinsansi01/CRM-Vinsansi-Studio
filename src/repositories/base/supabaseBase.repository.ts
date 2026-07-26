@@ -92,14 +92,28 @@ function calculateSummary(records: BaseLead[]): BaseSummary {
 
 async function listAll(): Promise<BaseLead[]> {
   const userId = await getCurrentUserId();
-  const { data, error } = await getSupabaseClient()
-    .from('leads')
-    .select(LEADS_SELECT)
-    .eq('users_id', userId)
-    .order('leads_created_at', { ascending: false });
+  const pageSize = 1000;
+  const rows: LeadDatabaseRow[] = [];
 
-  if (error) throw new Error(`Não foi possível carregar os leads: ${error.message}`);
-  return (data ?? []).map((row: unknown) => mapLead(row as unknown as LeadDatabaseRow));
+  // PostgREST limita cada resposta. A paginação garante que a Base Permanente
+  // sempre inclua todos os leads atuais e também os inseridos futuramente.
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await getSupabaseClient()
+      .from('leads')
+      .select(LEADS_SELECT)
+      .eq('users_id', userId)
+      .order('leads_created_at', { ascending: false })
+      .order('leads_id', { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw new Error(`Não foi possível carregar os leads: ${error.message}`);
+
+    const page = (data ?? []) as unknown as LeadDatabaseRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows.map(mapLead);
 }
 
 async function resolveLookupId(table: string, idColumn: string, nameColumn: string, value: string): Promise<number | null> {

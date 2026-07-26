@@ -5,8 +5,73 @@ import { extractImportItems, normalizeDomain, normalizeImportItems, normalizePho
 import type { ImportExecutionOptions, ImportLead, ImportLeadDestination, ImportLeadInput, ImportListFilters, ImportParseResult, ImportSummary } from '../../services/import/types';
 import { normalizeInstagramUsername } from '../../services/instagram/instagram.utils';
 import { isStatusGroup } from '../../services/status/status.mapper';
+import { mapLead } from '../../mappers/lead.mapper';
+import type { BaseLead } from '../../services/base/types';
+import type { LeadDatabaseRow } from '../../types/lead.types';
 import { createId, createUuid, getCurrentUserId, nowIso } from '../supabase.helpers';
 import type { ImportRepository } from './import.repository';
+
+const NORMALIZED_LEADS_SELECT = `
+  leads_id,
+  users_id,
+  branches_id,
+  countries_id,
+  states_id,
+  cities_id,
+  channels_id,
+  lead_status_id,
+  contact_sources_id,
+  apify_import_jobs_id,
+  leads_name,
+  leads_phone,
+  leads_instagram,
+  leads_website,
+  leads_maps,
+  leads_street,
+  leads_postal_code,
+  leads_categories,
+  leads_score,
+  leads_reviews_count,
+  leads_origin,
+  leads_created_at,
+  leads_updated_at,
+  branches:branches_id ( branches_id, branches_name ),
+  countries:countries_id ( countries_id, countries_name, countries_code ),
+  states:states_id ( states_id, states_name, states_code ),
+  cities:cities_id ( cities_id, cities_name ),
+  channels:channels_id ( channels_id, channels_name ),
+  lead_status:lead_status_id ( lead_status_id, lead_status_name ),
+  contact_sources:contact_sources_id ( contact_sources_id, contact_sources_name )
+`;
+
+function baseLeadToImportLead(lead: BaseLead): ImportLead {
+  return {
+    id: lead.id,
+    empresa: lead.company,
+    ramo: lead.branch,
+    branch_id: lead.branch_id,
+    subcategoria: lead.branch,
+    destino: lead.destination === 'Agregador' ? 'Agregadores' : lead.destination,
+    original_destination: lead.destination === 'Agregador' ? 'Agregadores' : lead.destination,
+    destination: lead.destination === 'Agregador' ? 'Agregadores' : lead.destination,
+    send_instagram: lead.destination === 'Instagram',
+    instagram_url: lead.instagram,
+    status: lead.status,
+    motivo: '',
+    rating: 0,
+    reviews: 0,
+    whatsapp: lead.phone,
+    instagram: lead.instagram,
+    site: lead.site,
+    cidade: lead.city,
+    estado: lead.state,
+    normalizedPhone: lead.normalizedPhone ?? '',
+    normalizedSite: lead.normalizedSite ?? '',
+    normalizedInstagram: lead.normalizedInstagram ?? '',
+    normalizedMapsUrl: lead.mapsUrl ?? '',
+    sourceLeadId: lead.sourceLeadId ?? '',
+  };
+}
 
 type BranchRule = {
   id: string;
@@ -255,18 +320,30 @@ function isOperationalStoredLead(lead: ImportLead) {
 }
 
 async function allLeads(includeDeleted = false) {
-  const branchRules = await loadBranchRules();
+  const userId = await getCurrentUserId();
   const pageSize = 1000;
-  const rows: Record<string, unknown>[] = [];
+  const rows: LeadDatabaseRow[] = [];
 
+  // A tabela normalizada usa leads_id e relacionamentos. Buscar em páginas
+  // evita o teto de 1000 linhas do PostgREST e mantém novos leads visíveis.
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await getSupabaseClient().from(table()).select('*').range(from, from + pageSize - 1);
+    const { data, error } = await getSupabaseClient()
+      .from('leads')
+      .select(NORMALIZED_LEADS_SELECT)
+      .eq('users_id', userId)
+      .order('leads_created_at', { ascending: false })
+      .order('leads_id', { ascending: false })
+      .range(from, from + pageSize - 1);
+
     if (error) throw new Error(error.message);
-    rows.push(...((data ?? []) as Record<string, unknown>[]));
-    if (!data || data.length < pageSize) break;
+    const page = (data ?? []) as unknown as LeadDatabaseRow[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
   }
 
-  return rows.map((row) => rowToLead(row, branchRules)).filter((lead) => !isTestLead(lead) && (includeDeleted || !isStatusGroup(lead.status, 'deleted')));
+  return rows
+    .map((row) => baseLeadToImportLead(mapLead(row)))
+    .filter((lead) => !isTestLead(lead) && (includeDeleted || !isStatusGroup(lead.status, 'deleted')));
 }
 
 function isTestConfigLike(record: Record<string, unknown>) {
