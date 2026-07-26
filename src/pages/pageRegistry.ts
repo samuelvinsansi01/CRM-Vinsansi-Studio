@@ -3,6 +3,7 @@ export type PageId =
   | 'import-approved'
   | 'import-rejected'
   | 'base'
+  | 'valid'
   | 'pre-send'
   | 'whatsapp'
   | 'instagram'
@@ -20,6 +21,7 @@ export const navGroups = [
     id: 'pre-send',
     label: 'Envios',
     items: [
+      { id: 'valid', label: 'Válidos' },
       { id: 'pre-send', label: 'Pré-Envio' },
       { id: 'whatsapp', label: 'Fila WhatsApp' },
       { id: 'instagram', label: 'Fila Instagram' },
@@ -45,6 +47,7 @@ export const pageTitles: Record<PageId, string> = {
   'import-approved': 'Importar',
   'import-rejected': 'Importar',
   base: 'Base Permanente',
+  valid: 'Válidos',
   'pre-send': 'Pré-Envio',
   whatsapp: 'Fila WhatsApp',
   instagram: 'Fila Instagram',

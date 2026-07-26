@@ -147,7 +147,7 @@ export function useDashboardData(filters: HomeFilters) {
   }, [refreshIndex]);
 
   const operationalLeads = useMemo(
-    () => sortByLeadScore(records.filter((lead) => isStatusGroup(lead.status, 'pending'))),
+    () => sortByLeadScore(records.filter((lead) => isStatusGroup(lead.status, 'pending') || isStatusGroup(lead.status, 'approved'))),
     [records],
   );
   const metrics = useMemo(() => calculateMetrics(operationalLeads), [operationalLeads]);

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Instagram, PhoneCall, RefreshCcw, RotateCcw, Save, Send, TableProperties } from 'lucide-react';
+import { PhoneCall, RefreshCcw, RotateCcw, Save, TableProperties } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -657,16 +657,14 @@ export function PreSendPage() {
         action={
           <div className="pre-send-header-actions">
             <Button variant="secondary" iconLeft={RotateCcw} onClick={returnSelectedDayToImport}>Retornar leads para inicio</Button>
-            <Button iconLeft={Send} onClick={sendPreparedToQueues}>Enviar leads para as filas</Button>
           </div>
         }
       />
       {error ? <div className="table-message">{error}</div> : null}
       {!error && loading ? <div className="table-message">Carregando semana de pre-envio...</div> : null}
       <DayLimitGrid dayCards={dayCards} activeDayKey={activeDayKey || daySelectionKey(defaultDayId)} onDayChange={(dayId) => setActiveDayKey(daySelectionKey(dayId))} />
-      <section className="metric-grid metric-grid--2 pre-send-summary">
-        <MetricCard icon={PhoneCall} value={String(daySummary.whatsapp)} label={`Numeros validados${daySummary.dateLabel ? ` - ${daySummary.dateLabel}` : ''}`} tone="success" />
-        <MetricCard icon={Instagram} value={String(daySummary.instagram)} label={`Retornos Instagram${daySummary.dateLabel ? ` - ${daySummary.dateLabel}` : ''}`} />
+      <section className="metric-grid pre-send-summary">
+        <MetricCard icon={PhoneCall} value={String(daySummary.whatsapp)} label={`WhatsApp para validar${daySummary.dateLabel ? ` - ${daySummary.dateLabel}` : ''}`} tone="success" />
       </section>
       <div className="pre-send-action">
         <Button iconLeft={RefreshCcw} onClick={() => { refreshAll(); pushToast({ title: 'Pré-envio atualizado', description: 'Dados atualizados em segundo plano.', tone: 'info' }); }}>Atualizar pré-envio</Button>
@@ -689,24 +687,6 @@ export function PreSendPage() {
             markAlreadySent={markAlreadySent}
             updateLead={updateLead}
             onScopeChange={setWhatsAppScope}
-          />
-        </Panel>
-        <Panel className="queue-card-shell">
-          <ValidationQueue
-            title="Instagram"
-            channel="Instagram"
-            activeDayId={dayIdForChannel('Instagram')}
-            onToast={pushToast}
-            onRefreshSummary={refreshAll}
-            moveApprovedImportsToQueue={moveApprovedImportsToQueue}
-            validateLead={validateLead}
-            validateLeads={validateLeads}
-            revalidateApprovedLeads={revalidateApprovedLeads}
-            invalidateLead={invalidateLead}
-            archiveLead={archiveLead}
-            markAlreadySent={markAlreadySent}
-            updateLead={updateLead}
-            onScopeChange={setInstagramScope}
           />
         </Panel>
       </section>

@@ -41,6 +41,7 @@ export function App() {
         <ImportPage rejected={activePage === 'import-rejected'} onStatusChange={(isRejected) => setActivePage(isRejected ? 'import-rejected' : 'import-approved')} />
       ) : null}
       {activePage === 'base' ? <BasePage /> : null}
+      {activePage === 'valid' ? <HomePage mode="valid" /> : null}
       {activePage === 'pre-send' ? <PreSendPage /> : null}
       {activePage === 'whatsapp' ? <QueuePage channel="whatsapp" /> : null}
       {activePage === 'instagram' ? <QueuePage channel="instagram" /> : null}

@@ -1697,6 +1697,17 @@ export const preSendService = {
           validationAttempts: (lead?.validationAttempts ?? 0) + 1,
           lastValidatedAt: validatedAt,
         });
+        if (lead?.sourceImportId) {
+          await repositories.import.update(lead.sourceImportId, {
+            status: 'approved',
+            destino: lead.destination,
+            destination: lead.destination,
+            instagram_url: lead.instagram_url || lead.instagram,
+          } as Partial<ImportLead>);
+        }
+        // O lead validado deixa o Pré-Envio. A partir daqui ele pertence à
+        // tela fixa Válidos e será consumido pelas filas conforme o destino.
+        await repositories.preSend.archiveLead(id);
         await appendValidationAudit({
           source: 'pre-send',
           action: 'whatsapp_validation_approved',
@@ -1811,6 +1822,17 @@ export const preSendService = {
           validationAttempts: (lead?.validationAttempts ?? 0) + 1,
           lastValidatedAt: validatedAt,
         });
+        if (lead?.sourceImportId) {
+          await repositories.import.update(lead.sourceImportId, {
+            status: 'approved',
+            destino: lead.destination,
+            destination: lead.destination,
+            instagram_url: lead.instagram_url || lead.instagram,
+          } as Partial<ImportLead>);
+        }
+        // O lead validado deixa o Pré-Envio. A partir daqui ele pertence à
+        // tela fixa Válidos e será consumido pelas filas conforme o destino.
+        await repositories.preSend.archiveLead(id);
         await appendValidationAudit({
           source: 'pre-send',
           action: 'whatsapp_revalidation_approved',

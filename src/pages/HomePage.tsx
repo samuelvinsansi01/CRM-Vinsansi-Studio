@@ -103,8 +103,9 @@ function situationTag(lead: ImportLead) {
   return <Tag tone={statusTone(lead.status)}>{statusLabel(lead.status)}</Tag>;
 }
 
-export function HomePage() {
-  const [filters, setFilters] = useState<HomeFilters>(defaultFilters);
+export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
+  const isValidPage = mode === 'valid';
+  const [filters, setFilters] = useState<HomeFilters>(() => ({ ...defaultFilters, situation: isValidPage ? 'Aprovado' : 'Em aguarde' }));
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(PAGE_SIZE);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
@@ -283,7 +284,7 @@ export function HomePage() {
   return (
     <div className="dashboard-table-page lead-list-page lead-list-page--home">
       <PageHeader
-        title="Inicio"
+        title={isValidPage ? "Válidos" : "Inicio"}
         action={
           <Button variant="secondary" iconLeft={RefreshCcw} disabled={dashboard.loading} onClick={dashboard.refresh}>
             Atualizar
@@ -305,7 +306,7 @@ export function HomePage() {
         <SelectField value={filters.destination} options={dashboard.options.destinations} placeholder="Destino" onChange={(value) => updateFilter('destination', value)} />
         <SelectField value={filters.instagram} options={dashboard.options.instagram} placeholder="Instagram" onChange={(value) => updateFilter('instagram', value)} />
         <SelectField value={filters.site} options={dashboard.options.sites} placeholder="Site" onChange={(value) => updateFilter('site', value)} />
-        <SelectField value={filters.situation} options={dashboard.options.situations} placeholder="Status" onChange={(value) => updateFilter('situation', value as HomeFilters['situation'])} />
+        {!isValidPage ? <SelectField value={filters.situation} options={dashboard.options.situations} placeholder="Status" onChange={(value) => updateFilter('situation', value as HomeFilters['situation'])} /> : null}
         <SearchInput value={filters.search} onChange={(value) => updateFilter('search', value)} placeholder="Buscar empresa" />
       </FiltersBar>
 
@@ -328,7 +329,7 @@ export function HomePage() {
         ) : null}
         {dashboard.error ? <div className="table-message">{dashboard.error}</div> : null}
         {!dashboard.error && dashboard.loading ? <div className="table-message">Carregando leads da importacao...</div> : null}
-        {!dashboard.error && !dashboard.loading && !pagedRows.length ? <div className="table-message">Nenhum lead em aguarde para atribuicao.</div> : null}
+        {!dashboard.error && !dashboard.loading && !pagedRows.length ? <div className="table-message">{isValidPage ? 'Nenhum lead validado disponível para as filas.' : 'Nenhum lead em aguarde para atribuicao.'}</div> : null}
         {!dashboard.error && !dashboard.loading && pagedRows.length ? (
           <DataTable
             columns={columns}
