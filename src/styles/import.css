@@ -551,7 +551,7 @@
 }
 
 /* Runs reais da Apify */
-.import-extractor-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.import-extractor-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
 .apify-runs-section { margin-top: var(--space-20); }
 .apify-runs-table-wrap { overflow-x: auto; }
 .apify-runs-table { width: 100%; border-collapse: collapse; min-width: 980px; }
@@ -561,4 +561,5 @@
 .apify-run-details { display: grid; gap: 16px; }
 .apify-run-summary { display: grid; gap: 6px; }
 .apify-json-viewer { max-height: 62vh; overflow: auto; padding: 16px; border-radius: 12px; background: color-mix(in srgb, var(--surface-card) 78%, black); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
-@media (max-width: 960px) { .import-extractor-fields { grid-template-columns: 1fr; } }
+@media (max-width: 960px) { .import-extractor-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .import-extractor-fields { grid-template-columns: 1fr; } }

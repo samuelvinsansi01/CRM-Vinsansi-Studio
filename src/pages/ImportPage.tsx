@@ -630,7 +630,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                 onChange={setSelectedApifyAccountId}
               />
             </label>
-            <Field label="Localização" placeholder="Ex.: Curitiba, PR" value={mapsLocation} onChange={setMapsLocation} />
             <label className="field import-select-field">
               <span className="field__label">Ramo</span>
               <SelectField
@@ -640,6 +639,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                 onChange={setSelectedBranchId}
               />
             </label>
+            <Field label="Localização" placeholder="Ex.: Curitiba, PR" value={mapsLocation} onChange={setMapsLocation} />
+            <Field label="Quantidade" type="number" min="1" max="500" value={mapsLimit} onChange={setMapsLimit} />
           </div>
           {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
           {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
@@ -705,6 +706,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         </section>
       )}
 
+      {importTab === 'Manual' ? (
       <section className="import-grid">
         <TableCard
           title="Prévia"
@@ -748,6 +750,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           ) : null}
         </TableCard>
       </section>
+      ) : null}
 
       <Drawer
         open={Boolean(selectedJob)}
