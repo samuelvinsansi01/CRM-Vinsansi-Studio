@@ -207,6 +207,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const simulateImport = importSettings?.safeMode.simulationMode ?? true;
   const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToInicio } = useImportLeads(activeStatus, search);
   const previewToken = useRef(0);
+  const recoveredApifyJob = useRef(false);
 
   const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
@@ -306,6 +307,62 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
 
+  const processApifyJob = async (jobId: number) => {
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      const sync = await apifyImportService.syncGoogleMapsExtractor(jobId);
+
+      if (sync.status === 'failed' || sync.status === 'aborted' || sync.status === 'timed_out') {
+        throw new Error(`A execução da Apify terminou com status ${sync.status}.`);
+      }
+      if (sync.status !== 'succeeded') continue;
+      if (sync.imported) return null;
+      if (!sync.items) throw new Error('A execução terminou, mas o dataset não foi retornado.');
+
+      const importedResult = await importJson(JSON.stringify(sync.items), { simulate: false });
+      setLastImport(importedResult);
+      setSearch('');
+      setPage(1);
+      setSelectedRows([]);
+
+      await apifyImportService.finalizeGoogleMapsImport({
+        jobId,
+        processed: importedResult.report.processed,
+        imported: importedResult.report.created,
+        duplicates: importedResult.report.duplicates,
+        rejected: importedResult.report.rejected,
+      });
+      return importedResult;
+    }
+    throw new Error('A coleta continua em processamento. Consulte novamente em alguns instantes.');
+  };
+
+  useEffect(() => {
+    if (recoveredApifyJob.current) return;
+    recoveredApifyJob.current = true;
+
+    void (async () => {
+      try {
+        const pendingJob = await apifyImportService.findLatestPendingGoogleMapsJob();
+        if (!pendingJob) return;
+        setStartingApify(true);
+        const importedResult = await processApifyJob(pendingJob.jobId);
+        if (!importedResult) return;
+        pushToast({
+          title: 'Coleta anterior recuperada',
+          description: `${importedResult.report.processed} processado(s): ${importedResult.report.created} criado(s), ${importedResult.report.duplicates} duplicado(s) e ${importedResult.report.rejected} recusado(s).`,
+          tone: importedResult.report.rejected > 0 ? 'warning' : 'success',
+        });
+      } catch (err) {
+        pushToast({ title: 'Não foi possível recuperar a coleta', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      } finally {
+        setStartingApify(false);
+      }
+    })();
+    // Executa uma única vez para recuperar inclusive o dataset criado antes deste deploy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const startApifyImport = async () => {
     const limit = Number(mapsLimit);
     const searchTerms = mapsSearchTerms.map((term) => term.trim()).filter(Boolean);
@@ -328,8 +385,19 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         description: `A conta ${result.account?.name ?? result.accountName} iniciou o Google Maps Extractor. Execução: ${result.runId}.`,
         tone: 'success',
       });
+
+      const importedResult = await processApifyJob(result.jobId);
+      if (!importedResult) {
+        pushToast({ title: 'Dataset já processado', description: 'Esta execução já havia sido importada e não será duplicada.', tone: 'success' });
+        return;
+      }
+      pushToast({
+        title: 'Coleta validada e importada',
+        description: `${importedResult.report.processed} processado(s): ${importedResult.report.created} criado(s), ${importedResult.report.duplicates} duplicado(s) e ${importedResult.report.rejected} recusado(s).`,
+        tone: importedResult.report.rejected > 0 ? 'warning' : 'success',
+      });
     } catch (err) {
-      pushToast({ title: 'Não foi possível iniciar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      pushToast({ title: 'Não foi possível concluir a coleta', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
       setStartingApify(false);
     }
