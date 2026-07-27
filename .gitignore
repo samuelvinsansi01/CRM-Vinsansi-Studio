@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+
+# Relatórios Markdown gerados durante manutenção
+*.md
+!README.md
+!README*.md
