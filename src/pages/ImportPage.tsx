@@ -255,6 +255,11 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     [selectedBranchId, uniqueBranches],
   );
 
+  const [mapsLocation, setMapsLocation] = useState('');
+  const [mapsLimit, setMapsLimit] = useState('100');
+  const [locationOptions, setLocationOptions] = useState<ApifyLocationOption[]>([]);
+  const [searchedLocations, setSearchedLocations] = useState<string[]>([]);
+
   const searchedLocationKeys = useMemo(
     () => new Set(searchedLocations.map(normalizeLocationKey)),
     [searchedLocations],
@@ -269,11 +274,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     () => locationOptions.filter((location) => searchedLocationKeys.has(normalizeLocationKey(location.label))),
     [locationOptions, searchedLocationKeys],
   );
-
-  const [mapsLocation, setMapsLocation] = useState('');
-  const [mapsLimit, setMapsLimit] = useState('100');
-  const [locationOptions, setLocationOptions] = useState<ApifyLocationOption[]>([]);
-  const [searchedLocations, setSearchedLocations] = useState<string[]>([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
   const [apifyJobs, setApifyJobs] = useState<ApifyImportJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
