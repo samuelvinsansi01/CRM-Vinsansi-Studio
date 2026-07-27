@@ -1,14 +1,10 @@
-import { Check, Instagram, MessageCircle, RefreshCcw, RotateCcw, Users, X } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { Archive, Check, Globe2, Instagram, MessageCircle, RefreshCcw, Users, X } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
   DataTable,
-  Drawer,
-  Field,
   FiltersBar,
   MetricCard,
-  RowsPerPageControl,
   SearchInput,
   SelectField,
   TableCard,
@@ -19,395 +15,168 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
-import { DestinationBadge } from '../components/DestinationBadge';
-import { useDashboardData, type HomeFilters } from '../hooks/useDashboardData';
-import type { ImportLead, ImportLeadDestination } from '../services/import/types';
-import { isValidInstagram } from '../services/instagram/instagram.utils';
-import { permissionsFor } from '../services/permissions';
-import { isStatusGroup, statusLabel, statusTone } from '../services/status/status.mapper';
+import { useLeadCycle } from '../hooks/useLeadCycle';
+import type { LeadCycleLead } from '../services/lead-cycle/types';
 
-type DashboardRow = Record<string, ReactNode> & {
-  id: string;
-};
+const SOURCE_INSTAGRAM = 4;
+const SOURCE_AGGREGATOR = 3;
 
-const PAGE_SIZE = 20;
-const destinationOptions: ImportLeadDestination[] = ['WhatsApp', 'Com site', 'Agregadores', 'Instagram'];
+type Row = Record<string, ReactNode> & { id: string };
 
-const defaultFilters: HomeFilters = {
-  search: '',
-  branch: 'Todos',
-  state: 'Todos',
-  destination: 'Todos',
-  instagram: 'Todos',
-  site: 'Todos',
-  situation: 'Em aguarde',
-};
-
-const columns: TableColumn<DashboardRow>[] = [
-  { key: 'company', label: 'Nome da empresa', width: '18%' },
-  { key: 'branch', label: 'Ramo', width: '13%' },
+const columns: TableColumn<Row>[] = [
+  { key: 'company', label: 'Nome da empresa', width: '25%' },
+  { key: 'branch', label: 'Ramo', width: '16%' },
   { key: 'state', label: 'Estado', width: '9%' },
-  { key: 'city', label: 'Cidade', width: '10%' },
-  { key: 'phone', label: 'Telefone', width: '8%' },
-  { key: 'instagram', label: 'Instagram', width: '8%' },
-  { key: 'site', label: 'Site', width: '8%' },
-  { key: 'destination', label: 'Destino', width: '10%' },
-  { key: 'situation', label: 'Situacao', width: '10%' },
+  { key: 'city', label: 'Cidade', width: '13%' },
+  { key: 'phone', label: 'WhatsApp', width: '11%' },
+  { key: 'instagram', label: 'Instagram', width: '11%' },
+  { key: 'channel', label: 'Canal', width: '10%' },
 ];
 
-function yesNo(value?: string | null) {
-  return value && value.trim() ? 'Sim' : 'Nao';
-}
-
-function silentLink(label: string, href?: string) {
-  if (!href) return label;
-  return <a className="silent-link" href={href} target="_blank" rel="noreferrer" title={href}>{label}</a>;
-}
-
-function ensureUrl(value?: string | null) {
-  const text = String(value ?? '').trim();
-  if (!text) return '';
-  return /^https?:\/\//i.test(text) ? text : `https://${text}`;
-}
-
-function mapsHref(lead: ImportLead) {
-  if (lead.normalizedMapsUrl?.trim()) return ensureUrl(lead.normalizedMapsUrl);
-  const query = [lead.empresa, lead.cidade, lead.estado].filter(Boolean).join(' ');
-  return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : '';
-}
-
-function instagramHref(lead: ImportLead) {
-  const instagram = lead.instagram_url ?? lead.instagram ?? '';
-  if (!instagram.trim()) return '';
-  if (/^https?:\/\//i.test(instagram)) return instagram;
-  return `https://instagram.com/${instagram.replace(/^@/, '')}`;
-}
-
-function leadDestination(lead: ImportLead) {
-  return lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-}
-
-function leadChannel(lead: ImportLead) {
-  return leadDestination(lead) === 'Instagram' ? 'Instagram' : 'WhatsApp';
-}
-
-function hasPhone(lead: ImportLead) {
-  return Boolean(lead.whatsapp?.trim());
-}
-
-function hasInstagram(lead: ImportLead) {
-  return isValidInstagram(lead.instagram_url ?? lead.instagram ?? '');
-}
-
-function situationTag(lead: ImportLead) {
-  return <Tag tone={statusTone(lead.status)}>{statusLabel(lead.status)}</Tag>;
+function hasValue(value: string) { return value.trim() ? 'Sim' : 'Não'; }
+function channelTag(lead: LeadCycleLead) {
+  return <Tag tone={lead.channelId === 2 ? 'primary' : 'success'}>{lead.channel}</Tag>;
 }
 
 export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
-  const isValidPage = mode === 'valid';
-  const [filters, setFilters] = useState<HomeFilters>(() => ({ ...defaultFilters, situation: isValidPage ? 'Aprovado' : 'Em aguarde' }));
-  const [page, setPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(PAGE_SIZE);
+  const validPage = mode === 'valid';
+  const { records, loading, saving, error, refresh, update } = useLeadCycle(validPage ? 'valid' : 'imported');
+  const [search, setSearch] = useState('');
+  const [channel, setChannel] = useState('Todos');
+  const [branch, setBranch] = useState('Todos');
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
-  const [activeLead, setActiveLead] = useState<ImportLead | null>(null);
-  const [savingLead, setSavingLead] = useState(false);
-  const [leadForm, setLeadForm] = useState({
-    empresa: '',
-    ramo: '',
-    destino: 'WhatsApp' as ImportLeadDestination,
-    whatsapp: '',
-    instagram: '',
-    site: '',
-    cidade: '',
-    estado: '',
-  });
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const dashboard = useDashboardData(filters, mode);
 
-  const rows = useMemo<DashboardRow[]>(
-    () =>
-      dashboard.visibleLeads.map((lead) => ({
-        id: lead.id,
-        company: silentLink(lead.empresa, mapsHref(lead)),
-        branch: lead.ramo,
-        state: lead.estado || '-',
-        city: lead.cidade || '-',
-        phone: yesNo(lead.whatsapp),
-        instagram: silentLink(yesNo(lead.instagram_url ?? lead.instagram), instagramHref(lead)),
-        site: silentLink(yesNo(lead.site), ensureUrl(lead.site)),
-        destination: <DestinationBadge value={leadDestination(lead)} />,
-        situation: situationTag(lead),
-      })),
-    [dashboard.visibleLeads],
-  );
+  const branches = useMemo(() => ['Todos', ...Array.from(new Set(records.map((lead) => lead.branch).filter(Boolean))).sort()], [records]);
+  const visible = useMemo(() => records.filter((lead) => {
+    const query = search.trim().toLowerCase();
+    return (!query || lead.company.toLowerCase().includes(query))
+      && (channel === 'Todos' || lead.channel === channel)
+      && (branch === 'Todos' || lead.branch === branch);
+  }), [records, search, channel, branch]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / rowsPerPage));
-  const currentPage = Math.min(page, totalPages);
-  const pagedRows = rows.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
-  const visibleLeadById = useMemo(() => new Map(dashboard.visibleLeads.map((lead) => [lead.id, lead])), [dashboard.visibleLeads]);
-  const selectedLeads = useMemo(
-    () => selectedRows.map((rowIndex) => visibleLeadById.get(pagedRows[rowIndex]?.id)).filter((lead): lead is ImportLead => Boolean(lead)),
-    [pagedRows, selectedRows, visibleLeadById],
-  );
-  const selectedIds = selectedLeads.map((lead) => lead.id);
-  const canBulkApprove = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('import', lead.status).canApprove() && !isStatusGroup(lead.status, 'approved'));
-  const canBulkUnapprove = selectedLeads.length > 0 && selectedLeads.every((lead) => isStatusGroup(lead.status, 'approved'));
-  const canBulkInvalidate = selectedLeads.length > 0 && selectedLeads.every((lead) =>
-    permissionsFor('import', lead.status).canInvalidate() &&
-    !isStatusGroup(lead.status, 'approved') &&
-    !isStatusGroup(lead.status, 'invalid')
-  );
-  const hasBulkAction = canBulkApprove || canBulkUnapprove || canBulkInvalidate;
+  const rows = useMemo<Row[]>(() => visible.map((lead) => ({
+    id: lead.id,
+    company: lead.company,
+    branch: lead.branch || '-',
+    state: lead.state || '-',
+    city: lead.city || '-',
+    phone: hasValue(lead.phone),
+    instagram: hasValue(lead.instagram),
+    channel: channelTag(lead),
+  })), [visible]);
 
-  const pushToast = (toast: Omit<ToastItem, 'id'>) => {
+  const selectedIds = selectedRows.map((index) => rows[index]?.id).filter(Boolean);
+  const byId = useMemo(() => new Map(visible.map((lead) => [lead.id, lead])), [visible]);
+
+  const toast = (title: string, description: string, tone: ToastItem['tone'] = 'success') => {
     const id = crypto.randomUUID?.() ?? String(Date.now());
-    setToasts((current) => [...current, { id, ...toast }].slice(0, 4));
+    setToasts((current) => [...current, { id, title, description, tone }].slice(-4));
     window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3200);
   };
 
-  const updateFilter = <K extends keyof HomeFilters>(key: K, value: HomeFilters[K]) => {
-    setFilters((current) => ({ ...current, [key]: value }));
-    setPage(1);
-    setSelectedRows([]);
-  };
-
-  const findLead = (row: DashboardRow) => visibleLeadById.get(row.id);
-
-  const openLeadDrawer = (lead: ImportLead) => {
-    setActiveLead(lead);
-    setLeadForm({
-      empresa: lead.empresa,
-      ramo: lead.ramo,
-      destino: leadDestination(lead) as ImportLeadDestination,
-      whatsapp: lead.whatsapp ?? '',
-      instagram: lead.instagram_url ?? lead.instagram ?? '',
-      site: lead.site ?? '',
-      cidade: lead.cidade ?? '',
-      estado: lead.estado ?? '',
-    });
-  };
-
-  const updateLeadForm = (key: keyof typeof leadForm, value: string) => {
-    setLeadForm((current) => ({ ...current, [key]: value }));
-  };
-
-  const saveLead = async () => {
-    if (!activeLead) return;
-    setSavingLead(true);
+  const moveImported = async (ids: string[], target: 'whatsapp' | 'instagram' | 'invalid' | 'archive') => {
     try {
-      await dashboard.updateLead(activeLead, {
-        empresa: leadForm.empresa,
-        ramo: leadForm.ramo,
-        destino: leadForm.destino,
-        destination: leadForm.destino,
-        whatsapp: leadForm.whatsapp,
-        instagram: leadForm.instagram,
-        instagram_url: leadForm.instagram,
-        site: leadForm.site,
-        cidade: leadForm.cidade,
-        estado: leadForm.estado,
-      });
-      pushToast({ title: 'Lead atualizado', description: 'Alteracao salva na camada de importacao.', tone: 'success' });
-      setActiveLead(null);
-    } catch (err) {
-      pushToast({ title: 'Nao foi possivel salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    } finally {
-      setSavingLead(false);
-    }
-  };
-
-  const runBulkAction = async (label: string, action: () => Promise<void>) => {
-    try {
-      await action();
-      pushToast({ title: 'Acao em massa concluida', description: `${selectedIds.length} lead(s): ${label}.`, tone: 'success' });
+      if (target === 'whatsapp') await update(ids, { channels_id: 1, lead_status_id: 3 }, [1]);
+      if (target === 'instagram') {
+        const invalid = ids.map((id) => byId.get(id)).filter((lead) => lead && !lead.instagram.trim());
+        if (invalid.length) throw new Error('Há lead selecionado sem Instagram real.');
+        await update(ids, { channels_id: 2, lead_status_id: 2 }, [1]);
+      }
+      if (target === 'invalid') await update(ids, { lead_status_id: 6 }, [1]);
+      if (target === 'archive') await update(ids, { lead_status_id: 8 }, [1]);
       setSelectedRows([]);
+      toast('Leads atualizados', `${ids.length} lead(s) avançaram no ciclo.`);
     } catch (err) {
-      pushToast({ title: 'Acao em massa bloqueada', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      toast('Não foi possível concluir', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
     }
   };
 
-  const handleAction = async (action: TableAction, row: DashboardRow) => {
-    const lead = findLead(row);
-    if (!lead) return;
+  const updateValidChannel = async (ids: string[], channelId: 1 | 2) => {
+    try {
+      if (channelId === 2) {
+        const invalid = ids.map((id) => byId.get(id)).filter((lead) => lead && !lead.instagram.trim());
+        if (invalid.length) throw new Error('Instagram só pode ser usado quando o lead possui Instagram real.');
+      }
+      await update(ids, { channels_id: channelId }, [2]);
+      setSelectedRows([]);
+      toast('Canal atualizado', `${ids.length} lead(s) atualizados.`);
+    } catch (err) {
+      toast('Não foi possível concluir', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
+    }
+  };
 
-    if (action === 'edit') {
-      openLeadDrawer(lead);
+  const handleAction = async (action: TableAction, row: Row) => {
+    if (!validPage) {
+      if (action === 'whatsapp') await moveImported([row.id], 'whatsapp');
+      if (action === 'instagram') await moveImported([row.id], 'instagram');
+      if (action === 'invalidate') await moveImported([row.id], 'invalid');
+      if (action === 'archive') await moveImported([row.id], 'archive');
       return;
     }
-
-    try {
-      if (action === 'whatsapp') {
-        await dashboard.updateDestination(lead, 'WhatsApp');
-        pushToast({ title: 'Destino atualizado', description: `${lead.empresa} voltou para o fluxo original.`, tone: 'success' });
-        return;
-      }
-
-      if (action === 'instagram') {
-        await dashboard.updateDestination(lead, 'Instagram');
-        pushToast({ title: 'Destino atualizado', description: `${lead.empresa} foi marcado para Instagram.`, tone: 'success' });
-        return;
-      }
-
-      if (action === 'approve') {
-        await dashboard.approveLead(lead);
-        pushToast({ title: 'Lead aprovado', description: `${lead.empresa} entrou como aprovado.`, tone: 'success' });
-        return;
-      }
-
-      if (action === 'unapprove') {
-        await dashboard.unapproveLead(lead);
-        pushToast({ title: 'Aprovacao removida', description: `${lead.empresa} voltou para em aguarde.`, tone: 'info' });
-        return;
-      }
-
-      if (action === 'archive') {
-        await dashboard.archiveLead(lead);
-        pushToast({ title: 'Lead arquivado', description: `${lead.empresa} saiu da lista operacional.`, tone: 'warning' });
-        return;
-      }
-
-      if (action === 'sent') {
-        await dashboard.markAlreadySent([lead.id]);
-        pushToast({ title: 'Lead marcado como enviado', description: `${lead.empresa} saiu do fluxo ativo.`, tone: 'success' });
-        return;
-      }
-
-      if (action === 'invalidate') {
-        await dashboard.invalidateLead(lead);
-        pushToast({ title: 'Lead invalidado', description: `${lead.empresa} saiu da lista operacional. Motivo: Outros.`, tone: 'warning' });
-      }
-    } catch (err) {
-      pushToast({ title: 'Acao bloqueada', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    }
+    if (action === 'whatsapp') await updateValidChannel([row.id], 1);
+    if (action === 'instagram') await updateValidChannel([row.id], 2);
+    if (action === 'archive') await update([row.id], { lead_status_id: 8 }, [2]);
   };
 
+  const total = records.length;
+  const whatsapp = records.filter((lead) => lead.channelId === 1).length;
+  const instagram = records.filter((lead) => lead.channelId === 2).length;
+  const ownSite = records.filter((lead) => lead.contactSourceId === 2).length;
+  const aggregators = records.filter((lead) => lead.contactSourceId === SOURCE_AGGREGATOR).length;
+  const instagramSource = records.filter((lead) => lead.contactSourceId === SOURCE_INSTAGRAM).length;
+
   return (
-    <div className="dashboard-table-page lead-list-page lead-list-page--home">
+    <div className="dashboard-table-page lead-list-page">
       <PageHeader
-        title={isValidPage ? "Válidos" : "Inicio"}
-        description={isValidPage ? "Leads validados e prontos para serem distribuídos às filas de envio." : undefined}
-        action={
-          <Button variant="secondary" iconLeft={RefreshCcw} disabled={dashboard.loading} onClick={dashboard.refresh}>
-            Atualizar
-          </Button>
-        }
+        title={validPage ? 'Válidos' : 'Início'}
+        description={validPage ? 'Leads aprovados e prontos para entrar em fila.' : 'Entrada do ciclo: triagem dos leads importados.'}
+        action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || saving} onClick={() => void refresh()}>Atualizar</Button>}
       />
 
-      {isValidPage ? (
-        <section className="metric-grid metric-grid--3">
-          <MetricCard icon={Users} value={String(dashboard.metrics.total.total)} label="Total" />
-          <MetricCard icon={MessageCircle} value={String(dashboard.metrics.total.total - dashboard.metrics.instagram.total)} label="WhatsApp" tone="success" />
-          <MetricCard icon={Instagram} value={String(dashboard.metrics.instagram.total)} label="Instagram" />
-        </section>
-      ) : (
-        <section className="metric-grid metric-grid--5">
-          <MetricCard icon={Users} value={`${dashboard.metrics.total.approved}/${dashboard.metrics.total.total}`} label="Total" />
-          <MetricCard icon={MessageCircle} value={`${dashboard.metrics.whatsapp.approved}/${dashboard.metrics.whatsapp.total}`} label="WhatsApp" tone="success" />
-          <MetricCard icon={Instagram} value={`${dashboard.metrics.instagram.approved}/${dashboard.metrics.instagram.total}`} label="Instagram" />
-        </section>
-      )}
+      <section className={`metric-grid ${validPage ? 'metric-grid--3' : 'metric-grid--5'}`}>
+        <MetricCard icon={Users} value={String(total)} label="Total" />
+        <MetricCard icon={MessageCircle} value={String(whatsapp)} label="WhatsApp" tone="success" />
+        {validPage ? <MetricCard icon={Instagram} value={String(instagram)} label="Instagram" tone="primary" /> : null}
+        {!validPage ? <MetricCard icon={Globe2} value={String(ownSite)} label="Com site" /> : null}
+        {!validPage ? <MetricCard value={String(aggregators)} label="Agregadores" /> : null}
+        {!validPage ? <MetricCard icon={Instagram} value={String(instagramSource)} label="Instagram" tone="primary" /> : null}
+      </section>
 
       <FiltersBar>
-        {isValidPage ? (
-          <>
-            <SelectField value={filters.destination} options={dashboard.options.channels} placeholder="Canal" onChange={(value) => updateFilter('destination', value)} />
-            <SelectField value={filters.branch} options={dashboard.options.branches} placeholder="Ramo" onChange={(value) => updateFilter('branch', value)} />
-          </>
-        ) : (
-          <>
-            <SelectField value={filters.branch} options={dashboard.options.branches} placeholder="Ramo" onChange={(value) => updateFilter('branch', value)} />
-            <SelectField value={filters.state} options={dashboard.options.states} placeholder="Estado" onChange={(value) => updateFilter('state', value)} />
-            <SelectField value={filters.destination} options={dashboard.options.destinations} placeholder="Destino" onChange={(value) => updateFilter('destination', value)} />
-            <SelectField value={filters.instagram} options={dashboard.options.instagram} placeholder="Instagram" onChange={(value) => updateFilter('instagram', value)} />
-            <SelectField value={filters.site} options={dashboard.options.sites} placeholder="Site" onChange={(value) => updateFilter('site', value)} />
-            <SelectField value={filters.situation} options={dashboard.options.situations} placeholder="Status" onChange={(value) => updateFilter('situation', value as HomeFilters['situation'])} />
-          </>
-        )}
-        <SearchInput value={filters.search} onChange={(value) => updateFilter('search', value)} placeholder="Buscar empresa" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar empresa" />
+        <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal" onChange={setChannel} />
+        <SelectField value={branch} options={branches} placeholder="Ramo" onChange={setBranch} />
       </FiltersBar>
 
-      <TableCard
-        title="Listagem de leads"
-        footerText={dashboard.loading ? 'Carregando leads...' : `Mostrando ${pagedRows.length} de ${rows.length} lead(s). ${selectedLeads.length} selecionado(s).`}
-        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setPage(1); setSelectedRows([]); }} />}
-        page={currentPage}
-        totalPages={totalPages}
-        onPageChange={(nextPage) => { setPage(nextPage); setSelectedRows([]); }}
-      >
-        {selectedLeads.length ? (
+      <TableCard title={validPage ? 'Leads aprovados' : 'Leads importados'} footerText={loading ? 'Carregando...' : `${rows.length} lead(s).`}>
+        {selectedIds.length ? (
           <div className="lead-bulk-actions">
-            <span>{selectedLeads.length} selecionado(s)</span>
-            {canBulkApprove ? <Button size="sm" iconLeft={Check} onClick={() => runBulkAction('aprovados', () => dashboard.approveMany(selectedIds))}>Aprovar</Button> : null}
-            {canBulkUnapprove ? <Button size="sm" variant="secondary" iconLeft={RotateCcw} onClick={() => runBulkAction('voltaram para em aguarde', () => dashboard.unapproveMany(selectedIds))}>Desaprovar</Button> : null}
-            {canBulkInvalidate ? <Button size="sm" variant="secondary" iconLeft={X} onClick={() => runBulkAction('invalidados com motivo Outros', () => dashboard.invalidateMany(selectedIds))}>Invalidar</Button> : null}
-            {!hasBulkAction ? <small>Nenhuma acao em massa disponivel para a selecao atual.</small> : null}
+            <span>{selectedIds.length} selecionado(s)</span>
+            {!validPage ? <Button size="sm" iconLeft={MessageCircle} disabled={saving} onClick={() => void moveImported(selectedIds, 'whatsapp')}>Pré-Envio</Button> : null}
+            {!validPage ? <Button size="sm" iconLeft={Instagram} disabled={saving} onClick={() => void moveImported(selectedIds, 'instagram')}>Validar Instagram</Button> : null}
+            {validPage ? <Button size="sm" iconLeft={MessageCircle} disabled={saving} onClick={() => void updateValidChannel(selectedIds, 1)}>WhatsApp</Button> : null}
+            {validPage ? <Button size="sm" iconLeft={Instagram} disabled={saving} onClick={() => void updateValidChannel(selectedIds, 2)}>Instagram</Button> : null}
+            {!validPage ? <Button size="sm" variant="secondary" iconLeft={X} disabled={saving} onClick={() => void moveImported(selectedIds, 'invalid')}>Invalidar</Button> : null}
+            <Button size="sm" variant="secondary" iconLeft={Archive} disabled={saving} onClick={() => void (validPage ? update(selectedIds, { lead_status_id: 8 }, [2]) : moveImported(selectedIds, 'archive'))}>Arquivar</Button>
           </div>
         ) : null}
-        {dashboard.error ? <div className="table-message">{dashboard.error}</div> : null}
-        {!dashboard.error && dashboard.loading ? <div className="table-message">Carregando leads da importacao...</div> : null}
-        {!dashboard.error && !dashboard.loading && !pagedRows.length ? <div className="table-message">{isValidPage ? 'Nenhum lead validado disponível para as filas.' : 'Nenhum lead em aguarde para atribuicao.'}</div> : null}
-        {!dashboard.error && !dashboard.loading && pagedRows.length ? (
+        {error ? <div className="table-message">{error}</div> : null}
+        {!error && loading ? <div className="table-message">Carregando leads...</div> : null}
+        {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead nesta etapa.</div> : null}
+        {!error && !loading && rows.length ? (
           <DataTable
             columns={columns}
-            rows={pagedRows}
-            actions={['edit', 'whatsapp', 'instagram', 'approve', 'unapprove', 'invalidate']}
+            rows={rows}
+            actions={validPage ? ['whatsapp', 'instagram', 'archive'] : ['whatsapp', 'instagram', 'invalidate', 'archive']}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
-            getRowActions={(row) => {
-              const lead = findLead(row);
-              if (!lead) return [];
-              const channel = leadChannel(lead);
-              return [
-                ...(permissionsFor('import', lead.status).canEdit() ? ['edit' as TableAction] : []),
-                ...(channel === 'WhatsApp' && hasInstagram(lead) ? ['instagram' as TableAction] : []),
-                ...(channel === 'Instagram' && hasPhone(lead) ? ['whatsapp' as TableAction] : []),
-                ...(permissionsFor('import', lead.status).canApprove() && !isStatusGroup(lead.status, 'approved') ? ['approve' as TableAction] : []),
-                ...(isStatusGroup(lead.status, 'approved') ? ['unapprove' as TableAction] : []),
-                ...(permissionsFor('import', lead.status).canInvalidate() ? ['invalidate' as TableAction] : []),
-              ];
-            }}
             onAction={handleAction}
           />
         ) : null}
       </TableCard>
 
-      <Drawer
-        open={Boolean(activeLead)}
-        title="Editar lead"
-        description={activeLead?.empresa ?? ''}
-        onClose={() => { if (!savingLead) setActiveLead(null); }}
-        footer={
-          <>
-            <Button variant="secondary" disabled={savingLead} onClick={() => setActiveLead(null)}>Cancelar</Button>
-            <Button disabled={savingLead} onClick={saveLead}>{savingLead ? 'Salvando...' : 'Salvar alterações'}</Button>
-          </>
-        }
-      >
-        {activeLead ? (
-          <div className="drawer-form">
-            <Field label="Nome da empresa" value={leadForm.empresa} onChange={(value) => updateLeadForm('empresa', value)} />
-            <Field label="Ramo" value={leadForm.ramo} onChange={(value) => updateLeadForm('ramo', value)} />
-            <div className="drawer-grid drawer-grid--2">
-              <Field label="Estado" value={leadForm.estado} onChange={(value) => updateLeadForm('estado', value)} />
-              <Field label="Cidade" value={leadForm.cidade} onChange={(value) => updateLeadForm('cidade', value)} />
-            </div>
-            <Field label="Telefone" value={leadForm.whatsapp} onChange={(value) => updateLeadForm('whatsapp', value)} />
-            <Field label="Instagram" value={leadForm.instagram} onChange={(value) => updateLeadForm('instagram', value)} />
-            <Field label="Site" value={leadForm.site} onChange={(value) => updateLeadForm('site', value)} />
-            <div className="drawer-grid drawer-grid--2">
-              <Field label="Destino original" value={activeLead.original_destination ?? activeLead.destino} readOnly />
-              <label className="drawer-field">
-                <span>Destino operacional</span>
-                <SelectField value={leadForm.destino} options={destinationOptions} onChange={(value) => updateLeadForm('destino', value)} />
-              </label>
-            </div>
-            <Field label="Situacao" value={statusLabel(activeLead.status)} readOnly />
-            {activeLead.motivo ? <Field label="Observacao" value={activeLead.motivo} readOnly /> : null}
-          </div>
-        ) : null}
-      </Drawer>
-
-      <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
+      <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>
   );
 }

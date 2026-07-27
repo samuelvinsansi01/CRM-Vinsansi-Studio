@@ -1,14 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Archive, Check, Instagram, MessageCircle, Save, Send, Users, X } from 'lucide-react';
+import { Archive, Instagram, MessageCircle, RefreshCcw, Send, Users, X } from 'lucide-react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
-  ConfirmDialog,
   DataTable,
-  Drawer,
-  Field,
   FiltersBar,
   MetricCard,
-  RowsPerPageControl,
   SearchInput,
   SelectField,
   TableCard,
@@ -19,542 +15,120 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
-import { DestinationBadge } from '../components/DestinationBadge';
-import { useBaseRecords } from '../hooks/useBaseRecords';
-import { permissionsFor } from '../services/permissions';
-import { baseStatusLabel } from '../services/base/status.mapper';
-import type { BaseFilters, BaseLead, BaseLeadDestination, BaseLeadOrigin, BaseLeadStatus, UpdateBaseLeadInput } from '../services/base/types';
-import { isStatusGroup, statusLabel, statusTone } from '../services/status/status.mapper';
+import { useLeadCycle } from '../hooks/useLeadCycle';
+import type { LeadCycleLead } from '../services/lead-cycle/types';
 
-type BaseLeadDraft = Pick<
-  BaseLead,
-  | 'company'
-  | 'branch'
-  | 'state'
-  | 'city'
-  | 'phone'
-  | 'site'
-  | 'instagram'
-  | 'mapsUrl'
-  | 'origin'
-  | 'destination'
-  | 'original_destination'
-  | 'destination_override'
-  | 'send_instagram'
-  | 'instagram_override_reason'
-  | 'override_by'
-  | 'override_at'
-  | 'status'
-  | 'template'
-  | 'chipOrProfile'
-  | 'notes'
->;
+const STATUS_LABEL: Record<number, string> = { 5: 'Enviado', 6: 'Inválido', 7: 'Duplicado', 8: 'Arquivado' };
 
-type BaseTableRow = Record<string, ReactNode> & {
-  id: string;
-  statusValue: BaseLeadStatus;
-};
-
-const PAGE_SIZE = 20;
-
-const statusOptions = [
-  { value: 'enviado', label: baseStatusLabel.enviado },
-  { value: 'invalido', label: baseStatusLabel.invalido },
-  { value: 'duplicado', label: baseStatusLabel.duplicado },
-  { value: 'arquivado', label: baseStatusLabel.arquivado },
-];
-
-const originOptions = ['WhatsApp', 'Instagram'];
-const destinationOptions = ['WhatsApp', 'Instagram', 'Com site', 'Agregador'];
-const dateOptions = [
-  { value: 'Todos', label: 'Data' },
-  { value: 'Hoje', label: 'Hoje' },
-  { value: '7d', label: 'Ultimos 7 dias' },
-  { value: '30d', label: 'Ultimos 30 dias' },
-];
-
-function yesNo(value?: string | null) {
-  return value && value.trim() ? 'Sim' : 'Nao';
-}
-
-function silentLink(label: string, href?: string) {
-  if (!href) return label;
-  return <a className="silent-link" href={href} target="_blank" rel="noreferrer" title={href}>{label}</a>;
-}
-
-function ensureUrl(value?: string | null) {
-  const text = String(value ?? '').trim();
-  if (!text) return '';
-  return /^https?:\/\//i.test(text) ? text : `https://${text}`;
-}
-
-function mapsHref(lead: BaseLead) {
-  if (lead.mapsUrl?.trim()) return ensureUrl(lead.mapsUrl);
-  const query = [lead.company, lead.city, lead.state].filter(Boolean).join(' ');
-  return query ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}` : '';
-}
-
-function instagramHref(lead: BaseLead) {
-  const instagram = lead.instagram ?? '';
-  if (!instagram.trim()) return '';
-  if (/^https?:\/\//i.test(instagram)) return instagram;
-  return `https://instagram.com/${instagram.replace(/^@/, '')}`;
-}
-
-function matchesDateFilter(sentAt: string, filter: string) {
-  if (filter === 'Todos') return true;
-
-  const sentDate = new Date(sentAt);
-  if (Number.isNaN(sentDate.getTime())) return false;
-
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  if (filter === 'Hoje') return sentDate >= startOfToday;
-
-  const days = filter === '7d' ? 7 : 30;
-  const threshold = new Date(startOfToday);
-  threshold.setDate(threshold.getDate() - days + 1);
-  return sentDate >= threshold;
-}
-
-const columns: TableColumn<BaseTableRow>[] = [
-  { key: 'company', label: 'Nome da empresa', width: '18%' },
-  { key: 'branch', label: 'Ramo', width: '12%' },
+type Row = Record<string, ReactNode> & { id: string };
+const columns: TableColumn<Row>[] = [
+  { key: 'company', label: 'Nome da empresa', width: '24%' },
+  { key: 'branch', label: 'Ramo', width: '15%' },
   { key: 'state', label: 'Estado', width: '9%' },
-  { key: 'city', label: 'Cidade', width: '10%' },
-  { key: 'phone', label: 'Telefone', width: '8%' },
-  { key: 'instagram', label: 'Instagram', width: '8%' },
-  { key: 'site', label: 'Site', width: '8%' },
-  { key: 'destination', label: 'Destino', width: '9%' },
-  {
-    key: 'status',
-    label: 'Situacao',
-    width: '10%',
-    render: (row) => {
-      return <Tag tone={statusTone(row.statusValue)}>{statusLabel(row.statusValue)}</Tag>;
-    },
-  },
+  { key: 'city', label: 'Cidade', width: '12%' },
+  { key: 'channel', label: 'Canal', width: '10%' },
+  { key: 'source', label: 'Fonte', width: '14%' },
+  { key: 'status', label: 'Status final', width: '12%' },
 ];
 
-const tableActions: TableAction[] = ['view', 'archive'];
-type ConfirmAction = 'archive';
+function statusTag(lead: LeadCycleLead) {
+  const tone = lead.statusId === 5 ? 'success' : lead.statusId === 8 ? 'neutral' : 'danger';
+  return <Tag tone={tone}>{STATUS_LABEL[lead.statusId] ?? lead.status}</Tag>;
+}
 
 export function BasePage() {
+  const { records, loading, saving, error, refresh, update } = useLeadCycle('permanent');
   const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState<Omit<BaseFilters, 'search'>>({});
-  const [dateFilter, setDateFilter] = useState('Todos');
-  const [page, setPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(PAGE_SIZE);
+  const [status, setStatus] = useState('Todos');
+  const [channel, setChannel] = useState('Todos');
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
-  const [drawerMode, setDrawerMode] = useState<'view' | 'edit' | null>(null);
-  const [activeLead, setActiveLead] = useState<BaseLead | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ lead: BaseLead; action: ConfirmAction } | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [validating, setValidating] = useState(false);
 
-  const effectiveFilters = useMemo<BaseFilters>(() => ({ ...filters, search }), [filters, search]);
-  const { records, summary, options, loading, error, updateLead, archiveLead, archiveMany, validateLead, validateMany } = useBaseRecords(effectiveFilters);
+  const visible = useMemo(() => records.filter((lead) => {
+    const query = search.trim().toLowerCase();
+    return (!query || lead.company.toLowerCase().includes(query))
+      && (status === 'Todos' || STATUS_LABEL[lead.statusId] === status)
+      && (channel === 'Todos' || lead.channel === channel);
+  }), [records, search, status, channel]);
 
-  const visibleRecords = useMemo(() => records.filter((lead) => matchesDateFilter(lead.sentAt, dateFilter)), [dateFilter, records]);
-  const totalPages = Math.max(1, Math.ceil(visibleRecords.length / rowsPerPage));
-  const currentPage = Math.min(page, totalPages);
-  const pagedRecords = visibleRecords.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
-  const rows = useMemo<BaseTableRow[]>(
-    () => pagedRecords.map((lead) => ({
-      id: lead.id,
-      company: silentLink(lead.company, mapsHref(lead)),
-      branch: lead.branch,
-      state: lead.state,
-      city: lead.city,
-      phone: yesNo(lead.phone),
-      instagram: silentLink(yesNo(lead.instagram), instagramHref(lead)),
-      site: silentLink(yesNo(lead.site), ensureUrl(lead.site)),
-      destination: <DestinationBadge value={lead.destination} />,
-      status: lead.status,
-      statusValue: lead.status,
-    })),
-    [pagedRecords],
-  );
+  const rows = useMemo<Row[]>(() => visible.map((lead) => ({
+    id: lead.id,
+    company: lead.company,
+    branch: lead.branch || '-',
+    state: lead.state || '-',
+    city: lead.city || '-',
+    channel: <Tag tone={lead.channelId === 2 ? 'primary' : 'success'}>{lead.channel}</Tag>,
+    source: lead.contactSource || '-',
+    status: statusTag(lead),
+  })), [visible]);
 
-  const selectedCount = selectedRows.length;
-  const selectedLeads = selectedRows.map((rowIndex) => pagedRecords[rowIndex]).filter((lead): lead is BaseLead => Boolean(lead));
-  const selectedIds = selectedLeads.map((lead) => lead.id);
-  const canBulkArchive = selectedLeads.length > 0 && selectedLeads.every((lead) => permissionsFor('base', lead.status).canArchive());
-  const canBulkValidate = selectedLeads.some((lead) => lead.status === 'importado');
-  const hasBulkAction = canBulkArchive || canBulkValidate;
-
-  const pushToast = (toast: Omit<ToastItem, 'id'>) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    setToasts((current) => [{ id, ...toast }, ...current].slice(0, 4));
-    window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3400);
+  const selectedIds = selectedRows.map((index) => rows[index]?.id).filter(Boolean);
+  const toast = (title: string, description: string, tone: ToastItem['tone'] = 'success') => {
+    const id = crypto.randomUUID?.() ?? String(Date.now());
+    setToasts((current) => [...current, { id, title, description, tone }].slice(-4));
+    window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3200);
   };
 
-  const updateFilter = (key: keyof Omit<BaseFilters, 'search'>, value: string) => {
-    setFilters((current) => ({ ...current, [key]: value }));
-    setPage(1);
-    setSelectedRows([]);
-  };
-
-  const openLead = (lead: BaseLead, mode: 'view' | 'edit') => {
-    setActiveLead(lead);
-    setDrawerMode(mode);
-  };
-
-  const handleAction = (action: TableAction, row: BaseTableRow) => {
-    const lead = records.find((item) => item.id === row.id);
-    if (!lead) return;
-
-    if (action === 'view') {
-      openLead(lead, 'view');
-      return;
-    }
-
-    if (action === 'edit') {
-      openLead(lead, 'edit');
-      return;
-    }
-
-    if (action === 'validate') {
-      if (lead.status !== 'importado') {
-        pushToast({ title: 'Validação indisponível', description: 'Somente leads importados podem ser validados.', tone: 'warning' });
-        return;
-      }
-      setValidating(true);
-      void validateLead(lead.id)
-        .then((result) => {
-          const description = result.status === 'validado'
-            ? `${lead.company} foi validado.`
-            : result.reason ?? `${lead.company} foi marcado como ${result.status}.`;
-          pushToast({ title: 'Validação concluída', description, tone: result.status === 'validado' ? 'success' : 'warning' });
-        })
-        .catch((err) => pushToast({ title: 'Erro na validação', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' }))
-        .finally(() => setValidating(false));
-      return;
-    }
-
-    if (action === 'archive') {
-      if (!permissionsFor('base', lead.status).canArchive()) {
-        pushToast({ title: 'Acao bloqueada', description: 'Este registro nao pode ser arquivado neste estado.', tone: 'warning' });
-        return;
-      }
-      setConfirmAction({ lead, action: 'archive' });
-      return;
-    }
-
-  };
-
-  const handleSaveLead = async (input: UpdateBaseLeadInput) => {
-    if (!activeLead) return;
-    setSaving(true);
-    await updateLead(activeLead.id, input);
-    setSaving(false);
-    setDrawerMode(null);
-    setActiveLead(null);
-    pushToast({ title: 'Lead atualizado', description: 'Alterações salvas na Base de Leads.', tone: 'success' });
-  };
-
-  const handleConfirmAction = async () => {
-    if (!confirmAction) return;
-    const { lead, action } = confirmAction;
-    await archiveLead(lead);
-    setConfirmAction(null);
-    setSelectedRows([]);
-    pushToast({ title: 'Lead arquivado', description: `${lead.company} foi arquivado.`, tone: 'warning' });
-  };
-
-
-  const handleBulkValidate = async () => {
-    const importedIds = selectedLeads.filter((lead) => lead.status === 'importado').map((lead) => lead.id);
-    if (!importedIds.length) return;
+  const archive = async (ids: string[]) => {
     try {
-      setValidating(true);
-      const result = await validateMany(importedIds);
+      await update(ids, { lead_status_id: 8 }, [5, 6, 7, 8]);
       setSelectedRows([]);
-      pushToast({
-        title: 'Validação em massa concluída',
-        description: `${result.validated} validado(s), ${result.invalid} inválido(s) e ${result.duplicated} duplicado(s).`,
-        tone: result.invalid || result.duplicated ? 'warning' : 'success',
-      });
+      toast('Leads arquivados', `${ids.length} lead(s) atualizados.`);
     } catch (err) {
-      pushToast({ title: 'Erro na validação', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    } finally {
-      setValidating(false);
+      toast('Não foi possível arquivar', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
     }
   };
 
-  const handleValidateAllImported = async () => {
-    try {
-      setValidating(true);
-      const result = await validateMany();
-      pushToast({
-        title: 'Validação concluída',
-        description: result.processed
-          ? `${result.validated} validado(s), ${result.invalid} inválido(s) e ${result.duplicated} duplicado(s).`
-          : 'Não há leads importados pendentes de validação.',
-        tone: result.invalid || result.duplicated ? 'warning' : 'success',
-      });
-    } catch (err) {
-      pushToast({ title: 'Erro na validação', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    } finally {
-      setValidating(false);
-    }
+  const handleAction = async (action: TableAction, row: Row) => {
+    if (action === 'archive') await archive([row.id]);
   };
 
-  const handleBulkArchive = async () => {
-    try {
-      await archiveMany(selectedIds);
-      setSelectedRows([]);
-      pushToast({ title: 'Leads arquivados', description: `${selectedIds.length} lead(s) arquivado(s).`, tone: 'warning' });
-    } catch (err) {
-      pushToast({ title: 'Acao em massa bloqueada', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    }
-  };
-
-
-
-
-
-  const confirmCopy: Record<ConfirmAction, { title: string; description: string; confirmLabel: string; danger: boolean }> = {
-    archive: {
-      title: 'Arquivar lead?',
-      description: 'Essa ação muda o status do lead para arquivado.',
-      confirmLabel: 'Arquivar',
-      danger: true,
-    },
-  };
-  const activeConfirm = confirmAction ? confirmCopy[confirmAction.action] : null;
+  const sent = records.filter((lead) => lead.statusId === 5);
+  const sentWhatsApp = sent.filter((lead) => lead.channelId === 1).length;
+  const sentInstagram = sent.filter((lead) => lead.channelId === 2).length;
+  const invalid = records.filter((lead) => lead.statusId === 6).length;
+  const duplicates = records.filter((lead) => lead.statusId === 7).length;
+  const archived = records.filter((lead) => lead.statusId === 8).length;
 
   return (
-    <div className="dashboard-table-page lead-list-page lead-list-page--base">
-      <PageHeader title="Base Permanente" />
+    <div className="dashboard-table-page lead-list-page">
+      <PageHeader
+        title="Base Permanente"
+        description="Somente leads finalizados: enviados, inválidos, duplicados e arquivados."
+        action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || saving} onClick={() => void refresh()}>Atualizar</Button>}
+      />
 
       <section className="metric-grid metric-grid--6">
-        <MetricCard icon={Users} value={String(summary.total)} label="Total" />
-        <MetricCard icon={Send} value={String(summary.sent)} label="Total enviados" tone="success" />
-        <MetricCard icon={MessageCircle} value={String(summary.sentWhatsApp)} label="Enviados WhatsApp" tone="success" />
-        <MetricCard icon={Instagram} value={String(summary.sentInstagram)} label="Enviados Instagram" tone="primary" />
-        <MetricCard icon={X} value={String(summary.invalid)} label="Inválidos" tone="danger" />
-        <MetricCard icon={Archive} value={String(summary.archived)} label="Arquivados" tone="warning" />
+        <MetricCard icon={Users} value={String(records.length)} label="Total final" />
+        <MetricCard icon={Send} value={String(sent.length)} label="Enviados" tone="success" />
+        <MetricCard icon={MessageCircle} value={String(sentWhatsApp)} label="WhatsApp enviados" tone="success" />
+        <MetricCard icon={Instagram} value={String(sentInstagram)} label="Instagram enviados" tone="primary" />
+        <MetricCard icon={X} value={String(invalid + duplicates)} label={`Inválidos (${invalid}) / Duplicados (${duplicates})`} tone="danger" />
+        <MetricCard icon={Archive} value={String(archived)} label="Arquivados" />
       </section>
 
       <FiltersBar>
-        <SelectField value={dateFilter} options={dateOptions} placeholder="Data" onChange={(value) => { setDateFilter(value); setPage(1); setSelectedRows([]); }} />
-        <SelectField value={filters.origin ?? 'Todos'} options={options.origins} placeholder="Origem disparo" onChange={(value) => updateFilter('origin', value)} />
-        <SelectField value={filters.branch ?? 'Todos'} options={options.branches} placeholder="Ramo" onChange={(value) => updateFilter('branch', value)} />
-        <SelectField value={filters.state ?? 'Todos'} options={options.states} placeholder="Estado" onChange={(value) => updateFilter('state', value)} />
-        <SelectField value={filters.destination ?? 'Todos'} options={options.destinations} placeholder="Destino" onChange={(value) => updateFilter('destination', value)} />
-        <SelectField
-          value={filters.status ?? 'Todos'}
-          options={[{ value: 'Todos', label: 'Todos' }, ...statusOptions]}
-          placeholder="Status"
-          onChange={(value) => updateFilter('status', value)}
-        />
-        <SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); setSelectedRows([]); }} placeholder="Buscar" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar empresa" />
+        <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Arquivado']} placeholder="Status final" onChange={setStatus} />
+        <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal" onChange={setChannel} />
       </FiltersBar>
 
-      <TableCard
-        title="Listagem de leads"
-        footerText={loading ? 'Carregando registros...' : `${visibleRecords.length} registro(s) encontrado(s). ${selectedCount} selecionado(s).`}
-        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setPage(1); setSelectedRows([]); }} />}
-        page={currentPage}
-        totalPages={totalPages}
-        onPageChange={(nextPage) => { setPage(nextPage); setSelectedRows([]); }}
-      >
-        {selectedLeads.length ? (
+      <TableCard title="Leads finalizados" footerText={loading ? 'Carregando...' : `${rows.length} lead(s).`}>
+        {selectedIds.length ? (
           <div className="lead-bulk-actions">
-            <span>{selectedLeads.length} selecionado(s)</span>
-            {canBulkValidate ? <Button size="sm" iconLeft={Check} onClick={handleBulkValidate} disabled={validating}>{validating ? 'Validando...' : 'Validar'}</Button> : null}
-            {canBulkArchive ? <Button size="sm" variant="danger" iconLeft={Archive} onClick={handleBulkArchive}>Arquivar</Button> : null}
-            {!hasBulkAction ? <small>Nenhuma acao disponivel para a selecao atual.</small> : null}
+            <span>{selectedIds.length} selecionado(s)</span>
+            <Button size="sm" variant="secondary" iconLeft={Archive} disabled={saving} onClick={() => void archive(selectedIds)}>Arquivar</Button>
           </div>
         ) : null}
         {error ? <div className="table-message">{error}</div> : null}
-        {!error && loading ? <div className="table-message">Carregando registros...</div> : null}
-        {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead encontrado na Base Permanente.</div> : null}
+        {!error && loading ? <div className="table-message">Carregando Base Permanente...</div> : null}
+        {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead finalizado.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable
-            columns={columns}
-            rows={rows}
-            actions={tableActions}
-            getRowActions={(row) => {
-              const lead = records.find((item) => item.id === row.id);
-              if (!lead) return [];
-              return [
-                'view' as TableAction,
-                ...(lead.status === 'importado' ? ['validate' as TableAction] : []),
-                ...(permissionsFor('base', lead.status).canArchive()
-                  ? ['archive' as TableAction]
-                  : []),
-              ];
-            }}
-            selectedRows={selectedRows}
-            onSelectedRowsChange={setSelectedRows}
-            onAction={handleAction}
-          />
+          <DataTable columns={columns} rows={rows} actions={['archive']} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={handleAction} />
         ) : null}
       </TableCard>
 
-      <BaseLeadDrawer
-        mode={drawerMode}
-        lead={activeLead}
-        saving={saving}
-        onModeChange={setDrawerMode}
-        onClose={() => { setDrawerMode(null); setActiveLead(null); }}
-        onSave={handleSaveLead}
-      />
-
-      <ConfirmDialog
-        open={Boolean(confirmAction)}
-        title={activeConfirm?.title ?? ''}
-        description={activeConfirm?.description ?? ''}
-        confirmLabel={activeConfirm?.confirmLabel ?? 'Confirmar'}
-        danger={activeConfirm?.danger}
-        onClose={() => setConfirmAction(null)}
-        onConfirm={handleConfirmAction}
-      >
-        {confirmAction ? <strong>{confirmAction.lead.company}</strong> : null}
-      </ConfirmDialog>
-
-      <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
+      <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>
-  );
-}
-
-function BaseLeadDrawer({
-  mode,
-  lead,
-  saving,
-  onModeChange,
-  onClose,
-  onSave,
-}: {
-  mode: 'view' | 'edit' | null;
-  lead: BaseLead | null;
-  saving: boolean;
-  onModeChange: (mode: 'view' | 'edit' | null) => void;
-  onClose: () => void;
-  onSave: (input: UpdateBaseLeadInput) => void;
-}) {
-  const [draft, setDraft] = useState<BaseLeadDraft | null>(null);
-
-  useEffect(() => {
-    if (!lead) {
-      setDraft(null);
-      return;
-    }
-
-    setDraft({
-      company: lead.company,
-      branch: lead.branch,
-      state: lead.state,
-      city: lead.city,
-      phone: lead.phone,
-      site: lead.site,
-      instagram: lead.instagram ?? '',
-      mapsUrl: lead.mapsUrl ?? '',
-      origin: lead.origin,
-      destination: lead.destination,
-      original_destination: lead.original_destination ?? lead.destination,
-      destination_override: lead.destination_override ?? '',
-      send_instagram: lead.send_instagram ?? false,
-      instagram_override_reason: lead.instagram_override_reason ?? '',
-      override_by: lead.override_by ?? '',
-      override_at: lead.override_at ?? '',
-      status: lead.status,
-      template: lead.template,
-      chipOrProfile: lead.chipOrProfile,
-      notes: lead.notes ?? '',
-    });
-  }, [lead]);
-
-  if (!lead || !draft || !mode) return null;
-
-  const readOnly = mode === 'view';
-  const updateDraft = <K extends keyof BaseLeadDraft>(key: K, value: BaseLeadDraft[K]) => {
-    setDraft((current) => (current ? { ...current, [key]: value } : current));
-  };
-
-  return (
-    <Drawer
-      open={Boolean(lead)}
-      title={mode === 'view' ? 'Detalhes do lead' : 'Editar lead permanente'}
-      description={`${lead.company} - ${statusLabel(lead.status)}`}
-      onClose={onClose}
-      footer={
-        mode === 'edit' ? (
-          <>
-            <Button variant="secondary" onClick={() => onModeChange('view')}>Cancelar</Button>
-            <Button iconLeft={Save} loading={saving} onClick={() => onSave(draft)}>Salvar alterações</Button>
-          </>
-        ) : (
-          <>
-            <Button variant="secondary" onClick={onClose}>Fechar</Button>
-            {permissionsFor('base', lead.status).canEdit() ? (
-              <Button onClick={() => onModeChange('edit')}>Editar</Button>
-            ) : null}
-          </>
-        )
-      }
-    >
-      <div className="drawer-form">
-        <Field label="Empresa" value={draft.company} readOnly={readOnly} onChange={(value) => updateDraft('company', value)} />
-        <Field label="Ramo" value={draft.branch} readOnly={readOnly} onChange={(value) => updateDraft('branch', value)} />
-        <div className="drawer-grid drawer-grid--2">
-          <Field label="Estado" value={draft.state} readOnly={readOnly} onChange={(value) => updateDraft('state', value)} />
-          <Field label="Cidade" value={draft.city} readOnly={readOnly} onChange={(value) => updateDraft('city', value)} />
-        </div>
-        <Field label="Telefone" value={draft.phone} readOnly={readOnly} onChange={(value) => updateDraft('phone', value)} />
-        <Field label="Site" value={draft.site} readOnly={readOnly} onChange={(value) => updateDraft('site', value)} />
-        <Field label="Instagram" value={draft.instagram ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('instagram', value)} />
-        <Field label="Maps URL / Place ID" value={draft.mapsUrl ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('mapsUrl', value)} />
-        {readOnly ? (
-          <div className="drawer-grid drawer-grid--2">
-            <Field label="Origem" value={draft.origin} readOnly />
-            <Field label="Destino" value={draft.destination} readOnly />
-            <Field label="Destino original" value={draft.original_destination ?? ''} readOnly />
-            <Field label="Override aplicado" value={draft.send_instagram ? 'Instagram' : draft.destination_override ?? ''} readOnly />
-          </div>
-        ) : (
-          <div className="drawer-grid drawer-grid--2">
-            <label className="field">
-              <span className="field__label">Origem</span>
-              <SelectField value={draft.origin} options={originOptions} onChange={(value) => updateDraft('origin', value as BaseLeadOrigin)} />
-            </label>
-            <label className="field">
-              <span className="field__label">Destino</span>
-              <SelectField value={draft.destination} options={destinationOptions} onChange={(value) => updateDraft('destination', value as BaseLeadDestination)} />
-            </label>
-          </div>
-        )}
-        {readOnly ? (
-          <Field label="Status" value={statusLabel(draft.status)} readOnly />
-        ) : (
-          <Field label="Status" value={statusLabel(draft.status)} readOnly />
-        )}
-        <Field label="Template utilizado" value={draft.template} readOnly={readOnly} onChange={(value) => updateDraft('template', value)} />
-        <Field label="Chip / Perfil" value={draft.chipOrProfile} readOnly={readOnly} onChange={(value) => updateDraft('chipOrProfile', value)} />
-        <Field label="Motivo override Instagram" value={draft.instagram_override_reason ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('instagram_override_reason', value)} />
-        <div className="drawer-grid drawer-grid--2">
-          <Field label="Override por" value={draft.override_by ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('override_by', value)} />
-          <Field label="Override em" value={draft.override_at ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('override_at', value)} />
-        </div>
-        <Field label="Observações" as="textarea" value={draft.notes ?? ''} readOnly={readOnly} onChange={(value) => updateDraft('notes', value)} />
-
-        <section className="drawer-section">
-          <h3>Histórico</h3>
-          <div className="history-list">
-            {lead.history.map((item) => (
-              <article className="history-item" key={item.id}>
-                <span>{item.date}</span>
-                <strong>{item.title}</strong>
-                <p>{item.description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
-      </div>
-    </Drawer>
   );
 }
