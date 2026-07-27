@@ -722,24 +722,48 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                 onChange={setMapsLocation}
                 renderNoResults={(query, selectValue) => {
                   const normalizedQuery = normalizeLocationKey(query);
-                  const matches = normalizedQuery
-                    ? previouslySearchedLocationOptions.filter((location) => normalizeLocationKey(location.label).includes(normalizedQuery)).slice(0, 5)
+
+                  const searchedMatches = normalizedQuery
+                    ? previouslySearchedLocationOptions
+                        .filter((location) => normalizeLocationKey(location.label).includes(normalizedQuery))
+                        .slice(0, 5)
                     : [];
 
-                  if (!matches.length) {
-                    return <div className="select-field__empty">Nenhuma localidade encontrada.</div>;
+                  const catalogMatches = normalizedQuery
+                    ? locationOptions
+                        .filter((location) => normalizeLocationKey(location.label).includes(normalizedQuery))
+                        .slice(0, 5)
+                    : [];
+
+                  if (searchedMatches.length) {
+                    return (
+                      <div className="location-already-searched">
+                        {searchedMatches.map((location) => (
+                          <div className="location-already-searched__item" key={location.cityId}>
+                            <span>
+                              Você já pesquisou <strong>{selectedBranch?.name ?? 'esse ramo'}</strong> em <strong>{location.label}</strong>.
+                            </span>
+                            <button type="button" onClick={() => selectValue(location.label)}>Selecionar mesmo assim</button>
+                          </div>
+                        ))}
+                      </div>
+                    );
                   }
 
-                  return (
-                    <div className="location-already-searched">
-                      {matches.map((location) => (
-                        <div className="location-already-searched__item" key={location.cityId}>
-                          <span>Você já pesquisou <strong>{selectedBranch?.name ?? 'esse ramo'}</strong> em <strong>{location.label}</strong>.</span>
-                          <button type="button" onClick={() => selectValue(location.label)}>Selecionar mesmo assim</button>
-                        </div>
-                      ))}
-                    </div>
-                  );
+                  if (catalogMatches.length) {
+                    return (
+                      <div className="location-already-searched">
+                        {catalogMatches.map((location) => (
+                          <div className="location-already-searched__item" key={location.cityId}>
+                            <span>Localidade encontrada: <strong>{location.label}</strong>.</span>
+                            <button type="button" onClick={() => selectValue(location.label)}>Selecionar</button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return <div className="select-field__empty">Nenhuma localidade encontrada.</div>;
                 }}
               />
             </label>

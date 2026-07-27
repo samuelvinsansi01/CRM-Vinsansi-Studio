@@ -134,12 +134,22 @@ export function SelectField({
     return options.map((option) => (typeof option === 'string' ? { label: option, value: option } : option));
   }, [children, options, placeholder]);
 
+  const normalizeSearchValue = (text: string) =>
+    text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .replace(/\s*[-/]\s*/g, ',')
+      .replace(/\s*,\s*/g, ',')
+      .replace(/\s+/g, ' ')
+      .trim();
+
   const filteredOptions = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase('pt-BR');
+    const query = normalizeSearchValue(searchQuery);
     if (!searchable || !query) return normalizedOptions;
 
     return normalizedOptions.filter((option) =>
-      option.label.toLocaleLowerCase('pt-BR').includes(query),
+      normalizeSearchValue(option.label).includes(query),
     );
   }, [normalizedOptions, searchQuery, searchable]);
 
