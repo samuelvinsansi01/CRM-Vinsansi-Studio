@@ -21,6 +21,7 @@ import {
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useImportLeads } from '../hooks/useImportLeads';
 import { useApifyAccounts } from '../hooks/useApifyAccounts';
+import { apifyImportService } from '../services/apify-import';
 import { useImportSettings } from '../hooks/useImportSettings';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
 import { permissionsFor } from '../services/permissions';
@@ -198,6 +199,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const [mapsSearch, setMapsSearch] = useState('');
   const [mapsLocation, setMapsLocation] = useState('');
   const [mapsLimit, setMapsLimit] = useState('100');
+  const [importTab, setImportTab] = useState<'Apify' | 'Manual'>('Apify');
+  const [startingApify, setStartingApify] = useState(false);
 
   const { settings: importSettings } = useImportSettings();
   const { activeAccounts: apifyAccounts, loading: loadingApifyAccounts, error: apifyAccountsError } = useApifyAccounts();
@@ -299,6 +302,35 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       pushToast({ title: 'Erro na importação', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
       setIsImporting(false);
+    }
+  };
+
+
+  const startApifyImport = async () => {
+    const limit = Number(mapsLimit);
+    if (!selectedApifyAccountId || !mapsSearch.trim() || !mapsLocation.trim()) return;
+    if (!Number.isFinite(limit) || limit < 1 || limit > 500) {
+      pushToast({ title: 'Quantidade inválida', description: 'Informe uma quantidade entre 1 e 500.', tone: 'danger' });
+      return;
+    }
+
+    setStartingApify(true);
+    try {
+      const result = await apifyImportService.startGoogleMapsExtractor({
+        apifyAccountId: Number(selectedApifyAccountId),
+        search: mapsSearch,
+        location: mapsLocation,
+        limit,
+      });
+      pushToast({
+        title: 'Coleta iniciada',
+        description: `A conta ${result.accountName} iniciou o Google Maps Extractor. Execução: ${result.runId}.`,
+        tone: 'success',
+      });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível iniciar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setStartingApify(false);
     }
   };
 
@@ -438,96 +470,72 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         </div>
       </section>
 
-      <Panel title="Google Maps Extractor" className="import-extractor-panel">
-        <p>A conta Apify é obrigatoriamente escolhida por você. Não existe seleção ou troca automática.</p>
-        <div className="import-extractor-fields">
-          <label className="drawer-field">
-            <span>Conta Apify</span>
-            <SelectField
-              value={selectedApifyAccountId}
-              options={[{ label: loadingApifyAccounts ? 'Carregando contas...' : 'Selecione uma conta', value: '' }, ...apifyAccounts.map((account) => ({ label: account.name, value: String(account.id) }))]}
-              onChange={setSelectedApifyAccountId}
+      <div className="import-source-tabs" role="tablist" aria-label="Tipo de importação">
+        <button type="button" role="tab" aria-selected={importTab === 'Apify'} className={importTab === 'Apify' ? 'is-active' : ''} onClick={() => setImportTab('Apify')}>Apify</button>
+        <button type="button" role="tab" aria-selected={importTab === 'Manual'} className={importTab === 'Manual' ? 'is-active' : ''} onClick={() => setImportTab('Manual')}>Manual</button>
+      </div>
+
+      {importTab === 'Apify' ? (
+        <Panel title="Google Maps Extractor" className="import-extractor-panel">
+          <p>Escolha manualmente a conta que será usada nesta coleta. A plataforma não troca a conta automaticamente.</p>
+          <div className="import-extractor-fields">
+            <label className="field">
+              <span className="field__label">Conta Apify</span>
+              <SelectField
+                value={selectedApifyAccountId}
+                options={[{ label: loadingApifyAccounts ? 'Carregando contas...' : 'Selecione uma conta', value: '' }, ...apifyAccounts.map((account) => ({ label: account.name, value: String(account.id) }))]}
+                onChange={setSelectedApifyAccountId}
+              />
+            </label>
+            <Field label="Termo de busca" placeholder="Ex.: clínicas odontológicas" value={mapsSearch} onChange={setMapsSearch} />
+            <Field label="Localização" placeholder="Ex.: Curitiba, PR" value={mapsLocation} onChange={setMapsLocation} />
+            <Field label="Quantidade máxima" type="number" value={mapsLimit} onChange={setMapsLimit} />
+          </div>
+          {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
+          {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
+          <div className="import-extractor-actions">
+            <Button
+              iconLeft={Database}
+              loading={startingApify}
+              disabled={!selectedApifyAccountId || !mapsSearch.trim() || !mapsLocation.trim()}
+              onClick={startApifyImport}
+            >
+              Iniciar coleta
+            </Button>
+          </div>
+        </Panel>
+      ) : (
+        <section className="import-grid import-grid--manual">
+          <Panel title="Importação manual" className="import-json">
+            <p>Cole o JSON exportado ou adicione um lead manualmente. Ambos passam pela mesma prévia de validação.</p>
+            <Field
+              as="textarea"
+              className="json-dropzone"
+              placeholder="Cole aqui o JSON exportado"
+              value={jsonText}
+              onChange={setJsonText}
             />
-          </label>
-          <Field label="Busca" placeholder="Ex.: clínicas odontológicas" value={mapsSearch} onChange={setMapsSearch} />
-          <Field label="Localização" placeholder="Ex.: Curitiba, PR" value={mapsLocation} onChange={setMapsLocation} />
-          <Field label="Quantidade máxima" type="number" value={mapsLimit} onChange={setMapsLimit} />
-        </div>
-        {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
-        {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
-        <div className="import-json__actions">
-          <Button
-            iconLeft={Database}
-            disabled={!selectedApifyAccountId || !mapsSearch.trim() || !mapsLocation.trim()}
-            onClick={() => pushToast({ title: 'Conta selecionada manualmente', description: 'A execução do Google Maps Extractor será ligada na próxima etapa, usando somente esta conta.', tone: 'success' })}
-          >
-            Preparar coleta
-          </Button>
-        </div>
-      </Panel>
+            <div className="import-json__actions">
+              <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
+              <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>Aprovar leads</Button>
+            </div>
+          </Panel>
+
+          <Panel title="Adicionar lead" className="manual-validation">
+            <div className="manual-validation__fields manual-validation__fields--stacked">
+              <Field label="Nome da empresa" placeholder="Digite o nome da empresa" value={manualLead.empresa} onChange={(empresa) => setManualLead((current) => ({ ...current, empresa }))} />
+              <Field label="Número WhatsApp" placeholder="Digite o número WhatsApp" value={manualLead.whatsapp} onChange={(whatsapp) => setManualLead((current) => ({ ...current, whatsapp }))} />
+              <Field label="Link Instagram" placeholder="Digite o link Instagram" value={manualLead.instagram} onChange={(instagram) => setManualLead((current) => ({ ...current, instagram }))} />
+            </div>
+            <div className="manual-validation__actions">
+              <Button variant="secondary" disabled={!manualLead.empresa} onClick={() => setManualLead({ empresa: '', whatsapp: '', instagram: '' })}>Limpar</Button>
+              <Button disabled={!manualLead.empresa} onClick={addManualLead}>Adicionar lead</Button>
+            </div>
+          </Panel>
+        </section>
+      )}
 
       <section className="import-grid">
-        <Panel title="JSON da Apify" className="import-json">
-          <p>Cole o JSON abaixo. A prévia inicia zerada e mostra apenas o resultado da última simulação/importação.</p>
-          <Field
-            as="textarea"
-            className="json-dropzone"
-            placeholder="Cole aqui o JSON exportado da Apify"
-            value={jsonText}
-            onChange={setJsonText}
-          />
-          <div className="import-json__actions">
-            <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
-            <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>Aprovar leads</Button>
-          </div>
-          {lastImport ? (() => {
-            const pendingCount = lastImport.leads.filter((lead) => isStatusGroup(lead.status, 'pending')).length;
-            const approvedCount = lastImport.leads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
-            const metrics = [
-              { value: String(lastImport.report.processed), label: 'Processados' },
-              { value: String(approvedCount), label: 'Aprovados', tone: 'success' as const },
-              { value: String(pendingCount), label: 'Em aguarde', tone: 'warning' as const },
-              { value: String(lastImport.rejected), label: 'Recusados', tone: 'danger' as const },
-              { value: String(lastImport.report.duplicates), label: 'Duplicados' },
-              ...(lastImport.ignored > 0 ? [{ value: String(lastImport.ignored), label: 'Ignorados' }] : []),
-            ];
-
-            return (
-              <div className="import-result">
-                <div className="import-result__header">
-                  <strong>Última importação</strong>
-                  <div className="import-result__meta">
-                    <span>{lastImport.report.simulation ? 'Simulação sem gravação' : `${lastImport.created} importado(s)`}</span>
-                    <span>{lastImport.report.durationMs}ms</span>
-                  </div>
-                </div>
-
-                <div className="metric-grid metric-grid--5 import-result__metrics">
-                  {metrics.map((metric) => (
-                    <MetricCard
-                      key={metric.label}
-                      value={metric.value}
-                      label={metric.label}
-                      tone={metric.tone ?? 'neutral'}
-                    />
-                  ))}
-                </div>
-
-                {lastImport.report.reasons.length ? (
-                  <div className="import-result__details">
-                    <strong>Detalhes das regras aplicadas</strong>
-                    <div className="import-result__reasons">
-                      {lastImport.report.reasons.map((reason) => (
-                        <span key={reason.code}>{reason.code === 'approved' ? 'Aptos para entrada' : reason.label}: {reason.count}</span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })() : null}
-        </Panel>
-
         <TableCard
           title="Prévia"
           footerText={`Mostrando ${pageRows.length} de ${leads.length} ${rejected ? 'recusados' : 'leads aptos'}`}
@@ -570,18 +578,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           ) : null}
         </TableCard>
       </section>
-
-      <Panel title="Validação manual" className="manual-validation">
-        <div className="manual-validation__fields">
-          <Field label="Nome da empresa" placeholder="Digite o nome da empresa" value={manualLead.empresa} onChange={(empresa) => setManualLead((current) => ({ ...current, empresa }))} />
-          <Field label="Número WhatsApp" placeholder="Digite o número WhatsApp" value={manualLead.whatsapp} onChange={(whatsapp) => setManualLead((current) => ({ ...current, whatsapp }))} />
-          <Field label="Link Instagram" placeholder="Digite o link Instagram" value={manualLead.instagram} onChange={(instagram) => setManualLead((current) => ({ ...current, instagram }))} />
-        </div>
-        <div className="manual-validation__actions">
-          <Button variant="secondary" disabled={!manualLead.empresa} onClick={() => setManualLead({ empresa: '', whatsapp: '', instagram: '' })}>Limpar</Button>
-          <Button disabled={!manualLead.empresa} onClick={addManualLead}>Adicionar lead</Button>
-        </div>
-      </Panel>
 
       <Drawer
         open={drawerOpen}
