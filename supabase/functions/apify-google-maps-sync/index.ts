@@ -119,7 +119,8 @@ Deno.serve(async (request: Request) => {
     if (updateError) throw new Error(updateError.message);
 
     if (status !== "succeeded") return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: Boolean(job.imported_at), items: null });
-    if (job.imported_at) return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: true, items: null });
+    const detailsRequested = action === "details";
+    if (job.imported_at && !detailsRequested) return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: true, items: null });
     if (!datasetId) return jsonResponse({ error: "Execução concluída sem datasetId." }, 502);
 
     const datasetResponse = await fetch(`https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?clean=true&format=json&token=${encodeURIComponent(token)}`);

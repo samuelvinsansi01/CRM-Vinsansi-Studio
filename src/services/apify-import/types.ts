@@ -3,6 +3,8 @@ export type StartGoogleMapsImportInput = {
   searchTerms: string[];
   location: string;
   limit: number;
+  branchId?: number;
+  branchName?: string;
 };
 
 export type StartGoogleMapsImportResult = {
@@ -43,4 +45,21 @@ export type PendingGoogleMapsJob = {
   jobId: number;
   runId: string;
   status: string;
+};
+
+export type ApifyImportJob = {
+  jobId: number;
+  accountName: string;
+  branchId: number | null;
+  branchName: string;
+  location: string;
+  status: string;
+  runId: string | null;
+  datasetId: string | null;
+  totalReceived: number;
+  totalImported: number;
+  totalDuplicates: number;
+  totalRejected: number;
+  createdAt: string;
+  finishedAt: string | null;
 };

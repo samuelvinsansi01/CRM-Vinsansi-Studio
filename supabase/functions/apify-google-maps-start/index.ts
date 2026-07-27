@@ -400,6 +400,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
      * 5. Cria o job como pendente/iniciando
      */
     const startedAt = new Date().toISOString();
+    const branchId = Number(body.branchId ?? body.branches_id);
+    const branchName = String(body.branchName ?? body.branch_name ?? searchTerms[0] ?? "").trim();
 
     const {
       data: job,
@@ -423,6 +425,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
         search_terms: searchTerms,
 
         location_query: locationQuery,
+
+        branches_id: Number.isInteger(branchId) && branchId > 0 ? branchId : null,
+
+        branch_name: branchName || null,
 
         requested_limit: limit,
 

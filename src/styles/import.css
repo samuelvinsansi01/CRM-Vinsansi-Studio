@@ -549,3 +549,16 @@
     flex-direction: column;
   }
 }
+
+/* Runs reais da Apify */
+.import-extractor-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.apify-runs-section { margin-top: var(--space-20); }
+.apify-runs-table-wrap { overflow-x: auto; }
+.apify-runs-table { width: 100%; border-collapse: collapse; min-width: 980px; }
+.apify-runs-table th, .apify-runs-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent); white-space: nowrap; }
+.apify-runs-table tbody tr { cursor: pointer; }
+.apify-runs-table tbody tr:hover { background: color-mix(in srgb, var(--color-pure-white) 4%, transparent); }
+.apify-run-details { display: grid; gap: 16px; }
+.apify-run-summary { display: grid; gap: 6px; }
+.apify-json-viewer { max-height: 62vh; overflow: auto; padding: 16px; border-radius: 12px; background: color-mix(in srgb, var(--surface-card) 78%, black); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+@media (max-width: 960px) { .import-extractor-fields { grid-template-columns: 1fr; } }

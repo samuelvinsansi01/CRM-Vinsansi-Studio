@@ -22,6 +22,9 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useImportLeads } from '../hooks/useImportLeads';
 import { useApifyAccounts } from '../hooks/useApifyAccounts';
 import { apifyImportService } from '../services/apify-import';
+import type { ApifyImportJob } from '../services/apify-import';
+import { configService } from '../services/config/config.service';
+import type { BranchConfigRecord } from '../services/config/types';
 import { useImportSettings } from '../hooks/useImportSettings';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
 import { permissionsFor } from '../services/permissions';
@@ -219,9 +222,15 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [lastImport, setLastImport] = useState<ImportParseResult | null>(null);
   const [selectedApifyAccountId, setSelectedApifyAccountId] = useState('');
-  const [mapsSearchTerms, setMapsSearchTerms] = useState<string[]>(['']);
+  const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [branches, setBranches] = useState<BranchConfigRecord[]>([]);
   const [mapsLocation, setMapsLocation] = useState('');
-  const [mapsLimit, setMapsLimit] = useState('100');
+  const [mapsLimit] = useState('100');
+  const [apifyJobs, setApifyJobs] = useState<ApifyImportJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<ApifyImportJob | null>(null);
+  const [jobItems, setJobItems] = useState<unknown[] | null>(null);
+  const [jobDetailsLoading, setJobDetailsLoading] = useState(false);
   const [importTab, setImportTab] = useState<'Apify' | 'Manual'>('Apify');
   const [startingApify, setStartingApify] = useState(false);
 
@@ -231,6 +240,41 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToInicio } = useImportLeads(activeStatus, search);
   const previewToken = useRef(0);
   const recoveredApifyJob = useRef(false);
+
+  const loadApifyJobs = async () => {
+    setJobsLoading(true);
+    try {
+      setApifyJobs(await apifyImportService.listGoogleMapsJobs());
+    } catch (err) {
+      pushToast({ title: 'Não foi possível carregar os runs', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setJobsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void configService.list('branches').then((records) => {
+      setBranches(records.filter((record): record is BranchConfigRecord => record.kind === 'branches' && record.active));
+    }).catch((err) => {
+      pushToast({ title: 'Não foi possível carregar os ramos', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    });
+    void loadApifyJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const openJobDetails = async (job: ApifyImportJob) => {
+    setSelectedJob(job);
+    setJobItems(null);
+    setJobDetailsLoading(true);
+    try {
+      const details = await apifyImportService.getGoogleMapsJobDetails(job.jobId);
+      setJobItems(details.items ?? []);
+    } catch (err) {
+      pushToast({ title: 'Não foi possível abrir o run', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setJobDetailsLoading(false);
+    }
+  };
 
   const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
@@ -388,8 +432,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const startApifyImport = async () => {
     const limit = Number(mapsLimit);
-    const searchTerms = mapsSearchTerms.map((term) => term.trim()).filter(Boolean);
-    if (!selectedApifyAccountId || !searchTerms.length || !mapsLocation.trim()) return;
+    const selectedBranch = branches.find((branch) => branch.id === selectedBranchId);
+    const searchTerms = selectedBranch ? [selectedBranch.name] : [];
+    if (!selectedApifyAccountId || !selectedBranch || !mapsLocation.trim()) return;
     if (!Number.isFinite(limit) || limit < 1 || limit > 500) {
       pushToast({ title: 'Quantidade inválida', description: 'Informe uma quantidade entre 1 e 500.', tone: 'danger' });
       return;
@@ -402,6 +447,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         searchTerms,
         location: mapsLocation,
         limit,
+        branchId: Number(selectedBranch.id),
+        branchName: selectedBranch.name,
       });
       pushToast({
         title: 'Coleta iniciada',
@@ -414,6 +461,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         pushToast({ title: 'Dataset já processado', description: 'Esta execução já havia sido importada e não será duplicada.', tone: 'success' });
         return;
       }
+      await loadApifyJobs();
       pushToast({
         title: 'Coleta validada e importada',
         description: formatApifyImportSummary(importedResult),
@@ -583,6 +631,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       </div>
 
       {importTab === 'Apify' ? (
+        <>
         <Panel title="Google Maps Extractor" className="import-extractor-panel">
           <p>Escolha manualmente a conta que será usada nesta coleta. A plataforma não troca a conta automaticamente.</p>
           <div className="import-extractor-fields">
@@ -596,36 +645,15 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               />
             </label>
             <Field label="Localização" placeholder="Ex.: Curitiba, PR" value={mapsLocation} onChange={setMapsLocation} />
-            <Field label="Quantidade máxima por termo" type="number" value={mapsLimit} onChange={setMapsLimit} />
-          </div>
-          <div className="import-search-terms">
-            <div className="import-search-terms__header">
-              <div>
-                <strong>Termos de busca</strong>
-                <span>Adicione quantos segmentos quiser pesquisar na mesma execução.</span>
-              </div>
-              <Button variant="secondary" size="sm" iconLeft={Plus} onClick={addSearchTerm}>Adicionar termo</Button>
-            </div>
-            <div className="import-search-terms__list">
-              {mapsSearchTerms.map((term, index) => (
-                <div className="import-search-term" key={`search-term-${index}`}>
-                  <Field
-                    label={`Termo ${index + 1}`}
-                    placeholder="Ex.: contabilidade"
-                    value={term}
-                    onChange={(value) => updateSearchTerm(index, value)}
-                  />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    aria-label={`Remover termo ${index + 1}`}
-                    onClick={() => removeSearchTerm(index)}
-                  >
-                    <X size={16} />
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <label className="field import-select-field">
+              <span className="field__label">Ramo</span>
+              <SelectField
+                className="import-select-control"
+                value={selectedBranchId}
+                options={[{ label: 'Selecione um ramo cadastrado', value: '' }, ...branches.map((branch) => ({ label: branch.name, value: branch.id }))]}
+                onChange={setSelectedBranchId}
+              />
+            </label>
           </div>
           {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
           {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
@@ -633,13 +661,33 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             <Button
               iconLeft={Database}
               loading={startingApify}
-              disabled={!selectedApifyAccountId || !mapsSearchTerms.some((term) => term.trim()) || !mapsLocation.trim()}
+              disabled={!selectedApifyAccountId || !selectedBranchId || !mapsLocation.trim()}
               onClick={startApifyImport}
             >
               Iniciar coleta
             </Button>
           </div>
         </Panel>
+        <section className="apify-runs-section">
+          <TableCard title="Runs reais" footerText={`${apifyJobs.length} execução(ões) encontrada(s)`}>
+            {jobsLoading ? <div className="table-message">Carregando runs...</div> : null}
+            {!jobsLoading && !apifyJobs.length ? <div className="table-message">Nenhuma execução encontrada.</div> : null}
+            {!jobsLoading && apifyJobs.length ? (
+              <div className="apify-runs-table-wrap">
+                <table className="apify-runs-table">
+                  <thead><tr><th>Status</th><th>Conta</th><th>Localização</th><th>Ramo</th><th>Resultados</th><th>Criados</th><th>Duplicados</th><th>Recusados</th><th>Data</th></tr></thead>
+                  <tbody>{apifyJobs.map((job) => (
+                    <tr key={job.jobId} onClick={() => void openJobDetails(job)} tabIndex={0}>
+                      <td><Tag tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' ? 'danger' : 'warning'}>{job.status}</Tag></td>
+                      <td>{job.accountName}</td><td>{job.location}</td><td>{job.branchName}</td><td>{job.totalReceived}</td><td>{job.totalImported}</td><td>{job.totalDuplicates}</td><td>{job.totalRejected}</td><td>{job.createdAt ? new Date(job.createdAt).toLocaleString('pt-BR') : '—'}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            ) : null}
+          </TableCard>
+        </section>
+        </>
       ) : (
         <section className="import-grid import-grid--manual">
           <Panel title="Importação manual" className="import-json">
@@ -714,6 +762,30 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           ) : null}
         </TableCard>
       </section>
+
+      <Drawer
+        open={Boolean(selectedJob)}
+        title={selectedJob ? `Run #${selectedJob.jobId}` : 'Run'}
+        description="Dados reais da execução e conteúdo bruto do dataset da Apify."
+        onClose={() => { setSelectedJob(null); setJobItems(null); }}
+      >
+        {selectedJob ? (
+          <div className="apify-run-details">
+            <div className="apify-run-summary">
+              <strong>{selectedJob.branchName}</strong>
+              <span>{selectedJob.location} · {selectedJob.status}</span>
+              <span>Run ID: {selectedJob.runId ?? '—'} · Dataset ID: {selectedJob.datasetId ?? '—'}</span>
+            </div>
+            {jobDetailsLoading ? <div className="table-message">Carregando JSON e resultados...</div> : null}
+            {!jobDetailsLoading && jobItems ? (
+              <>
+                <h3>Resultados ({jobItems.length})</h3>
+                <pre className="apify-json-viewer">{JSON.stringify(jobItems, null, 2)}</pre>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </Drawer>
 
       <Drawer
         open={drawerOpen}

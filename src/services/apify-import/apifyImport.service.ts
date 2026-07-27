@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabase';
-import type { FinalizeGoogleMapsImportInput, PendingGoogleMapsJob, StartGoogleMapsImportInput, StartGoogleMapsImportResult, SyncGoogleMapsImportResult } from './types';
+import type { ApifyImportJob, FinalizeGoogleMapsImportInput, PendingGoogleMapsJob, StartGoogleMapsImportInput, StartGoogleMapsImportResult, SyncGoogleMapsImportResult } from './types';
 
 export const apifyImportService = {
   async startGoogleMapsExtractor(input: StartGoogleMapsImportInput): Promise<StartGoogleMapsImportResult> {
@@ -9,6 +9,8 @@ export const apifyImportService = {
         searchTerms: input.searchTerms.map((term) => term.trim()).filter(Boolean),
         locationQuery: input.location.trim(),
         maxCrawledPlacesPerSearch: input.limit,
+        branchId: input.branchId,
+        branchName: input.branchName,
       },
     });
 
@@ -32,6 +34,42 @@ export const apifyImportService = {
       accountId: response.account?.id ?? response.accountId,
       accountName,
     };
+  },
+
+
+  async listGoogleMapsJobs(): Promise<ApifyImportJob[]> {
+    const { data, error } = await getSupabaseClient()
+      .from('apify_import_jobs')
+      .select('apify_import_jobs_id, branches_id, branch_name, location_query, status, external_run_id, external_dataset_id, total_received, total_imported, total_duplicates, total_rejected, created_at, finished_at, apify_accounts:apify_accounts_id(account_name)')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row: any) => ({
+      jobId: Number(row.apify_import_jobs_id),
+      accountName: String((Array.isArray(row.apify_accounts) ? row.apify_accounts[0]?.account_name : row.apify_accounts?.account_name) ?? '—'),
+      branchId: row.branches_id == null ? null : Number(row.branches_id),
+      branchName: String(row.branch_name ?? '—'),
+      location: String(row.location_query ?? '—'),
+      status: String(row.status ?? '—'),
+      runId: row.external_run_id ? String(row.external_run_id) : null,
+      datasetId: row.external_dataset_id ? String(row.external_dataset_id) : null,
+      totalReceived: Number(row.total_received ?? 0),
+      totalImported: Number(row.total_imported ?? 0),
+      totalDuplicates: Number(row.total_duplicates ?? 0),
+      totalRejected: Number(row.total_rejected ?? 0),
+      createdAt: String(row.created_at ?? ''),
+      finishedAt: row.finished_at ? String(row.finished_at) : null,
+    }));
+  },
+
+  async getGoogleMapsJobDetails(jobId: number): Promise<SyncGoogleMapsImportResult> {
+    const { data, error } = await getSupabaseClient().functions.invoke('apify-google-maps-sync', {
+      body: { action: 'details', jobId },
+    });
+    if (error) throw new Error(error.message);
+    if (!data || typeof data !== 'object') throw new Error('Resposta inválida ao carregar os resultados.');
+    if ('error' in data && data.error) throw new Error(String(data.error));
+    return data as SyncGoogleMapsImportResult;
   },
 
   async findLatestPendingGoogleMapsJob(): Promise<PendingGoogleMapsJob | null> {
