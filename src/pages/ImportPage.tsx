@@ -224,6 +224,20 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const [selectedApifyAccountId, setSelectedApifyAccountId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [branches, setBranches] = useState<BranchConfigRecord[]>([]);
+
+  const uniqueBranches = useMemo(() => {
+    const byName = new Map<string, BranchConfigRecord>();
+
+    for (const branch of branches) {
+      const normalizedName = branch.name.trim().toLocaleLowerCase('pt-BR');
+      if (!normalizedName || byName.has(normalizedName)) continue;
+      byName.set(normalizedName, { ...branch, name: branch.name.trim() });
+    }
+
+    return Array.from(byName.values()).sort((left, right) =>
+      left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
+    );
+  }, [branches]);
   const [mapsLocation, setMapsLocation] = useState('');
   const [mapsLimit, setMapsLimit] = useState('100');
   const [apifyJobs, setApifyJobs] = useState<ApifyImportJob[]>([]);
@@ -635,7 +649,10 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               <SelectField
                 className="import-select-control"
                 value={selectedBranchId}
-                options={[{ label: 'Selecione um ramo cadastrado', value: '' }, ...branches.map((branch) => ({ label: branch.name, value: branch.id }))]}
+                placeholder="Selecione um ramo cadastrado"
+                searchable
+                searchPlaceholder="Buscar ramo..."
+                options={uniqueBranches.map((branch) => ({ label: branch.name, value: branch.id }))}
                 onChange={setSelectedBranchId}
               />
             </label>

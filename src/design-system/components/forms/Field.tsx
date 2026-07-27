@@ -103,6 +103,8 @@ type SelectFieldProps = {
   onChange?: (value: string) => void;
   className?: string;
   density?: 'regular' | 'compact';
+  searchable?: boolean;
+  searchPlaceholder?: string;
 };
 
 export function SelectField({
@@ -114,9 +116,12 @@ export function SelectField({
   onChange,
   className = '',
   density = 'regular',
+  searchable = false,
+  searchPlaceholder = 'Buscar...',
 }: SelectFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const normalizedOptions = useMemo<SelectOption[]>(() => {
     if (!options?.length) {
@@ -126,6 +131,15 @@ export function SelectField({
 
     return options.map((option) => (typeof option === 'string' ? { label: option, value: option } : option));
   }, [children, options, placeholder]);
+
+  const filteredOptions = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase('pt-BR');
+    if (!searchable || !query) return normalizedOptions;
+
+    return normalizedOptions.filter((option) =>
+      option.label.toLocaleLowerCase('pt-BR').includes(query),
+    );
+  }, [normalizedOptions, searchQuery, searchable]);
 
   const initialValue = defaultValue ?? value ?? normalizedOptions[0]?.value ?? '';
   const [internalValue, setInternalValue] = useState(initialValue);
@@ -160,6 +174,7 @@ export function SelectField({
     }
 
     onChange?.(nextValue);
+    setSearchQuery('');
     setIsOpen(false);
   };
 
@@ -170,7 +185,10 @@ export function SelectField({
         type="button"
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={() => {
+          setSearchQuery('');
+          setIsOpen((current) => !current);
+        }}
       >
         <span>{selectedLabel}</span>
         <ChevronDown size={16} strokeWidth={1.8} />
@@ -178,7 +196,21 @@ export function SelectField({
 
       {isOpen ? (
         <div className="select-field__menu" role="listbox" onMouseDown={(event) => event.preventDefault()}>
-          {normalizedOptions.map((option) => (
+          {searchable ? (
+            <div className="select-field__search">
+              <Search size={15} strokeWidth={1.8} />
+              <input
+                autoFocus
+                type="search"
+                value={searchQuery}
+                placeholder={searchPlaceholder}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onMouseDown={(event) => event.stopPropagation()}
+              />
+            </div>
+          ) : null}
+
+          {filteredOptions.length ? filteredOptions.map((option) => (
             <button
               className="select-field__option"
               type="button"
@@ -190,7 +222,9 @@ export function SelectField({
               <span>{option.label}</span>
               {option.value === selectedValue ? <Check size={14} strokeWidth={1.8} /> : null}
             </button>
-          ))}
+          )) : (
+            <div className="select-field__empty">Nenhum resultado encontrado.</div>
+          )}
         </div>
       ) : null}
     </div>

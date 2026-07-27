@@ -1000,6 +1000,31 @@
   box-shadow: 0 16px 38px color-mix(in srgb, var(--color-pure-black) 72%, transparent);
 }
 
+
+.select-field__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.select-field__search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.select-field__empty {
+  padding: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .select-field__option {
   display: flex;
   align-items: center;
