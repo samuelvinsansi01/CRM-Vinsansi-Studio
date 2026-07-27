@@ -161,9 +161,24 @@ function rowToBranch(row: Record<string, unknown>): BranchConfigRecord {
   const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<BranchConfigRecord>;
   const rawStatus = row.status ?? data.status;
   const inactiveFlatStatus = normalizeComparable(rawStatus) === 'arquivado' || isDeletedStatus(rawStatus);
-  const sourceId = normalizeBranchId(textFrom(row.id, data.id)) || textFrom(row.id, data.id);
-  const name = textFrom(row.name, data.name, row.category, data.category, 'Novo ramo');
+  // A tabela de produção usa nomes normalizados (branches_id, branches_name,
+  // branches_categories, branches_created_at...). Mantemos também os aliases
+  // legados para não quebrar ambientes antigos.
+  const sourceId =
+    normalizeBranchId(textFrom(row.branches_id, row.id, data.id)) ||
+    textFrom(row.branches_id, row.id, data.id);
+  const name = textFrom(
+    row.branches_name,
+    row.name,
+    data.name,
+    row.category,
+    data.category,
+    'Novo ramo',
+  );
   const slug = textFrom(row.slug, data.slug, branchSlug(name));
+  const categories = row.branches_categories ?? row.subcategories ?? data.subcategories;
+  const statusId = Number(row.status_id ?? 1);
+
   return normalizeBranch(
     {
       ...data,
@@ -171,17 +186,20 @@ function rowToBranch(row: Record<string, unknown>): BranchConfigRecord {
       slug,
       name,
       category: textFrom(row.category, data.category, name),
-      subcategories: row.subcategories ?? data.subcategories,
-      associatedCategories: row.associated_categories ?? data.associatedCategories,
+      subcategories: categories,
+      associatedCategories:
+        row.associated_categories ?? row.branches_categories ?? data.associatedCategories,
       order: row.order_index ?? data.order,
       minRating: row.min_rating ?? data.minRating,
       minReviews: row.min_reviews ?? data.minReviews,
       imageName: row.image_name ?? data.imageName,
       imageRequired: row.image_required ?? data.imageRequired ?? data.image_required,
-      active: inactiveFlatStatus ? data.active ?? row.active : row.active ?? data.active,
+      active: inactiveFlatStatus
+        ? data.active ?? row.active
+        : row.active ?? data.active ?? statusId === 1,
       status: row.status ?? data.status,
-      createdAt: row.created_at ?? data.createdAt,
-      updatedAt: row.updated_at ?? data.updatedAt,
+      createdAt: row.branches_created_at ?? row.created_at ?? data.createdAt,
+      updatedAt: row.branches_updated_at ?? row.updated_at ?? data.updatedAt,
     },
     undefined,
   );
