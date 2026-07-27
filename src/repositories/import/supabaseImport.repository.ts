@@ -437,55 +437,6 @@ function isDuplicateIdentityDatabaseError(error: unknown) {
   return /duplicate_identity:|duplicate key value violates unique constraint/i.test(message);
 }
 
-async function rememberImportBatch(
-  userId: string,
-  auditLeads: ImportLead[],
-  operationalLeads: ImportLead[],
-  duplicateCount: number,
-  rejectedCount: number,
-  source = 'react',
-) {
-  const batchId = createUuid();
-  const { error } = await getSupabaseClient().from(getSupabaseConfig().tables.importBatches).insert({
-    id: batchId,
-    user_id: userId,
-    source,
-    quantity_total: auditLeads.length,
-    quantity_created: operationalLeads.length,
-    quantity_blocked: rejectedCount,
-    quantity_duplicate: duplicateCount,
-    // Nao persiste o JSON importado. Recusados ficam somente na sessao da tela.
-    raw_metadata: { source },
-    created_at: nowIso(),
-  });
-  if (error) throw new Error(error.message);
-  return batchId;
-}
-
-async function rememberLeadImports(
-  userId: string,
-  batchId: string,
-  leads: ImportLead[],
-  persistedLeadIds: Set<string>,
-) {
-  const rows = leads.map((lead) => ({
-    id: createUuid(),
-    user_id: userId,
-    import_batch_id: batchId,
-    // lead_imports.lead_id referencia leads.id. Duplicados ficam apenas na
-    // auditoria e, portanto, nao possuem um novo registro em leads.
-    lead_id: persistedLeadIds.has(lead.id) ? lead.id : null,
-    status: lead.status,
-    reason: lead.motivo,
-    original_payload: lead,
-    normalized_payload: lead,
-    created_at: nowIso(),
-  }));
-  if (!rows.length) return;
-  const { error } = await getSupabaseClient().from(getSupabaseConfig().tables.leadImports).insert(rows);
-  if (error) throw new Error(error.message);
-}
-
 async function rememberRegistries(userId: string, leads: ImportLead[]) {
   const identityRows = leads.flatMap((lead) => {
     const identities = [
@@ -610,15 +561,9 @@ export const supabaseImportRepository: ImportRepository = {
       }
       persistedOperationalLeads = persisted;
       databaseDuplicateLeads = blocked;
-      const batchId = await rememberImportBatch(
-        userId,
-        persistedOperationalLeads,
-        persistedOperationalLeads,
-        normalized.duplicates + databaseDuplicateLeads.length,
-        rejected + databaseDuplicateLeads.length,
-      );
-      // O historico detalhado tambem recebe apenas leads realmente persistidos.
-      await rememberLeadImports(userId, batchId, persistedOperationalLeads, new Set(persistedOperationalLeads.map((lead) => lead.id)));
+      // A importação usa apenas as tabelas já existentes: leads e lead_registry.
+      // Os totais do processamento Apify são gravados em apify_import_jobs pela Edge sync.
+      // Não criamos nem dependemos de import_batches ou lead_imports.
       await rememberRegistries(userId, persistedOperationalLeads);
     }
 
