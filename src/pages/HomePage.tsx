@@ -18,7 +18,22 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useLeadCycle } from '../hooks/useLeadCycle';
 import type { LeadCycleLead } from '../services/lead-cycle/types';
 
+const SOURCE_NO_SITE = 1;
+const SOURCE_OWN_SITE = 2;
 const SOURCE_AGGREGATOR = 3;
+const SOURCE_INSTAGRAM = 4;
+
+type ImportedCardBucket = 'WhatsApp' | 'Com site' | 'Agregadores' | 'Instagram';
+
+function importedCardBucket(lead: LeadCycleLead): ImportedCardBucket {
+  // Categorias exclusivas: cada lead entra em exatamente um card, então a soma fecha com o Total.
+  if (lead.contactSourceId === SOURCE_INSTAGRAM || Boolean(lead.instagram.trim())) return 'Instagram';
+  if (lead.contactSourceId === SOURCE_AGGREGATOR) return 'Agregadores';
+  if (lead.contactSourceId === SOURCE_OWN_SITE) return 'Com site';
+  // Sem site, fonte não classificada ou fallback operacional seguem para WhatsApp.
+  if (lead.contactSourceId === SOURCE_NO_SITE || lead.phone.trim()) return 'WhatsApp';
+  return 'WhatsApp';
+}
 
 type Row = Record<string, ReactNode> & { id: string };
 
@@ -61,11 +76,7 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
   const states = useMemo(() => ['Todos', ...Array.from(new Set(records.map((lead) => lead.state).filter(Boolean))).sort()], [records]);
   const matchesDestination = (lead: LeadCycleLead) => {
     if (destination === 'Todos') return true;
-    if (destination === 'WhatsApp') return Boolean(lead.phone.trim());
-    if (destination === 'Com site') return lead.contactSourceId === 2;
-    if (destination === 'Agregadores') return lead.contactSourceId === SOURCE_AGGREGATOR;
-    if (destination === 'Instagram') return Boolean(lead.instagram.trim());
-    return true;
+    return importedCardBucket(lead) === destination;
   };
   const visible = useMemo(() => records.filter((lead) => {
     const query = search.trim().toLowerCase();
@@ -146,20 +157,25 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
     if (action === 'archive') await update([row.id], { lead_status_id: 8 }, [2]);
   };
 
-  const hasWhatsapp = (lead: LeadCycleLead) => Boolean(lead.phone.trim());
-  const hasInstagram = (lead: LeadCycleLead) => Boolean(lead.instagram.trim());
-  const hasOwnSite = (lead: LeadCycleLead) => lead.contactSourceId === 2;
-  const isAggregator = (lead: LeadCycleLead) => lead.contactSourceId === SOURCE_AGGREGATOR;
-
   const total = records.length;
+  const importedBuckets = useMemo(() => {
+    const counts: Record<ImportedCardBucket, number> = {
+      WhatsApp: 0,
+      'Com site': 0,
+      Agregadores: 0,
+      Instagram: 0,
+    };
+    records.forEach((lead) => { counts[importedCardBucket(lead)] += 1; });
+    return counts;
+  }, [records]);
   const whatsapp = validPage
     ? records.filter((lead) => lead.channelId === 1).length
-    : records.filter(hasWhatsapp).length;
+    : importedBuckets.WhatsApp;
   const instagram = validPage
     ? records.filter((lead) => lead.channelId === 2).length
-    : records.filter(hasInstagram).length;
-  const ownSite = records.filter(hasOwnSite).length;
-  const aggregators = records.filter(isAggregator).length;
+    : importedBuckets.Instagram;
+  const ownSite = importedBuckets['Com site'];
+  const aggregators = importedBuckets.Agregadores;
 
   return (
     <div className="dashboard-table-page lead-list-page">
