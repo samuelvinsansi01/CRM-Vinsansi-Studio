@@ -20,6 +20,7 @@ import {
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useImportLeads } from '../hooks/useImportLeads';
+import { useApifyAccounts } from '../hooks/useApifyAccounts';
 import { useImportSettings } from '../hooks/useImportSettings';
 import { isValidInstagram } from '../services/instagram/instagram.utils';
 import { permissionsFor } from '../services/permissions';
@@ -193,8 +194,13 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [lastImport, setLastImport] = useState<ImportParseResult | null>(null);
+  const [selectedApifyAccountId, setSelectedApifyAccountId] = useState('');
+  const [mapsSearch, setMapsSearch] = useState('');
+  const [mapsLocation, setMapsLocation] = useState('');
+  const [mapsLimit, setMapsLimit] = useState('100');
 
   const { settings: importSettings } = useImportSettings();
+  const { activeAccounts: apifyAccounts, loading: loadingApifyAccounts, error: apifyAccountsError } = useApifyAccounts();
   const simulateImport = importSettings?.safeMode.simulationMode ?? true;
   const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToInicio } = useImportLeads(activeStatus, search);
   const previewToken = useRef(0);
@@ -431,6 +437,34 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           <MetricCard value={String(summary.instagram)} label="Instagram" />
         </div>
       </section>
+
+      <Panel title="Google Maps Extractor" className="import-extractor-panel">
+        <p>A conta Apify é obrigatoriamente escolhida por você. Não existe seleção ou troca automática.</p>
+        <div className="import-extractor-fields">
+          <label className="drawer-field">
+            <span>Conta Apify</span>
+            <SelectField
+              value={selectedApifyAccountId}
+              options={[{ label: loadingApifyAccounts ? 'Carregando contas...' : 'Selecione uma conta', value: '' }, ...apifyAccounts.map((account) => ({ label: account.name, value: String(account.id) }))]}
+              onChange={setSelectedApifyAccountId}
+            />
+          </label>
+          <Field label="Busca" placeholder="Ex.: clínicas odontológicas" value={mapsSearch} onChange={setMapsSearch} />
+          <Field label="Localização" placeholder="Ex.: Curitiba, PR" value={mapsLocation} onChange={setMapsLocation} />
+          <Field label="Quantidade máxima" type="number" value={mapsLimit} onChange={setMapsLimit} />
+        </div>
+        {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
+        {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
+        <div className="import-json__actions">
+          <Button
+            iconLeft={Database}
+            disabled={!selectedApifyAccountId || !mapsSearch.trim() || !mapsLocation.trim()}
+            onClick={() => pushToast({ title: 'Conta selecionada manualmente', description: 'A execução do Google Maps Extractor será ligada na próxima etapa, usando somente esta conta.', tone: 'success' })}
+          >
+            Preparar coleta
+          </Button>
+        </div>
+      </Panel>
 
       <section className="import-grid">
         <Panel title="JSON da Apify" className="import-json">

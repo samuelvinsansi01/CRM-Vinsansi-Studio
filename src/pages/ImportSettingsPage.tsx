@@ -1,7 +1,8 @@
-import { RotateCcw, Save } from 'lucide-react';
+import { Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 import { Button, Field, Panel, SelectField, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useImportSettings } from '../hooks/useImportSettings';
+import { useApifyAccounts } from '../hooks/useApifyAccounts';
 import type { ImportSettings } from '../services/import-settings';
 import { useState } from 'react';
 
@@ -46,6 +47,92 @@ function BooleanSetting({ label, description, value, onChange }: { label: string
       </div>
       <SelectField value={String(value)} options={booleanOptions} onChange={(nextValue) => onChange(nextValue === 'true')} />
     </div>
+  );
+}
+
+
+function ApifyAccountsPanel({ pushToast }: { pushToast: (toast: Omit<ToastItem, 'id'>) => void }) {
+  const { accounts, loading, saving, error, save, remove } = useApifyAccounts();
+  const [editingId, setEditingId] = useState<number | undefined>();
+  const [name, setName] = useState('');
+  const [token, setToken] = useState('');
+  const [active, setActive] = useState(true);
+
+  const resetForm = () => {
+    setEditingId(undefined);
+    setName('');
+    setToken('');
+    setActive(true);
+  };
+
+  const edit = (account: (typeof accounts)[number]) => {
+    setEditingId(account.id);
+    setName(account.name);
+    setToken('');
+    setActive(account.active);
+  };
+
+  const submit = async () => {
+    if (!name.trim()) return;
+    if (!editingId && !token.trim()) {
+      pushToast({ title: 'Token obrigatório', description: 'Informe o token da conta Apify.', tone: 'warning' });
+      return;
+    }
+    try {
+      await save({ id: editingId, name, token: token || undefined, active });
+      pushToast({ title: editingId ? 'Conta atualizada' : 'Conta adicionada', description: 'A conta já está disponível para seleção manual.', tone: 'success' });
+      resetForm();
+    } catch (err) {
+      pushToast({ title: 'Não foi possível salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
+  const deleteAccount = async (id: number) => {
+    try {
+      await remove(id);
+      if (editingId === id) resetForm();
+      pushToast({ title: 'Conta removida', description: 'A conexão Apify foi removida.', tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível remover', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
+  return (
+    <Panel title="Contas Apify" className="settings-card import-settings-card import-apify-accounts">
+      <p className="settings-note">A conta usada no Google Maps Extractor será sempre escolhida manualmente. O sistema nunca troca de conta sozinho.</p>
+      <div className="import-apify-form">
+        <Field label="Nome da conta" placeholder="Ex.: Apify pessoal 1" value={name} onChange={setName} />
+        <Field label={editingId ? 'Novo token (opcional)' : 'Token Apify'} placeholder={editingId ? 'Deixe vazio para manter o token atual' : 'apify_api_...'} value={token} onChange={setToken} />
+        <label className="drawer-field">
+          <span>Status</span>
+          <SelectField value={String(active)} options={[{ label: 'Ativa', value: 'true' }, { label: 'Desativada', value: 'false' }]} onChange={(value) => setActive(value === 'true')} />
+        </label>
+        <div className="import-apify-form__actions">
+          {editingId ? <Button variant="secondary" onClick={resetForm}>Cancelar</Button> : null}
+          <Button iconLeft={editingId ? Save : Plus} loading={saving} disabled={!name.trim()} onClick={submit}>{editingId ? 'Salvar conta' : 'Adicionar conta'}</Button>
+        </div>
+      </div>
+
+      {error ? <div className="table-message">{error}</div> : null}
+      {loading ? <div className="table-message">Carregando contas...</div> : null}
+      {!loading && !accounts.length ? <div className="table-message">Nenhuma conta Apify cadastrada.</div> : null}
+      {!loading && accounts.length ? (
+        <div className="import-apify-list">
+          {accounts.map((account) => (
+            <div className="import-apify-account" key={account.id}>
+              <div>
+                <strong>{account.name}</strong>
+                <span>{account.tokenMask || 'Token protegido'} · {account.active ? 'Ativa' : 'Desativada'}</span>
+              </div>
+              <div className="import-apify-account__actions">
+                <Button size="sm" variant="secondary" onClick={() => edit(account)}>Editar</Button>
+                <Button size="sm" variant="danger" iconLeft={Trash2} onClick={() => void deleteAccount(account.id)}>Remover</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </Panel>
   );
 }
 
@@ -120,6 +207,7 @@ export function ImportSettingsPage() {
       {error ? <div className="table-message">{error}</div> : null}
 
       <section className="settings-grid import-settings-grid">
+        <ApifyAccountsPanel pushToast={pushToast} />
         <Panel title="Critérios mínimos" className="settings-card import-settings-card">
           <Field label="Nota mínima global" value={String(settings.minRating)} onChange={(value) => updateNumber('minRating', value)} />
           <Field label="Reviews mínimos global" value={String(settings.minReviews)} onChange={(value) => updateNumber('minReviews', value)} />
