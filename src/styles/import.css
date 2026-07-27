@@ -470,3 +470,82 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Fluxo Apify: selects seguem exatamente a altura, borda e raio dos campos de texto. */
+.import-extractor-fields .import-select-field,
+.import-extractor-fields .import-select-control,
+.import-extractor-fields .import-select-control .select-field {
+  width: 100%;
+}
+
+.import-extractor-fields .import-select-control .select-field {
+  min-height: var(--space-48);
+  height: var(--space-48);
+  border-radius: var(--radius-12);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.import-search-terms {
+  display: grid;
+  gap: var(--space-16);
+  margin-top: var(--space-20);
+  padding: var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--surface-card) 86%, transparent);
+}
+
+.import-search-terms__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+}
+
+.import-search-terms__header > div {
+  display: grid;
+  gap: var(--space-04);
+}
+
+.import-search-terms__header strong {
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.import-search-terms__header span {
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.import-search-terms__list {
+  display: grid;
+  gap: var(--space-12);
+}
+
+.import-search-term {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-12);
+  align-items: end;
+}
+
+.import-search-term .field__control {
+  min-height: var(--space-48);
+  border-radius: var(--radius-12);
+}
+
+.import-search-term > .button {
+  width: var(--space-48);
+  height: var(--space-48);
+  padding: 0;
+}
+
+@media (max-width: 640px) {
+  .import-search-terms__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

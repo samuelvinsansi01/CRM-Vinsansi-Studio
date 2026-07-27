@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Database, Globe2, Users, X } from 'lucide-react';
+import { Database, Globe2, Plus, Users, X } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -196,7 +196,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [lastImport, setLastImport] = useState<ImportParseResult | null>(null);
   const [selectedApifyAccountId, setSelectedApifyAccountId] = useState('');
-  const [mapsSearch, setMapsSearch] = useState('');
+  const [mapsSearchTerms, setMapsSearchTerms] = useState<string[]>(['']);
   const [mapsLocation, setMapsLocation] = useState('');
   const [mapsLimit, setMapsLimit] = useState('100');
   const [importTab, setImportTab] = useState<'Apify' | 'Manual'>('Apify');
@@ -308,7 +308,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const startApifyImport = async () => {
     const limit = Number(mapsLimit);
-    if (!selectedApifyAccountId || !mapsSearch.trim() || !mapsLocation.trim()) return;
+    const searchTerms = mapsSearchTerms.map((term) => term.trim()).filter(Boolean);
+    if (!selectedApifyAccountId || !searchTerms.length || !mapsLocation.trim()) return;
     if (!Number.isFinite(limit) || limit < 1 || limit > 500) {
       pushToast({ title: 'Quantidade inválida', description: 'Informe uma quantidade entre 1 e 500.', tone: 'danger' });
       return;
@@ -318,7 +319,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     try {
       const result = await apifyImportService.startGoogleMapsExtractor({
         apifyAccountId: Number(selectedApifyAccountId),
-        search: mapsSearch,
+        searchTerms,
         location: mapsLocation,
         limit,
       });
@@ -332,6 +333,21 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     } finally {
       setStartingApify(false);
     }
+  };
+
+  const updateSearchTerm = (index: number, value: string) => {
+    setMapsSearchTerms((current) => current.map((term, termIndex) => termIndex === index ? value : term));
+  };
+
+  const addSearchTerm = () => {
+    setMapsSearchTerms((current) => [...current, '']);
+  };
+
+  const removeSearchTerm = (index: number) => {
+    setMapsSearchTerms((current) => {
+      if (current.length === 1) return [''];
+      return current.filter((_, termIndex) => termIndex !== index);
+    });
   };
 
   const saveEditedLead = async () => {
@@ -479,17 +495,46 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         <Panel title="Google Maps Extractor" className="import-extractor-panel">
           <p>Escolha manualmente a conta que será usada nesta coleta. A plataforma não troca a conta automaticamente.</p>
           <div className="import-extractor-fields">
-            <label className="field">
+            <label className="field import-select-field">
               <span className="field__label">Conta Apify</span>
               <SelectField
+                className="import-select-control"
                 value={selectedApifyAccountId}
                 options={[{ label: loadingApifyAccounts ? 'Carregando contas...' : 'Selecione uma conta', value: '' }, ...apifyAccounts.map((account) => ({ label: account.name, value: String(account.id) }))]}
                 onChange={setSelectedApifyAccountId}
               />
             </label>
-            <Field label="Termo de busca" placeholder="Ex.: clínicas odontológicas" value={mapsSearch} onChange={setMapsSearch} />
             <Field label="Localização" placeholder="Ex.: Curitiba, PR" value={mapsLocation} onChange={setMapsLocation} />
-            <Field label="Quantidade máxima" type="number" value={mapsLimit} onChange={setMapsLimit} />
+            <Field label="Quantidade máxima por termo" type="number" value={mapsLimit} onChange={setMapsLimit} />
+          </div>
+          <div className="import-search-terms">
+            <div className="import-search-terms__header">
+              <div>
+                <strong>Termos de busca</strong>
+                <span>Adicione quantos segmentos quiser pesquisar na mesma execução.</span>
+              </div>
+              <Button variant="secondary" size="sm" iconLeft={Plus} onClick={addSearchTerm}>Adicionar termo</Button>
+            </div>
+            <div className="import-search-terms__list">
+              {mapsSearchTerms.map((term, index) => (
+                <div className="import-search-term" key={`search-term-${index}`}>
+                  <Field
+                    label={`Termo ${index + 1}`}
+                    placeholder="Ex.: contabilidade"
+                    value={term}
+                    onChange={(value) => updateSearchTerm(index, value)}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    aria-label={`Remover termo ${index + 1}`}
+                    onClick={() => removeSearchTerm(index)}
+                  >
+                    <X size={16} />
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
           {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
           {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
@@ -497,7 +542,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             <Button
               iconLeft={Database}
               loading={startingApify}
-              disabled={!selectedApifyAccountId || !mapsSearch.trim() || !mapsLocation.trim()}
+              disabled={!selectedApifyAccountId || !mapsSearchTerms.some((term) => term.trim()) || !mapsLocation.trim()}
               onClick={startApifyImport}
             >
               Iniciar coleta

@@ -30,12 +30,14 @@ Deno.serve(async (request) => {
 
   const body = await request.json().catch(() => ({}));
   const apifyAccountId = Number(body.apifyAccountId);
-  const search = String(body.search ?? '').trim();
+  const searchTerms = Array.isArray(body.searchTerms)
+    ? body.searchTerms.map((term: unknown) => String(term ?? '').trim()).filter(Boolean)
+    : [String(body.search ?? '').trim()].filter(Boolean);
   const location = String(body.location ?? '').trim();
   const limit = Math.min(500, Math.max(1, Number(body.limit) || 50));
 
   if (!Number.isInteger(apifyAccountId) || apifyAccountId <= 0) return json({ error: 'Selecione manualmente uma conta Apify.' }, 400);
-  if (!search) return json({ error: 'Informe a busca.' }, 400);
+  if (!searchTerms.length) return json({ error: 'Informe ao menos um termo de busca.' }, 400);
   if (!location) return json({ error: 'Informe a localização.' }, 400);
 
   const { data: userRow, error: userError } = await admin
@@ -62,7 +64,8 @@ Deno.serve(async (request) => {
       users_id: userRow.users_id,
       apify_accounts_id: account.apify_accounts_id,
       actor_id: 'compass/google-maps-extractor',
-      search_query: search,
+      search_query: searchTerms.join(' | '),
+      search_terms: searchTerms,
       location_query: location,
       requested_limit: limit,
       status: 'starting',
@@ -76,7 +79,7 @@ Deno.serve(async (request) => {
 
   try {
     const actorInput = {
-      searchStringsArray: [search],
+      searchStringsArray: searchTerms,
       locationQuery: location,
       maxCrawledPlacesPerSearch: limit,
       language: 'pt-BR',

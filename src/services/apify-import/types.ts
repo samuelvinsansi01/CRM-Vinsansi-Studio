@@ -1,6 +1,6 @@
 export type StartGoogleMapsImportInput = {
   apifyAccountId: number;
-  search: string;
+  searchTerms: string[];
   location: string;
   limit: number;
 };

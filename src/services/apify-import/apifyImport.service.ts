@@ -6,7 +6,7 @@ export const apifyImportService = {
     const { data, error } = await getSupabaseClient().functions.invoke('apify-google-maps-start', {
       body: {
         apifyAccountId: input.apifyAccountId,
-        search: input.search.trim(),
+        searchTerms: input.searchTerms.map((term) => term.trim()).filter(Boolean),
         location: input.location.trim(),
         limit: input.limit,
       },
