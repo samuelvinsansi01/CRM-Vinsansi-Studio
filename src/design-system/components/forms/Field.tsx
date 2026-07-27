@@ -105,6 +105,7 @@ type SelectFieldProps = {
   density?: 'regular' | 'compact';
   searchable?: boolean;
   searchPlaceholder?: string;
+  renderNoResults?: (query: string, selectValue: (value: string) => void) => ReactNode;
 };
 
 export function SelectField({
@@ -118,6 +119,7 @@ export function SelectField({
   density = 'regular',
   searchable = false,
   searchPlaceholder = 'Buscar...',
+  renderNoResults,
 }: SelectFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -223,7 +225,9 @@ export function SelectField({
               {option.value === selectedValue ? <Check size={14} strokeWidth={1.8} /> : null}
             </button>
           )) : (
-            <div className="select-field__empty">Nenhum resultado encontrado.</div>
+            renderNoResults ? renderNoResults(searchQuery, selectOption) : (
+              <div className="select-field__empty">Nenhum resultado encontrado.</div>
+            )
           )}
         </div>
       ) : null}

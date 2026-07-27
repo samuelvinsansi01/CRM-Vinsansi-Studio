@@ -63,3 +63,11 @@ export type ApifyImportJob = {
   createdAt: string;
   finishedAt: string | null;
 };
+
+export type ApifyLocationOption = {
+  cityId: number;
+  stateId: number;
+  cityName: string;
+  stateCode: string;
+  label: string;
+};

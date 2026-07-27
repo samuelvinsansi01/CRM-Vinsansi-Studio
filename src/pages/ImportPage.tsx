@@ -22,7 +22,7 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useImportLeads } from '../hooks/useImportLeads';
 import { useApifyAccounts } from '../hooks/useApifyAccounts';
 import { apifyImportService } from '../services/apify-import';
-import type { ApifyImportJob } from '../services/apify-import';
+import type { ApifyImportJob, ApifyLocationOption } from '../services/apify-import';
 import { configService } from '../services/config/config.service';
 import type { BranchConfigRecord } from '../services/config/types';
 import { useImportSettings } from '../hooks/useImportSettings';
@@ -65,6 +65,17 @@ const emptyLeadForm: LeadForm = {
   estado: '',
   motivo: '',
 };
+
+function normalizeLocationKey(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/\s*[-\/]\s*/g, ',')
+    .replace(/\s*,\s*/g, ',')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function silentLink(label: string, href?: string) {
   if (!href) return label;
@@ -238,8 +249,32 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       left.name.localeCompare(right.name, 'pt-BR', { sensitivity: 'base' }),
     );
   }, [branches]);
+
+  const selectedBranch = useMemo(
+    () => uniqueBranches.find((branch) => branch.id === selectedBranchId) ?? null,
+    [selectedBranchId, uniqueBranches],
+  );
+
+  const searchedLocationKeys = useMemo(
+    () => new Set(searchedLocations.map(normalizeLocationKey)),
+    [searchedLocations],
+  );
+
+  const availableLocationOptions = useMemo(
+    () => locationOptions.filter((location) => !searchedLocationKeys.has(normalizeLocationKey(location.label))),
+    [locationOptions, searchedLocationKeys],
+  );
+
+  const previouslySearchedLocationOptions = useMemo(
+    () => locationOptions.filter((location) => searchedLocationKeys.has(normalizeLocationKey(location.label))),
+    [locationOptions, searchedLocationKeys],
+  );
+
   const [mapsLocation, setMapsLocation] = useState('');
   const [mapsLimit, setMapsLimit] = useState('100');
+  const [locationOptions, setLocationOptions] = useState<ApifyLocationOption[]>([]);
+  const [searchedLocations, setSearchedLocations] = useState<string[]>([]);
+  const [locationsLoading, setLocationsLoading] = useState(false);
   const [apifyJobs, setApifyJobs] = useState<ApifyImportJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<ApifyImportJob | null>(null);
@@ -272,9 +307,28 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     }).catch((err) => {
       pushToast({ title: 'Não foi possível carregar os ramos', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     });
+    setLocationsLoading(true);
+    void apifyImportService.listBrazilLocations().then(setLocationOptions).catch((err) => {
+      pushToast({ title: 'Não foi possível carregar as localidades', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }).finally(() => setLocationsLoading(false));
     void loadApifyJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    setMapsLocation('');
+    setSearchedLocations([]);
+    if (!selectedBranchId) return;
+
+    setLocationsLoading(true);
+    void apifyImportService.listSuccessfullySearchedLocations(Number(selectedBranchId))
+      .then(setSearchedLocations)
+      .catch((err) => {
+        pushToast({ title: 'Não foi possível verificar as localidades já pesquisadas', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      })
+      .finally(() => setLocationsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBranchId]);
 
   const openJobDetails = async (job: ApifyImportJob) => {
     setSelectedJob(job);
@@ -656,7 +710,39 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                 onChange={setSelectedBranchId}
               />
             </label>
-            <Field label="Localização" placeholder="Ex.: Curitiba, PR" value={mapsLocation} onChange={setMapsLocation} />
+            <label className="field import-select-field">
+              <span className="field__label">Localização</span>
+              <SelectField
+                className="import-select-control"
+                value={mapsLocation}
+                placeholder={!selectedBranchId ? 'Selecione primeiro um ramo' : locationsLoading ? 'Carregando localidades...' : 'Selecione uma localidade'}
+                searchable
+                searchPlaceholder="Buscar cidade ou estado..."
+                options={availableLocationOptions.map((location) => ({ label: location.label, value: location.label }))}
+                onChange={setMapsLocation}
+                renderNoResults={(query, selectValue) => {
+                  const normalizedQuery = normalizeLocationKey(query);
+                  const matches = normalizedQuery
+                    ? previouslySearchedLocationOptions.filter((location) => normalizeLocationKey(location.label).includes(normalizedQuery)).slice(0, 5)
+                    : [];
+
+                  if (!matches.length) {
+                    return <div className="select-field__empty">Nenhuma localidade encontrada.</div>;
+                  }
+
+                  return (
+                    <div className="location-already-searched">
+                      {matches.map((location) => (
+                        <div className="location-already-searched__item" key={location.cityId}>
+                          <span>Você já pesquisou <strong>{selectedBranch?.name ?? 'esse ramo'}</strong> em <strong>{location.label}</strong>.</span>
+                          <button type="button" onClick={() => selectValue(location.label)}>Selecionar mesmo assim</button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }}
+              />
+            </label>
             <Field label="Quantidade" type="number" min="1" max="500" value={mapsLimit} onChange={setMapsLimit} />
           </div>
           {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}

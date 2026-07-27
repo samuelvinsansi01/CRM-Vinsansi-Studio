@@ -1339,3 +1339,39 @@ button.checkbox {
   font-size: 12px;
   line-height: 16px;
 }
+
+.location-already-searched {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.location-already-searched__item {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.location-already-searched__item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.location-already-searched__item button {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--action-active);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.location-already-searched__item button:hover {
+  text-decoration: underline;
+}

@@ -1,7 +1,43 @@
 import { getSupabaseClient } from '../../lib/supabase';
-import type { ApifyImportJob, FinalizeGoogleMapsImportInput, PendingGoogleMapsJob, StartGoogleMapsImportInput, StartGoogleMapsImportResult, SyncGoogleMapsImportResult } from './types';
+import type { ApifyImportJob, ApifyLocationOption, FinalizeGoogleMapsImportInput, PendingGoogleMapsJob, StartGoogleMapsImportInput, StartGoogleMapsImportResult, SyncGoogleMapsImportResult } from './types';
 
 export const apifyImportService = {
+
+  async listBrazilLocations(): Promise<ApifyLocationOption[]> {
+    const { data, error } = await getSupabaseClient()
+      .from('cities')
+      .select('cities_id, cities_name, states_id, states:states_id(states_id, states_name, states_code)')
+      .order('cities_name', { ascending: true });
+    if (error) throw new Error(error.message);
+
+    return (data ?? []).flatMap((row: any) => {
+      const state = Array.isArray(row.states) ? row.states[0] : row.states;
+      const cityName = String(row.cities_name ?? '').trim();
+      const stateCode = String(state?.states_code ?? state?.states_name ?? '').trim();
+      if (!cityName || !stateCode) return [];
+      return [{
+        cityId: Number(row.cities_id),
+        stateId: Number(row.states_id ?? state?.states_id),
+        cityName,
+        stateCode,
+        label: `${cityName}, ${stateCode}`,
+      }];
+    });
+  },
+
+  async listSuccessfullySearchedLocations(branchId: number): Promise<string[]> {
+    const { data, error } = await getSupabaseClient()
+      .from('apify_import_jobs')
+      .select('location_query')
+      .eq('branches_id', branchId)
+      .eq('status', 'succeeded')
+      .not('location_query', 'is', null);
+    if (error) throw new Error(error.message);
+    return Array.from(new Set((data ?? [])
+      .map((row: any) => String(row.location_query ?? '').trim())
+      .filter(Boolean)));
+  },
+
   async startGoogleMapsExtractor(input: StartGoogleMapsImportInput): Promise<StartGoogleMapsImportResult> {
     const { data, error } = await getSupabaseClient().functions.invoke('apify-google-maps-start', {
       body: {
