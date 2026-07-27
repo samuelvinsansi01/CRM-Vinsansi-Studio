@@ -1,4 +1,4 @@
-import { Archive, Check, Globe2, Instagram, MessageCircle, RefreshCcw, Users, X } from 'lucide-react';
+import { Archive, Globe2, Instagram, MessageCircle, RefreshCcw, Users, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -146,27 +146,20 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
     if (action === 'archive') await update([row.id], { lead_status_id: 8 }, [2]);
   };
 
-  const operational = [...importedCycle.records, ...validCycle.records];
-  const approved = validCycle.records;
-  const metricValue = (approvedCount: number, totalCount: number) => validPage ? String(totalCount) : `${approvedCount}/${totalCount}`;
   const hasWhatsapp = (lead: LeadCycleLead) => Boolean(lead.phone.trim());
   const hasInstagram = (lead: LeadCycleLead) => Boolean(lead.instagram.trim());
   const hasOwnSite = (lead: LeadCycleLead) => lead.contactSourceId === 2;
   const isAggregator = (lead: LeadCycleLead) => lead.contactSourceId === SOURCE_AGGREGATOR;
 
   const total = records.length;
-  const whatsapp = records.filter((lead) => lead.channelId === 1).length;
-  const instagram = records.filter((lead) => lead.channelId === 2).length;
-  const totalOperational = operational.length;
-  const approvedTotal = approved.length;
-  const whatsappOperational = operational.filter(hasWhatsapp).length;
-  const whatsappApproved = approved.filter(hasWhatsapp).length;
-  const ownSiteOperational = operational.filter(hasOwnSite).length;
-  const ownSiteApproved = approved.filter(hasOwnSite).length;
-  const aggregatorsOperational = operational.filter(isAggregator).length;
-  const aggregatorsApproved = approved.filter(isAggregator).length;
-  const instagramOperational = operational.filter(hasInstagram).length;
-  const instagramApproved = approved.filter(hasInstagram).length;
+  const whatsapp = validPage
+    ? records.filter((lead) => lead.channelId === 1).length
+    : records.filter(hasWhatsapp).length;
+  const instagram = validPage
+    ? records.filter((lead) => lead.channelId === 2).length
+    : records.filter(hasInstagram).length;
+  const ownSite = records.filter(hasOwnSite).length;
+  const aggregators = records.filter(isAggregator).length;
 
   return (
     <div className="dashboard-table-page lead-list-page">
@@ -177,12 +170,12 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
       />
 
       <section className={`metric-grid ${validPage ? 'metric-grid--3' : 'metric-grid--5'}`}>
-        <MetricCard icon={Users} value={validPage ? String(total) : metricValue(approvedTotal, totalOperational)} label="Total" />
-        <MetricCard icon={MessageCircle} value={validPage ? String(whatsapp) : metricValue(whatsappApproved, whatsappOperational)} label="WhatsApp" tone="success" />
+        <MetricCard icon={Users} value={String(total)} label="Total" />
+        <MetricCard icon={MessageCircle} value={String(whatsapp)} label="WhatsApp" tone="success" />
         {validPage ? <MetricCard icon={Instagram} value={String(instagram)} label="Instagram" tone="primary" /> : null}
-        {!validPage ? <MetricCard icon={Globe2} value={metricValue(ownSiteApproved, ownSiteOperational)} label="Com site" /> : null}
-        {!validPage ? <MetricCard value={metricValue(aggregatorsApproved, aggregatorsOperational)} label="Agregadores" /> : null}
-        {!validPage ? <MetricCard icon={Instagram} value={metricValue(instagramApproved, instagramOperational)} label="Instagram" tone="primary" /> : null}
+        {!validPage ? <MetricCard icon={Globe2} value={String(ownSite)} label="Com site" /> : null}
+        {!validPage ? <MetricCard value={String(aggregators)} label="Agregadores" /> : null}
+        {!validPage ? <MetricCard icon={Instagram} value={String(instagram)} label="Instagram" tone="primary" /> : null}
       </section>
 
       <FiltersBar>

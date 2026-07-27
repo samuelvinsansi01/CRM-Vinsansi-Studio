@@ -103,14 +103,14 @@ export function BasePage() {
         <MetricCard icon={Send} value={String(sent.length)} label="Enviados" tone="success" />
         <MetricCard icon={MessageCircle} value={String(sentWhatsApp)} label="WhatsApp enviados" tone="success" />
         <MetricCard icon={Instagram} value={String(sentInstagram)} label="Instagram enviados" tone="primary" />
-        <MetricCard icon={X} value={String(invalid + duplicates)} label={`Inválidos (${invalid}) / Duplicados (${duplicates})`} tone="danger" />
+        <MetricCard icon={X} value={String(invalid + duplicates)} label="Inválidos e duplicados" tone="danger" />
         <MetricCard icon={Archive} value={String(archived)} label="Arquivados" />
       </section>
 
       <FiltersBar>
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar empresa" />
         <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Arquivado']} placeholder="Status final" onChange={setStatus} />
         <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal" onChange={setChannel} />
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar empresa" />
       </FiltersBar>
 
       <TableCard title="Leads finalizados" footerText={loading ? 'Carregando...' : `${rows.length} lead(s).`}>

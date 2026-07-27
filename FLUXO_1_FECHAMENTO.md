@@ -1,31 +1,70 @@
-# Fluxo 1 — Ciclo de Leads
+# Fluxo 1 — Ciclo de leads
 
-## Implementado nesta entrega
+## Regras oficiais
 
-- Início consulta somente `lead_status_id = 1`.
-- Início voltou a exibir Total, WhatsApp, Com site, Agregadores e Instagram.
-- Triagem do WhatsApp move o lead para `lead_status_id = 3` e `channels_id = 1`.
-- Triagem do Instagram exige Instagram preenchido e move para `lead_status_id = 2` e `channels_id = 2`.
-- Pré-Envio consulta exclusivamente `lead_status_id = 3` e `channels_id = 1`.
-- Válidos consulta somente `lead_status_id = 2`.
-- Válidos usa apenas `channels_id` para WhatsApp/Instagram.
-- Base Permanente consulta somente `lead_status_id IN (5,6,7,8)`.
-- Contadores de enviados por canal usam apenas `channels_id`.
-- As quatro páginas deixaram de depender dos services/repositories antigos de importação, pré-envio e base.
-- Criada uma camada única do fluxo em `services/lead-cycle` e `hooks/useLeadCycle.ts`.
+- `lead_status_id = 1` → Importado
+- `lead_status_id = 2` → Validado
+- `lead_status_id = 3` → Pré-Envio
+- `lead_status_id = 4` → Na Fila
+- `lead_status_id = 5` → Enviado
+- `lead_status_id = 6` → Inválido
+- `lead_status_id = 7` → Duplicado
+- `lead_status_id = 8` → Arquivado
+- `channels_id = 1` → WhatsApp
+- `channels_id = 2` → Instagram
+- `contact_sources_id = 2` → Domínio próprio
+- `contact_sources_id = 3` → Agregador
 
-## Legado removido das páginas do Fluxo 1
+## Início
 
-- `destination`
-- `destino`
-- `destination_override`
-- `send_instagram`
-- `situation`
-- status textuais `Em aguarde` / `Aprovado`
-- consultas a `pre_send_leads`
-- consultas a `app_settings`
-- inferência de canal por site/agregador/contact source
+Consulta somente `lead_status_id = 1` → Importado.
 
-## Validação pendente
+Cards exibem totais simples da própria página:
 
-O build não pôde ser concluído neste ambiente porque o `node_modules` do ZIP não estava instalado e a instalação das dependências expirou. A validação estática do escopo foi feita por busca de referências legadas nos arquivos novos.
+- Total: todos os importados;
+- WhatsApp: importados que possuem telefone;
+- Com site: importados com `contact_sources_id = 2` → Domínio próprio;
+- Agregadores: importados com `contact_sources_id = 3` → Agregador;
+- Instagram: importados que possuem Instagram.
+
+Os filtros originais foram preservados e a busca permanece por último, à direita.
+
+## Pré-Envio
+
+Consulta somente:
+
+- `lead_status_id = 3` → Pré-Envio;
+- `channels_id = 1` → WhatsApp.
+
+Aprovação envia para `lead_status_id = 2` → Validado.
+
+## Válidos
+
+Consulta somente `lead_status_id = 2` → Validado.
+
+Cards:
+
+- Total;
+- `channels_id = 1` → WhatsApp;
+- `channels_id = 2` → Instagram.
+
+Filtros: Canal, Ramo e Busca, com a busca por último.
+
+## Base Permanente
+
+Consulta somente:
+
+- `lead_status_id = 5` → Enviado;
+- `lead_status_id = 6` → Inválido;
+- `lead_status_id = 7` → Duplicado;
+- `lead_status_id = 8` → Arquivado.
+
+O card combinado foi renomeado para “Inválidos e duplicados”, exibindo apenas a soma.
+
+## Arquitetura
+
+As quatro páginas usam:
+
+`página → useLeadCycle → leadCycleService → leads`
+
+Não usam tabelas legadas do ciclo.
