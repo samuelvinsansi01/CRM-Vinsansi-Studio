@@ -474,20 +474,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     }
   };
 
-  const updateSearchTerm = (index: number, value: string) => {
-    setMapsSearchTerms((current) => current.map((term, termIndex) => termIndex === index ? value : term));
-  };
-
-  const addSearchTerm = () => {
-    setMapsSearchTerms((current) => [...current, '']);
-  };
-
-  const removeSearchTerm = (index: number) => {
-    setMapsSearchTerms((current) => {
-      if (current.length === 1) return [''];
-      return current.filter((_, termIndex) => termIndex !== index);
-    });
-  };
 
   const saveEditedLead = async () => {
     if (!editingLead) return;
