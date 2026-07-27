@@ -6,10 +6,17 @@ export type StartGoogleMapsImportInput = {
 };
 
 export type StartGoogleMapsImportResult = {
+  success?: boolean;
+  message?: string;
   jobId: number;
   runId: string;
   datasetId: string | null;
   status: string;
-  accountId: number;
+  apifyJobStatusId?: number | null;
+  accountId?: number;
   accountName: string;
+  account?: {
+    id: number;
+    name: string;
+  };
 };

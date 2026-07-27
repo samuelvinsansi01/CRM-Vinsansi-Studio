@@ -7,8 +7,8 @@ export const apifyImportService = {
       body: {
         apifyAccountId: input.apifyAccountId,
         searchTerms: input.searchTerms.map((term) => term.trim()).filter(Boolean),
-        location: input.location.trim(),
-        limit: input.limit,
+        locationQuery: input.location.trim(),
+        maxCrawledPlacesPerSearch: input.limit,
       },
     });
 
@@ -16,6 +16,21 @@ export const apifyImportService = {
     if (!data || typeof data !== 'object') throw new Error('Resposta inválida ao iniciar o Google Maps Extractor.');
     if ('error' in data && data.error) throw new Error(String(data.error));
 
-    return data as StartGoogleMapsImportResult;
+    const response = data as Partial<StartGoogleMapsImportResult>;
+    const accountName = response.account?.name ?? response.accountName;
+
+    if (!response.jobId || !response.runId || !accountName) {
+      throw new Error('A Edge Function retornou dados incompletos ao iniciar a coleta.');
+    }
+
+    return {
+      ...response,
+      jobId: response.jobId,
+      runId: response.runId,
+      datasetId: response.datasetId ?? null,
+      status: response.status ?? 'running',
+      accountId: response.account?.id ?? response.accountId,
+      accountName,
+    };
   },
 };

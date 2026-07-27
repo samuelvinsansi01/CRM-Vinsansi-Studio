@@ -325,7 +325,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       });
       pushToast({
         title: 'Coleta iniciada',
-        description: `A conta ${result.accountName} iniciou o Google Maps Extractor. Execução: ${result.runId}.`,
+        description: `A conta ${result.account?.name ?? result.accountName} iniciou o Google Maps Extractor. Execução: ${result.runId}.`,
         tone: 'success',
       });
     } catch (err) {
