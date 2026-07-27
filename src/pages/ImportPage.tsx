@@ -68,6 +68,29 @@ function silentLink(label: string, href?: string) {
   return <a className="silent-link" href={href} target="_blank" rel="noreferrer" title={href}>{label}</a>;
 }
 
+const duplicateReasonCodes = new Set([
+  'payload_duplicate',
+  'duplicate_phone',
+  'duplicate_site',
+  'already_in_base',
+  'duplicate_lead_id',
+  'already_sent',
+]);
+
+function formatRejectionReasons(result: ImportParseResult) {
+  const reasons = result.report.reasons
+    .filter((reason) => reason.code !== 'approved' && reason.code !== 'ignored' && !duplicateReasonCodes.has(reason.code))
+    .filter((reason) => reason.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  if (!reasons.length) return '';
+  return ` Motivos das recusas: ${reasons.map((reason) => `${reason.label}: ${reason.count}`).join('; ')}.`;
+}
+
+function formatApifyImportSummary(result: ImportParseResult) {
+  return `${result.report.processed} processado(s): ${result.report.created} criado(s), ${result.report.duplicates} duplicado(s) e ${result.report.rejected} recusado(s).${formatRejectionReasons(result)}`;
+}
+
 function ensureUrl(value?: string | null) {
   const text = String(value ?? '').trim();
   if (!text) return '';
@@ -350,7 +373,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         if (!importedResult) return;
         pushToast({
           title: 'Coleta anterior recuperada',
-          description: `${importedResult.report.processed} processado(s): ${importedResult.report.created} criado(s), ${importedResult.report.duplicates} duplicado(s) e ${importedResult.report.rejected} recusado(s).`,
+          description: formatApifyImportSummary(importedResult),
           tone: importedResult.report.rejected > 0 ? 'warning' : 'success',
         });
       } catch (err) {
@@ -393,7 +416,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       }
       pushToast({
         title: 'Coleta validada e importada',
-        description: `${importedResult.report.processed} processado(s): ${importedResult.report.created} criado(s), ${importedResult.report.duplicates} duplicado(s) e ${importedResult.report.rejected} recusado(s).`,
+        description: formatApifyImportSummary(importedResult),
         tone: importedResult.report.rejected > 0 ? 'warning' : 'success',
       });
     } catch (err) {
