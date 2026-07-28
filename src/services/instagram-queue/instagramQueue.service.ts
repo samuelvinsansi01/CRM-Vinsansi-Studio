@@ -11,6 +11,7 @@ import { settingsService } from '../settings/settings.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { renderTemplateVariables } from '../templates/templateVariables';
+import { hasAllTemplateMessages } from '../templates/templateContract';
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 
 async function getSelectedLeads(ids: string[]) {
@@ -58,7 +59,7 @@ function sourceLeadId(lead: InstagramQueueLead) {
 }
 
 function assertTemplateReady(leads: InstagramQueueLead[]) {
-  const missing = leads.find((lead) => !lead.message1.trim() || lead.message1.toLowerCase().includes('template nao configurado'));
+  const missing = leads.find((lead) => !hasAllTemplateMessages(lead) || lead.message1.toLowerCase().includes('template nao configurado'));
   if (missing) throw new Error(`Template valido ausente para Instagram / ${missing.branch} / ${missing.type}.`);
 }
 

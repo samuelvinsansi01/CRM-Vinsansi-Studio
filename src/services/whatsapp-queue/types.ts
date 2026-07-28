@@ -27,6 +27,7 @@ export type WhatsAppQueueLead = {
   batchId: string;
   batch_id: string;
   batch_number: number;
+  batchLimit?: number;
   chip: string;
   chip_instance?: string;
   chip_label?: string;

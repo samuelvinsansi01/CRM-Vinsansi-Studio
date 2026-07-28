@@ -232,7 +232,7 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelP
         { key: 'branchId', label: 'Ramo', type: 'select', options: branchSelectOptions },
         { key: 'channel', label: 'Canal', type: 'select', options: templateChannelOptions, description: 'Geral atende WhatsApp e Instagram deste ramo. Entre templates compatíveis, a plataforma sorteia e fixa uma opção por lead.' },
         { key: 'type', label: 'Tipo', type: 'select', options: templateTypeOptions },
-        { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1 },
+        { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1, description: 'As quatro mensagens são obrigatórias e serão congeladas na fila.' },
         { key: 'message2', label: 'Mensagem 2', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_2 },
         { key: 'message3', label: 'Mensagem 3', type: 'textarea', placeholder: 'Digite a terceira mensagem' },
         { key: 'message4', label: 'Mensagem 4', type: 'textarea', placeholder: 'Digite a quarta mensagem' },
@@ -476,7 +476,7 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
       branch: branchDisplayName(branches, record.branchId, record.branchName),
       channel: record.channel,
       type: formatTemplateType(record.type),
-      messages: [previewMessage(record.message1), record.message2 ? previewMessage(record.message2) : ''].filter(Boolean).join(' / '),
+      messages: [record.message1, record.message2, record.message3, record.message4].map(previewMessage).join(' / '),
       status: statusTag(record),
     }));
   }
@@ -816,7 +816,9 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
             <div className="config-preview">
               <strong>Preview</strong>
               <span>{previewMessage(form.message1)}</span>
-              {form.message2 ? <span>{previewMessage(form.message2)}</span> : null}
+              <span>{previewMessage(form.message2)}</span>
+              <span>{previewMessage(form.message3)}</span>
+              <span>{previewMessage(form.message4)}</span>
             </div>
           ) : null}
         </div>

@@ -14,6 +14,7 @@ import { preSendService } from '../pre-send/preSend.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { renderTemplateVariables } from '../templates/templateVariables';
+import { hasAllTemplateMessages } from '../templates/templateContract';
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 
 function isChip(record: ConfigRecord): record is ChipConfigRecord {
@@ -148,7 +149,7 @@ function sourceLeadId(lead: WhatsAppQueueLead) {
 }
 
 function assertTemplateReady(leads: WhatsAppQueueLead[]) {
-  const missing = leads.find((lead) => !lead.message1.trim() || lead.message1.toLowerCase().includes('template nao configurado'));
+  const missing = leads.find((lead) => !hasAllTemplateMessages(lead) || lead.message1.toLowerCase().includes('template nao configurado'));
   if (missing) throw new Error(`Template valido ausente para WhatsApp / ${missing.branch} / ${missing.type}.`);
 }
 
@@ -166,6 +167,8 @@ async function logDispatchMessages(leads: WhatsAppQueueLead[], replayed = false)
       [
         { part: 'message_1', body: renderTemplateVariables(lead.message_1 || lead.message1, lead) },
         { part: 'message_2', body: renderTemplateVariables(lead.message_2 || lead.message2, lead) },
+        { part: 'message_3', body: renderTemplateVariables(lead.message_3 || lead.message3, lead) },
+        { part: 'message_4', body: renderTemplateVariables(lead.message_4 || lead.message4, lead) },
         { part: 'image', body: lead.image_url || lead.image_id || '' },
       ]
         .filter((item) => item.body.trim())

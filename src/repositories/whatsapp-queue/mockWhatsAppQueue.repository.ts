@@ -121,9 +121,12 @@ export const mockWhatsAppQueueRepository: WhatsAppQueueRepository = {
   async enqueue(inputLeads: CreateWhatsAppQueueLeadInput[]) {
     await delay();
     const existingSources = new Set(allLeads().map((lead) => lead.sourcePreSendId).filter(Boolean));
+    const existingLeadIds = new Set(allLeads().map((lead) => lead.lead_id).filter(Boolean));
     const existingPhones = new Set(allLeads().map((lead) => lead.phone).filter(Boolean));
+    const createdIds: string[] = [];
 
     for (const input of inputLeads) {
+      if (input.lead_id && existingLeadIds.has(input.lead_id)) continue;
       if (input.sourcePreSendId && existingSources.has(input.sourcePreSendId)) continue;
       if (input.phone && existingPhones.has(input.phone)) continue;
 
@@ -167,9 +170,19 @@ export const mockWhatsAppQueueRepository: WhatsAppQueueRepository = {
       const storageBatch = batches.find((item) => item.id === batch.id) ?? { ...batch, leads: [] };
       if (!batches.some((item) => item.id === storageBatch.id)) batches.push(storageBatch);
       storageBatch.leads.push(lead);
+      createdIds.push(lead.id);
+      if (lead.lead_id) existingLeadIds.add(lead.lead_id);
       if (lead.sourcePreSendId) existingSources.add(lead.sourcePreSendId);
       if (lead.phone) existingPhones.add(lead.phone);
     }
+    return createdIds;
+  },
+
+  async removeQueued(id: string) {
+    await delay();
+    batches = batches
+      .map((batch) => ({ ...batch, leads: batch.leads.filter((lead) => lead.id !== id || lead.status !== 'queued') }))
+      .filter((batch) => batch.leads.length > 0);
   },
 
   async updateLead(id: string, input: UpdateWhatsAppQueueLeadInput) {

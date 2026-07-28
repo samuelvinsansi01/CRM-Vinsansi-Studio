@@ -1,6 +1,6 @@
 {
   "name": "gease-visual-shell",
-  "version": "3.40.0",
+  "version": "3.41.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
     "verify:f04-routing": "node scripts/verify-f04-routing.mjs",
     "verify:f05-validation": "node scripts/verify-f05-whatsapp-validation.mjs",
     "verify:f05-provider": "node scripts/verify-f05-provider-contract.mjs",
-    "verify:f05": "npm run verify:f05-validation && npm run verify:f05-provider"
+    "verify:f05": "npm run verify:f05-validation && npm run verify:f05-provider",
+    "verify:f06": "node scripts/verify-f06-queue-preparation.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

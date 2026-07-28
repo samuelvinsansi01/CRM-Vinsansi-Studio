@@ -106,8 +106,9 @@ function isDeletedRow(row: Record<string, unknown>) {
 
 async function allLeads() {
   const client = getSupabaseClient();
+  const userId = await getCurrentUserId();
   const [queueResponse, branchResponse] = await Promise.all([
-    client.from(table()).select('*'),
+    client.from(table()).select('*').eq('user_id', userId),
     client.from(getSupabaseConfig().tables.branches).select('*'),
   ]);
   if (queueResponse.error) throw new Error(queueResponse.error.message);
@@ -236,6 +237,7 @@ function buildLead(input: CreateWhatsAppQueueLeadInput, batch: WhatsAppQueueBatc
     batchId: batch.id,
     batch_id: batch.id,
     batch_number: batch.number,
+    batchLimit: input.batchLimit ?? batch.limit,
     chip_id: input.chip_id ?? input.chip,
     profile_id: undefined,
     scheduled_date: input.scheduled_date ?? todayIsoDate(),
@@ -281,6 +283,7 @@ function dbPayload(lead: WhatsAppQueueLead, userId: string) {
     channel: 'whatsapp',
     batch_id: lead.batch_id,
     batch_number: lead.batch_number,
+    block_size: Math.max(1, Number(lead.batchLimit || 30)),
     company_name: lead.company_name,
     phone: lead.phone,
     normalized_phone: lead.phone_normalized,
@@ -328,7 +331,7 @@ async function updateStatus(ids: string[], status: WhatsAppQueueStatus, errorMes
       retry_count: status === 'queued' ? lead.retry_count + 1 : lead.retry_count,
       updated_at: timestamp,
     };
-    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id);
+    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id).eq('user_id', userId);
     if (error) throw new Error(error.message);
   }));
 }
@@ -357,12 +360,15 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
   async enqueue(inputLeads) {
     const persisted = await allLeads();
     const existingSources = new Set(persisted.map((lead) => lead.sourcePreSendId).filter(Boolean));
+    const existingLeadIds = new Set(persisted.map((lead) => lead.lead_id).filter(Boolean));
     const existingPhones = new Set(persisted.map((lead) => lead.phone_normalized || normalizePhone(lead.phone)).filter(Boolean));
     const working = [...persisted];
     const userId = await getCurrentUserId();
+    const createdIds: string[] = [];
 
     for (const input of inputLeads) {
       const normalizedPhone = normalizePhone(input.phone);
+      if (input.lead_id && existingLeadIds.has(input.lead_id)) continue;
       if (input.sourcePreSendId && existingSources.has(input.sourcePreSendId)) continue;
       if (normalizedPhone && existingPhones.has(normalizedPhone)) continue;
 
@@ -379,9 +385,23 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
       const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
       if (error) throw new Error(error.message);
       working.push(lead);
+      createdIds.push(lead.id);
+      if (lead.lead_id) existingLeadIds.add(lead.lead_id);
       if (lead.sourcePreSendId) existingSources.add(lead.sourcePreSendId);
       if (lead.phone_normalized) existingPhones.add(lead.phone_normalized);
     }
+    return createdIds;
+  },
+
+  async removeQueued(id: string) {
+    const userId = await getCurrentUserId();
+    const { error } = await getSupabaseClient()
+      .from(table())
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId)
+      .eq('status', 'queued');
+    if (error) throw new Error(error.message);
   },
 
   async updateLead(id: string, input: UpdateWhatsAppQueueLeadInput) {
@@ -400,7 +420,8 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
       instagram_username: input.instagram_url || input.instagram ? normalizeInstagramUsername(input.instagram_url ?? input.instagram) : lead.instagram_username,
       updated_at: nowIso(),
     };
-    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, await getCurrentUserId())).eq('id', id);
+    const userId = await getCurrentUserId();
+    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id).eq('user_id', userId);
     if (error) throw new Error(error.message);
     return updated;
   },

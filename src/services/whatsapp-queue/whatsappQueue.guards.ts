@@ -16,6 +16,8 @@ export function missingWhatsAppWorkerFields(lead: WhatsAppQueueLead) {
   if (!text(lead.template_id)) fields.push('template_id');
   if (!text(lead.message_1 || lead.message1)) fields.push('message_1');
   if (!text(lead.message_2 || lead.message2)) fields.push('message_2');
+  if (!text(lead.message_3 || lead.message3)) fields.push('message_3');
+  if (!text(lead.message_4 || lead.message4)) fields.push('message_4');
   if (!text(lead.phone_normalized || lead.phone)) fields.push('phone');
   return fields;
 }

@@ -12,6 +12,7 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { QueuePreparationPanel } from '../components/QueuePreparationPanel';
 import { useLeadCycle } from '../hooks/useLeadCycle';
 import type { LeadRoutingCommand, LeadRoutingResult } from '../services/lead-cycle/types';
 import type { WhatsAppValidationBatchResult } from '../services/whatsapp-validation/types';
@@ -126,7 +127,7 @@ export function PreSendPage() {
     <div className="dashboard-table-page lead-list-page">
       <PageHeader
         title="Pré-Envio"
-        description="Validação real de WhatsApp. Falhas do Worker ou da Evolution mantêm o lead nesta etapa."
+        description="Valide WhatsApps e prepare filas com capacidade, data, recurso, template e mídia congelados."
         action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || saving} onClick={() => void refresh()}>Atualizar</Button>}
       />
       <section className="metric-grid metric-grid--1">
@@ -148,6 +149,7 @@ export function PreSendPage() {
           <DataTable columns={columns} rows={rows} actions={['approve', 'invalidate', 'archive']} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={handleAction} />
         ) : null}
       </TableCard>
+      <QueuePreparationPanel onToast={toast} />
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>
   );

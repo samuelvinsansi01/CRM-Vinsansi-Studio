@@ -9,10 +9,17 @@ const source = fs.readFileSync(sourcePath, 'utf8');
 const javascript = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
 }).outputText;
+const originalLoad = Module._load;
+Module._load = function mockedLoad(request, parent, isMain) {
+  if (request === '@supabase/supabase-js') return { createClient: () => ({}) };
+  return originalLoad.call(this, request, parent, isMain);
+};
+
 const runtimeModule = new Module(sourcePath);
 runtimeModule.filename = sourcePath;
 runtimeModule.paths = Module._nodeModulePaths(process.cwd());
 runtimeModule._compile(javascript, `${sourcePath}.js`);
+Module._load = originalLoad;
 const { runStrictValidation } = runtimeModule.exports;
 
 process.env.WHATSAPP_VALIDATION_WORKER_URL = 'https://worker.test';

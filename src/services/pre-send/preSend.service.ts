@@ -14,6 +14,7 @@ import type { CreateBaseLeadInput } from '../base/types';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { assertTransition } from '../state-machine';
 import { renderLeadMessages } from '../templates/templateVariables';
+import { hasAllTemplateMessages } from '../templates/templateContract';
 import { selectTemplateForLead, templateTypeForLead } from '../templates/templateSelector';
 import type { CreateWhatsAppQueueLeadInput, WhatsAppQueueLead } from '../whatsapp-queue/types';
 import { preSendLeadToWhatsAppValidationRequest, whatsappValidationGateway, WhatsAppValidationUnavailableError } from '../whatsapp-validation/whatsappValidation.gateway';
@@ -672,7 +673,7 @@ function branchMediaForLead(lead: PreSendLead, branches: BranchConfigRecord[]) {
 }
 
 function assertTemplate(lead: PreSendLead, template: TemplateConfigRecord | undefined): asserts template is TemplateConfigRecord {
-  if (!template || !template.message1.trim()) {
+  if (!template || !hasAllTemplateMessages(template)) {
     const requiredType = templateTypeForLead(lead);
     throw new Error(`Template ${requiredType} valido ausente para ${lead.channel} / ${lead.branch}.`);
   }

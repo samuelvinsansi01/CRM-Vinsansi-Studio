@@ -2,6 +2,7 @@ import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { platformConfigService } from '../platform-config/platformConfig.service';
 import { settingsService } from '../settings';
+import { assertAllTemplateMessages } from '../templates/templateContract';
 import { branchSlug, normalizeBranchId } from './branchIdentity';
 import {
   DEFAULT_BRANCH_MIN_RATING,
@@ -101,6 +102,8 @@ function isTestConfigRecord(record: ConfigRecord) {
     record.kind === 'templates' ? record.type : '',
     record.kind === 'templates' ? record.message1 : '',
     record.kind === 'templates' ? record.message2 : '',
+    record.kind === 'templates' ? record.message3 : '',
+    record.kind === 'templates' ? record.message4 : '',
   ]
     .map((value) => normalizeText(value))
     .join(' ');
@@ -351,6 +354,7 @@ async function normalizeByKind(kind: ConfigKind, input: CreateConfigRecordInput 
 }
 
 async function assertTemplateContract(template: TemplateConfigRecord, editingId?: string) {
+  assertAllTemplateMessages(template);
   const templates = (await repositories.config.list('templates')).filter(isTemplate);
   const activeGroupCount = templates.filter(
     (item) =>
@@ -403,6 +407,8 @@ function assertPersisted(expected: ConfigRecord, saved: ConfigRecord) {
     if (expected.type !== saved.type) fail('type', expected.type, saved.type);
     if (expected.message1 !== saved.message1) fail('message1', expected.message1, saved.message1);
     if (expected.message2 !== saved.message2) fail('message2', expected.message2, saved.message2);
+    if (expected.message3 !== saved.message3) fail('message3', expected.message3, saved.message3);
+    if (expected.message4 !== saved.message4) fail('message4', expected.message4, saved.message4);
     if (expected.active !== saved.active) fail('active', expected.active, saved.active);
     return;
   }

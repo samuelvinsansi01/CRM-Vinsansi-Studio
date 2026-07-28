@@ -1,4 +1,5 @@
 import type { TemplateChannel, TemplateConfigRecord, TemplateType } from '../config/types';
+import { hasAllTemplateMessages } from './templateContract';
 
 type LeadTemplateContext = {
   branch?: string;
@@ -39,7 +40,7 @@ function isActiveTemplate(template: TemplateConfigRecord) {
   return Boolean(template.active) &&
     template.status !== 'Arquivado' &&
     template.status !== 'deleted' &&
-    Boolean(template.message1?.trim());
+    hasAllTemplateMessages(template);
 }
 
 function isEmptySiteValue(value: unknown) {

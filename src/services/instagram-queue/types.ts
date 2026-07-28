@@ -28,6 +28,7 @@ export type InstagramQueueLead = {
   batchId: string;
   batch_id: string;
   batch_number: number;
+  batchLimit?: number;
   chip_id?: string;
   scheduled_date: string;
   template_id: string;

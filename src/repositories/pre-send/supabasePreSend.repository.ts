@@ -48,7 +48,11 @@ function leadFlatExtra(lead: PreSendLead) {
 }
 
 async function allLeads() {
-  const { data, error } = await getSupabaseClient().from(table()).select('id,data,status,active,kind,channel,created_at,updated_at');
+  const userId = await getCurrentUserId();
+  const { data, error } = await getSupabaseClient()
+    .from(table())
+    .select('id,data,status,active,kind,channel,created_at,updated_at')
+    .eq('user_id', userId);
   if (error) throw new Error(error.message);
 
   return (data ?? []).map((row) => {
@@ -58,7 +62,7 @@ async function allLeads() {
       id: lead.id ?? String(row.id),
       status: normalizePreSendStatus(row.status ?? lead.status),
     });
-  }).filter((lead) => isStatusGroup(lead.status, 'review'));
+  }).filter((lead) => !isStatusGroup(lead.status, 'deleted'));
 }
 
 export const supabasePreSendRepository: PreSendRepository = {

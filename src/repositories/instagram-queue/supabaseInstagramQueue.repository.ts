@@ -99,8 +99,9 @@ function isDeletedRow(row: Record<string, unknown>) {
 
 async function allLeads() {
   const client = getSupabaseClient();
+  const userId = await getCurrentUserId();
   const [queueResponse, branchResponse] = await Promise.all([
-    client.from(table()).select('*'),
+    client.from(table()).select('*').eq('user_id', userId),
     client.from(getSupabaseConfig().tables.branches).select('*'),
   ]);
   if (queueResponse.error) throw new Error(queueResponse.error.message);
@@ -137,16 +138,18 @@ async function allLeads() {
 }
 
 async function loadValidLeadIds(ids: string[]) {
-  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
+  const uniqueIds = Array.from(new Set(ids.map((id) => id.trim()).filter((id) => /^\d+$/.test(id))));
   if (!uniqueIds.length) return new Set<string>();
+  const userId = await getCurrentUserId();
 
   const { data, error } = await getSupabaseClient()
     .from(getSupabaseConfig().tables.importLeads)
-    .select('id')
-    .in('id', uniqueIds);
+    .select('leads_id')
+    .eq('users_id', userId)
+    .in('leads_id', uniqueIds.map(Number));
 
-  if (error) return new Set<string>();
-  return new Set((data ?? []).map((row) => String(row.id)));
+  if (error) throw new Error(`Não foi possível validar os vínculos da fila Instagram: ${error.message}`);
+  return new Set((data ?? []).map((row) => String(row.leads_id)));
 }
 
 function calculateSummary(leads: InstagramQueueLead[]): InstagramQueueSummary {
@@ -241,6 +244,7 @@ function buildLead(input: CreateInstagramQueueLeadInput, batch: InstagramQueueBa
     batchId: batch.id,
     batch_id: batch.id,
     batch_number: batch.number,
+    batchLimit: input.batchLimit ?? batch.limit,
     scheduled_date: input.scheduled_date ?? todayIsoDate(),
     template_id: input.template_id ?? '',
     message_1: input.message1,
@@ -271,7 +275,7 @@ function dbPayload(lead: InstagramQueueLead, userId: string) {
     profile_id: uuidOrNull(lead.profile_id),
     profile_username: lead.profile,
     block_number: lead.batch_number,
-    block_size: 15,
+    block_size: Math.max(1, Number(lead.batchLimit || 15)),
     message_1: lead.message_1,
     message_2: lead.message_2,
     message_3: lead.message_3,
@@ -325,7 +329,7 @@ async function updateStatus(ids: string[], status: InstagramQueueStatus, errorMe
       retry_count: status === 'queued' ? lead.retry_count + 1 : lead.retry_count,
       updated_at: timestamp,
     };
-    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id);
+    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id).eq('user_id', userId);
     if (error) throw new Error(error.message);
   }));
 }
@@ -354,14 +358,17 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
   async enqueue(inputLeads) {
     const persisted = await allLeads();
     const existingSources = new Set(persisted.map((lead) => lead.sourcePreSendId).filter(Boolean));
+    const existingLeadIds = new Set(persisted.map((lead) => lead.lead_id).filter(Boolean));
     const existingInstagrams = new Set(persisted.map((lead) => lead.instagram_username || normalizeInstagramUsername(lead.instagram_url ?? lead.instagram)).filter(Boolean));
     const validLeadIds = await loadValidLeadIds(inputLeads.map((lead) => lead.lead_id ?? ''));
     const working = [...persisted];
     const userId = await getCurrentUserId();
+    const createdIds: string[] = [];
 
     for (const input of inputLeads) {
       const safeInput = input.lead_id && !validLeadIds.has(input.lead_id) ? { ...input, lead_id: undefined } : input;
       const username = normalizeInstagramUsername(safeInput.instagram_url ?? safeInput.instagram);
+      if (safeInput.lead_id && existingLeadIds.has(safeInput.lead_id)) continue;
       if (safeInput.sourcePreSendId && existingSources.has(safeInput.sourcePreSendId)) continue;
       if (username && existingInstagrams.has(username)) continue;
 
@@ -378,9 +385,23 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
       const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
       if (error) throw new Error(error.message);
       working.push(lead);
+      createdIds.push(lead.id);
+      if (lead.lead_id) existingLeadIds.add(lead.lead_id);
       if (lead.sourcePreSendId) existingSources.add(lead.sourcePreSendId);
       if (lead.instagram_username) existingInstagrams.add(lead.instagram_username);
     }
+    return createdIds;
+  },
+
+  async removeQueued(id: string) {
+    const userId = await getCurrentUserId();
+    const { error } = await getSupabaseClient()
+      .from(table())
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId)
+      .eq('status', 'queued');
+    if (error) throw new Error(error.message);
   },
 
   async updateLead(id: string, input: UpdateInstagramQueueLeadInput) {
@@ -398,7 +419,8 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
       instagram_username: input.instagram_url || input.instagram ? normalizeInstagramUsername(input.instagram_url ?? input.instagram) : lead.instagram_username,
       updated_at: nowIso(),
     };
-    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, await getCurrentUserId())).eq('id', id);
+    const userId = await getCurrentUserId();
+    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id).eq('user_id', userId);
     if (error) throw new Error(error.message);
     return updated;
   },
