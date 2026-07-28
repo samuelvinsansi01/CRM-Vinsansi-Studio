@@ -156,6 +156,19 @@ Object.entries(STATUS_GROUPS).forEach(([group, config]) => {
 });
 
 export function normalizeStatusGroup(value: unknown): StatusGroup {
+  // Compatibilidade com o contrato normalizado do banco novo.
+  // A máquina de estados anterior trabalhava apenas com aliases textuais.
+  const numeric = typeof value === 'number' || /^\d+$/.test(String(value ?? '').trim())
+    ? Number(value)
+    : Number.NaN;
+  if (numeric === 1) return 'pending';
+  if (numeric === 2) return 'approved';
+  if (numeric === 3) return 'review';
+  if (numeric === 4) return 'queued';
+  if (numeric === 5) return 'sent';
+  if (numeric === 6 || numeric === 7) return 'invalid';
+  if (numeric === 8) return 'archived';
+
   const normalized = normalizeComparable(value);
   return ALIAS_TO_GROUP.get(normalized) ?? 'unknown';
 }

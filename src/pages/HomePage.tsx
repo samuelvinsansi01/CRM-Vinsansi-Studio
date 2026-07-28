@@ -16,7 +16,7 @@ import {
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useLeadCycle } from '../hooks/useLeadCycle';
-import type { LeadCycleLead } from '../services/lead-cycle/types';
+import type { LeadCycleLead, LeadRoutingCommand, LeadRoutingResult } from '../services/lead-cycle/types';
 
 const SOURCE_NO_SITE = 1;
 const SOURCE_OWN_SITE = 2;
@@ -26,11 +26,9 @@ const SOURCE_INSTAGRAM = 4;
 type ImportedCardBucket = 'WhatsApp' | 'Com site' | 'Agregadores' | 'Instagram';
 
 function importedCardBucket(lead: LeadCycleLead): ImportedCardBucket {
-  // Categorias exclusivas: cada lead entra em exatamente um card, então a soma fecha com o Total.
   if (lead.contactSourceId === SOURCE_INSTAGRAM || Boolean(lead.instagram.trim())) return 'Instagram';
   if (lead.contactSourceId === SOURCE_AGGREGATOR) return 'Agregadores';
   if (lead.contactSourceId === SOURCE_OWN_SITE) return 'Com site';
-  // Sem site, fonte não classificada ou fallback operacional seguem para WhatsApp.
   if (lead.contactSourceId === SOURCE_NO_SITE || lead.phone.trim()) return 'WhatsApp';
   return 'WhatsApp';
 }
@@ -52,12 +50,22 @@ function channelTag(lead: LeadCycleLead) {
   return <Tag tone={lead.channelId === 2 ? 'primary' : 'success'}>{lead.channel}</Tag>;
 }
 
+function resultDescription(result: LeadRoutingResult) {
+  const parts = [`${result.succeeded} atualizado(s)`];
+  if (result.unchanged) parts.push(`${result.unchanged} já estava(m) correto(s)`);
+  if (result.failed) parts.push(`${result.failed} não processado(s)`);
+  let description = `${parts.join(', ')}.`;
+  if (result.failures[0]) description += ` ${result.failures[0].reason}`;
+  if (result.auditWarnings.length) description += ' A alteração foi salva, mas houve aviso na auditoria.';
+  return description;
+}
+
 export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
   const validPage = mode === 'valid';
   const importedCycle = useLeadCycle('imported');
   const validCycle = useLeadCycle('valid');
   const activeCycle = validPage ? validCycle : importedCycle;
-  const { records, loading, saving, error, update } = activeCycle;
+  const { records, loading, saving, error, executeRoutingCommand } = activeCycle;
   const refresh = async () => {
     await Promise.all([importedCycle.refresh(), validCycle.refresh()]);
   };
@@ -74,10 +82,7 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
 
   const branches = useMemo(() => ['Todos', ...Array.from(new Set(records.map((lead) => lead.branch).filter(Boolean))).sort()], [records]);
   const states = useMemo(() => ['Todos', ...Array.from(new Set(records.map((lead) => lead.state).filter(Boolean))).sort()], [records]);
-  const matchesDestination = (lead: LeadCycleLead) => {
-    if (destination === 'Todos') return true;
-    return importedCardBucket(lead) === destination;
-  };
+  const matchesDestination = (lead: LeadCycleLead) => destination === 'Todos' || importedCardBucket(lead) === destination;
   const visible = useMemo(() => records.filter((lead) => {
     const query = search.trim().toLowerCase();
     const instagramOk = instagramFilter === 'Todos' || (instagramFilter === 'Com Instagram' ? Boolean(lead.instagram.trim()) : !lead.instagram.trim());
@@ -105,56 +110,43 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
   })), [visible]);
 
   const selectedIds = selectedRows.map((index) => rows[index]?.id).filter(Boolean);
-  const byId = useMemo(() => new Map(visible.map((lead) => [lead.id, lead])), [visible]);
 
   const toast = (title: string, description: string, tone: ToastItem['tone'] = 'success') => {
     const id = crypto.randomUUID?.() ?? String(Date.now());
     setToasts((current) => [...current, { id, title, description, tone }].slice(-4));
-    window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3200);
+    window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 4200);
   };
 
-  const moveImported = async (ids: string[], target: 'whatsapp' | 'instagram' | 'invalid' | 'archive') => {
+  const runRoutingCommand = async (command: LeadRoutingCommand, ids: string[], successTitle: string) => {
     try {
-      if (target === 'whatsapp') await update(ids, { channels_id: 1, lead_status_id: 3 }, [1]);
-      if (target === 'instagram') {
-        const invalid = ids.map((id) => byId.get(id)).filter((lead) => lead && !lead.instagram.trim());
-        if (invalid.length) throw new Error('Há lead selecionado sem Instagram real.');
-        await update(ids, { channels_id: 2, lead_status_id: 2 }, [1]);
-      }
-      if (target === 'invalid') await update(ids, { lead_status_id: 6 }, [1]);
-      if (target === 'archive') await update(ids, { lead_status_id: 8 }, [1]);
-      setSelectedRows([]);
-      toast('Leads atualizados', `${ids.length} lead(s) avançaram no ciclo.`);
-    } catch (err) {
-      toast('Não foi possível concluir', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
-    }
-  };
+      const result = await executeRoutingCommand(command, ids);
+      if (result.succeeded || result.unchanged) setSelectedRows([]);
 
-  const updateValidChannel = async (ids: string[], channelId: 1 | 2) => {
-    try {
-      if (channelId === 2) {
-        const invalid = ids.map((id) => byId.get(id)).filter((lead) => lead && !lead.instagram.trim());
-        if (invalid.length) throw new Error('Instagram só pode ser usado quando o lead possui Instagram real.');
+      if (!result.failed) {
+        toast(successTitle, resultDescription(result), result.auditWarnings.length ? 'warning' : 'success');
+      } else if (result.succeeded || result.unchanged) {
+        toast('Ação concluída parcialmente', resultDescription(result), 'warning');
+      } else {
+        toast('Não foi possível concluir', resultDescription(result), 'danger');
       }
-      await update(ids, { channels_id: channelId }, [2]);
-      setSelectedRows([]);
-      toast('Canal atualizado', `${ids.length} lead(s) atualizados.`);
+      return result;
     } catch (err) {
       toast('Não foi possível concluir', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
+      return null;
     }
   };
 
   const handleAction = async (action: TableAction, row: Row) => {
     if (!validPage) {
-      if (action === 'whatsapp') await moveImported([row.id], 'whatsapp');
-      if (action === 'instagram') await moveImported([row.id], 'instagram');
-      if (action === 'invalidate') await moveImported([row.id], 'invalid');
-      if (action === 'archive') await moveImported([row.id], 'archive');
+      if (action === 'whatsapp') await runRoutingCommand('route-imported-to-whatsapp', [row.id], 'Lead enviado ao Pré-Envio');
+      if (action === 'instagram') await runRoutingCommand('route-imported-to-instagram', [row.id], 'Lead validado para Instagram');
+      if (action === 'invalidate') await runRoutingCommand('invalidate-imported', [row.id], 'Lead invalidado');
+      if (action === 'archive') await runRoutingCommand('archive-imported', [row.id], 'Lead arquivado');
       return;
     }
-    if (action === 'whatsapp') await updateValidChannel([row.id], 1);
-    if (action === 'instagram') await updateValidChannel([row.id], 2);
-    if (action === 'archive') await update([row.id], { lead_status_id: 8 }, [2]);
+    if (action === 'whatsapp') await runRoutingCommand('set-valid-channel-whatsapp', [row.id], 'Canal atualizado');
+    if (action === 'instagram') await runRoutingCommand('set-valid-channel-instagram', [row.id], 'Canal atualizado');
+    if (action === 'archive') await runRoutingCommand('archive-valid', [row.id], 'Lead arquivado');
   };
 
   const total = records.length;
@@ -217,12 +209,20 @@ export function HomePage({ mode = 'home' }: { mode?: 'home' | 'valid' }) {
         {selectedIds.length ? (
           <div className="lead-bulk-actions">
             <span>{selectedIds.length} selecionado(s)</span>
-            {!validPage ? <Button size="sm" iconLeft={MessageCircle} disabled={saving} onClick={() => void moveImported(selectedIds, 'whatsapp')}>Pré-Envio</Button> : null}
-            {!validPage ? <Button size="sm" iconLeft={Instagram} disabled={saving} onClick={() => void moveImported(selectedIds, 'instagram')}>Validar Instagram</Button> : null}
-            {validPage ? <Button size="sm" iconLeft={MessageCircle} disabled={saving} onClick={() => void updateValidChannel(selectedIds, 1)}>WhatsApp</Button> : null}
-            {validPage ? <Button size="sm" iconLeft={Instagram} disabled={saving} onClick={() => void updateValidChannel(selectedIds, 2)}>Instagram</Button> : null}
-            {!validPage ? <Button size="sm" variant="secondary" iconLeft={X} disabled={saving} onClick={() => void moveImported(selectedIds, 'invalid')}>Invalidar</Button> : null}
-            <Button size="sm" variant="secondary" iconLeft={Archive} disabled={saving} onClick={() => void (validPage ? update(selectedIds, { lead_status_id: 8 }, [2]) : moveImported(selectedIds, 'archive'))}>Arquivar</Button>
+            {!validPage ? <Button size="sm" iconLeft={MessageCircle} disabled={saving} onClick={() => void runRoutingCommand('route-imported-to-whatsapp', selectedIds, 'Leads enviados ao Pré-Envio')}>Pré-Envio</Button> : null}
+            {!validPage ? <Button size="sm" iconLeft={Instagram} disabled={saving} onClick={() => void runRoutingCommand('route-imported-to-instagram', selectedIds, 'Leads validados para Instagram')}>Validar Instagram</Button> : null}
+            {validPage ? <Button size="sm" iconLeft={MessageCircle} disabled={saving} onClick={() => void runRoutingCommand('set-valid-channel-whatsapp', selectedIds, 'Canais atualizados')}>WhatsApp</Button> : null}
+            {validPage ? <Button size="sm" iconLeft={Instagram} disabled={saving} onClick={() => void runRoutingCommand('set-valid-channel-instagram', selectedIds, 'Canais atualizados')}>Instagram</Button> : null}
+            {!validPage ? <Button size="sm" variant="secondary" iconLeft={X} disabled={saving} onClick={() => void runRoutingCommand('invalidate-imported', selectedIds, 'Leads invalidados')}>Invalidar</Button> : null}
+            <Button
+              size="sm"
+              variant="secondary"
+              iconLeft={Archive}
+              disabled={saving}
+              onClick={() => void runRoutingCommand(validPage ? 'archive-valid' : 'archive-imported', selectedIds, 'Leads arquivados')}
+            >
+              Arquivar
+            </Button>
           </div>
         ) : null}
         {error ? <div className="table-message">{error}</div> : null}

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { leadCycleService } from '../services/lead-cycle/leadCycle.service';
-import type { LeadCycleLead, LeadCycleUpdate } from '../services/lead-cycle/types';
+import type {
+  LeadCycleLead,
+  LeadCycleUpdate,
+  LeadRoutingCommand,
+  LeadRoutingResult,
+} from '../services/lead-cycle/types';
 import type { LeadStatusId } from '../types/lead.types';
 
 export type LeadCycleView = 'imported' | 'valid' | 'pre-send' | 'permanent';
@@ -33,6 +38,21 @@ export function useLeadCycle(view: LeadCycleView) {
 
   useEffect(() => { void refresh(); }, [refresh]);
 
+  const executeRoutingCommand = useCallback(async (
+    command: LeadRoutingCommand,
+    ids: string[],
+  ): Promise<LeadRoutingResult> => {
+    setSaving(true);
+    try {
+      const result = await leadCycleService.executeRoutingCommand(command, ids);
+      await refresh();
+      return result;
+    } finally {
+      setSaving(false);
+    }
+  }, [refresh]);
+
+  /** Temporário: utilizado pelos fluxos ainda não migrados para comandos explícitos. */
   const update = useCallback(async (ids: string[], input: LeadCycleUpdate, expectedStatuses?: LeadStatusId[]) => {
     setSaving(true);
     try {
@@ -43,5 +63,5 @@ export function useLeadCycle(view: LeadCycleView) {
     }
   }, [refresh]);
 
-  return { records, loading, saving, error, refresh, update };
+  return { records, loading, saving, error, refresh, executeRoutingCommand, update };
 }
