@@ -63,6 +63,16 @@ for (const file of [
   }
 }
 
+
+const mockImport = read('src/repositories/import/mockImport.repository.ts');
+for (const removed of ['sentPhones', 'sentSites', 'sentInstagrams', 'sentMapsUrls']) {
+  assert.ok(!mockImport.includes(removed), `mockImport.repository.ts ainda contém contexto legado: ${removed}`);
+}
+
+const publicTypes = read('src/types/index.ts');
+assert.ok(!publicTypes.includes('UpdateBaseLeadInput'), 'src/types/index.ts exporta tipo removido UpdateBaseLeadInput.');
+assert.ok(!fs.existsSync(path.join(root, 'src/services/leads/lead-validation.service.ts')), 'Serviço legado lead-validation.service.ts deve ser removido.');
+
 const whatsappService = requireText('src/services/whatsapp-queue/whatsappQueue.service.ts', [
   'syncCanonicalSentStatus',
   'supabaseLeadCycleRepository.compareAndSet(leadId, 4, { lead_status_id: 5 })',

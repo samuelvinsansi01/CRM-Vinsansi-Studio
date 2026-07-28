@@ -115,10 +115,6 @@ export const mockImportRepository: ImportRepository = {
       baseSites: new Set(options.context?.baseSites ?? []),
       baseInstagrams: new Set(options.context?.baseInstagrams ?? []),
       baseMapsUrls: new Set(options.context?.baseMapsUrls ?? []),
-      sentPhones: new Set(options.context?.sentPhones ?? []),
-      sentSites: new Set(options.context?.sentSites ?? []),
-      sentInstagrams: new Set(options.context?.sentInstagrams ?? []),
-      sentMapsUrls: new Set(options.context?.sentMapsUrls ?? []),
     });
 
     const startedAt = performance.now?.() ?? Date.now();
