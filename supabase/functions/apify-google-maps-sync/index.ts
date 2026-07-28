@@ -13,8 +13,7 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 function messageOf(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return typeof error === "string" ? error : "Erro desconhecido.";
+  return error instanceof Error ? error.message : typeof error === "string" ? error : "Erro desconhecido.";
 }
 function normalizeRunStatus(value: unknown): JobStatus {
   const status = String(value ?? "RUNNING").toUpperCase();
@@ -33,6 +32,22 @@ function numericStatus(status: JobStatus) {
   if (status === "aborted") return JOB_STATUS.CANCELED;
   if (status === "starting" || status === "ready") return JOB_STATUS.PENDING;
   return JOB_STATUS.PROCESSING;
+}
+function safeCount(value: unknown) {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
+}
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function claimMarker(token: string) {
+  return `import_claim:${token}`;
 }
 
 Deno.serve(async (request: Request) => {
@@ -58,40 +73,41 @@ Deno.serve(async (request: Request) => {
 
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     if (!body) return jsonResponse({ error: "Corpo inválido." }, 400);
-    const jobId = Number(body.jobId ?? body.apify_import_jobs_id);
     const action = String(body.action ?? "status");
-    if (!Number.isInteger(jobId) || jobId <= 0) return jsonResponse({ error: "Job inválido." }, 400);
 
     const { data: internalUser, error: userError } = await admin.from("users").select("users_id").eq("auth_user_id", authData.user.id).maybeSingle();
     if (userError) throw new Error(userError.message);
     if (!internalUser?.users_id) return jsonResponse({ error: "Usuário interno não encontrado." }, 403);
+    const usersId = Number(internalUser.users_id);
+
+    if (action === "recover_stale") {
+      const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+      const { data: stale, error: staleError } = await admin
+        .from("apify_import_jobs")
+        .select("apify_import_jobs_id")
+        .eq("users_id", usersId)
+        .like("error_message", "import_claim:%")
+        .lt("imported_at", cutoff);
+      if (staleError) throw new Error(staleError.message);
+      const ids = (stale ?? []).map((row: any) => Number(row.apify_import_jobs_id)).filter(Boolean);
+      if (ids.length) {
+        const { error: releaseError } = await admin.from("apify_import_jobs").update({ imported_at: null, error_message: null, updated_at: new Date().toISOString() }).eq("users_id", usersId).in("apify_import_jobs_id", ids);
+        if (releaseError) throw new Error(releaseError.message);
+      }
+      return jsonResponse({ success: true, jobId: -1, runId: "recovery", datasetId: null, status: "succeeded", imported: false, items: null, totalItems: ids.length });
+    }
+
+    const jobId = Number(body.jobId ?? body.apify_import_jobs_id);
+    if (!Number.isInteger(jobId) || jobId <= 0) return jsonResponse({ error: "Job inválido." }, 400);
 
     const { data: job, error: jobError } = await admin
       .from("apify_import_jobs")
-      .select(`apify_import_jobs_id, users_id, apify_accounts_id, external_run_id, external_dataset_id, status, imported_at, apify_accounts:apify_accounts_id ( apify_accounts_id, token_secret )`)
+      .select(`apify_import_jobs_id, users_id, apify_accounts_id, external_run_id, external_dataset_id, status, imported_at, error_message, apify_accounts:apify_accounts_id ( apify_accounts_id, token_secret )`)
       .eq("apify_import_jobs_id", jobId)
-      .eq("users_id", internalUser.users_id)
+      .eq("users_id", usersId)
       .maybeSingle();
     if (jobError) throw new Error(jobError.message);
     if (!job) return jsonResponse({ error: "Job não encontrado." }, 404);
-
-    if (action === "finalize") {
-      const processed = Math.max(0, Number(body.processed ?? 0) || 0);
-      const imported = Math.max(0, Number(body.imported ?? 0) || 0);
-      const duplicates = Math.max(0, Number(body.duplicates ?? 0) || 0);
-      const rejected = Math.max(0, Number(body.rejected ?? 0) || 0);
-      const now = new Date().toISOString();
-      const { error } = await admin.from("apify_import_jobs").update({
-        total_received: processed,
-        total_imported: imported,
-        total_duplicates: duplicates,
-        total_rejected: rejected,
-        imported_at: now,
-        updated_at: now,
-      }).eq("apify_import_jobs_id", jobId).eq("users_id", internalUser.users_id);
-      if (error) throw new Error(error.message);
-      return jsonResponse({ success: true, jobId, importedAt: now });
-    }
 
     const runId = String(job.external_run_id ?? "").trim();
     const accountRelation = Array.isArray(job.apify_accounts) ? job.apify_accounts[0] : job.apify_accounts;
@@ -99,7 +115,66 @@ Deno.serve(async (request: Request) => {
     if (!runId) return jsonResponse({ error: "O job não possui runId." }, 409);
     if (!token) return jsonResponse({ error: "A conta Apify não possui token." }, 409);
 
-    const runResponse = await fetch(`https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}?token=${encodeURIComponent(token)}`);
+    if (action === "finalize" || action === "release") {
+      const claimToken = String(body.claimToken ?? "").trim();
+      const claimedAt = String(body.claimedAt ?? "").trim();
+      if (!claimToken || !claimedAt) return jsonResponse({ error: "Claim de importação ausente." }, 400);
+      const expectedMarker = claimMarker(claimToken);
+      if (job.error_message !== expectedMarker || !job.imported_at) {
+        return jsonResponse({ error: "O claim de importação não pertence a esta operação ou já foi finalizado." }, 409);
+      }
+
+      if (action === "release") {
+        const reason = String(body.reason ?? "").trim();
+        const { data: released, error } = await admin.from("apify_import_jobs").update({
+          imported_at: null,
+          error_message: reason ? `Importação liberada após falha: ${reason.slice(0, 500)}` : null,
+          updated_at: new Date().toISOString(),
+        }).eq("apify_import_jobs_id", jobId).eq("users_id", usersId).eq("error_message", expectedMarker).eq("imported_at", claimedAt).select("apify_import_jobs_id");
+        if (error) throw new Error(error.message);
+        if (!released?.length) return jsonResponse({ error: "O claim mudou antes de ser liberado." }, 409);
+        return jsonResponse({ success: true, jobId, runId, datasetId: job.external_dataset_id ?? null, status: normalizeRunStatus(job.status), imported: false, items: null });
+      }
+
+      const processed = safeCount(body.processed);
+      const imported = safeCount(body.imported);
+      const duplicates = safeCount(body.duplicates);
+      const rejected = safeCount(body.rejected);
+      if (imported + duplicates + rejected > processed) return jsonResponse({ error: "Totais da importação são inconsistentes." }, 400);
+      const now = new Date().toISOString();
+      const { data: finalized, error } = await admin.from("apify_import_jobs").update({
+        total_received: processed,
+        total_imported: imported,
+        total_duplicates: duplicates,
+        total_rejected: rejected,
+        imported_at: now,
+        error_message: null,
+        updated_at: now,
+      }).eq("apify_import_jobs_id", jobId).eq("users_id", usersId).eq("error_message", expectedMarker).eq("imported_at", claimedAt).select("apify_import_jobs_id");
+      if (error) throw new Error(error.message);
+      if (!finalized?.length) return jsonResponse({ error: "O claim mudou antes da finalização." }, 409);
+      return jsonResponse({ success: true, jobId, runId, datasetId: job.external_dataset_id ?? null, status: "succeeded", imported: true, items: null });
+    }
+
+    if (action === "abort") {
+      if (["succeeded", "failed", "aborted", "timed_out"].includes(String(job.status))) {
+        return jsonResponse({ error: "Este job já está finalizado e não pode ser cancelado." }, 409);
+      }
+      const response = await fetchWithTimeout(`https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}/abort`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      }, 20000);
+      const payload = await response.json().catch(() => null) as Record<string, any> | null;
+      if (!response.ok) throw new Error(String(payload?.error?.message ?? `A Apify retornou HTTP ${response.status}.`));
+      const now = new Date().toISOString();
+      const { error } = await admin.from("apify_import_jobs").update({ status: "aborted", apify_job_status_id: JOB_STATUS.CANCELED, finished_at: now, updated_at: now }).eq("apify_import_jobs_id", jobId).eq("users_id", usersId);
+      if (error) throw new Error(error.message);
+      return jsonResponse({ success: true, jobId, runId, datasetId: job.external_dataset_id ?? null, status: "aborted", imported: Boolean(job.imported_at), items: null });
+    }
+
+    const runResponse = await fetchWithTimeout(`https://api.apify.com/v2/actor-runs/${encodeURIComponent(runId)}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    }, 20000);
     const runPayload = await runResponse.json().catch(() => null) as Record<string, any> | null;
     if (!runResponse.ok) throw new Error(String(runPayload?.error?.message ?? `A Apify retornou HTTP ${runResponse.status}.`));
 
@@ -113,24 +188,50 @@ Deno.serve(async (request: Request) => {
       status,
       apify_job_status_id: numericStatus(status),
       finished_at: finished ? String(run?.finishedAt ?? now) : null,
-      error_message: status === "failed" ? String(run?.statusMessage ?? "Falha na execução da Apify.") : null,
+      error_message: status === "failed" ? String(run?.statusMessage ?? "Falha na execução da Apify.") : (String(job.error_message ?? "").startsWith("import_claim:") ? job.error_message : null),
       updated_at: now,
-    }).eq("apify_import_jobs_id", jobId).eq("users_id", internalUser.users_id);
+    }).eq("apify_import_jobs_id", jobId).eq("users_id", usersId);
     if (updateError) throw new Error(updateError.message);
 
     if (status !== "succeeded") return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: Boolean(job.imported_at), items: null });
-    const detailsRequested = action === "details";
-    if (job.imported_at && !detailsRequested) return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: true, items: null });
     if (!datasetId) return jsonResponse({ error: "Execução concluída sem datasetId." }, 502);
 
-    const datasetResponse = await fetch(`https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?clean=true&format=json&token=${encodeURIComponent(token)}`);
-    const items = await datasetResponse.json().catch(() => null);
-    if (!datasetResponse.ok || !Array.isArray(items)) throw new Error(`Não foi possível carregar o dataset da Apify (HTTP ${datasetResponse.status}).`);
+    if (action === "status") return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: Boolean(job.imported_at), items: null });
 
-    await admin.from("apify_import_jobs").update({ total_received: items.length, updated_at: new Date().toISOString() }).eq("apify_import_jobs_id", jobId).eq("users_id", internalUser.users_id);
-    return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: false, items });
+    if (action === "claim") {
+      if (job.imported_at) return jsonResponse({ error: "Este dataset já está em processamento ou foi importado." }, 409);
+      const claimToken = crypto.randomUUID();
+      const claimedAt = new Date().toISOString();
+      const marker = claimMarker(claimToken);
+      const { data: claimed, error: claimError } = await admin.from("apify_import_jobs").update({ imported_at: claimedAt, error_message: marker, updated_at: claimedAt })
+        .eq("apify_import_jobs_id", jobId).eq("users_id", usersId).eq("status", "succeeded").is("imported_at", null).select("apify_import_jobs_id");
+      if (claimError) throw new Error(claimError.message);
+      if (!claimed?.length) return jsonResponse({ error: "Outro processo já assumiu a importação deste dataset." }, 409);
+
+      try {
+        const datasetResponse = await fetchWithTimeout(`https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?clean=true&format=json`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        }, 45000);
+        const items = await datasetResponse.json().catch(() => null);
+        if (!datasetResponse.ok || !Array.isArray(items)) throw new Error(`Não foi possível carregar o dataset da Apify (HTTP ${datasetResponse.status}).`);
+        await admin.from("apify_import_jobs").update({ total_received: items.length, updated_at: new Date().toISOString() }).eq("apify_import_jobs_id", jobId).eq("users_id", usersId).eq("error_message", marker);
+        return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: false, items, totalItems: items.length, claimToken, claimedAt });
+      } catch (error) {
+        await admin.from("apify_import_jobs").update({ imported_at: null, error_message: messageOf(error), updated_at: new Date().toISOString() }).eq("apify_import_jobs_id", jobId).eq("users_id", usersId).eq("error_message", marker);
+        throw error;
+      }
+    }
+
+    const previewLimit = Math.min(100, Math.max(1, safeCount(body.previewLimit) || 100));
+    const datasetResponse = await fetchWithTimeout(`https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?clean=true&format=json&limit=${previewLimit}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    }, 30000);
+    const items = await datasetResponse.json().catch(() => null);
+    if (!datasetResponse.ok || !Array.isArray(items)) throw new Error(`Não foi possível carregar a prévia do dataset da Apify (HTTP ${datasetResponse.status}).`);
+    return jsonResponse({ success: true, jobId, runId, datasetId, status, imported: Boolean(job.imported_at), items, totalItems: Number(run?.stats?.datasetItemCount ?? items.length), previewTruncated: items.length >= previewLimit });
   } catch (error) {
     console.error("ERRO APIFY GOOGLE MAPS SYNC:", error);
-    return jsonResponse({ error: messageOf(error) }, 500);
+    const message = error instanceof DOMException && error.name === "AbortError" ? "Tempo limite ao consultar a Apify." : messageOf(error);
+    return jsonResponse({ error: message }, 500);
   }
 });

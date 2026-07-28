@@ -2,1024 +2,238 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const APIFY_ACTOR_ID = "compass~google-maps-extractor";
 const ACTOR_DATABASE_NAME = "compass/google-maps-extractor";
+const JOB_STATUS = { PENDING: 3, PROCESSING: 4, COMPLETED: 5, ERROR: 6, CANCELED: 7 } as const;
 
-const JOB_STATUS = {
-  ACTIVE: 1,
-  INACTIVE: 2,
-  PENDING: 3,
-  PROCESSING: 4,
-  COMPLETED: 5,
-  ERROR: 6,
-  CANCELED: 7,
-  PAUSED: 8,
-} as const;
+type JobStatus = "starting" | "ready" | "running" | "succeeded" | "failed" | "aborted" | "timed_out";
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
-  });
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "string") {
-    return error;
-  }
-
+function messageOf(error: unknown) {
+  return error instanceof Error ? error.message : typeof error === "string" ? error : "Erro desconhecido.";
+}
+function normalizeStatus(value: unknown): JobStatus {
+  const status = String(value ?? "RUNNING").toUpperCase();
+  if (status === "STARTING") return "starting";
+  if (status === "READY") return "ready";
+  if (status === "RUNNING") return "running";
+  if (status === "SUCCEEDED") return "succeeded";
+  if (status === "FAILED") return "failed";
+  if (status === "ABORTED") return "aborted";
+  if (status === "TIMED-OUT" || status === "TIMED_OUT") return "timed_out";
+  return "running";
+}
+function numericStatus(status: JobStatus) {
+  if (status === "succeeded") return JOB_STATUS.COMPLETED;
+  if (status === "failed" || status === "timed_out") return JOB_STATUS.ERROR;
+  if (status === "aborted") return JOB_STATUS.CANCELED;
+  if (status === "starting" || status === "ready") return JOB_STATUS.PENDING;
+  return JOB_STATUS.PROCESSING;
+}
+function normalizeTerms(raw: unknown) {
+  const values = Array.isArray(raw) ? raw : [raw];
+  const seen = new Set<string>();
+  return values.flatMap((value) => String(value ?? "").split(/[\n,;|]/)).map((value) => value.trim()).filter((value) => {
+    const key = value.toLocaleLowerCase("pt-BR");
+    if (value.length < 2 || value.length > 100 || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 20);
+}
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return JSON.stringify(error);
-  } catch {
-    return "Erro desconhecido.";
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-Deno.serve(async (request: Request): Promise<Response> => {
-  if (request.method === "OPTIONS") {
-    return new Response("ok", {
-      status: 200,
-      headers: corsHeaders,
-    });
-  }
-
-  if (request.method !== "POST") {
-    return jsonResponse(
-      {
-        error: "Método não permitido.",
-      },
-      405,
-    );
-  }
+Deno.serve(async (request: Request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method !== "POST") return jsonResponse({ error: "Método não permitido." }, 405);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SB_PUBLISHABLE_KEY");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const authorization = request.headers.get("Authorization");
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) return jsonResponse({ error: "Configuração interna do Supabase ausente." }, 500);
+  if (!authorization) return jsonResponse({ error: "Sessão não encontrada." }, 401);
 
-  const anonKey =
-    Deno.env.get("SUPABASE_ANON_KEY") ??
-    Deno.env.get("SB_PUBLISHABLE_KEY");
-
-  const serviceRoleKey = Deno.env.get(
-    "SUPABASE_SERVICE_ROLE_KEY",
-  );
-
-  let adminClient: ReturnType<typeof createClient> | null =
-    null;
-
+  const authClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authorization } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
   let jobId: number | null = null;
 
   try {
-    console.log("1. Requisição recebida");
+    const { data: authData, error: authError } = await authClient.auth.getUser();
+    if (authError || !authData.user) return jsonResponse({ error: "Sessão inválida ou expirada." }, 401);
 
-    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-      console.error("Variáveis obrigatórias ausentes", {
-        hasSupabaseUrl: Boolean(supabaseUrl),
-        hasAnonKey: Boolean(anonKey),
-        hasServiceRoleKey: Boolean(serviceRoleKey),
-      });
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return jsonResponse({ error: "Corpo inválido." }, 400);
 
-      return jsonResponse(
-        {
-          error:
-            "Configuração interna do Supabase ausente na Edge Function.",
-        },
-        500,
-      );
-    }
-
-    const authorization = request.headers.get(
-      "Authorization",
-    );
-
-    if (!authorization) {
-      return jsonResponse(
-        {
-          error: "Sessão não encontrada.",
-        },
-        401,
-      );
-    }
-
-    const authClient = createClient(
-      supabaseUrl,
-      anonKey,
-      {
-        global: {
-          headers: {
-            Authorization: authorization,
-          },
-        },
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      },
-    );
-
-    adminClient = createClient(
-      supabaseUrl,
-      serviceRoleKey,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      },
-    );
-
-    /*
-     * 1. Valida o usuário autenticado
-     */
-    const {
-      data: authData,
-      error: authError,
-    } = await authClient.auth.getUser();
-
-    if (authError || !authData.user) {
-      console.error("Erro de autenticação", authError);
-
-      return jsonResponse(
-        {
-          error: "Sessão inválida ou expirada.",
-        },
-        401,
-      );
-    }
-
-    console.log("2. Usuário autenticado", {
-      authUserId: authData.user.id,
-    });
-
-    /*
-     * 2. Lê o corpo da requisição
-     */
-    const body = await request.json().catch(() => null);
-
-    if (!body || typeof body !== "object") {
-      return jsonResponse(
-        {
-          error: "Corpo da requisição inválido.",
-        },
-        400,
-      );
-    }
-
-    const apifyAccountId = Number(
-      body.apifyAccountId ??
-        body.apify_account_id ??
-        body.apifyAccountsId ??
-        body.apify_accounts_id,
-    );
-
-    const rawSearchTerms = Array.isArray(body.searchTerms)
-      ? body.searchTerms
-      : Array.isArray(body.search_terms)
-        ? body.search_terms
-        : [
-            body.search ??
-              body.searchQuery ??
-              body.search_query ??
-              "",
-          ];
-
-    const searchTerms = rawSearchTerms
-      .map((term: unknown) =>
-        String(term ?? "").trim()
-      )
-      .filter(
-        (term: string) => term.length > 0,
-      );
-
-    const locationQuery = String(
-      body.locationQuery ??
-        body.location_query ??
-        body.location ??
-        "",
-    ).trim();
-
-    const requestedLimit = Number(
-      body.maxCrawledPlacesPerSearch ??
-        body.requestedLimit ??
-        body.requested_limit ??
-        body.limit ??
-        50,
-    );
-
-    const limit = Math.min(
-      500,
-      Math.max(
-        1,
-        Number.isFinite(requestedLimit)
-          ? Math.floor(requestedLimit)
-          : 50,
-      ),
-    );
-
-    console.log("3. Parâmetros recebidos", {
-      apifyAccountId,
-      searchTerms,
-      locationQuery,
-      limit,
-    });
-
-    if (
-      !Number.isInteger(apifyAccountId) ||
-      apifyAccountId <= 0
-    ) {
-      return jsonResponse(
-        {
-          error:
-            "Selecione manualmente uma conta Apify.",
-        },
-        400,
-      );
-    }
-
-    if (searchTerms.length === 0) {
-      return jsonResponse(
-        {
-          error:
-            "Informe ao menos um termo de busca.",
-        },
-        400,
-      );
-    }
-
-    if (!locationQuery) {
-      return jsonResponse(
-        {
-          error:
-            "Informe a localização da busca.",
-        },
-        400,
-      );
-    }
-
-    /*
-     * 3. Resolve o usuário interno
-     */
-    const {
-      data: internalUser,
-      error: internalUserError,
-    } = await adminClient
-      .from("users")
-      .select("users_id")
-      .eq("auth_user_id", authData.user.id)
-      .maybeSingle();
-
-    if (internalUserError) {
-      console.error(
-        "Erro ao localizar usuário interno",
-        internalUserError,
-      );
-
-      return jsonResponse(
-        {
-          error:
-            internalUserError.message ||
-            "Não foi possível localizar o usuário interno.",
-          details:
-            internalUserError.details ?? null,
-          hint: internalUserError.hint ?? null,
-          code: internalUserError.code ?? null,
-        },
-        500,
-      );
-    }
-
-    if (!internalUser?.users_id) {
-      return jsonResponse(
-        {
-          error:
-            "Usuário interno não encontrado.",
-        },
-        403,
-      );
-    }
-
-    const usersId = Number(
-      internalUser.users_id,
-    );
-
-    console.log("4. Usuário interno resolvido", {
-      usersId,
-    });
-
-    /*
-     * 4. Busca a conta Apify escolhida
-     */
-    const {
-      data: account,
-      error: accountError,
-    } = await adminClient
-      .from("apify_accounts")
-      .select(`
-        apify_accounts_id,
-        users_id,
-        account_name,
-        token_secret,
-        is_active
-      `)
-      .eq(
-        "apify_accounts_id",
-        apifyAccountId,
-      )
-      .eq("users_id", usersId)
-      .maybeSingle();
-
-    if (accountError) {
-      console.error(
-        "Erro ao consultar conta Apify",
-        accountError,
-      );
-
-      return jsonResponse(
-        {
-          error:
-            accountError.message ||
-            "Não foi possível consultar a conta Apify.",
-          details: accountError.details ?? null,
-          hint: accountError.hint ?? null,
-          code: accountError.code ?? null,
-        },
-        500,
-      );
-    }
-
-    if (!account) {
-      return jsonResponse(
-        {
-          error:
-            "A conta Apify selecionada não existe ou não pertence ao usuário.",
-        },
-        404,
-      );
-    }
-
-    if (!account.is_active) {
-      return jsonResponse(
-        {
-          error:
-            "A conta Apify selecionada está desativada.",
-        },
-        400,
-      );
-    }
-
-    const apifyToken = String(
-      account.token_secret ?? "",
-    ).trim();
-
-    if (!apifyToken) {
-      return jsonResponse(
-        {
-          error:
-            "A conta selecionada não possui token Apify.",
-        },
-        400,
-      );
-    }
-
-    console.log("5. Conta Apify validada", {
-      accountId: account.apify_accounts_id,
-      accountName: account.account_name,
-    });
-
-    /*
-     * 5. Cria o job como pendente/iniciando
-     */
-    const startedAt = new Date().toISOString();
+    const accountId = Number(body.apifyAccountId ?? body.apify_accounts_id);
     const branchId = Number(body.branchId ?? body.branches_id);
-    const branchName = String(body.branchName ?? body.branch_name ?? searchTerms[0] ?? "").trim();
+    const cityId = Number(body.locationCityId ?? body.cities_id);
+    const requestedLimit = Number(body.maxCrawledPlacesPerSearch ?? body.limit ?? 50);
+    const limit = Math.min(500, Math.max(1, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 50));
+    const searchTerms = normalizeTerms(body.searchTerms ?? body.search_terms ?? body.search);
 
-    const {
-      data: job,
-      error: jobError,
-    } = await adminClient
-      .from("apify_import_jobs")
-      .insert({
-        users_id: usersId,
+    if (!Number.isInteger(accountId) || accountId <= 0) return jsonResponse({ error: "Selecione uma conta Apify válida." }, 400);
+    if (!Number.isInteger(branchId) || branchId <= 0) return jsonResponse({ error: "Selecione um ramo cadastrado." }, 400);
+    if (!Number.isInteger(cityId) || cityId <= 0) return jsonResponse({ error: "Selecione uma localidade cadastrada." }, 400);
+    if (!searchTerms.length) return jsonResponse({ error: "Informe ao menos um termo de busca válido." }, 400);
 
-        apify_accounts_id:
-          account.apify_accounts_id,
+    const { data: internalUser, error: userError } = await admin.from("users").select("users_id").eq("auth_user_id", authData.user.id).maybeSingle();
+    if (userError) throw new Error(userError.message);
+    if (!internalUser?.users_id) return jsonResponse({ error: "Usuário interno não encontrado." }, 403);
+    const usersId = Number(internalUser.users_id);
 
-        apify_job_status_id:
-          JOB_STATUS.PENDING,
+    const [{ data: account, error: accountError }, { data: branch, error: branchError }, { data: city, error: cityError }] = await Promise.all([
+      admin.from("apify_accounts").select("apify_accounts_id, account_name, token_secret, is_active").eq("apify_accounts_id", accountId).eq("users_id", usersId).maybeSingle(),
+      admin.from("branches").select("branches_id, branches_name, status_id").eq("branches_id", branchId).maybeSingle(),
+      admin.from("cities").select("cities_id, cities_name, states_id, states:states_id(states_id, states_name, states_code)").eq("cities_id", cityId).maybeSingle(),
+    ]);
+    if (accountError) throw new Error(accountError.message);
+    if (branchError) throw new Error(branchError.message);
+    if (cityError) throw new Error(cityError.message);
+    if (!account) return jsonResponse({ error: "Conta Apify não encontrada ou não pertence ao usuário." }, 404);
+    if (!account.is_active) return jsonResponse({ error: "A conta Apify selecionada está desativada." }, 409);
+    if (!branch || Number(branch.status_id ?? 1) !== 1) return jsonResponse({ error: "Ramo não encontrado ou inativo." }, 404);
+    if (!city) return jsonResponse({ error: "Localidade não encontrada." }, 404);
 
-        actor_id: ACTOR_DATABASE_NAME,
+    const token = String(account.token_secret ?? "").trim();
+    if (!token) return jsonResponse({ error: "A conta selecionada não possui token Apify." }, 409);
 
-        search_query:
-          searchTerms.join(" | "),
+    const state = Array.isArray(city.states) ? city.states[0] : city.states;
+    const cityName = String(city.cities_name ?? "").trim();
+    const stateCode = String(state?.states_code ?? state?.states_name ?? "").trim();
+    if (!cityName || !stateCode) return jsonResponse({ error: "A localidade selecionada está incompleta no banco." }, 409);
+    const locationQuery = `${cityName}, ${stateCode}`;
+    const branchName = String(branch.branches_name ?? body.branchName ?? "").trim();
 
-        search_terms: searchTerms,
-
-        location_query: locationQuery,
-
-        branches_id: Number.isInteger(branchId) && branchId > 0 ? branchId : null,
-
-        branch_name: branchName || null,
-
-        requested_limit: limit,
-
-        status: "starting",
-
-        started_at: startedAt,
-
-        updated_at: startedAt,
-      })
-      .select("apify_import_jobs_id")
-      .single();
-
-    if (jobError || !job) {
-      console.error(
-        "Erro ao criar job",
-        jobError,
-      );
-
-      return jsonResponse(
-        {
-          error:
-            jobError?.message ||
-            "Não foi possível registrar a execução da Apify.",
-          details: jobError?.details ?? null,
-          hint: jobError?.hint ?? null,
-          code: jobError?.code ?? null,
-        },
-        500,
-      );
+    const { data: existing, error: existingError } = await admin.from("apify_import_jobs")
+      .select("apify_import_jobs_id, external_run_id, external_dataset_id, status")
+      .eq("users_id", usersId)
+      .eq("branches_id", branchId)
+      .eq("location_query", locationQuery)
+      .in("status", ["starting", "ready", "running"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existingError) throw new Error(existingError.message);
+    if (existing?.external_run_id) {
+      return jsonResponse({
+        success: true,
+        message: "Já existe uma coleta ativa para este ramo e localidade.",
+        jobId: Number(existing.apify_import_jobs_id),
+        runId: String(existing.external_run_id),
+        datasetId: existing.external_dataset_id ? String(existing.external_dataset_id) : null,
+        status: normalizeStatus(existing.status),
+        accountId,
+        accountName: String(account.account_name ?? "Conta Apify"),
+        reusedExistingJob: true,
+      });
     }
 
-    jobId = Number(
-      job.apify_import_jobs_id,
-    );
-
-    console.log("6. Job criado", {
-      jobId,
-      apifyJobStatusId:
-        JOB_STATUS.PENDING,
+    const startedAt = new Date().toISOString();
+    const { data: job, error: jobError } = await admin.from("apify_import_jobs").insert({
+      users_id: usersId,
+      apify_accounts_id: accountId,
+      apify_job_status_id: JOB_STATUS.PENDING,
+      actor_id: ACTOR_DATABASE_NAME,
+      search_query: searchTerms.join(" | "),
+      search_terms: searchTerms,
+      location_query: locationQuery,
+      branches_id: branchId,
+      branch_name: branchName,
+      requested_limit: limit,
       status: "starting",
-    });
+      started_at: startedAt,
+      updated_at: startedAt,
+    }).select("apify_import_jobs_id").single();
+    if (jobError || !job) throw new Error(jobError?.message ?? "Não foi possível registrar a execução da Apify.");
+    jobId = Number(job.apify_import_jobs_id);
 
-    /*
-     * 6. Atualiza para processando/running
-     *
-     * A constraint aceita:
-     * starting
-     * ready
-     * running
-     * succeeded
-     * failed
-     * aborted
-     * timed_out
-     */
-    const processingAt =
-      new Date().toISOString();
-
-    const {
-      error: processingJobError,
-    } = await adminClient
-      .from("apify_import_jobs")
-      .update({
-        apify_job_status_id:
-          JOB_STATUS.PROCESSING,
-
-        status: "running",
-
-        updated_at: processingAt,
-      })
-      .eq(
-        "apify_import_jobs_id",
-        jobId,
-      );
-
-    if (processingJobError) {
-      console.error(
-        "Erro ao atualizar job para running",
-        processingJobError,
-      );
-
-      throw new Error(
-        processingJobError.message ||
-          "Não foi possível atualizar o job para running.",
-      );
-    }
-
-    console.log(
-      "7. Job atualizado para running",
-      {
-        jobId,
-        apifyJobStatusId:
-          JOB_STATUS.PROCESSING,
-        status: "running",
-      },
-    );
-
-    /*
-     * 7. Payload do Google Maps Extractor
-     */
     const actorInput = {
       enableCompetitorAnalysis: false,
-
       includeWebResults: false,
-
       language: "pt-BR",
-
       locationQuery,
-
       maxCrawledPlacesPerSearch: limit,
-
       maximumLeadsEnrichmentRecords: 0,
-
       scrapeContacts: false,
-
       scrapeDirectories: false,
-
       scrapeImageAuthors: false,
-
       scrapeOrderOnline: false,
-
       scrapePlaceDetailPage: false,
-
       scrapeReviewsPersonalData: true,
-
-      scrapeSocialMediaProfiles: {
-        facebooks: false,
-        instagrams: false,
-        tiktoks: false,
-        twitters: false,
-        youtubes: false,
-      },
-
+      scrapeSocialMediaProfiles: { facebooks: false, instagrams: false, tiktoks: false, twitters: false, youtubes: false },
       scrapeTableReservationProvider: false,
-
       searchStringsArray: searchTerms,
-
       skipClosedPlaces: false,
-
       verifyLeadsEnrichmentEmails: false,
     };
 
-    /*
-     * 8. Chama a Apify
-     *
-     * Não existe consulta à tabela app_settings.
-     */
-    const apifyUrl =
-      `https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs` +
-      `?token=${encodeURIComponent(apifyToken)}`;
-
-    console.log(
-      "8. Iniciando execução na Apify",
-      {
-        actorId: APIFY_ACTOR_ID,
-        searchTerms,
-        locationQuery,
-        limit,
-      },
-    );
-
-    console.log(
-      "Payload enviado para Apify:",
-      JSON.stringify(actorInput, null, 2),
-    );
-
-    const apifyResponse = await fetch(
-      apifyUrl,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-        body: JSON.stringify(actorInput),
-      },
-    );
-
-    const responseText =
-      await apifyResponse.text();
-
-    let apifyPayload:
-      | Record<string, any>
-      | null = null;
-
-    if (responseText) {
-      try {
-        apifyPayload =
-          JSON.parse(responseText);
-      } catch {
-        apifyPayload = {
-          rawResponse: responseText,
-        };
-      }
+    const response = await fetchWithTimeout(`https://api.apify.com/v2/acts/${APIFY_ACTOR_ID}/runs`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(actorInput),
+    }, 30000);
+    const payload = await response.json().catch(() => null) as Record<string, any> | null;
+    if (!response.ok) {
+      const message = String(payload?.error?.message ?? `A Apify retornou HTTP ${response.status}.`);
+      const failedAt = new Date().toISOString();
+      await admin.from("apify_import_jobs").update({ apify_job_status_id: JOB_STATUS.ERROR, status: "failed", error_message: message, finished_at: failedAt, updated_at: failedAt }).eq("apify_import_jobs_id", jobId).eq("users_id", usersId);
+      await admin.from("apify_accounts").update({ connection_status: response.status === 401 || response.status === 403 ? "error" : "not_verified", last_error: message, last_checked_at: failedAt, updated_at: failedAt }).eq("apify_accounts_id", accountId).eq("users_id", usersId);
+      return jsonResponse({ error: message, jobId }, response.status === 401 || response.status === 403 ? 401 : 502);
     }
 
-    /*
-     * 9. Trata erro da Apify
-     */
-    if (!apifyResponse.ok) {
-      const apifyErrorMessage = String(
-        apifyPayload?.error?.message ??
-          apifyPayload?.message ??
-          apifyPayload?.rawResponse ??
-          `A Apify retornou HTTP ${apifyResponse.status}.`,
-      );
-
-      console.error(
-        "Erro retornado pela Apify",
-        {
-          status: apifyResponse.status,
-          message: apifyErrorMessage,
-          payload: apifyPayload,
-        },
-      );
-
-      const failedAt =
-        new Date().toISOString();
-
-      await adminClient
-        .from("apify_import_jobs")
-        .update({
-          apify_job_status_id:
-            JOB_STATUS.ERROR,
-
-          status: "failed",
-
-          error_message:
-            apifyErrorMessage,
-
-          finished_at: failedAt,
-
-          updated_at: failedAt,
-        })
-        .eq(
-          "apify_import_jobs_id",
-          jobId,
-        );
-
-      await adminClient
-        .from("apify_accounts")
-        .update({
-          connection_status:
-            apifyResponse.status === 401 ||
-            apifyResponse.status === 403
-              ? "error"
-              : "not_verified",
-
-          last_error:
-            apifyErrorMessage,
-
-          last_checked_at:
-            failedAt,
-
-          updated_at: failedAt,
-        })
-        .eq(
-          "apify_accounts_id",
-          account.apify_accounts_id,
-        );
-
-      return jsonResponse(
-        {
-          error: apifyErrorMessage,
-          apifyStatus:
-            apifyResponse.status,
-          jobId,
-        },
-        apifyResponse.status === 401 ||
-          apifyResponse.status === 403
-          ? 401
-          : 502,
-      );
-    }
-
-    const run = apifyPayload?.data;
-
-    if (!run?.id) {
-      const message =
-        "A Apify respondeu, mas não retornou o ID da execução.";
-
-      console.error(message, {
-        response: apifyPayload,
-      });
-
-      const failedAt =
-        new Date().toISOString();
-
-      await adminClient
-        .from("apify_import_jobs")
-        .update({
-          apify_job_status_id:
-            JOB_STATUS.ERROR,
-
-          status: "failed",
-
-          error_message: message,
-
-          finished_at: failedAt,
-
-          updated_at: failedAt,
-        })
-        .eq(
-          "apify_import_jobs_id",
-          jobId,
-        );
-
-      return jsonResponse(
-        {
-          error: message,
-          jobId,
-        },
-        502,
-      );
-    }
-
-    /*
-     * 10. Normaliza status retornado pela Apify
-     */
-    const rawRunStatus = String(
-      run.status ?? "RUNNING",
-    ).toUpperCase();
-
-    const allowedStatuses = new Set([
-      "starting",
-      "ready",
-      "running",
-      "succeeded",
-      "failed",
-      "aborted",
-      "timed_out",
-    ]);
-
-    const normalizedRunStatus =
-      rawRunStatus === "SUCCEEDED"
-        ? "succeeded"
-        : rawRunStatus === "FAILED"
-          ? "failed"
-          : rawRunStatus === "ABORTED"
-            ? "aborted"
-            : rawRunStatus === "TIMED-OUT" ||
-                rawRunStatus === "TIMED_OUT"
-              ? "timed_out"
-              : rawRunStatus === "READY"
-                ? "ready"
-                : rawRunStatus === "RUNNING"
-                  ? "running"
-                  : rawRunStatus === "STARTING"
-                    ? "starting"
-                    : "running";
-
-    const safeRunStatus =
-      allowedStatuses.has(
-        normalizedRunStatus,
-      )
-        ? normalizedRunStatus
-        : "running";
-
-    let numericJobStatus:
-      | number
-      | null =
-      JOB_STATUS.PROCESSING;
-
-    if (safeRunStatus === "succeeded") {
-      numericJobStatus =
-        JOB_STATUS.COMPLETED;
-    } else if (
-      safeRunStatus === "failed" ||
-      safeRunStatus === "timed_out"
-    ) {
-      numericJobStatus =
-        JOB_STATUS.ERROR;
-    } else if (
-      safeRunStatus === "aborted"
-    ) {
-      numericJobStatus =
-        JOB_STATUS.CANCELED;
-    } else if (
-      safeRunStatus === "starting" ||
-      safeRunStatus === "ready"
-    ) {
-      numericJobStatus =
-        JOB_STATUS.PENDING;
-    }
-
-    const updatedAt =
-      new Date().toISOString();
-
-    const jobUpdate: Record<
-      string,
-      unknown
-    > = {
-      apify_job_status_id:
-        numericJobStatus,
-
+    const run = payload?.data;
+    if (!run?.id) throw new Error("A Apify respondeu sem o ID da execução.");
+    const status = normalizeStatus(run.status);
+    const updatedAt = new Date().toISOString();
+    const finished = ["succeeded", "failed", "aborted", "timed_out"].includes(status);
+    const { error: updateError } = await admin.from("apify_import_jobs").update({
+      apify_job_status_id: numericStatus(status),
       external_run_id: run.id,
-
-      external_dataset_id:
-        run.defaultDatasetId ?? null,
-
-      status: safeRunStatus,
-
+      external_dataset_id: run.defaultDatasetId ?? null,
+      status,
+      finished_at: finished ? String(run.finishedAt ?? updatedAt) : null,
       updated_at: updatedAt,
-    };
+    }).eq("apify_import_jobs_id", jobId).eq("users_id", usersId);
+    if (updateError) throw new Error(`A coleta foi iniciada, mas o histórico não pôde ser atualizado: ${updateError.message}`);
 
-    if (
-      safeRunStatus === "succeeded" ||
-      safeRunStatus === "failed" ||
-      safeRunStatus === "aborted" ||
-      safeRunStatus === "timed_out"
-    ) {
-      jobUpdate.finished_at =
-        updatedAt;
-    }
+    await admin.from("apify_accounts").update({ connection_status: "connected", last_checked_at: updatedAt, last_used_at: updatedAt, last_error: null, updated_at: updatedAt }).eq("apify_accounts_id", accountId).eq("users_id", usersId);
 
-    const {
-      error: updateJobError,
-    } = await adminClient
-      .from("apify_import_jobs")
-      .update(jobUpdate)
-      .eq(
-        "apify_import_jobs_id",
-        jobId,
-      );
-
-    if (updateJobError) {
-      console.error(
-        "Execução iniciada, mas houve erro ao atualizar o job",
-        updateJobError,
-      );
-
-      return jsonResponse(
-        {
-          error:
-            "A coleta foi iniciada na Apify, mas o CRM não conseguiu atualizar o histórico.",
-
-          details:
-            updateJobError.message,
-
-          hint:
-            updateJobError.hint ?? null,
-
-          code:
-            updateJobError.code ?? null,
-
-          runId: run.id,
-
-          datasetId:
-            run.defaultDatasetId ?? null,
-
-          jobId,
-        },
-        500,
-      );
-    }
-
-    /*
-     * 11. Atualiza dados da conta Apify
-     */
-    const {
-      error: accountUpdateError,
-    } = await adminClient
-      .from("apify_accounts")
-      .update({
-        connection_status:
-          "connected",
-
-        last_checked_at:
-          updatedAt,
-
-        last_used_at:
-          updatedAt,
-
-        last_error: null,
-
-        updated_at: updatedAt,
-      })
-      .eq(
-        "apify_accounts_id",
-        account.apify_accounts_id,
-      );
-
-    if (accountUpdateError) {
-      console.error(
-        "Erro não bloqueante ao atualizar conta Apify",
-        accountUpdateError,
-      );
-    }
-
-    console.log(
-      "9. Execução iniciada com sucesso",
-      {
-        jobId,
-        runId: run.id,
-        datasetId:
-          run.defaultDatasetId ?? null,
-        status: safeRunStatus,
-        apifyJobStatusId:
-          numericJobStatus,
-      },
-    );
-
-    return jsonResponse(
-      {
-        success: true,
-
-        message:
-          "Coleta iniciada com sucesso.",
-
-        jobId,
-
-        runId: run.id,
-
-        datasetId:
-          run.defaultDatasetId ?? null,
-
-        status: safeRunStatus,
-
-        apifyJobStatusId:
-          numericJobStatus,
-
-        accountName:
-          account.account_name,
-
-        account: {
-          id:
-            account.apify_accounts_id,
-
-          name:
-            account.account_name,
-        },
-      },
-      200,
-    );
+    return jsonResponse({
+      success: true,
+      message: "Coleta iniciada com sucesso.",
+      jobId,
+      runId: String(run.id),
+      datasetId: run.defaultDatasetId ?? null,
+      status,
+      apifyJobStatusId: numericStatus(status),
+      accountId,
+      accountName: String(account.account_name ?? "Conta Apify"),
+      account: { id: accountId, name: String(account.account_name ?? "Conta Apify") },
+    });
   } catch (error) {
-    const message =
-      getErrorMessage(error);
-
-    console.error(
-      "ERRO APIFY GOOGLE MAPS START:",
-      error,
-    );
-
-    /*
-     * Registra o job como erro
-     */
-    if (jobId && adminClient) {
-      const failedAt =
-        new Date().toISOString();
-
-      try {
-        const {
-          error: failedJobError,
-        } = await adminClient
-          .from("apify_import_jobs")
-          .update({
-            apify_job_status_id:
-              JOB_STATUS.ERROR,
-
-            status: "failed",
-
-            error_message: message,
-
-            finished_at: failedAt,
-
-            updated_at: failedAt,
-          })
-          .eq(
-            "apify_import_jobs_id",
-            jobId,
-          );
-
-        if (failedJobError) {
-          console.error(
-            "Erro ao registrar falha no job",
-            failedJobError,
-          );
-        }
-      } catch (updateError) {
-        console.error(
-          "Erro inesperado ao registrar falha no job",
-          updateError,
-        );
-      }
+    const message = error instanceof DOMException && error.name === "AbortError" ? "Tempo limite ao iniciar a coleta na Apify." : messageOf(error);
+    if (jobId) {
+      const failedAt = new Date().toISOString();
+      await admin.from("apify_import_jobs").update({ apify_job_status_id: JOB_STATUS.ERROR, status: "failed", error_message: message, finished_at: failedAt, updated_at: failedAt }).eq("apify_import_jobs_id", jobId);
     }
-
-    return jsonResponse(
-      {
-        error: message,
-        jobId,
-      },
-      500,
-    );
+    console.error("ERRO APIFY GOOGLE MAPS START:", error);
+    return jsonResponse({ error: message, jobId }, 500);
   }
 });

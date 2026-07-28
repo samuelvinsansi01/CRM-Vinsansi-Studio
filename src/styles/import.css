@@ -563,3 +563,9 @@
 .apify-json-viewer { max-height: 62vh; overflow: auto; padding: 16px; border-radius: 12px; background: color-mix(in srgb, var(--surface-card) 78%, black); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 960px) { .import-extractor-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .import-extractor-fields { grid-template-columns: 1fr; } }
+
+/* F02 — aquisição Apify */
+.import-extractor-fields textarea.field__control { min-height: 112px; resize: vertical; }
+.apify-run-actions { display: flex; gap: 8px; align-items: center; }
+.apify-runs-table { min-width: 1320px; }
+.apify-run-summary .table-message { margin-top: 8px; white-space: normal; }

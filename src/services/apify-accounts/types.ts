@@ -18,3 +18,11 @@ export type SaveApifyAccountInput = {
   token?: string;
   active: boolean;
 };
+
+export type CheckApifyAccountResult = {
+  accountId: number;
+  connected: boolean;
+  username: string;
+  plan: string;
+  checkedAt: string;
+};

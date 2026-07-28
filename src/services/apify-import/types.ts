@@ -1,10 +1,20 @@
+export type ApifyJobStatus =
+  | 'starting'
+  | 'ready'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'aborted'
+  | 'timed_out';
+
 export type StartGoogleMapsImportInput = {
   apifyAccountId: number;
   searchTerms: string[];
   location: string;
+  locationCityId: number;
   limit: number;
-  branchId?: number;
-  branchName?: string;
+  branchId: number;
+  branchName: string;
 };
 
 export type StartGoogleMapsImportResult = {
@@ -13,10 +23,11 @@ export type StartGoogleMapsImportResult = {
   jobId: number;
   runId: string;
   datasetId: string | null;
-  status: string;
+  status: ApifyJobStatus;
   apifyJobStatusId?: number | null;
   accountId?: number;
   accountName: string;
+  reusedExistingJob?: boolean;
   account?: {
     id: number;
     name: string;
@@ -28,39 +39,59 @@ export type SyncGoogleMapsImportResult = {
   jobId: number;
   runId: string;
   datasetId: string | null;
-  status: string;
+  status: ApifyJobStatus;
   imported: boolean;
   items: unknown[] | null;
+  totalItems?: number;
+  previewTruncated?: boolean;
+  claimToken?: string;
+  claimedAt?: string;
 };
 
 export type FinalizeGoogleMapsImportInput = {
   jobId: number;
+  claimToken: string;
+  claimedAt: string;
   processed: number;
   imported: number;
   duplicates: number;
   rejected: number;
 };
 
+export type ReleaseGoogleMapsImportClaimInput = {
+  jobId: number;
+  claimToken: string;
+  claimedAt: string;
+  reason?: string;
+};
+
 export type PendingGoogleMapsJob = {
   jobId: number;
   runId: string;
-  status: string;
+  status: ApifyJobStatus;
 };
 
 export type ApifyImportJob = {
   jobId: number;
+  accountId: number | null;
   accountName: string;
   branchId: number | null;
   branchName: string;
   location: string;
-  status: string;
+  searchTerms: string[];
+  requestedLimit: number;
+  status: ApifyJobStatus;
   runId: string | null;
   datasetId: string | null;
   totalReceived: number;
   totalImported: number;
   totalDuplicates: number;
   totalRejected: number;
+  errorMessage: string;
+  importedAt: string | null;
+  startedAt: string | null;
   createdAt: string;
+  updatedAt: string;
   finishedAt: string | null;
 };
 

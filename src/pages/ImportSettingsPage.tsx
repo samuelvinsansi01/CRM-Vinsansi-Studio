@@ -51,7 +51,7 @@ function BooleanSetting({ label, description, value, onChange }: { label: string
 
 
 function ApifyAccountsPanel({ pushToast }: { pushToast: (toast: Omit<ToastItem, 'id'>) => void }) {
-  const { accounts, loading, saving, error, save, remove } = useApifyAccounts();
+  const { accounts, loading, saving, checkingId, error, save, check, remove } = useApifyAccounts();
   const [editingId, setEditingId] = useState<number | undefined>();
   const [name, setName] = useState('');
   const [token, setToken] = useState('');
@@ -78,9 +78,19 @@ function ApifyAccountsPanel({ pushToast }: { pushToast: (toast: Omit<ToastItem, 
       return;
     }
     try {
-      await save({ id: editingId, name, token: token || undefined, active });
-      pushToast({ title: editingId ? 'Conta atualizada' : 'Conta adicionada', description: 'A conta já está disponível para seleção manual.', tone: 'success' });
+      const wasEditing = Boolean(editingId);
+      const savedId = await save({ id: editingId, name, token: token || undefined, active });
       resetForm();
+      if (!active) {
+        pushToast({ title: wasEditing ? 'Conta atualizada' : 'Conta adicionada', description: 'A conta foi salva desativada.', tone: 'success' });
+        return;
+      }
+      try {
+        const result = await check(savedId);
+        pushToast({ title: wasEditing ? 'Conta atualizada e verificada' : 'Conta adicionada e verificada', description: result.username ? `Conectada como ${result.username}.` : 'Token validado com sucesso na Apify.', tone: 'success' });
+      } catch (checkError) {
+        pushToast({ title: 'Conta salva, mas não conectada', description: checkError instanceof Error ? checkError.message : 'Teste o token novamente.', tone: 'warning' });
+      }
     } catch (err) {
       pushToast({ title: 'Não foi possível salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
@@ -93,6 +103,15 @@ function ApifyAccountsPanel({ pushToast }: { pushToast: (toast: Omit<ToastItem, 
       pushToast({ title: 'Conta removida', description: 'A conexão Apify foi removida.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Não foi possível remover', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
+  };
+
+  const checkAccount = async (id: number) => {
+    try {
+      const result = await check(id);
+      pushToast({ title: 'Conta conectada', description: result.username ? `Token válido para ${result.username}.` : 'Token validado com sucesso na Apify.', tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Falha na conexão Apify', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
   };
 
@@ -121,9 +140,11 @@ function ApifyAccountsPanel({ pushToast }: { pushToast: (toast: Omit<ToastItem, 
             <div className="import-apify-account" key={account.id}>
               <div>
                 <strong>{account.name}</strong>
-                <span>{account.tokenMask || 'Token protegido'} · {account.active ? 'Ativa' : 'Desativada'}</span>
+                <span>{account.tokenMask || 'Token protegido'} · {account.active ? 'Ativa' : 'Desativada'} · {account.connectionStatus === 'connected' ? 'Conectada' : account.connectionStatus === 'error' ? 'Com erro' : 'Não verificada'}{account.externalUsername ? ` · ${account.externalUsername}` : ''}</span>
+                {account.lastError ? <small className="settings-note">{account.lastError}</small> : null}
               </div>
               <div className="import-apify-account__actions">
+                <Button size="sm" variant="secondary" loading={checkingId === account.id} onClick={() => void checkAccount(account.id)}>Testar</Button>
                 <Button size="sm" variant="secondary" onClick={() => edit(account)}>Editar</Button>
                 <Button size="sm" variant="danger" iconLeft={Trash2} onClick={() => void deleteAccount(account.id)}>Remover</Button>
               </div>
