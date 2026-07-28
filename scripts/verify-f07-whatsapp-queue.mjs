@@ -30,13 +30,16 @@ for (const status of ['error', 'invalid', 'sent']) {
 assert(repository.includes(".eq('status', lead.status)") && repository.includes(".select('id')"), 'Atualizações da fila precisam usar compare-and-set.');
 assert(queuePage.includes('Array.from(new Set(batches.map((batch) => batch.chip)'), 'Ações globais devem mirar somente chips visíveis na fila.');
 
-assert(/const VERSION = '2\.(?:7|8)\.0'/.test(worker), 'Worker precisa estar na versão 2.7.0 ou superior compatível.');
+const workerVersion = JSON.parse(workerPackage).version;
+const [workerMajor, workerMinor] = workerVersion.split('.').map(Number);
+assert(workerMajor > 2 || (workerMajor === 2 && workerMinor >= 7), 'Worker precisa estar na versão 2.7.0 ou superior compatível.');
+assert(worker.includes(`const VERSION = '${workerVersion}'`), 'Versão do código e package.json do Worker precisam coincidir.');
 assert(worker.includes('batches_by_chip') && worker.includes('controlBatchesFromPayload'), 'Worker precisa manter controles independentes por chip.');
 assert(worker.includes('claimQueueItem') && worker.includes("['queued', 'ready_to_dispatch'"), 'Scheduler precisa fazer claim condicional do item.');
 assert(worker.includes(".from('leads')") && worker.includes('lead_status_id: 5') && worker.includes(".eq('lead_status_id', 4)"), 'Worker precisa atualizar o lead canônico de 4 para 5.');
 assert(worker.includes('dispatch_user_required') && worker.includes('queue_item_not_available_for_current_user'), 'Disparo do Worker precisa validar o usuário.');
 assert(worker.includes('for (const number of [1, 2, 3, 4])'), 'Worker precisa enviar quatro mensagens.');
-assert(['2.7.0', '2.8.0'].includes(JSON.parse(workerPackage).version), 'package.json do Worker precisa refletir versão compatível com o F07.');
+
 
 const migrations = await readdir(resolve(root, 'supabase/migrations')).catch(() => []);
 assert(!migrations.some((name) => name.includes('f07') || name.includes('whatsapp_queue_control')), 'F07 não pode adicionar migration estrutural.');

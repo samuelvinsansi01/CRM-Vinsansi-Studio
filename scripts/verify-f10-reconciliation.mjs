@@ -61,7 +61,16 @@ const compile = (source, fileName, module = ts.ModuleKind.CommonJS) => {
   return result.outputText;
 };
 
-const statusSandbox = { module: { exports: {} }, exports: {} };
+const statusSandbox = {
+  module: { exports: {} },
+  exports: {},
+  require: (specifier) => {
+    if (specifier === './leadStatus') return {
+      LEAD_STATUS: { IMPORTED: 1, VALIDATED: 2, PRE_SEND: 3, QUEUED: 4, SENT: 5, INVALID: 6, DUPLICATE: 7, ARCHIVED: 8 },
+    };
+    throw new Error(`Import inesperado no status mapper: ${specifier}`);
+  },
+};
 statusSandbox.exports = statusSandbox.module.exports;
 vm.runInNewContext(compile(read('src/services/status/status.mapper.ts'), 'status.mapper.ts'), statusSandbox, { filename: 'status.mapper.ts' });
 const statusExports = statusSandbox.module.exports;

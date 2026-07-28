@@ -33,7 +33,7 @@ function send(res: ApiResponse, status: number, payload: unknown) {
 async function authenticate(req: ApiRequest): Promise<{ client: SupabaseClient; publicUserId: string }> {
   const token = bearer(req);
   const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const key = envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_ANON_KEY');
+  const key = envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY');
   if (!token) throw new Error('auth_required');
   if (!url || !key) throw new Error('supabase_auth_backend_not_configured');
   const client = createClient(url, key, {

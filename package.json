@@ -1,6 +1,6 @@
 {
   "name": "gease-visual-shell",
-  "version": "3.44.0",
+  "version": "3.60.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,7 +18,9 @@
     "verify:f09": "node scripts/verify-f09-base-permanente.mjs",
     "verify:f10": "node scripts/verify-f10-reconciliation.mjs",
     "verify:f01": "node scripts/verify-f01-operational-config.mjs",
-    "verify:f02": "node scripts/verify-f02-apify-acquisition.mjs"
+    "verify:f02": "node scripts/verify-f02-apify-acquisition.mjs",
+    "verify:final": "node scripts/verify-final-consolidation.mjs",
+    "verify:all": "npm run verify:f01 && npm run verify:f02 && npm run verify:existing-schema-import && npm run verify:f04-routing && npm run verify:f05 && npm run verify:f06 && npm run verify:f07 && npm run verify:f08 && npm run verify:f09 && npm run verify:f10 && npm run verify:final"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

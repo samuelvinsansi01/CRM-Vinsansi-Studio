@@ -3,7 +3,6 @@ export type InstagramQueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent'
 export type InstagramQueueLead = {
   id: string;
   lead_id: string;
-  sourcePreSendId?: string;
   order: number;
   position: number;
   company: string;
@@ -60,7 +59,6 @@ export type InstagramQueueLead = {
 export type CreateInstagramQueueLeadInput = Omit<
   InstagramQueueLead,
   | 'id'
-  | 'lead_id'
   | 'order'
   | 'position'
   | 'company_name'
@@ -81,7 +79,6 @@ export type CreateInstagramQueueLeadInput = Omit<
   | 'created_at'
   | 'updated_at'
 > & {
-  lead_id?: string;
   batchLimit?: number;
   scheduled_date?: string;
   template_id?: string;

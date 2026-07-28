@@ -11,9 +11,6 @@ export interface WhatsAppGateway {
   send(leads: WhatsAppQueueLead[]): Promise<WhatsAppGatewayResult[]>;
 }
 
-function isBrowserRuntime() {
-  return typeof window !== 'undefined' && typeof document !== 'undefined';
-}
 
 /**
  * O navegador nunca conversa diretamente com o Worker exposto no Tunnel.
@@ -36,11 +33,6 @@ async function authenticatedHeaders() {
   return headers;
 }
 
-export const mockWhatsAppGateway: WhatsAppGateway = {
-  async send(leads) {
-    return leads.map((lead) => ({ leadId: lead.id, status: 'sent' }));
-  },
-};
 
 export const internalWorkerWhatsAppGateway: WhatsAppGateway = {
   async send(leads) {
@@ -75,4 +67,4 @@ export const internalWorkerWhatsAppGateway: WhatsAppGateway = {
   },
 };
 
-export const whatsappGateway: WhatsAppGateway = isBrowserRuntime() ? internalWorkerWhatsAppGateway : mockWhatsAppGateway;
+export const whatsappGateway: WhatsAppGateway = internalWorkerWhatsAppGateway;

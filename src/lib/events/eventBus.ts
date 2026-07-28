@@ -2,7 +2,7 @@ export type LeadCertoEventMap = {
   'config:changed': { kind: 'chips' | 'instagram' | 'branches' | 'templates' };
   'import-settings:changed': { source: 'settings' | 'reset' | 'branches' };
   'dispatch-settings:changed': { source: 'settings' | 'reset' };
-  'import:changed': { source: 'manual' | 'json' | 'move' | 'remove' | 'update' | 'pre-send' | 'mark-sent' };
+  'import:changed': { source: 'manual' | 'json' | 'move' | 'remove' | 'update' | 'mark-sent' };
   'pre-send:changed': { action: 'move-to-queue' | 'validate' | 'archive' | 'update' | 'sent' | 'rollover' | 'fill' | 'whatsapp-invalid-return' | 'whatsapp-validation-review' | 'whatsapp-revalidate' | 'whatsapp-revalidation-review' };
   'whatsapp-queue:changed': { action: 'send' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'update' | 'sending' | 'worker-sent' | 'error' };
   'instagram-queue:changed': { action: 'send' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'update' | 'sending' | 'worker-sent' | 'error' };

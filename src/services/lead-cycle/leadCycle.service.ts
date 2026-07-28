@@ -1,13 +1,11 @@
-import { getSupabaseClient } from '../../lib/supabase';
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
-import { getCurrentUserId } from '../../repositories/supabase.helpers';
 import type { LeadDatabaseRow, LeadStatusId, LeadStatusName } from '../../types/lead.types';
+import { LEAD_STATUS } from '../status/leadStatus';
 import { isRoutingNoop, routingDecision, validateRoutingCommand } from './leadRouting.rules';
 import type {
   LeadCycleLead,
-  LeadCycleUpdate,
   LeadRoutingCommand,
   LeadRoutingFailure,
   LeadRoutingResult,
@@ -50,27 +48,6 @@ async function listByStatuses(statusIds: LeadStatusId[], channelId?: 1 | 2): Pro
   return (await supabaseLeadCycleRepository.listByStatuses(statusIds, channelId)).map(mapRow);
 }
 
-/**
- * API temporária para os fluxos que ainda não foram migrados para comandos.
- * O F04 usa exclusivamente executeRoutingCommand.
- */
-async function update(ids: string[], input: LeadCycleUpdate, expectedStatuses?: LeadStatusId[]) {
-  if (!ids.length) return;
-  const numericIds = Array.from(new Set(ids)).map(Number);
-  if (numericIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
-    throw new Error('Um ou mais identificadores de lead são inválidos.');
-  }
-
-  const userId = await getCurrentUserId();
-  let query = getSupabaseClient()
-    .from('leads')
-    .update({ ...input, leads_updated_at: new Date().toISOString() })
-    .in('leads_id', numericIds)
-    .eq('users_id', userId);
-  if (expectedStatuses?.length) query = query.in('lead_status_id', expectedStatuses);
-  const { error } = await query;
-  if (error) throw new Error(error.message);
-}
 
 function emptyRoutingResult(command: LeadRoutingCommand, requested: number): LeadRoutingResult {
   return {
@@ -217,9 +194,8 @@ async function executeRoutingCommand(command: LeadRoutingCommand, ids: string[])
 }
 
 export const leadCycleService = {
-  listImported: () => listByStatuses([1]),
-  listValid: () => listByStatuses([2]),
-  listPreSend: () => listByStatuses([3], 1),
+  listImported: () => listByStatuses([LEAD_STATUS.IMPORTED]),
+  listValid: () => listByStatuses([LEAD_STATUS.VALIDATED]),
+  listPreSend: () => listByStatuses([LEAD_STATUS.PRE_SEND], 1),
   executeRoutingCommand,
-  update,
 };

@@ -3,7 +3,6 @@ export type WhatsAppQueueStatus = 'queued' | 'sending' | 'sent' | 'paused' | 'er
 export type WhatsAppQueueLead = {
   id: string;
   lead_id: string;
-  sourcePreSendId?: string;
   order: number;
   position: number;
   company: string;
@@ -66,7 +65,6 @@ export type WhatsAppQueueLead = {
 export type CreateWhatsAppQueueLeadInput = Omit<
   WhatsAppQueueLead,
   | 'id'
-  | 'lead_id'
   | 'order'
   | 'position'
   | 'company_name'
@@ -87,7 +85,6 @@ export type CreateWhatsAppQueueLeadInput = Omit<
   | 'created_at'
   | 'updated_at'
 > & {
-  lead_id?: string;
   chip_id?: string;
   batchLimit?: number;
   scheduled_date?: string;

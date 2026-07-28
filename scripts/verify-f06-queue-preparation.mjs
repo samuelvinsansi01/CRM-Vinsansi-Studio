@@ -16,7 +16,7 @@ function requireText(file, snippets) {
 }
 
 const service = requireText('src/services/queue-preparation/queuePreparation.service.ts', [
-  'supabaseLeadCycleRepository.compareAndSet(id, 2, { lead_status_id: 4 })',
+  'supabaseLeadCycleRepository.compareAndSet(id, LEAD_STATUS.VALIDATED, { lead_status_id: LEAD_STATUS.QUEUED })',
   'repositories.whatsappQueue.removeQueued(queueItemId)',
   'repositories.instagramQueue.removeQueued(queueItemId)',
   'settingsService.getDispatchSettings()',

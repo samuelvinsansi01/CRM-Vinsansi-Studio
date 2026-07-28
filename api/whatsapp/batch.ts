@@ -30,7 +30,6 @@ type QueueItem = {
   chip_instance?: string | null;
   chip_label?: string | null;
   data?: RecordValue | null;
-  raw_payload?: RecordValue | null;
 };
 
 function envAny(...names: string[]) {
@@ -83,7 +82,7 @@ function queueTable() {
 function authConfig() {
   return {
     url: envAny('SUPABASE_URL', 'VITE_SUPABASE_URL').replace(/\/$/, ''),
-    anonKey: envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_ANON_KEY'),
+    anonKey: envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY'),
   };
 }
 
@@ -132,9 +131,8 @@ async function authenticate(req: ApiRequest): Promise<AuthContext> {
 
 function nestedValue(item: QueueItem, ...keys: string[]) {
   const data = item.data && typeof item.data === 'object' ? item.data : {};
-  const raw = item.raw_payload && typeof item.raw_payload === 'object' ? item.raw_payload : {};
   for (const key of keys) {
-    const value = (item as RecordValue)[key] ?? data[key] ?? raw[key];
+    const value = (item as RecordValue)[key] ?? data[key];
     if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
   }
   return '';
@@ -151,7 +149,7 @@ function itemChip(item: QueueItem) {
 async function resolveOwnedQueueItems(auth: AuthContext, ids: string[]): Promise<QueueItem[]> {
   const { data, error } = await auth.client
     .from(queueTable())
-    .select('id,user_id,status,chip_instance,chip_label,data,raw_payload')
+    .select('id,user_id,status,chip_instance,chip_label,data')
     .eq('user_id', auth.publicUserId)
     .in('id', ids);
   if (error) throw new Error(`queue_authorization_check_failed:${error.message}`);

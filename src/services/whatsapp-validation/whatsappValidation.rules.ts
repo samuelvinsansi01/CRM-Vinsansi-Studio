@@ -1,6 +1,7 @@
 import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
 import { normalizePhone } from '../import/importValidation';
 import { isValidInstagram } from '../instagram/instagram.utils';
+import { LEAD_STATUS } from '../status/leadStatus';
 import type { WhatsAppValidationMode } from './types';
 
 export type WhatsAppValidationTarget = {
@@ -10,7 +11,7 @@ export type WhatsAppValidationTarget = {
 };
 
 export function expectedStatusForValidation(mode: WhatsAppValidationMode): LeadStatusId {
-  return mode === 'initial' ? 3 : 2;
+  return mode === 'initial' ? LEAD_STATUS.PRE_SEND : LEAD_STATUS.VALIDATED;
 }
 
 export function isLikelyValidWhatsApp(value: unknown) {
@@ -29,7 +30,7 @@ export function validationSelectionError(row: LeadDatabaseRow, mode: WhatsAppVal
 
 export function validWhatsAppTarget(mode: WhatsAppValidationMode): WhatsAppValidationTarget {
   return {
-    statusId: 2,
+    statusId: LEAD_STATUS.VALIDATED,
     channelId: 1,
     outcome: mode === 'initial' ? 'approved' : 'revalidated',
   };
@@ -37,7 +38,7 @@ export function validWhatsAppTarget(mode: WhatsAppValidationMode): WhatsAppValid
 
 export function invalidWhatsAppTarget(row: LeadDatabaseRow): WhatsAppValidationTarget {
   if (isValidInstagram(row.leads_instagram)) {
-    return { statusId: 2, channelId: 2, outcome: 'redirected' };
+    return { statusId: LEAD_STATUS.VALIDATED, channelId: 2, outcome: 'redirected' };
   }
-  return { statusId: 6, channelId: 1, outcome: 'invalidated' };
+  return { statusId: LEAD_STATUS.INVALID, channelId: 1, outcome: 'invalidated' };
 }

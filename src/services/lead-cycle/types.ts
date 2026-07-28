@@ -22,19 +22,6 @@ export type LeadCycleLead = {
   updatedAt: string;
 };
 
-/**
- * Atualização genérica mantida temporariamente para fluxos ainda não migrados.
- * O F04 não utiliza esta API; todas as ações da triagem passam por comandos explícitos.
- */
-export type LeadCycleUpdate = Partial<{
-  leads_name: string;
-  leads_phone: string | null;
-  leads_instagram: string | null;
-  leads_website: string | null;
-  leads_maps: string | null;
-  channels_id: 1 | 2;
-  lead_status_id: LeadStatusId;
-}>;
 
 export type LeadRoutingCommand =
   | 'route-imported-to-whatsapp'

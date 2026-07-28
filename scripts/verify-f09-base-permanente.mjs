@@ -31,6 +31,7 @@ const basePage = requireText('src/pages/BasePage.tsx', [
 ]);
 assert.ok(!basePage.includes("useLeadCycle('permanent')"));
 assert.ok(!basePage.includes('lead_status_id: 8'));
+assert.ok(baseRepo.includes('LEAD_STATUS.ARCHIVED'));
 
 const baseService = requireText('src/services/base/base.service.ts', [
   'repositories.base.compareAndArchive',
@@ -64,10 +65,6 @@ for (const file of [
 }
 
 
-const mockImport = read('src/repositories/import/mockImport.repository.ts');
-for (const removed of ['sentPhones', 'sentSites', 'sentInstagrams', 'sentMapsUrls']) {
-  assert.ok(!mockImport.includes(removed), `mockImport.repository.ts ainda contém contexto legado: ${removed}`);
-}
 
 const publicTypes = read('src/types/index.ts');
 assert.ok(!publicTypes.includes('UpdateBaseLeadInput'), 'src/types/index.ts exporta tipo removido UpdateBaseLeadInput.');
@@ -75,17 +72,15 @@ assert.ok(!fs.existsSync(path.join(root, 'src/services/leads/lead-validation.ser
 
 const whatsappService = requireText('src/services/whatsapp-queue/whatsappQueue.service.ts', [
   'syncCanonicalSentStatus',
-  'supabaseLeadCycleRepository.compareAndSet(leadId, 4, { lead_status_id: 5 })',
+  'supabaseLeadCycleRepository.compareAndSet(leadId, LEAD_STATUS.QUEUED, { lead_status_id: LEAD_STATUS.SENT })',
 ]);
 assert.ok(!whatsappService.includes('persistSentToBase'));
 
-const preSendService = read('src/services/pre-send/preSend.service.ts');
-assert.ok(!preSendService.includes('repositories.base.upsertSent'));
-assert.ok(!preSendService.includes('preSendLeadToBaseInput'));
+assert.ok(!fs.existsSync(path.join(root, 'src/services/pre-send')), 'O ciclo paralelo pre-send deve permanecer removido.');
 
 assert.ok(fs.existsSync(workerRoot), 'Informe WORKER_F09_ROOT para validar o Worker F09.');
 const worker = fs.readFileSync(path.join(workerRoot, 'src/worker.js'), 'utf8');
-assert.ok(worker.includes("const VERSION = '2.8.0'"));
+assert.ok(/const VERSION = '2\.(?:8|9)\.0'/.test(worker));
 assert.ok(worker.includes(".from('leads')"));
 assert.ok(worker.includes('canonical_sent_synced'));
 assert.ok(!worker.includes(".from('base_permanente')"));
@@ -95,7 +90,6 @@ const changedTsFiles = [
   'src/services/base/types.ts',
   'src/repositories/base/base.repository.ts',
   'src/repositories/base/supabaseBase.repository.ts',
-  'src/repositories/base/mockBase.repository.ts',
   'src/services/base/base.service.ts',
   'src/hooks/useBaseRecords.ts',
   'src/pages/BasePage.tsx',
@@ -107,7 +101,6 @@ const changedTsFiles = [
   'src/services/import-settings/importSettings.seed.ts',
   'src/pages/ImportSettingsPage.tsx',
   'src/lib/supabase/config.ts',
-  'src/services/pre-send/preSend.service.ts',
   'src/services/whatsapp-queue/whatsappQueue.service.ts',
   'src/hooks/useLeadCycle.ts',
   'src/services/lead-cycle/leadCycle.service.ts',

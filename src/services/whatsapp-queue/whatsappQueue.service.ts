@@ -1,3 +1,4 @@
+import { LEAD_STATUS } from '../status/leadStatus';
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { normalizePhone } from '../import/importValidation';
@@ -9,7 +10,6 @@ import type { UpdateWhatsAppQueueLeadInput, WhatsAppQueueFilters, WhatsAppQueueL
 import type { ChipConfigRecord, ConfigRecord } from '../config/types';
 import { chipInstance, chipLevelDefaults, isOperationalWhatsAppChip } from '../config/chipOperational';
 import { settingsService } from '../settings';
-import { preSendService } from '../pre-send/preSend.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { renderTemplateVariables } from '../templates/templateVariables';
@@ -139,7 +139,7 @@ function assertStatusPatch(current: WhatsAppQueueLead, input: UpdateWhatsAppQueu
 }
 
 function sourceLeadId(lead: WhatsAppQueueLead) {
-  return lead.lead_id || lead.sourcePreSendId || lead.id;
+  return lead.lead_id || lead.id;
 }
 
 function assertTemplateReady(leads: WhatsAppQueueLead[]) {
@@ -194,7 +194,7 @@ function logQueueEvent(action: string, lead: Partial<WhatsAppQueueLead>, status?
     source: 'whatsapp-queue',
     action,
     channel: 'whatsapp',
-    leadId: lead.lead_id ?? lead.sourcePreSendId,
+    leadId: lead.lead_id,
     queueItemId: lead.id,
     status,
     message,
@@ -210,7 +210,7 @@ async function syncCanonicalSentStatus(leads: WhatsAppQueueLead[]) {
   await Promise.allSettled(leads.map(async (lead) => {
     const leadId = sourceLeadId(lead);
     if (!/^\d+$/.test(leadId)) return;
-    const updated = await supabaseLeadCycleRepository.compareAndSet(leadId, 4, { lead_status_id: 5 });
+    const updated = await supabaseLeadCycleRepository.compareAndSet(leadId, LEAD_STATUS.QUEUED, { lead_status_id: LEAD_STATUS.SENT });
     if (updated) return;
     await repositories.events.append({
       source: 'whatsapp-queue',
@@ -231,18 +231,15 @@ async function syncCanonicalSentStatus(leads: WhatsAppQueueLead[]) {
 async function finishSentPersistence({
   queueIds,
   leads,
-  preSendIds,
   replayed = false,
 }: {
   queueIds: string[];
   leads: WhatsAppQueueLead[];
-  preSendIds: string[];
   replayed?: boolean;
 }) {
   // A tabela leads é a única fonte canônica da Base Permanente.
   if (leads.length) await syncCanonicalSentStatus(leads);
   if (queueIds.length) await repositories.whatsappQueue.send(queueIds);
-  if (preSendIds.length) await preSendService.markSent(preSendIds);
   if (leads.length) await logDispatchMessages(leads, replayed);
 }
 
@@ -270,9 +267,7 @@ export const whatsappQueueService = {
     const sentLeads = await getSelectedLeads(ids);
     const allowed = assertAllAllowed(sentLeads, 'mark_sent', 'sent', 'Todos os itens selecionados precisam estar em envio para marcar como enviados.');
     const allowedLeads = sentLeads.filter((lead) => allowed.includes(lead.id));
-    const sentPreSendIds = allowedLeads.map((lead) => lead.sourcePreSendId).filter((id): id is string => Boolean(id));
-
-    await finishSentPersistence({ queueIds: allowed, leads: allowedLeads, preSendIds: sentPreSendIds, replayed: true });
+    await finishSentPersistence({ queueIds: allowed, leads: allowedLeads, replayed: true });
     allowedLeads.forEach((lead) => logQueueEvent('sent', lead, 'sent'));
     eventBus.emit('whatsapp-queue:changed', { action: 'worker-sent' });
     if (allowedLeads.length) eventBus.emit('base:changed', { action: 'update' });
@@ -394,11 +389,10 @@ export const whatsappQueueService = {
     const errorResults = normalizedResults.filter((result) => result.status === 'error');
     const pausedResults = normalizedResults.filter((result) => result.status === 'paused');
     const sentLeads = leads.filter((lead) => sentIds.includes(lead.id));
-    const sentPreSendIds = sentLeads.map((lead) => lead.sourcePreSendId).filter((id): id is string => Boolean(id));
 
     const sentAllowedIds = allowedIds(sentLeads.map((lead) => ({ ...lead, status: 'sending' })), 'mark_sent', 'sent');
     try {
-      await finishSentPersistence({ queueIds: sentAllowedIds, leads: sentLeads, preSendIds: sentPreSendIds });
+      await finishSentPersistence({ queueIds: sentAllowedIds, leads: sentLeads});
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha ao persistir envio WhatsApp.';
       await Promise.all(sentLeads.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'error', error_message: message })));

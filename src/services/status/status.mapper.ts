@@ -1,3 +1,5 @@
+import { LEAD_STATUS } from './leadStatus';
+
 export type StatusGroup =
   | 'approved'
   | 'pending'
@@ -161,13 +163,13 @@ export function normalizeStatusGroup(value: unknown): StatusGroup {
   const numeric = typeof value === 'number' || /^\d+$/.test(String(value ?? '').trim())
     ? Number(value)
     : Number.NaN;
-  if (numeric === 1) return 'pending';
-  if (numeric === 2) return 'approved';
-  if (numeric === 3) return 'review';
-  if (numeric === 4) return 'queued';
-  if (numeric === 5) return 'sent';
-  if (numeric === 6 || numeric === 7) return 'invalid';
-  if (numeric === 8) return 'archived';
+  if (numeric === LEAD_STATUS.IMPORTED) return 'pending';
+  if (numeric === LEAD_STATUS.VALIDATED) return 'approved';
+  if (numeric === LEAD_STATUS.PRE_SEND) return 'review';
+  if (numeric === LEAD_STATUS.QUEUED) return 'queued';
+  if (numeric === LEAD_STATUS.SENT) return 'sent';
+  if (numeric === LEAD_STATUS.INVALID || numeric === LEAD_STATUS.DUPLICATE) return 'invalid';
+  if (numeric === LEAD_STATUS.ARCHIVED) return 'archived';
 
   const normalized = normalizeComparable(value);
   return ALIAS_TO_GROUP.get(normalized) ?? 'unknown';
@@ -200,17 +202,10 @@ export function isStatusGroup(value: unknown, group: StatusGroup) {
   return normalizeStatusGroup(value) === group;
 }
 
-export type NormalizedPreSendStatus = 'review' | 'approved' | 'queued' | 'rejected' | 'invalid' | 'archived' | 'sent' | 'deleted';
 export type NormalizedWhatsAppQueueStatus = 'queued' | 'sending' | 'sent' | 'paused' | 'error' | 'invalid';
 export type NormalizedInstagramQueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'error' | 'invalid';
 export type NormalizedBaseStatus = 'sent' | 'archived' | 'invalid' | 'error' | 'deleted';
 
-export function normalizePreSendStatus(value: unknown, fallback: NormalizedPreSendStatus = 'review'): NormalizedPreSendStatus {
-  const group = normalizeStatusGroup(value);
-  if (group === 'approved' || group === 'queued' || group === 'rejected' || group === 'invalid' || group === 'archived' || group === 'sent' || group === 'deleted') return group;
-  if (group === 'pending' || group === 'review' || group === 'error') return 'review';
-  return fallback;
-}
 
 export function normalizeWhatsAppQueueStatus(value: unknown, fallback: NormalizedWhatsAppQueueStatus = 'queued'): NormalizedWhatsAppQueueStatus {
   const group = normalizeStatusGroup(value);

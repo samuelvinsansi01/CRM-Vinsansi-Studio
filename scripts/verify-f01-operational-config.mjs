@@ -31,7 +31,8 @@ function loadTsModule(file) {
 const repositoriesIndex = read('src/repositories/index.ts');
 assert(!repositoriesIndex.includes('mockConfigRepository'), 'F01 ainda usa mockConfigRepository.');
 assert(!repositoriesIndex.includes('mockSettingsRepository'), 'F01 ainda usa mockSettingsRepository.');
-assert(repositoriesIndex.includes('unavailableConfigRepository'), 'F01 precisa falhar explicitamente sem Supabase.');
+assert(repositoriesIndex.includes('config: supabaseConfigRepository'), 'F01 deve usar somente o repository Supabase.');
+assert(repositoriesIndex.includes('settings: supabaseSettingsRepository'), 'F01 deve usar settings somente no Supabase.');
 
 const configRepository = read('src/repositories/config/supabaseConfig.repository.ts');
 for (const scope of ["tableForKind('templates')", "tableForKind('chips')", "tableForKind('instagram')"]) {

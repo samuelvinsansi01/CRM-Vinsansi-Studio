@@ -1,16 +1,17 @@
-export const LEAD_STATUS = {
-  importado: 1,
-  validado: 2,
-  pre_envio: 3,
-  na_fila: 4,
-  enviado: 5,
-  invalido: 6,
-  duplicado: 7,
-  arquivado: 8,
-} as const;
+import type { LeadStatusId } from '../services/status/leadStatus';
 
-export type LeadStatusName = keyof typeof LEAD_STATUS;
-export type LeadStatusId = (typeof LEAD_STATUS)[LeadStatusName];
+export { LEAD_STATUS } from '../services/status/leadStatus';
+export type { LeadStatusId } from '../services/status/leadStatus';
+
+export type LeadStatusName =
+  | 'importado'
+  | 'validado'
+  | 'pre_envio'
+  | 'na_fila'
+  | 'enviado'
+  | 'invalido'
+  | 'duplicado'
+  | 'arquivado';
 export type LeadOrigin = 'manual' | 'apify' | 'csv' | 'api';
 
 export type LeadRelation<T> = T | T[] | null;

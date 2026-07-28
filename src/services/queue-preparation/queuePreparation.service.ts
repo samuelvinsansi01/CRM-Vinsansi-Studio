@@ -1,3 +1,4 @@
+import { LEAD_STATUS } from '../status/leadStatus';
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
@@ -196,7 +197,7 @@ function preparationReason(
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
 ) {
-  if (row.lead_status_id !== 2) return 'O lead não está mais no status Validado.';
+  if (row.lead_status_id !== LEAD_STATUS.VALIDATED) return 'O lead não está mais no status Validado.';
   if (Number(row.channels_id) !== (channel === 'WhatsApp' ? 1 : 2)) return 'O canal do lead foi alterado.';
   if (channel === 'WhatsApp' && normalizePhone(row.leads_phone).length < 10) return 'Telefone inválido para WhatsApp.';
   if (channel === 'Instagram' && !isValidInstagram(row.leads_instagram)) return 'Instagram inválido ou ausente.';
@@ -457,7 +458,7 @@ async function enqueueValidated(
         addFailure(result, { id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
         continue;
       }
-      if (row.lead_status_id !== 2 || Number(row.channels_id) !== (channel === 'WhatsApp' ? 1 : 2)) {
+      if (row.lead_status_id !== LEAD_STATUS.VALIDATED || Number(row.channels_id) !== (channel === 'WhatsApp' ? 1 : 2)) {
         addFailure(result, { id, company: row.leads_name, reason: 'O lead mudou de status ou canal antes da preparação.' }, true);
         continue;
       }
@@ -474,7 +475,7 @@ async function enqueueValidated(
 
       // Se o item já existe na fila, apenas reconcilia o status canônico.
       if (alreadyQueued.has(id)) {
-        const reconciled = await supabaseLeadCycleRepository.compareAndSet(id, 2, { lead_status_id: 4 });
+        const reconciled = await supabaseLeadCycleRepository.compareAndSet(id, LEAD_STATUS.VALIDATED, { lead_status_id: LEAD_STATUS.QUEUED });
         if (!reconciled) {
           addFailure(result, { id, company: row.leads_name, reason: 'O item já existe na fila, mas o lead foi alterado por outra operação.' }, true);
           continue;
@@ -501,7 +502,7 @@ async function enqueueValidated(
           continue;
         }
 
-        const updated = await supabaseLeadCycleRepository.compareAndSet(id, 2, { lead_status_id: 4 });
+        const updated = await supabaseLeadCycleRepository.compareAndSet(id, LEAD_STATUS.VALIDATED, { lead_status_id: LEAD_STATUS.QUEUED });
         if (!updated) {
           if (channel === 'WhatsApp') await repositories.whatsappQueue.removeQueued(queueItemId);
           else await repositories.instagramQueue.removeQueued(queueItemId);

@@ -1,6 +1,6 @@
 import { normalizeStatusGroup, type StatusGroup } from '../status/status.mapper';
 
-export type EntityKind = 'import' | 'pre-send' | 'whatsapp-queue' | 'instagram-queue' | 'base';
+export type EntityKind = 'import' | 'whatsapp-queue' | 'instagram-queue' | 'base';
 
 export type StateAction =
   | 'edit'
@@ -89,25 +89,6 @@ function canImport(request: TransitionRequest): TransitionResult {
   return denied(request, 'Transicao invalida na importacao.');
 }
 
-function canPreSend(request: TransitionRequest): TransitionResult {
-  const from = normalizeStatusGroup(request.fromStatus);
-  const to = target(request);
-
-  if (from === 'sent') return denied(request, 'Lead enviado nao pode voltar ao pre-envio.');
-  if (from === 'sending') return denied(request, 'Lead em envio nao pode ser alterado.');
-  if (request.action === 'edit') return includes(['review', 'approved', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Lead em fila ou finalizado nao pode ser editado.');
-  if (request.action === 'instagram_override') return includes(['review', 'approved', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Override Instagram permitido somente antes da fila.');
-  if (request.action === 'approve') return to === 'approved' && includes(['review', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Apenas leads em revisao, recusados ou invalidos podem ser aprovados.');
-  if (request.action === 'review') return to === 'review' && includes(['review', 'approved', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Somente leads ativos podem voltar para revisao.');
-  if (request.action === 'unapprove') return to === 'pending' && from === 'approved' ? allowed(request) : denied(request, 'Somente leads aprovados podem voltar para em aguarde.');
-  if (request.action === 'invalidate') return to === 'invalid' && includes(['review', 'approved', 'rejected', 'pending'], from) ? allowed(request) : denied(request, 'Somente leads ativos antes da fila podem ser invalidados.');
-  if (request.action === 'queue') return to === 'queued' && includes(['approved', 'review'], from) ? allowed(request) : denied(request, 'Apenas leads aprovados ou retornos em revisão podem entrar em fila.');
-  if (request.action === 'archive') return to === 'archived' && includes(['review', 'approved', 'rejected', 'invalid', 'pending'], from) ? allowed(request) : denied(request, 'Lead em fila ou enviado nao pode ser arquivado pelo pre-envio.');
-  if (request.action === 'mark_sent') return to === 'sent' && includes(['review', 'approved', 'pending', 'rejected', 'invalid', 'queued'], from) ? allowed(request) : denied(request, 'Apenas leads ativos do pre-envio podem ser marcados como enviados.');
-  if (isDirectStatusUpdate(request) && from === to) return allowed(request);
-  return denied(request, 'Transicao invalida no pre-envio.');
-}
-
 function canWhatsAppQueue(request: TransitionRequest): TransitionResult {
   const from = normalizeStatusGroup(request.fromStatus);
   const to = target(request);
@@ -160,7 +141,6 @@ export function canTransition(request: TransitionRequest): TransitionResult {
   if (request.toStatus !== undefined && target(request) === 'unknown') return denied(request, 'Status de destino desconhecido.');
 
   if (request.entity === 'import') return canImport(request);
-  if (request.entity === 'pre-send') return canPreSend(request);
   if (request.entity === 'whatsapp-queue') return canWhatsAppQueue(request);
   if (request.entity === 'instagram-queue') return canInstagramQueue(request);
   return canBase(request);

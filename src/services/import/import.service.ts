@@ -1,6 +1,5 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
-import { preSendService } from '../pre-send/preSend.service';
 import { normalizePhone, normalizeSiteIdentity } from './importValidation';
 import { isValidInstagram } from '../instagram/instagram.utils';
 import { normalizeInstagramUsername } from '../instagram/instagram.utils';
@@ -40,97 +39,6 @@ function channelFromImport(lead: ImportLead): 'instagram' | 'whatsapp' {
   return (lead.send_instagram || (lead.destination ?? lead.destino) === 'Instagram') ? 'instagram' : 'whatsapp';
 }
 
-function isActivePreSendAllocation(status: unknown) {
-  return isStatusGroup(status, 'review') || isStatusGroup(status, 'approved') || isStatusGroup(status, 'queued');
-}
-
-function isActiveQueueAllocation(status: unknown) {
-  return (
-    isStatusGroup(status, 'queued') ||
-    isStatusGroup(status, 'sending') ||
-    isStatusGroup(status, 'paused') ||
-    isStatusGroup(status, 'following') ||
-    isStatusGroup(status, 'dm_opened') ||
-    isStatusGroup(status, 'error')
-  );
-}
-
-type ActivePipelineAllocationKeys = {
-  ids: Set<string>;
-  phones: Set<string>;
-  instagrams: Set<string>;
-};
-
-function addPhone(target: Set<string>, value: unknown) {
-  const phone = normalizePhone(value);
-  if (phone) target.add(phone);
-}
-
-function addInstagram(target: Set<string>, value: unknown) {
-  const instagram = normalizeInstagramUsername(String(value ?? ''));
-  if (instagram) target.add(instagram);
-}
-
-async function activePipelineAllocationKeys(): Promise<ActivePipelineAllocationKeys> {
-  const [preSendWhatsApp, preSendInstagram, whatsappBatches, instagramBatches] = await Promise.all([
-    repositories.preSend.listLeads({ channel: 'WhatsApp', queueFilter: 'Geral' }),
-    repositories.preSend.listLeads({ channel: 'Instagram', queueFilter: 'Geral' }),
-    repositories.whatsappQueue.listBatches({}),
-    repositories.instagramQueue.listBatches({}),
-  ]);
-
-  const keys: ActivePipelineAllocationKeys = {
-    ids: new Set<string>(),
-    phones: new Set<string>(),
-    instagrams: new Set<string>(),
-  };
-  const preSendImportIdById = new Map<string, string>();
-
-  for (const lead of [...preSendWhatsApp, ...preSendInstagram]) {
-    if (lead.sourceImportId) preSendImportIdById.set(lead.id, lead.sourceImportId);
-    if (!isActivePreSendAllocation(lead.status)) continue;
-    if (lead.sourceImportId) keys.ids.add(lead.sourceImportId);
-    addPhone(keys.phones, lead.phone);
-    addInstagram(keys.instagrams, lead.instagram_url ?? lead.instagram);
-  }
-
-  for (const lead of whatsappBatches.flatMap((batch) => batch.leads)) {
-    if (!isActiveQueueAllocation(lead.status)) continue;
-    const sourceImportId = lead.lead_id || (lead.sourcePreSendId ? preSendImportIdById.get(lead.sourcePreSendId) : '');
-    if (sourceImportId) keys.ids.add(sourceImportId);
-    addPhone(keys.phones, lead.phone_normalized || lead.phone);
-    addInstagram(keys.instagrams, lead.instagram_url ?? lead.instagram_username ?? lead.instagram);
-  }
-
-  for (const lead of instagramBatches.flatMap((batch) => batch.leads)) {
-    if (!isActiveQueueAllocation(lead.status)) continue;
-    const sourceImportId = lead.lead_id || (lead.sourcePreSendId ? preSendImportIdById.get(lead.sourcePreSendId) : '');
-    if (sourceImportId) keys.ids.add(sourceImportId);
-    addPhone(keys.phones, lead.phone);
-    addInstagram(keys.instagrams, lead.instagram_url ?? lead.instagram_username ?? lead.instagram);
-  }
-
-  return keys;
-}
-
-function isAllocatedInPipeline(lead: ImportLead, keys: ActivePipelineAllocationKeys) {
-  if (keys.ids.has(lead.id)) return true;
-  const phone = normalizePhone(lead.whatsapp ?? lead.normalizedPhone);
-  if (phone && keys.phones.has(phone)) return true;
-  const instagram = normalizeInstagramUsername(lead.instagram_url ?? lead.instagram ?? lead.normalizedInstagram);
-  return Boolean(instagram && keys.instagrams.has(instagram));
-}
-
-async function routeApprovedInstagramToQueue(leads: ImportLead[]) {
-  const eligible = leads.filter((lead) =>
-    isStatusGroup(lead.status, 'approved') &&
-    (lead.send_instagram || (lead.destination ?? lead.destino) === 'Instagram') &&
-    isValidInstagram(lead.instagram_url ?? lead.instagram),
-  );
-  if (!eligible.length) return;
-  await preSendService.enqueueApprovedInstagramImports();
-}
-
 async function bulkUpdate(ids: string[], action: BulkImportAction) {
   if (!ids.length) throw new Error('Selecione pelo menos um lead.');
   const uniqueIds = Array.from(new Set(ids));
@@ -151,7 +59,6 @@ async function bulkUpdate(ids: string[], action: BulkImportAction) {
   });
 
   const updated = await Promise.all(selectedLeads.map((lead) => repositories.import.update(lead.id, target.input)));
-  if (action === 'approve') await routeApprovedInstagramToQueue(updated);
   eventBus.emit('import:changed', { source: 'update' });
   return updated;
 }
@@ -199,16 +106,12 @@ export const importService = {
 
   async persistLeads(leads: ImportLead[], options?: ImportExecutionOptions) {
     const result = await repositories.import.persist(leads, options);
-    if (result.created.length) {
-      await routeApprovedInstagramToQueue(result.created);
-      eventBus.emit('import:changed', { source: 'json' });
-    }
+    if (result.created.length) eventBus.emit('import:changed', { source: 'json' });
     return result;
   },
 
   async create(input: ImportLeadInput) {
     const lead = await repositories.import.create(input);
-    await routeApprovedInstagramToQueue([lead]);
     eventBus.emit('import:changed', { source: 'manual' });
     return lead;
   },
@@ -241,7 +144,6 @@ export const importService = {
       }
     }
     const lead = await repositories.import.update(id, input);
-    await routeApprovedInstagramToQueue([lead]);
     eventBus.emit('import:changed', { source: 'update' });
     return lead;
   },
@@ -255,17 +157,10 @@ export const importService = {
     const current = (await repositories.import.list({ status: status === 'approved' ? 'rejected' : 'approved' })).find((lead) => lead.id === id);
     if (current) assertTransition({ entity: 'import', fromStatus: current.status, toStatus: status, action: status === 'approved' ? 'approve' : 'reject' });
     const lead = await repositories.import.move(id, status);
-    if (status === 'approved') await routeApprovedInstagramToQueue([lead]);
     eventBus.emit('import:changed', { source: 'move' });
     return lead;
   },
 
-  async sendToPreSend(leads: ImportLead[]) {
-    const approved = leads.filter((lead) => isStatusGroup(lead.status, 'approved') && !(lead.send_instagram || (lead.destination ?? lead.destino) === 'Instagram'));
-    const created = await preSendService.addFromImport(approved);
-    eventBus.emit('import:changed', { source: 'move' });
-    return created;
-  },
 
   async approveMany(ids: string[]) {
     return bulkUpdate(ids, 'approve');

@@ -40,12 +40,12 @@ async function pagedRows(table: string, userColumn: 'users_id' | 'user_id', user
 }
 
 function queueSnapshot(row: Record<string, unknown>, channel: ReconciliationChannel): ReconciliationQueueSnapshot {
-  const data = record(row.data ?? row.raw_payload);
+  const data = record(row.data);
   const statusRaw = String(row.status ?? data.status ?? '');
   return {
     id: String(row.id ?? ''),
     channel,
-    leadId: String(row.lead_id ?? data.lead_id ?? data.sourcePreSendId ?? data.source_pre_send_id ?? ''),
+    leadId: String(row.lead_id ?? data.lead_id ?? ''),
     status: normalizeStatusGroup(statusRaw),
     statusRaw,
     updatedAt: String(row.updated_at ?? data.updated_at ?? row.created_at ?? data.created_at ?? ''),
@@ -129,7 +129,7 @@ async function assertTerminalQueueState(issue: ReconciliationIssue, expectedGrou
   if (!issue.channel || !issue.queueItemId) throw new Error('A inconsistência não possui item de fila identificável.');
   const { row } = await loadQueueRow(issue.channel, issue.queueItemId, userId);
   if (!row) throw new Error('O item da fila não existe mais ou não pertence ao usuário atual.');
-  const data = record(row.data ?? row.raw_payload);
+  const data = record(row.data);
   const current = normalizeStatusGroup(row.status ?? data.status);
   if (current !== expectedGroup) {
     throw new Error(`O item da fila mudou para “${current}”. Execute uma nova auditoria antes de reparar.`);
@@ -141,7 +141,7 @@ async function markQueueError(issue: ReconciliationIssue, userId: string): Promi
   const { table, row } = await loadQueueRow(issue.channel, issue.queueItemId, userId);
   if (!row) throw new Error('O item da fila não existe mais ou não pertence ao usuário atual.');
 
-  const data = record(row.data ?? row.raw_payload);
+  const data = record(row.data);
   const currentRaw = String(row.status ?? data.status ?? '');
   const currentGroup = normalizeStatusGroup(currentRaw);
   if (currentGroup === 'error') {

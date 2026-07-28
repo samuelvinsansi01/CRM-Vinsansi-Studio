@@ -1,6 +1,4 @@
 import { getSupabaseClient } from '../../lib/supabase';
-import type { PreSendLead } from '../pre-send/types';
-import { normalizePhone } from '../import/importValidation';
 
 export type WhatsAppValidationRequest = {
   id: string;
@@ -160,16 +158,6 @@ async function callValidationWorker(
   return normalized;
 }
 
-export function preSendLeadToWhatsAppValidationRequest(lead: PreSendLead): WhatsAppValidationRequest {
-  return {
-    id: lead.id,
-    sourceImportId: lead.sourceImportId,
-    company: lead.company,
-    phone: lead.phone ?? '',
-    normalizedPhone: normalizePhone(lead.phone),
-    chipInstance: lead.profile,
-  };
-}
 
 export const workerWhatsAppValidationGateway: WhatsAppValidationGateway = {
   validateInitial(leads) {

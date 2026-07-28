@@ -1,3 +1,4 @@
+import { FINAL_LEAD_STATUS_IDS, LEAD_STATUS } from '../../services/status/leadStatus';
 import { getSupabaseClient } from '../../lib/supabase';
 import { mapLead } from '../../mappers/lead.mapper';
 import type {
@@ -11,7 +12,6 @@ import type { LeadDatabaseRow } from '../../types/lead.types';
 import { getCurrentUserId } from '../supabase.helpers';
 import type { BaseRepository } from './base.repository';
 
-const FINAL_LEAD_STATUS_IDS = [5, 6, 7, 8] as const;
 
 const LEADS_SELECT = `
   leads_id,
@@ -111,7 +111,7 @@ async function listRowsByStatuses(statuses: readonly number[]): Promise<LeadData
     if (page.length < pageSize) break;
   }
 
-  return rows.filter((row) => FINAL_LEAD_STATUS_IDS.includes(Number(row.lead_status_id) as 5 | 6 | 7 | 8));
+  return rows.filter((row) => FINAL_LEAD_STATUS_IDS.includes(Number(row.lead_status_id) as (typeof FINAL_LEAD_STATUS_IDS)[number]));
 }
 
 async function listAll(): Promise<BaseLead[]> {
@@ -178,7 +178,7 @@ export const supabaseBaseRepository: BaseRepository = {
     const userId = await getCurrentUserId();
     const { data, error } = await getSupabaseClient()
       .from('leads')
-      .update({ lead_status_id: 8, leads_updated_at: new Date().toISOString() })
+      .update({ lead_status_id: LEAD_STATUS.ARCHIVED, leads_updated_at: new Date().toISOString() })
       .eq('leads_id', numericId)
       .eq('users_id', userId)
       .eq('lead_status_id', expectedStatus)

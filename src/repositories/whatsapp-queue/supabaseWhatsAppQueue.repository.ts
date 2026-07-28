@@ -27,7 +27,7 @@ function uuidOrNull(value: unknown) {
 }
 
 function rowToLead(row: Record<string, unknown>): WhatsAppQueueLead {
-  const data = (row.data && typeof row.data === 'object' ? row.data : row.raw_payload && typeof row.raw_payload === 'object' ? row.raw_payload : {}) as Partial<WhatsAppQueueLead>;
+  const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<WhatsAppQueueLead>;
   const chipInstance = String(row.chip_instance ?? data.chip_instance ?? data.chip ?? '');
   const chipLabel = String(row.chip_label ?? data.chip_label ?? chipInstance);
   const chip = chipInstance;
@@ -41,8 +41,7 @@ function rowToLead(row: Record<string, unknown>): WhatsAppQueueLead {
     ...(row.block_size ? { block_size: Number(row.block_size) } : {}),
     ...(row.batch_limit ? { batch_limit: Number(row.batch_limit) } : {}),
     id: String(row.id),
-    lead_id: String(row.lead_id ?? data.lead_id ?? data.sourcePreSendId ?? row.id),
-    sourcePreSendId: String(data.sourcePreSendId ?? row.lead_id ?? ''),
+    lead_id: String(row.lead_id ?? data.lead_id ?? ''),
     order: position,
     position,
     company: String(row.company_name ?? data.company ?? ''),
@@ -100,7 +99,7 @@ function rowToLead(row: Record<string, unknown>): WhatsAppQueueLead {
 }
 
 function isDeletedRow(row: Record<string, unknown>) {
-  const data = (row.data && typeof row.data === 'object' ? row.data : row.raw_payload && typeof row.raw_payload === 'object' ? row.raw_payload : {}) as Partial<WhatsAppQueueLead>;
+  const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<WhatsAppQueueLead>;
   return isStatusGroup(row.status ?? data.status, 'deleted');
 }
 
@@ -236,7 +235,7 @@ function buildLead(input: CreateWhatsAppQueueLeadInput, batch: WhatsAppQueueBatc
   return {
     ...input,
     id,
-    lead_id: input.lead_id ?? input.sourcePreSendId ?? id,
+    lead_id: input.lead_id,
     order: batch.leads.length + 1,
     position: batch.leads.length + 1,
     company_name: input.company,
@@ -275,7 +274,6 @@ function dbPayload(lead: WhatsAppQueueLead, userId: string) {
     id: lead.id,
     user_id: userId,
     lead_id: lead.lead_id,
-    source_pre_send_id: lead.sourcePreSendId ?? null,
     scheduled_date: lead.scheduled_date,
     status: lead.status,
     position: lead.position,
@@ -283,7 +281,6 @@ function dbPayload(lead: WhatsAppQueueLead, userId: string) {
     chip_label: chipLabel,
     lead_type: lead.type,
     notes: lead.imageName ?? '',
-    raw_payload: lead,
     validation_attempts: lead.retry_count,
     validation_error: lead.error_message || null,
     validation_status: lead.status,
@@ -377,7 +374,6 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
 
   async enqueue(inputLeads) {
     const persisted = await allLeads();
-    const existingSources = new Set(persisted.map((lead) => lead.sourcePreSendId).filter(Boolean));
     const existingLeadIds = new Set(persisted.map((lead) => lead.lead_id).filter(Boolean));
     const existingPhones = new Set(persisted.map((lead) => lead.phone_normalized || normalizePhone(lead.phone)).filter(Boolean));
     const working = [...persisted];
@@ -387,25 +383,19 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
     for (const input of inputLeads) {
       const normalizedPhone = normalizePhone(input.phone);
       if (input.lead_id && existingLeadIds.has(input.lead_id)) continue;
-      if (input.sourcePreSendId && existingSources.has(input.sourcePreSendId)) continue;
       if (normalizedPhone && existingPhones.has(normalizedPhone)) continue;
 
       const limit = input.batchLimit ?? 30;
       const scheduledDate = input.scheduled_date ?? todayIsoDate();
       const batch = nextBatch(working, input.chip, limit, scheduledDate);
       const lead = buildLead(input, batch);
-      // The legacy database may expose source_pre_send_id only through a partial
-      // unique index. PostgREST cannot use a partial index as an ON CONFLICT
-      // target, which made a valid WhatsApp queue allocation fail before the
-      // item was created. Duplicates are guarded above from the persisted queue
-      // snapshot, so this path can use a regular insert and remain idempotent
-      // for normal panel actions.
+      // Duplicidades são bloqueadas pelo lead canônico e pelo telefone normalizado
+      // antes do insert. O item só é considerado criado após confirmação do banco.
       const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
       if (error) throw new Error(error.message);
       working.push(lead);
       createdIds.push(lead.id);
       if (lead.lead_id) existingLeadIds.add(lead.lead_id);
-      if (lead.sourcePreSendId) existingSources.add(lead.sourcePreSendId);
       if (lead.phone_normalized) existingPhones.add(lead.phone_normalized);
     }
     return createdIds;

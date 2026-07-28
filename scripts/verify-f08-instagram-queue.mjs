@@ -141,7 +141,6 @@ const changedTsFiles = [
   'src/services/instagram-queue/instagramQueue.service.ts',
   'src/repositories/instagram-queue/supabaseInstagramQueue.repository.ts',
   'src/repositories/instagram-queue/instagramQueue.repository.ts',
-  'src/repositories/instagram-queue/mockInstagramQueue.repository.ts',
   'src/hooks/useInstagramQueue.ts', 'src/pages/QueuePage.tsx',
 ];
 for (const file of changedTsFiles) {

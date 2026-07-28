@@ -1,5 +1,6 @@
 import { normalizeInstagramUsername, isValidInstagram } from '../instagram/instagram.utils';
 import { normalizePhone } from '../import/importValidation';
+import { LEAD_STATUS } from '../status/leadStatus';
 import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
 import type { LeadRoutingCommand } from './types';
 
@@ -10,15 +11,15 @@ export type LeadRoutingDecision = {
 };
 
 const COMMAND_DECISIONS: Record<LeadRoutingCommand, LeadRoutingDecision> = {
-  'route-imported-to-whatsapp': { expectedStatus: 1, targetStatus: 3, targetChannel: 1 },
-  'route-imported-to-instagram': { expectedStatus: 1, targetStatus: 2, targetChannel: 2 },
-  'invalidate-imported': { expectedStatus: 1, targetStatus: 6 },
-  'archive-imported': { expectedStatus: 1, targetStatus: 8 },
-  'set-valid-channel-whatsapp': { expectedStatus: 2, targetStatus: 2, targetChannel: 1 },
-  'set-valid-channel-instagram': { expectedStatus: 2, targetStatus: 2, targetChannel: 2 },
-  'archive-valid': { expectedStatus: 2, targetStatus: 8 },
-  'invalidate-pre-send': { expectedStatus: 3, targetStatus: 6 },
-  'archive-pre-send': { expectedStatus: 3, targetStatus: 8 },
+  'route-imported-to-whatsapp': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.PRE_SEND, targetChannel: 1 },
+  'route-imported-to-instagram': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 2 },
+  'invalidate-imported': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.INVALID },
+  'archive-imported': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.ARCHIVED },
+  'set-valid-channel-whatsapp': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 1 },
+  'set-valid-channel-instagram': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 2 },
+  'archive-valid': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.ARCHIVED },
+  'invalidate-pre-send': { expectedStatus: LEAD_STATUS.PRE_SEND, targetStatus: LEAD_STATUS.INVALID },
+  'archive-pre-send': { expectedStatus: LEAD_STATUS.PRE_SEND, targetStatus: LEAD_STATUS.ARCHIVED },
 };
 
 export function routingDecision(command: LeadRoutingCommand) {

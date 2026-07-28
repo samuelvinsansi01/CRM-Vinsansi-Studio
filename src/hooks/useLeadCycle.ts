@@ -2,11 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { leadCycleService } from '../services/lead-cycle/leadCycle.service';
 import type {
   LeadCycleLead,
-  LeadCycleUpdate,
   LeadRoutingCommand,
   LeadRoutingResult,
 } from '../services/lead-cycle/types';
-import type { LeadStatusId } from '../types/lead.types';
 import { whatsappValidationService } from '../services/whatsapp-validation/whatsappValidation.service';
 import type { WhatsAppValidationBatchResult } from '../services/whatsapp-validation/types';
 
@@ -76,16 +74,6 @@ export function useLeadCycle(view: LeadCycleView) {
     }
   }, [refresh]);
 
-  /** Temporário: utilizado pelos fluxos ainda não migrados para comandos explícitos. */
-  const update = useCallback(async (ids: string[], input: LeadCycleUpdate, expectedStatuses?: LeadStatusId[]) => {
-    setSaving(true);
-    try {
-      await leadCycleService.update(ids, input, expectedStatuses);
-      await refresh();
-    } finally {
-      setSaving(false);
-    }
-  }, [refresh]);
 
-  return { records, loading, saving, error, refresh, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp, update };
+  return { records, loading, saving, error, refresh, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp };
 }

@@ -208,7 +208,7 @@ async function syncCanonicalLead(client: SupabaseClient, tokenScope: TokenScope,
   if (readError) throw new Error(`instagram_lead_sync_read_failed:${readError.message}`);
   if (!current) return { status: 'missing' };
   if (Number(current.lead_status_id) === desired) return { status: 'already_synced' };
-  if (Number(current.lead_status_id) !== 4) return { status: 'conflict', current_status: current.lead_status_id };
+  if (Number(current.lead_status_id) !== 4) return { status: 'conflict', observed_status_id: current.lead_status_id };
   const { data: updated, error } = await client.from(leadsTable()).update({ lead_status_id: desired, leads_updated_at: new Date().toISOString() })
     .eq('leads_id', Number(item.lead_id)).eq('users_id', tokenScope.userId).eq('lead_status_id', 4).select('leads_id').maybeSingle();
   if (error) throw new Error(`instagram_lead_sync_failed:${error.message}`);

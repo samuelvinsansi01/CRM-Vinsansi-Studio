@@ -22,14 +22,8 @@ export function createUuid() {
 }
 
 export async function getCurrentUserId() {
-  try {
-    const publicUser = await getCurrentPublicUser();
-    return String(publicUser.users_id);
-  } catch (error) {
-    const fallback = import.meta.env.VITE_DEFAULT_USER_ID ?? '';
-    if (fallback) return String(fallback);
-    throw error;
-  }
+  const publicUser = await getCurrentPublicUser();
+  return String(publicUser.users_id);
 }
 
 export function nowIso() {

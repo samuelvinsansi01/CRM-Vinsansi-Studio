@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { getSupabaseConfig, isSupabaseConfigured } from '../lib/supabase';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 type ConfigContextValue = {
   source: 'supabase' | 'unavailable';
@@ -10,8 +10,7 @@ const ConfigContext = createContext<ConfigContextValue | null>(null);
 
 export function ConfigProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ConfigContextValue>(() => {
-    const config = getSupabaseConfig();
-    const ready = isSupabaseConfigured() && config.useSupabaseConfig && config.useSupabaseSettings;
+    const ready = isSupabaseConfigured();
     return { source: ready ? 'supabase' : 'unavailable', ready };
   }, []);
 

@@ -37,7 +37,6 @@ function rowToLead(row: Record<string, unknown>): InstagramQueueLead {
     ...(row.batch_limit ? { batch_limit: Number(row.batch_limit) } : {}),
     id: String(row.id),
     lead_id: String(row.lead_id ?? data.lead_id ?? ''),
-    sourcePreSendId: String(data.sourcePreSendId ?? row.source_pre_send_id ?? row.lead_id ?? ''),
     order: position,
     position,
     company: String(row.company_name ?? data.company ?? ''),
@@ -267,7 +266,6 @@ function dbPayload(lead: InstagramQueueLead, userId: string) {
     id: lead.id,
     user_id: userId,
     lead_id: lead.lead_id || null,
-    source_pre_send_id: lead.sourcePreSendId ?? null,
     scheduled_date: lead.scheduled_date,
     status: lead.status,
     position: lead.position,
@@ -364,7 +362,6 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
 
   async enqueue(inputLeads) {
     const persisted = await allLeads();
-    const existingSources = new Set(persisted.map((lead) => lead.sourcePreSendId).filter(Boolean));
     const existingLeadIds = new Set(persisted.map((lead) => lead.lead_id).filter(Boolean));
     const existingInstagrams = new Set(persisted.map((lead) => lead.instagram_username || normalizeInstagramUsername(lead.instagram_url ?? lead.instagram)).filter(Boolean));
     const validLeadIds = await loadValidLeadIds(inputLeads.map((lead) => lead.lead_id ?? ''));
@@ -373,16 +370,17 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
     const createdIds: string[] = [];
 
     for (const input of inputLeads) {
-      const safeInput = input.lead_id && !validLeadIds.has(input.lead_id) ? { ...input, lead_id: undefined } : input;
-      const username = normalizeInstagramUsername(safeInput.instagram_url ?? safeInput.instagram);
-      if (safeInput.lead_id && existingLeadIds.has(safeInput.lead_id)) continue;
-      if (safeInput.sourcePreSendId && existingSources.has(safeInput.sourcePreSendId)) continue;
+      if (!validLeadIds.has(input.lead_id)) {
+        throw new Error(`Lead canônico inexistente ou sem acesso: ${input.lead_id}.`);
+      }
+      const username = normalizeInstagramUsername(input.instagram_url ?? input.instagram);
+      if (existingLeadIds.has(input.lead_id)) continue;
       if (username && existingInstagrams.has(username)) continue;
 
-      const limit = safeInput.batchLimit ?? 15;
-      const scheduledDate = safeInput.scheduled_date ?? todayIsoDate();
-      const batch = nextBatch(working, safeInput.profile, limit, scheduledDate);
-      const lead = buildLead(safeInput, batch);
+      const limit = input.batchLimit ?? 15;
+      const scheduledDate = input.scheduled_date ?? todayIsoDate();
+      const batch = nextBatch(working, input.profile, limit, scheduledDate);
+      const lead = buildLead(input, batch);
       // A deduplicação é feita contra a fila persistida antes do insert.
       // O item só é considerado criado depois de o banco confirmar a gravação.
       const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
@@ -390,7 +388,6 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
       working.push(lead);
       createdIds.push(lead.id);
       if (lead.lead_id) existingLeadIds.add(lead.lead_id);
-      if (lead.sourcePreSendId) existingSources.add(lead.sourcePreSendId);
       if (lead.instagram_username) existingInstagrams.add(lead.instagram_username);
     }
     return createdIds;

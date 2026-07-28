@@ -1,3 +1,4 @@
+import { LEAD_STATUS } from '../../services/status/leadStatus';
 import { getSupabaseClient } from '../../lib/supabase';
 import { mapLead } from '../../mappers/lead.mapper';
 import { normalizeBrazilState } from '../../services/geo/brazilState';
@@ -64,8 +65,8 @@ const NORMALIZED_LEADS_SELECT = `
   contact_sources:contact_sources_id ( contact_sources_id, contact_sources_name )
 `;
 
-const ACTIVE_IMPORT_STATUS_IDS: LeadStatusId[] = [1, 2];
-const ALL_LEAD_STATUS_IDS: LeadStatusId[] = [1, 2, 3, 4, 5, 6, 7, 8];
+const ACTIVE_IMPORT_STATUS_IDS: LeadStatusId[] = [LEAD_STATUS.IMPORTED, LEAD_STATUS.VALIDATED];
+const ALL_LEAD_STATUS_IDS: LeadStatusId[] = Object.values(LEAD_STATUS);
 
 type LookupRow = Record<string, unknown>;
 type IdentityType = keyof ReturnType<typeof leadIdentityValues>;
@@ -572,7 +573,7 @@ export const supabaseImportRepository: ImportRepository = {
     const userId = await getCurrentUserId();
     const { data, error } = await getSupabaseClient()
       .from('leads')
-      .update({ lead_status_id: 8, leads_updated_at: new Date().toISOString() })
+      .update({ lead_status_id: LEAD_STATUS.ARCHIVED, leads_updated_at: new Date().toISOString() })
       .eq('leads_id', Number(id))
       .eq('users_id', userId)
       .select('leads_id')
@@ -583,7 +584,7 @@ export const supabaseImportRepository: ImportRepository = {
 
   async move(id, status: 'approved' | 'rejected') {
     const userId = await getCurrentUserId();
-    const statusId: LeadStatusId = status === 'approved' ? 2 : 6;
+    const statusId: LeadStatusId = status === 'approved' ? LEAD_STATUS.VALIDATED : LEAD_STATUS.INVALID;
     const { data, error } = await getSupabaseClient()
       .from('leads')
       .update({ lead_status_id: statusId, leads_updated_at: new Date().toISOString() })

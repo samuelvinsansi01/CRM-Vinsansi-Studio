@@ -2,6 +2,7 @@ import { normalizeBrazilState } from '../geo/brazilState';
 import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { calculateLeadScore } from '../lead-score/leadScore.service';
 import { isStatusGroup } from '../status/status.mapper';
+import { LEAD_STATUS } from '../status/leadStatus';
 import { normalizePhone, normalizeSiteIdentity } from './importValidation';
 import type { LeadOrigin, LeadStatusId } from '../../types/lead.types';
 import type { ImportLead, ImportLeadDestination } from './types';
@@ -47,14 +48,14 @@ function destinationOf(lead: ImportLead): ImportLeadDestination {
 }
 
 export function canonicalStatusId(status: unknown): LeadStatusId {
-  if (isStatusGroup(status, 'pending')) return 1;
-  if (isStatusGroup(status, 'approved')) return 2;
-  if (isStatusGroup(status, 'review')) return 3;
-  if (isStatusGroup(status, 'queued')) return 4;
-  if (isStatusGroup(status, 'sent')) return 5;
-  if (isStatusGroup(status, 'rejected') || isStatusGroup(status, 'invalid')) return 6;
-  if (String(status ?? '').trim().toLowerCase() === 'duplicado') return 7;
-  if (isStatusGroup(status, 'archived') || isStatusGroup(status, 'deleted')) return 8;
+  if (isStatusGroup(status, 'pending')) return LEAD_STATUS.IMPORTED;
+  if (isStatusGroup(status, 'approved')) return LEAD_STATUS.VALIDATED;
+  if (isStatusGroup(status, 'review')) return LEAD_STATUS.PRE_SEND;
+  if (isStatusGroup(status, 'queued')) return LEAD_STATUS.QUEUED;
+  if (isStatusGroup(status, 'sent')) return LEAD_STATUS.SENT;
+  if (isStatusGroup(status, 'rejected') || isStatusGroup(status, 'invalid')) return LEAD_STATUS.INVALID;
+  if (String(status ?? '').trim().toLowerCase() === 'duplicado') return LEAD_STATUS.DUPLICATE;
+  if (isStatusGroup(status, 'archived') || isStatusGroup(status, 'deleted')) return LEAD_STATUS.ARCHIVED;
   throw new Error(`Status de lead desconhecido: ${String(status ?? '') || 'vazio'}.`);
 }
 
@@ -64,10 +65,10 @@ export function canonicalChannelId(lead: ImportLead): 1 | 2 {
 
 export function canonicalContactSourceId(lead: ImportLead): 1 | 2 | 3 | 4 {
   const destination = destinationOf(lead);
-  if (destination === 'Instagram') return 4;
-  if (destination === 'Agregadores') return 3;
-  if (destination === 'Com site') return 2;
-  return 1;
+  if (destination === 'Instagram') return LEAD_STATUS.QUEUED;
+  if (destination === 'Agregadores') return LEAD_STATUS.PRE_SEND;
+  if (destination === 'Com site') return LEAD_STATUS.VALIDATED;
+  return LEAD_STATUS.IMPORTED;
 }
 
 function compactCategories(values: Array<string | undefined>) {
@@ -103,7 +104,7 @@ function validateLead(lead: ImportLead, lookup: CanonicalLeadLookup, allowFinalS
   }
 
   const statusId = canonicalStatusId(lead.status);
-  if (!allowFinalStatus && statusId !== 1 && statusId !== 2) {
+  if (!allowFinalStatus && statusId !== LEAD_STATUS.IMPORTED && statusId !== LEAD_STATUS.VALIDATED) {
     throw new Error(`Status de importação não persistível: ${String(lead.status ?? '') || 'vazio'}.`);
   }
 }
