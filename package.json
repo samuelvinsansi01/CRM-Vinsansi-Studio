@@ -16,7 +16,8 @@
     "verify:f07": "node scripts/verify-f07-whatsapp-queue.mjs",
     "verify:f08": "node scripts/verify-f08-instagram-queue.mjs",
     "verify:f09": "node scripts/verify-f09-base-permanente.mjs",
-    "verify:f10": "node scripts/verify-f10-reconciliation.mjs"
+    "verify:f10": "node scripts/verify-f10-reconciliation.mjs",
+    "verify:f01": "node scripts/verify-f01-operational-config.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

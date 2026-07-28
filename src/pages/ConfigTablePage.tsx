@@ -48,6 +48,7 @@ type FieldDefinition = {
   key: string;
   label: string;
   type?: 'input' | 'select' | 'textarea';
+  inputType?: 'text' | 'password' | 'number' | 'url' | 'time';
   options?: Array<string | SelectOption>;
   placeholder?: string;
   description?: string;
@@ -98,6 +99,8 @@ const templateTypeOptions: SelectOption[] = [
   { label: 'Sem site', value: 'sem-site' },
   { label: 'Com site', value: 'com-site' },
 ];
+
+const API_KEY_MASK = '••••••••';
 
 const templateChannelOptions: SelectOption[] = [
   { label: 'Geral', value: 'Geral' },
@@ -314,9 +317,9 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelP
       { key: 'name', label: 'Nome do chip', placeholder: 'Ex.: Principal' },
       { key: 'number', label: 'Numero', placeholder: 'Ex.: 5511940028922' },
       { key: 'level', label: 'Nivel', type: 'select', options: CHIP_LEVEL_OPTIONS },
-      { key: 'url', label: 'URL', placeholder: 'https://evolution.exemplo.com' },
+      { key: 'url', label: 'URL', inputType: 'url', placeholder: 'https://evolution.exemplo.com' },
       { key: 'instance', label: 'Instance name', placeholder: 'chip-8457' },
-      { key: 'apiKey', label: 'API Key', placeholder: 'Chave da instancia' },
+      { key: 'apiKey', label: 'API Key', inputType: 'password', placeholder: 'Chave da instancia', description: 'A chave existente nunca e exibida. Deixe o valor mascarado para preserva-la.' },
       { key: 'active', label: 'Status', type: 'select', options: activeOptions },
     ],
   };
@@ -425,7 +428,7 @@ function formFromRecord(record: ConfigRecord, chipLevelPresets: ChipLevelPresets
     number: record.number,
     level: record.level,
     url: record.url,
-    apiKey: record.apiKey,
+    apiKey: record.apiKey ? API_KEY_MASK : '',
     priority: String(record.priority),
     startTime: record.startTime ?? defaults.startTime,
     endTime: record.endTime ?? defaults.endTime,
@@ -447,7 +450,7 @@ function toInputPayload(kind: ConfigKind, form: Record<string, string>, chipLeve
   }
 
   const levelDefaults = chipLevelDefaults(form.level, chipLevelPresets);
-  return {
+  const payload: Record<string, unknown> = {
     ...form,
     active: form.active === 'Ativo',
     dailyLimit: form.dailyLimit ?? String(levelDefaults.dailyLimit),
@@ -457,6 +460,8 @@ function toInputPayload(kind: ConfigKind, form: Record<string, string>, chipLeve
     startTime: form.startTime ?? levelDefaults.startTime,
     endTime: form.endTime ?? levelDefaults.endTime,
   };
+  if (form.apiKey === API_KEY_MASK) delete payload.apiKey;
+  return payload;
 }
 
 function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: BranchConfigRecord[] = []): ConfigTableRow[] {
@@ -621,9 +626,28 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   };
 
   const validateForm = () => {
-    if (kind === 'templates' && !form.branchId) {
-      throw new Error('Cadastre um ramo antes de criar templates.');
+    if (kind === 'branches') {
+      if (!form.name?.trim()) throw new Error('Informe o nome do ramo.');
+      if (form.imageRequired === 'true' && !form.imageName?.trim()) throw new Error('Informe a imagem obrigatoria do ramo.');
+      return;
     }
+
+    if (kind === 'templates') {
+      if (!form.branchId) throw new Error('Cadastre um ramo antes de criar templates.');
+      [form.message1, form.message2, form.message3, form.message4].forEach((message, index) => {
+        if (!message?.trim()) throw new Error(`A Mensagem ${index + 1} e obrigatoria.`);
+      });
+      return;
+    }
+
+    if (kind === 'instagram') {
+      if (!form.username?.replace(/^@/, '').trim()) throw new Error('Informe o usuario do Instagram.');
+      return;
+    }
+
+    if (!form.instance?.trim()) throw new Error('Informe a instancia do chip.');
+    if (!form.url?.trim()) throw new Error('Informe a URL da Evolution.');
+    if (drawerMode === 'create' && !form.apiKey?.trim()) throw new Error('Informe a API Key da instancia.');
   };
 
   const saveForm = async () => {
@@ -804,6 +828,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
                   as={field.type === 'textarea' ? 'textarea' : 'input'}
                   label={field.label}
                   placeholder={field.placeholder}
+                  type={field.inputType}
                   value={form[field.key] ?? ''}
                   readOnly={drawerMode === 'view'}
                   onChange={(value) => updateForm(field.key, value)}

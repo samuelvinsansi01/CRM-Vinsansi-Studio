@@ -13,7 +13,7 @@ async function readSetting<T>(key: SettingsKey, fallback: T): Promise<T> {
   const table = getSupabaseConfig().tables.settings;
   const userId = await getCurrentUserId();
   const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', key).maybeSingle();
-  if (error) return fallback;
+  if (error) throw new Error(`Nao foi possivel carregar a configuracao ${key}: ${error.message}`);
   return data?.value ? ({ ...fallback, ...data.value } as T) : fallback;
 }
 
@@ -38,6 +38,18 @@ async function writeSetting<T>(key: SettingsKey, value: T): Promise<T> {
     ? await client.from(table).update(payload).eq('id', existing.data.id)
     : await client.from(table).insert(payload);
   if (error) throw new Error(error.message);
+
+  const confirmation = await client
+    .from(table)
+    .select('value')
+    .eq('user_id', userId)
+    .eq('key', key)
+    .maybeSingle();
+  if (confirmation.error) throw new Error(`A configuracao foi gravada, mas nao pode ser confirmada: ${confirmation.error.message}`);
+  if (!confirmation.data) throw new Error('A configuracao nao foi encontrada apos o salvamento.');
+  if (JSON.stringify(confirmation.data.value) !== JSON.stringify(value)) {
+    throw new Error('O banco retornou uma configuracao diferente da que foi salva.');
+  }
   return value;
 }
 
@@ -45,7 +57,7 @@ async function readExtensionRuntimeConfig(): Promise<ExtensionRuntimeConfig | nu
   const table = getSupabaseConfig().tables.settings;
   const userId = await getCurrentUserId();
   const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', 'extension_runtime').maybeSingle();
-  if (error) return null;
+  if (error) throw new Error(`Nao foi possivel carregar a configuracao da extensao: ${error.message}`);
   return (data?.value ?? null) as ExtensionRuntimeConfig | null;
 }
 
@@ -115,7 +127,7 @@ export const supabaseSettingsRepository: SettingsRepository = {
     const table = getSupabaseConfig().tables.settings;
     const userId = await getCurrentUserId();
     const { data, error } = await getSupabaseClient().from(table).select('value').eq('user_id', userId).eq('key', 'dispatch').maybeSingle();
-    if (error) return normalizeDispatchSettings(defaultDispatchSettings);
+    if (error) throw new Error(`Nao foi possivel carregar as configuracoes de disparo: ${error.message}`);
     return normalizeDispatchSettings(data?.value ?? defaultDispatchSettings);
   },
 

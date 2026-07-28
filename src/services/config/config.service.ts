@@ -11,6 +11,7 @@ import {
   DEFAULT_TEMPLATE_MESSAGE_2,
 } from './config.seed';
 import { chipLevelDefaults } from './chipOperational';
+import { assertOperationalConfigRecord } from './operationalConfig.rules';
 import type {
   BranchConfigRecord,
   ChipConfigRecord,
@@ -279,7 +280,7 @@ async function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigR
     batches,
     paused: toBoolean(valueFromInput(raw, ['paused', 'pausado'], existing?.paused ?? false), existing?.paused ?? false),
     active,
-    status: existing?.status ?? statusFromActive(active),
+    status: statusFromActive(active),
     createdAt,
     updatedAt: nowIso(),
   };
@@ -351,6 +352,69 @@ async function normalizeByKind(kind: ConfigKind, input: CreateConfigRecordInput 
   if (kind === 'chips') return normalizeChipInput(input, existing && existing.kind === 'chips' ? existing : undefined);
   if (kind === 'instagram') return normalizeInstagramInput(input, existing && existing.kind === 'instagram' ? existing : undefined);
   return normalizeTemplateInput(input, existing && isTemplate(existing) ? existing : undefined, await getBranches());
+}
+
+async function listAllConfigRecords() {
+  const [branches, templates, chips, instagram] = await Promise.all([
+    repositories.config.list('branches'),
+    repositories.config.list('templates'),
+    repositories.config.list('chips'),
+    repositories.config.list('instagram'),
+  ]);
+  return [...branches, ...templates, ...chips, ...instagram].filter((record) => !isDeletedConfig(record));
+}
+
+async function assertRecordContract(record: ConfigRecord, editingId?: string) {
+  const records = await listAllConfigRecords();
+  assertOperationalConfigRecord(record, records, editingId);
+  if (record.kind === 'templates') await assertTemplateContract(record, editingId);
+}
+
+function isOpenWhatsAppStatus(status: unknown) {
+  return ['queued', 'sending', 'paused', 'error'].includes(normalizeText(status));
+}
+
+function isOpenInstagramStatus(status: unknown) {
+  return ['queued', 'following', 'dm_opened', 'paused', 'error'].includes(normalizeText(status));
+}
+
+async function assertArchiveAllowed(record: ConfigRecord) {
+  if (record.kind === 'branches') {
+    const templates = (await repositories.config.list('templates')).filter(isTemplate);
+    const activeTemplates = templates.filter((template) =>
+      template.branchId === record.id && !isArchivedConfig(template) && !isDeletedConfig(template),
+    );
+    if (activeTemplates.length) {
+      throw new Error(`Arquive primeiro os ${activeTemplates.length} template(s) vinculados a este ramo.`);
+    }
+    return;
+  }
+
+  if (record.kind === 'chips') {
+    const batches = await repositories.whatsappQueue.listBatches({ chip: record.instance });
+    const open = batches.flatMap((batch) => batch.leads).filter((lead) => isOpenWhatsAppStatus(lead.status));
+    if (open.length) throw new Error(`Este chip possui ${open.length} item(ns) de fila ainda aberto(s).`);
+    return;
+  }
+
+  if (record.kind === 'instagram') {
+    const batches = await repositories.instagramQueue.listBatches({ profile: record.username });
+    const open = batches.flatMap((batch) => batch.leads).filter((lead) => isOpenInstagramStatus(lead.status));
+    if (open.length) throw new Error(`Este perfil possui ${open.length} item(ns) de fila ainda aberto(s).`);
+    return;
+  }
+
+  const [whatsappBatches, instagramBatches] = await Promise.all([
+    repositories.whatsappQueue.listBatches({}),
+    repositories.instagramQueue.listBatches({}),
+  ]);
+  const openWhatsApp = whatsappBatches.flatMap((batch) => batch.leads)
+    .filter((lead) => lead.template_id === record.id && isOpenWhatsAppStatus(lead.status));
+  const openInstagram = instagramBatches.flatMap((batch) => batch.leads)
+    .filter((lead) => lead.template_id === record.id && isOpenInstagramStatus(lead.status));
+  if (openWhatsApp.length + openInstagram.length) {
+    throw new Error(`Este template esta congelado em ${openWhatsApp.length + openInstagram.length} item(ns) de fila ainda aberto(s).`);
+  }
 }
 
 async function assertTemplateContract(template: TemplateConfigRecord, editingId?: string) {
@@ -459,7 +523,7 @@ export const configService = {
 
   async create(kind: ConfigKind, input: CreateConfigRecordInput) {
     const normalized = await normalizeByKind(kind, input);
-    if (normalized.kind === 'templates') await assertTemplateContract(normalized);
+    await assertRecordContract(normalized);
 
     const record = await repositories.config.create(kind, normalized);
     const persisted = await confirmPersisted(kind, record);
@@ -472,7 +536,7 @@ export const configService = {
     if (!current) throw new Error('Registro nao encontrado.');
 
     const normalized = await normalizeByKind(kind, input, current);
-    if (normalized.kind === 'templates') await assertTemplateContract(normalized, id);
+    await assertRecordContract(normalized, id);
 
     const record = await repositories.config.update(kind, id, normalized);
     assertPersisted(normalized, record);
@@ -492,6 +556,8 @@ export const configService = {
   },
 
   async toggleArchive(kind: ConfigKind, id: string) {
+    const current = (await selectedRecords(kind, [id]))[0];
+    if (!isArchivedConfig(current)) await assertArchiveAllowed(current);
     const record = await repositories.config.toggleArchive(kind, id);
     await emitConfigChanged(kind);
     return record;
@@ -502,7 +568,9 @@ export const configService = {
     if (!selected.every((record) => !isArchivedConfig(record) && !isDeletedConfig(record))) {
       throw new Error('Arquivar exige apenas registros ativos ou inativos.');
     }
-    const updated = await Promise.all(selected.map((record) => repositories.config.toggleArchive(kind, record.id)));
+    for (const record of selected) await assertArchiveAllowed(record);
+    const updated: ConfigRecord[] = [];
+    for (const record of selected) updated.push(await repositories.config.toggleArchive(kind, record.id));
     await emitConfigChanged(kind);
     return updated;
   },

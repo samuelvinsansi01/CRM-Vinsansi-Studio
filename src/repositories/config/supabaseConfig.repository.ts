@@ -356,30 +356,30 @@ function rowToInstagramProfile(row: Record<string, unknown>): InstagramConfigRec
 }
 
 async function listTemplates() {
-  const branches = await listBranches();
-  const { data, error } = await getSupabaseClient().from(tableForKind('templates')).select(TEMPLATE_SELECT);
+  const [branches, userId] = await Promise.all([listBranches(), getCurrentUserId()]);
+  const { data, error } = await getSupabaseClient().from(tableForKind('templates')).select(TEMPLATE_SELECT).eq('user_id', userId);
   if (error) throw new Error(error.message);
-  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => rowToTemplate(row, branches));
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row: Record<string, unknown>) => rowToTemplate(row, branches));
 }
 
 async function listBranches() {
   const { data, error } = await getSupabaseClient().from(tableForKind('branches')).select('*');
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => rowToBranch(row));
+  return ((data ?? []) as Record<string, unknown>[]).map((row: Record<string, unknown>) => rowToBranch(row));
 }
 
 async function listChips() {
-  const { data, error } = await getSupabaseClient().from(tableForKind('chips')).select('*');
+  const userId = await getCurrentUserId();
+  const { data, error } = await getSupabaseClient().from(tableForKind('chips')).select('*').eq('user_id', userId);
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => rowToChip(row));
+  return ((data ?? []) as Record<string, unknown>[]).map((row: Record<string, unknown>) => rowToChip(row));
 }
 
 async function listInstagramProfiles() {
-  const { data, error } = await getSupabaseClient().from(tableForKind('instagram')).select('*');
-  // O banco normalizado atual ainda não possui a tabela legada instagram_profiles.
-  // Nesse caso, a configuração fica vazia sem interromper as telas operacionais.
-  if (error) return [];
-  return (data ?? []).map((row) => rowToInstagramProfile(row));
+  const userId = await getCurrentUserId();
+  const { data, error } = await getSupabaseClient().from(tableForKind('instagram')).select('*').eq('user_id', userId);
+  if (error) throw new Error(`Nao foi possivel carregar os perfis Instagram: ${error.message}`);
+  return ((data ?? []) as Record<string, unknown>[]).map((row: Record<string, unknown>) => rowToInstagramProfile(row));
 }
 
 async function findRowById(table: string, id: unknown) {
@@ -390,10 +390,20 @@ async function findRowById(table: string, id: unknown) {
   return data as Record<string, unknown> | null;
 }
 
+async function findOwnedRowById(table: string, id: unknown) {
+  const text = String(id ?? '').trim();
+  if (!text) return null;
+  const userId = await getCurrentUserId();
+  const { data, error } = await getSupabaseClient().from(table).select('*').eq('id', text).eq('user_id', userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as Record<string, unknown> | null;
+}
+
 async function findTemplateRowById(table: string, id: unknown) {
   const text = String(id ?? '').trim();
   if (!text) return null;
-  const { data, error } = await getSupabaseClient().from(table).select(TEMPLATE_SELECT).eq('id', text).maybeSingle();
+  const userId = await getCurrentUserId();
+  const { data, error } = await getSupabaseClient().from(table).select(TEMPLATE_SELECT).eq('id', text).eq('user_id', userId).maybeSingle();
   if (error) throw new Error(error.message);
   return data as Record<string, unknown> | null;
 }
@@ -465,7 +475,7 @@ async function upsertTemplate(record: TemplateConfigRecord) {
     updated_at: nowIso(),
   };
   const response = existingById
-    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select(TEMPLATE_SELECT).single()
+    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).eq('user_id', userId).select(TEMPLATE_SELECT).single()
     : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select(TEMPLATE_SELECT).single();
   if (response.error) throw new Error(response.error.message);
   return rowToTemplate((response.data ?? payload) as unknown as Record<string, unknown>, branches);
@@ -476,7 +486,7 @@ async function upsertChip(record: ChipConfigRecord) {
   const table = tableForKind('chips');
   const instance = String(record.instance || record.name || record.id).trim();
   const levelDefaults = chipLevelDefaults(record.level);
-  const existingById = await findRowById(table, record.id);
+  const existingById = await findOwnedRowById(table, record.id);
   let existingByInstance: Record<string, unknown> | null = null;
 
   if (instance) {
@@ -543,7 +553,7 @@ async function upsertChip(record: ChipConfigRecord) {
     updated_at: nowIso(),
   };
   const response = existingByInstance || existingById
-    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).select('*').single()
+    ? await getSupabaseClient().from(table).update(payload).eq('id', targetId).eq('user_id', userId).select('*').single()
     : await getSupabaseClient().from(table).insert({ ...payload, created_at: record.createdAt || nowIso() }).select('*').single();
   if (response.error) throw new Error(response.error.message);
   return rowToChip(response.data ?? payload);
@@ -553,7 +563,7 @@ async function upsertInstagramProfile(record: InstagramConfigRecord) {
   const userId = await getCurrentUserId();
   const table = tableForKind('instagram');
   const username = normalizeInstagramUsername(record.username);
-  const existingById = await findRowById(table, record.id);
+  const existingById = await findOwnedRowById(table, record.id);
   let existingByUsername: Record<string, unknown> | null = null;
 
   if (username) {
@@ -666,13 +676,14 @@ function queueRowUsesBranch(row: Record<string, unknown>, branch: BranchConfigRe
 
 async function propagateBranchMediaToOpenQueues(branch: BranchConfigRecord) {
   const client = getSupabaseClient();
+  const userId = await getCurrentUserId();
   const tables = [getSupabaseConfig().tables.whatsappQueueItems, getSupabaseConfig().tables.instagramQueueItems];
   const imageName = String(branch.imageName ?? '').trim();
   const imageRequired = Boolean(branch.imageRequired);
   const effectiveImageUrl = imageRequired ? imageName : '';
 
   for (const queueTable of tables) {
-    const response = await client.from(queueTable).select('*');
+    const response = await client.from(queueTable).select('*').eq('user_id', userId);
     // A leitura dinâmica ainda garante o valor correto no painel/worker se uma
     // tabela antiga estiver temporariamente sem permissão de atualização.
     if (response.error) {
@@ -681,10 +692,10 @@ async function propagateBranchMediaToOpenQueues(branch: BranchConfigRecord) {
     }
 
     const targets = (response.data ?? [])
-      .filter((row) => isOpenQueueRow(row as Record<string, unknown>))
-      .filter((row) => queueRowUsesBranch(row as Record<string, unknown>, branch));
+      .filter((row: Record<string, unknown>) => isOpenQueueRow(row))
+      .filter((row: Record<string, unknown>) => queueRowUsesBranch(row, branch));
 
-    await Promise.all(targets.map(async (row) => {
+    await Promise.all(targets.map(async (row: Record<string, unknown>) => {
       const current = row as Record<string, unknown>;
       const data = rowData(current);
       const { error } = await client
@@ -699,7 +710,8 @@ async function propagateBranchMediaToOpenQueues(branch: BranchConfigRecord) {
           },
           updated_at: nowIso(),
         })
-        .eq('id', current.id);
+        .eq('id', current.id)
+        .eq('user_id', userId);
       if (error) {
         console.warn(`[branches] item ${String(current.id)} nao sincronizado em ${queueTable}: ${error.message}`);
       }
