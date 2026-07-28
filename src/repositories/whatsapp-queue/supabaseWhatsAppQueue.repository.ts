@@ -140,7 +140,17 @@ async function allLeads() {
   return (queueResponse.data ?? [])
     .filter((row) => !isDeletedRow(row))
     .map((row) => rowToLead(row))
-    .filter((lead) => isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'sending') || isStatusGroup(lead.status, 'paused'))
+    // A fila operacional precisa manter erros, inválidos e enviados visíveis.
+    // O filtro anterior removia justamente os itens que a UI deveria permitir
+    // reprocessar e fazia os indicadores de enviados/erros permanecerem zerados.
+    .filter((lead) =>
+      isStatusGroup(lead.status, 'queued') ||
+      isStatusGroup(lead.status, 'sending') ||
+      isStatusGroup(lead.status, 'paused') ||
+      isStatusGroup(lead.status, 'error') ||
+      isStatusGroup(lead.status, 'invalid') ||
+      isStatusGroup(lead.status, 'sent'),
+    )
     .map((lead) => applyCurrentBranchMedia(lead, branchForBoundRecord(lead, branches)))
     .filter((lead) => !isSanitizedLegacyWhatsAppItem(lead));
 }
@@ -322,17 +332,25 @@ async function updateStatus(ids: string[], status: WhatsAppQueueStatus, errorMes
   const userId = await getCurrentUserId();
   await Promise.all(ids.map(async (id) => {
     const lead = leads.find((item) => item.id === id);
-    if (!lead) return;
+    if (!lead) throw new Error(`Item da fila não encontrado ou sem acesso: ${id}.`);
     const updated: WhatsAppQueueLead = {
       ...lead,
       status,
       error_message: errorMessage || (status === 'error' ? lead.error_message : ''),
       sent_at: status === 'sent' ? timestamp : lead.sent_at,
-      retry_count: status === 'queued' ? lead.retry_count + 1 : lead.retry_count,
+      retry_count: status === 'queued' && isStatusGroup(lead.status, 'error') ? lead.retry_count + 1 : lead.retry_count,
       updated_at: timestamp,
     };
-    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id).eq('user_id', userId);
+    const { data, error } = await getSupabaseClient()
+      .from(table())
+      .update(dbPayload(updated, userId))
+      .eq('id', id)
+      .eq('user_id', userId)
+      .eq('status', lead.status)
+      .select('id')
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (!data?.id) throw new Error(`Conflito concorrente no item ${id}. Atualize a fila antes de repetir a ação.`);
   }));
 }
 
@@ -421,8 +439,16 @@ export const supabaseWhatsAppQueueRepository: WhatsAppQueueRepository = {
       updated_at: nowIso(),
     };
     const userId = await getCurrentUserId();
-    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id).eq('user_id', userId);
+    const { data, error } = await getSupabaseClient()
+      .from(table())
+      .update(dbPayload(updated, userId))
+      .eq('id', id)
+      .eq('user_id', userId)
+      .eq('status', lead.status)
+      .select('id')
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (!data?.id) throw new Error('O item foi alterado por outro processo. Atualize a fila e tente novamente.');
     return updated;
   },
 

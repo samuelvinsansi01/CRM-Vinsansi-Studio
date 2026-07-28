@@ -12,7 +12,8 @@
     "verify:f05-validation": "node scripts/verify-f05-whatsapp-validation.mjs",
     "verify:f05-provider": "node scripts/verify-f05-provider-contract.mjs",
     "verify:f05": "npm run verify:f05-validation && npm run verify:f05-provider",
-    "verify:f06": "node scripts/verify-f06-queue-preparation.mjs"
+    "verify:f06": "node scripts/verify-f06-queue-preparation.mjs",
+    "verify:f07": "node scripts/verify-f07-whatsapp-queue.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

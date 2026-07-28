@@ -161,7 +161,7 @@ function WhatsAppQueuePage() {
     }
   };
 
-  const targetChips = () => activeChip ? [activeChip] : chips;
+  const targetChips = () => activeChip ? [activeChip] : Array.from(new Set(batches.map((batch) => batch.chip).filter(Boolean)));
 
   const handlePause = async () => {
     try {
@@ -201,10 +201,14 @@ function WhatsAppQueuePage() {
       return;
     }
 
-    await reprocess(ids);
-    setStarting(false);
-    setSelectedIds([]);
-    pushToast({ title: 'Leads reprocessados', description: `${ids.length} lead(s) voltaram para a fila.`, tone: 'success' });
+    try {
+      await reprocess(ids);
+      setStarting(false);
+      setSelectedIds([]);
+      pushToast({ title: 'Leads reprocessados', description: `${ids.length} lead(s) voltaram para a fila.`, tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível reprocessar', description: err instanceof Error ? err.message : 'Atualize a fila e tente novamente.', tone: 'danger' });
+    }
   };
 
   const handleSaveLead = async (draft: QueueDraft) => {
