@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DashboardLayout } from './design-system/layouts/DashboardLayout';
+import { AuditPage } from './pages/AuditPage';
 import { BasePage } from './pages/BasePage';
 import { ConfigTablePage } from './pages/ConfigTablePage';
 import { HomePage } from './pages/HomePage';
@@ -35,6 +36,7 @@ export function App() {
         <ImportPage rejected={activePage === 'import-rejected'} onStatusChange={(isRejected) => setActivePage(isRejected ? 'import-rejected' : 'import-approved')} />
       ) : null}
       {activePage === 'base' ? <BasePage /> : null}
+      {activePage === 'audit' ? <AuditPage /> : null}
       {activePage === 'valid' ? <HomePage mode="valid" /> : null}
       {activePage === 'pre-send' ? <PreSendPage /> : null}
       {activePage === 'whatsapp' ? <QueuePage channel="whatsapp" /> : null}

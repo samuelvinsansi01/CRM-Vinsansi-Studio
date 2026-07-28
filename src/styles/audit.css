@@ -1,0 +1,30 @@
+.audit-page .page-header { margin-bottom: var(--space-16); }
+.audit-page__actions { display: flex; gap: var(--space-12); align-items: center; }
+.audit-page > .metric-grid { margin-bottom: var(--space-16); }
+.audit-panel { overflow: hidden; }
+.audit-scan-time { display: inline-flex; align-items: center; gap: var(--space-08); color: var(--app-muted); font-size: 12px; }
+.audit-filters { display: grid; grid-template-columns: minmax(280px, 1fr) 210px 220px; gap: var(--space-12); padding: 0 var(--space-20) var(--space-20); }
+.audit-search { display: flex; align-items: center; gap: var(--space-08); min-height: var(--space-40); padding: 0 var(--space-12); border: 1px solid color-mix(in srgb, var(--color-pure-white) 10%, transparent); border-radius: var(--radius-08); background: var(--surface-raised); color: var(--app-muted); }
+.audit-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--app-text); font: inherit; }
+.audit-filters select { min-height: var(--space-40); padding: 0 var(--space-12); border: 1px solid color-mix(in srgb, var(--color-pure-white) 10%, transparent); border-radius: var(--radius-08); background: var(--surface-raised); color: var(--app-text); }
+.audit-table-wrap { overflow-x: auto; }
+.audit-table { width: 100%; border-collapse: collapse; }
+.audit-table th { padding: var(--space-12) var(--space-16); border-top: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent); color: var(--app-muted); font-size: 12px; text-align: left; white-space: nowrap; }
+.audit-table td { padding: var(--space-16); border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 7%, transparent); vertical-align: top; }
+.audit-table td:nth-child(2) { min-width: 360px; }
+.audit-table td:nth-child(3) { min-width: 220px; }
+.audit-table td:nth-child(4) { min-width: 150px; }
+.audit-table td:nth-child(5) { min-width: 220px; }
+.audit-table td strong, .audit-table td span, .audit-table td small { display: block; }
+.audit-table td strong { margin-bottom: var(--space-04); font-size: 14px; }
+.audit-table td span { color: var(--app-muted); font-size: 13px; line-height: 20px; }
+.audit-table td small { margin-top: var(--space-06); color: var(--app-muted); font-size: 12px; line-height: 18px; }
+.audit-state { display: flex; min-height: 180px; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-08); padding: var(--space-24); color: var(--app-muted); text-align: center; }
+.audit-state--success { color: var(--action-success); }
+.audit-state--success span { color: var(--app-muted); }
+.audit-state--error { color: var(--action-danger); }
+.audit-footnote { margin: var(--space-16) 0 0; color: var(--app-muted); font-size: 12px; line-height: 18px; }
+@media (max-width: 900px) {
+  .audit-page__actions { align-items: stretch; flex-direction: column; }
+  .audit-filters { grid-template-columns: 1fr; }
+}

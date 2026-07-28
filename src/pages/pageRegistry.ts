@@ -3,6 +3,7 @@ export type PageId =
   | 'import-approved'
   | 'import-rejected'
   | 'base'
+  | 'audit'
   | 'valid'
   | 'pre-send'
   | 'whatsapp'
@@ -28,6 +29,7 @@ export const navGroups = [
     ],
   },
   { id: 'base', label: 'Base Permanente' },
+  { id: 'audit', label: 'Auditoria' },
   {
     id: 'settings',
     label: 'Configurações',
@@ -47,6 +49,7 @@ export const pageTitles: Record<PageId, string> = {
   'import-approved': 'Importar',
   'import-rejected': 'Importar',
   base: 'Base Permanente',
+  audit: 'Auditoria',
   valid: 'Válidos',
   'pre-send': 'Pré-Envio',
   whatsapp: 'Fila WhatsApp',
