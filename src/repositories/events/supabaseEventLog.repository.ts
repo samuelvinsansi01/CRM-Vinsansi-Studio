@@ -108,6 +108,6 @@ export const supabaseEventLogRepository: EventLogRepository = {
   async list(limit = 100) {
     const { data, error } = await getSupabaseClient().from(table()).select('*').order('created_at', { ascending: false }).limit(limit);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => rowToEvent(row));
+    return ((data ?? []) as Array<Record<string, unknown>>).map((row) => rowToEvent(row));
   },
 };

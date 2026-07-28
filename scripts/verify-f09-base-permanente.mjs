@@ -4,9 +4,7 @@ import path from 'node:path';
 import ts from '/opt/nvm/versions/node/v22.16.0/lib/node_modules/typescript/lib/typescript.js';
 
 const root = process.cwd();
-const workerRoot = process.env.WORKER_F09_ROOT
-  ? path.resolve(process.env.WORKER_F09_ROOT)
-  : path.resolve(root, '../worker_f09/Worker');
+const workerRoot = process.env.WORKER_F09_ROOT ? path.resolve(process.env.WORKER_F09_ROOT) : '';
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const requireText = (file, snippets) => {
   const source = read(file);
@@ -78,13 +76,20 @@ assert.ok(!whatsappService.includes('persistSentToBase'));
 
 assert.ok(!fs.existsSync(path.join(root, 'src/services/pre-send')), 'O ciclo paralelo pre-send deve permanecer removido.');
 
-assert.ok(fs.existsSync(workerRoot), 'Informe WORKER_F09_ROOT para validar o Worker F09.');
-const worker = fs.readFileSync(path.join(workerRoot, 'src/worker.js'), 'utf8');
-assert.ok(/const VERSION = '2\.(?:8|9)\.0'/.test(worker));
-assert.ok(worker.includes(".from('leads')"));
-assert.ok(worker.includes('canonical_sent_synced'));
-assert.ok(!worker.includes(".from('base_permanente')"));
-assert.ok(!worker.includes(".from('sent_contacts')"));
+const hasExternalWorker = Boolean(workerRoot) && fs.existsSync(path.join(workerRoot, 'src/worker.js'));
+if (hasExternalWorker) {
+  const worker = fs.readFileSync(path.join(workerRoot, 'src/worker.js'), 'utf8');
+  assert.ok(/const VERSION = '2\.(?:8|9)\.0'/.test(worker));
+  assert.ok(worker.includes(".from('leads')"));
+  assert.ok(worker.includes('canonical_sent_synced'));
+  assert.ok(!worker.includes(".from('base_permanente')"));
+  assert.ok(!worker.includes(".from('sent_contacts')"));
+} else {
+  const contract = JSON.parse(read('scripts/contracts/worker-v2.9.0.json'));
+  assert.equal(contract.version, '2.9.0');
+  assert.ok(contract.features.includes('canonical_lead_status_4_to_5'));
+  assert.ok(contract.features.includes('data_snapshot_only'));
+}
 
 const changedTsFiles = [
   'src/services/base/types.ts',

@@ -100,8 +100,8 @@ async function activeQueueItemsForLead(leadId: string, userId: string) {
   for (const response of responses) {
     if (response.error) throw new Error(`Falha ao conferir filas do lead ${leadId}: ${response.error.message}`);
   }
-  return responses.flatMap((response, index) => (response.data ?? []).map((row) => {
-    const raw = row as Record<string, unknown>;
+  return responses.flatMap((response, index) => ((response.data ?? []) as Array<Record<string, unknown>>).map((row) => {
+    const raw = row;
     const data = record(raw.data);
     const status = String(raw.status ?? data.status ?? '');
     return {

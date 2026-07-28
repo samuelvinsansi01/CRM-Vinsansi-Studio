@@ -154,11 +154,12 @@ async function resolveOwnedQueueItems(auth: AuthContext, ids: string[]): Promise
     .in('id', ids);
   if (error) throw new Error(`queue_authorization_check_failed:${error.message}`);
 
-  const byId = new Map((data ?? []).map((row) => [String(row.id), row as QueueItem]));
+  const rows = (data ?? []) as QueueItem[];
+  const byId = new Map<string, QueueItem>(rows.map((row) => [String(row.id), row]));
   if (byId.size !== ids.length || ids.some((id) => !byId.has(id))) {
     throw new Error('queue_item_not_available_for_current_user');
   }
-  return ids.map((id) => byId.get(id)!).filter(Boolean);
+  return ids.map((id) => byId.get(id)).filter((item): item is QueueItem => Boolean(item));
 }
 
 function assertStartContract(items: QueueItem[], requestedChip: string) {

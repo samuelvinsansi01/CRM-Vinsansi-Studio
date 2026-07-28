@@ -96,7 +96,7 @@ function isDeletedRow(row: Record<string, unknown>) {
   return isStatusGroup(row.status ?? data.status, 'deleted');
 }
 
-async function allLeads() {
+async function allLeads(): Promise<InstagramQueueLead[]> {
   const client = getSupabaseClient();
   const userId = await getCurrentUserId();
   const [queueResponse, branchResponse] = await Promise.all([
@@ -107,7 +107,7 @@ async function allLeads() {
 
   const branches = branchResponse.error
     ? []
-    : (branchResponse.data ?? []).map((row) => {
+    : ((branchResponse.data ?? []) as Array<Record<string, unknown>>).map((row) => {
         const data = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : {};
         return {
           id: String(row.id ?? data.id ?? ''),
@@ -129,7 +129,7 @@ async function allLeads() {
         };
       });
 
-  return (queueResponse.data ?? [])
+  return ((queueResponse.data ?? []) as Array<Record<string, unknown>>)
     .filter((row) => !isDeletedRow(row))
     .map((row) => rowToLead(row))
     .map((lead) => applyCurrentBranchMedia(lead, branchForBoundRecord(lead, branches)));
@@ -147,7 +147,7 @@ async function loadValidLeadIds(ids: string[]) {
     .in('leads_id', uniqueIds.map(Number));
 
   if (error) throw new Error(`Não foi possível validar os vínculos da fila Instagram: ${error.message}`);
-  return new Set((data ?? []).map((row) => String(row.leads_id)));
+  return new Set(((data ?? []) as Array<{ leads_id?: unknown }>).map((row) => String(row.leads_id)));
 }
 
 function calculateSummary(leads: InstagramQueueLead[]): InstagramQueueSummary {

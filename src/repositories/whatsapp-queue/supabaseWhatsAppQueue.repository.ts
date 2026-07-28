@@ -103,7 +103,7 @@ function isDeletedRow(row: Record<string, unknown>) {
   return isStatusGroup(row.status ?? data.status, 'deleted');
 }
 
-async function allLeads() {
+async function allLeads(): Promise<WhatsAppQueueLead[]> {
   const client = getSupabaseClient();
   const userId = await getCurrentUserId();
   const [queueResponse, branchResponse] = await Promise.all([
@@ -114,7 +114,7 @@ async function allLeads() {
 
   const branches = branchResponse.error
     ? []
-    : (branchResponse.data ?? []).map((row) => {
+    : ((branchResponse.data ?? []) as Array<Record<string, unknown>>).map((row) => {
         const data = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : {};
         return {
           id: String(row.id ?? data.id ?? ''),
@@ -136,7 +136,7 @@ async function allLeads() {
         };
       });
 
-  return (queueResponse.data ?? [])
+  return ((queueResponse.data ?? []) as Array<Record<string, unknown>>)
     .filter((row) => !isDeletedRow(row))
     .map((row) => rowToLead(row))
     // A fila operacional precisa manter erros, inválidos e enviados visíveis.

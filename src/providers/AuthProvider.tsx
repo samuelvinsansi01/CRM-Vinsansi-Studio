@@ -76,7 +76,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    client.auth.getSession().then(({ data, error: sessionError }) => {
+    client.auth.getSession().then((result: { data: { session: { user: User } | null }; error: { message: string } | null }) => {
+      const { data, error: sessionError } = result;
       if (!active) return;
       if (sessionError) {
         setError(sessionError.message);
@@ -86,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void syncUser(data.session?.user ?? null);
     });
 
-    const { data } = client.auth.onAuthStateChange((_event, session) => {
+    const { data } = client.auth.onAuthStateChange((_event: string, session: { user: User } | null) => {
       setLoading(true);
       void syncUser(session?.user ?? null);
     });

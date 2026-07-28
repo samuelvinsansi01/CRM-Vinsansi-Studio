@@ -207,7 +207,7 @@ export function SelectField({
       </button>
 
       {isOpen ? (
-        <div className="select-field__menu" role="listbox" onMouseDown={(event) => event.preventDefault()}>
+        <div className="select-field__menu" role="listbox" onMouseDown={(event: import('react').MouseEvent<HTMLDivElement>) => event.preventDefault()}>
           {searchable ? (
             <div className="select-field__search">
               <Search size={15} strokeWidth={1.8} />
@@ -216,8 +216,8 @@ export function SelectField({
                 type="search"
                 value={searchQuery}
                 placeholder={searchPlaceholder}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                onMouseDown={(event) => event.stopPropagation()}
+                onChange={(event: import('react').ChangeEvent<HTMLInputElement>) => setSearchQuery(event.target.value)}
+                onMouseDown={(event: import('react').MouseEvent<HTMLInputElement>) => event.stopPropagation()}
               />
             </div>
           ) : null}

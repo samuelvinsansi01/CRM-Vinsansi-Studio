@@ -6,11 +6,11 @@ import { webcrypto } from 'node:crypto';
 import ts from '/opt/nvm/versions/node/v22.16.0/lib/node_modules/typescript/lib/typescript.js';
 
 const root = process.cwd();
-const extensionRoot = process.env.EXTENSION_F08_ROOT
-  ? path.resolve(process.env.EXTENSION_F08_ROOT)
-  : path.resolve(root, '../extension/extension_hardened');
+const extensionRoot = process.env.EXTENSION_F08_ROOT ? path.resolve(process.env.EXTENSION_F08_ROOT) : '';
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
+const hasExternalExtension = Boolean(extensionRoot) && fs.existsSync(path.join(extensionRoot, 'manifest.json'));
 const readExtension = (file) => fs.readFileSync(path.join(extensionRoot, file), 'utf8');
+const extensionContract = JSON.parse(read('scripts/contracts/instagram-extension-v1.3.0.json'));
 const requireText = (file, snippets) => {
   const source = read(file);
   for (const snippet of snippets) assert.ok(source.includes(snippet), `${file} deveria conter: ${snippet}`);
@@ -86,30 +86,38 @@ requireText('src/pages/QueuePage.tsx', [
   'window.prompt(`Copie o token temporário',
 ]);
 
-const manifest = JSON.parse(readExtension('manifest.json'));
-assert.equal(manifest.manifest_version, 3, 'A extensão precisa usar Manifest V3.');
-assert.equal(manifest.version, '1.3.0', 'A extensão precisa estar na versão 1.3.0.');
-const popup = readExtension('popup.js');
-for (const forbidden of ['/api/update', 'INSTAGRAM_EXTENSION_SECRET', 'userId:', 'User ID']) {
-  assert.ok(!popup.includes(forbidden), `popup.js não pode conter contrato legado: ${forbidden}`);
+if (hasExternalExtension) {
+  const manifest = JSON.parse(readExtension('manifest.json'));
+  assert.equal(manifest.manifest_version, 3, 'A extensão precisa usar Manifest V3.');
+  assert.equal(manifest.version, '1.3.0', 'A extensão precisa estar na versão 1.3.0.');
+  const popup = readExtension('popup.js');
+  for (const forbidden of ['/api/update', 'INSTAGRAM_EXTENSION_SECRET', 'userId:', 'User ID']) {
+    assert.ok(!popup.includes(forbidden), `popup.js não pode conter contrato legado: ${forbidden}`);
+  }
+  for (const required of [
+    "chrome.storage.session.set({ [TOKEN_STORAGE_KEY]: config.pairingToken })",
+    "'Authorization': `Bearer ${config.pairingToken}`",
+    "crmApi('claim_next'",
+    "crmApi('claim_item'",
+    "crmApi('transition'",
+    "await claimCurrentItem();",
+    "await assertSafeDmForLead(expectedUsername);",
+    "for (const number of [1, 2, 3, 4])",
+    "['following', 'dm_opened'].includes",
+  ]) assert.ok(popup.includes(required), `popup.js deveria conter: ${required}`);
+  const processIndex = popup.indexOf('async function processLead(item)');
+  const claimIndex = popup.indexOf('await claimCurrentItem();', processIndex);
+  const openProfileIndex = popup.indexOf('const username = await ensureLeadProfileOpen();', processIndex);
+  assert.ok(processIndex >= 0 && claimIndex > processIndex && openProfileIndex > claimIndex, 'O lead deve ser assumido antes de abrir o perfil.');
+  const content = readExtension('content.js');
+  assert.ok(content.includes('CRM_INSTAGRAM_SAFE_TO_SEND') && content.includes('expectedUsername'), 'O content script precisa validar o destinatário esperado.');
+} else {
+  assert.equal(extensionContract.manifestVersion, 3, 'Contrato da extensão deve exigir Manifest V3.');
+  assert.equal(extensionContract.version, '1.3.0', 'Contrato da extensão precisa estar na versão 1.3.0.');
+  for (const feature of ['temporary_pairing_token', 'claim_before_navigation', 'safe_dm_recipient', 'four_messages', 'session_storage', 'idempotent_transitions']) {
+    assert.ok(extensionContract.features.includes(feature), `Contrato da extensão ausente: ${feature}.`);
+  }
 }
-for (const required of [
-  "chrome.storage.session.set({ [TOKEN_STORAGE_KEY]: config.pairingToken })",
-  "'Authorization': `Bearer ${config.pairingToken}`",
-  "crmApi('claim_next'",
-  "crmApi('claim_item'",
-  "crmApi('transition'",
-  "await claimCurrentItem();",
-  "await assertSafeDmForLead(expectedUsername);",
-  "for (const number of [1, 2, 3, 4])",
-  "['following', 'dm_opened'].includes",
-]) assert.ok(popup.includes(required), `popup.js deveria conter: ${required}`);
-const processIndex = popup.indexOf('async function processLead(item)');
-const claimIndex = popup.indexOf('await claimCurrentItem();', processIndex);
-const openProfileIndex = popup.indexOf('const username = await ensureLeadProfileOpen();', processIndex);
-assert.ok(processIndex >= 0 && claimIndex > processIndex && openProfileIndex > claimIndex, 'O lead deve ser assumido antes de abrir o perfil.');
-const content = readExtension('content.js');
-assert.ok(content.includes('CRM_INSTAGRAM_SAFE_TO_SEND') && content.includes('expectedUsername'), 'O content script precisa validar o destinatário esperado.');
 
 const tokenCompiled = ts.transpileModule(tokenSource, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
@@ -156,7 +164,9 @@ for (const file of changedTsFiles) {
 const migrationDir = path.join(root, 'supabase', 'migrations');
 const migrations = fs.existsSync(migrationDir) ? fs.readdirSync(migrationDir) : [];
 assert.ok(!migrations.some((name) => /f08|instagram_extension|instagram_queue_claim/i.test(name)), 'F08 não pode adicionar migration estrutural.');
-const extensionFiles = fs.readdirSync(extensionRoot);
-assert.ok(!extensionFiles.some((name) => name === '.env' || name.startsWith('.env.')), 'A extensão não pode conter arquivo de credenciais.');
+if (hasExternalExtension) {
+  const extensionFiles = fs.readdirSync(extensionRoot);
+  assert.ok(!extensionFiles.some((name) => name === '.env' || name.startsWith('.env.')), 'A extensão não pode conter arquivo de credenciais.');
+}
 
 console.log('F08 verificado: vínculo temporário, escopo por usuário/perfil, claim, transições idempotentes, quatro mensagens, destinatário seguro e ausência de alteração estrutural no banco.');

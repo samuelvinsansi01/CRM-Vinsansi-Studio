@@ -111,15 +111,15 @@ export function AuditPage() {
         <div className="audit-filters">
           <label className="audit-search">
             <Search size={16} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por lead, fila ou problema" />
+            <input value={search} onChange={(event: import('react').ChangeEvent<HTMLInputElement>) => setSearch(event.target.value)} placeholder="Buscar por lead, fila ou problema" />
           </label>
-          <select value={severity} onChange={(event) => setSeverity(event.target.value as 'all' | ReconciliationSeverity)}>
+          <select value={severity} onChange={(event: import('react').ChangeEvent<HTMLSelectElement>) => setSeverity(event.target.value as 'all' | ReconciliationSeverity)}>
             <option value="all">Todas as severidades</option>
             <option value="critical">Críticas</option>
             <option value="warning">Atenção</option>
             <option value="info">Informativas</option>
           </select>
-          <select value={repairability} onChange={(event) => setRepairability(event.target.value as typeof repairability)}>
+          <select value={repairability} onChange={(event: import('react').ChangeEvent<HTMLSelectElement>) => setRepairability(event.target.value as typeof repairability)}>
             <option value="all">Todos os tratamentos</option>
             <option value="repairable">Com reparo</option>
             <option value="manual">Revisão manual</option>

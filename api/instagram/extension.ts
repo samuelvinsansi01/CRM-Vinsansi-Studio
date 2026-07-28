@@ -133,9 +133,10 @@ async function listItems(client: SupabaseClient, tokenScope: TokenScope, body: R
   if (date) query = query.eq('scheduled_date', date);
   const { data, error } = await query.order('block_number', { ascending: true }).order('position', { ascending: true }).order('created_at', { ascending: true });
   if (error) throw new Error(`instagram_queue_read_failed:${error.message}`);
-  return (data ?? [])
-    .filter((row) => isActive(row as RecordValue) && normalizeInstagramProfile((row as RecordValue).profile_username ?? rowData(row as RecordValue).profile_username ?? rowData(row as RecordValue).profile) === tokenScope.profile)
-    .map((row) => queueItem(row as RecordValue))
+  const rows = (data ?? []) as RecordValue[];
+  return rows
+    .filter((row) => isActive(row) && normalizeInstagramProfile(row.profile_username ?? rowData(row).profile_username ?? rowData(row).profile) === tokenScope.profile)
+    .map((row) => queueItem(row))
     .sort(sortItems);
 }
 async function loadOwnedItem(client: SupabaseClient, tokenScope: TokenScope, id: string) {
@@ -183,7 +184,7 @@ async function claim(client: SupabaseClient, tokenScope: TokenScope, body: Recor
 
   const items = await listItems(client, tokenScope, body);
   const block = numberValue(body.block_number, 0);
-  const candidates = items.filter((item) => item.status === 'queued' && (!block || item.block_number === block)).slice(0, 20);
+  const candidates = items.filter((item: ReturnType<typeof queueItem>) => item.status === 'queued' && (!block || item.block_number === block)).slice(0, 20);
   for (const candidate of candidates) {
     const row = await loadOwnedItem(client, tokenScope, candidate.id);
     const claimed = await claimRow(client, tokenScope, row);

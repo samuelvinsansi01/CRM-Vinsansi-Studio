@@ -61,7 +61,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       .eq('user_id', auth.publicUserId)
       .limit(1000);
     if (error) throw new Error(`instagram_profile_authorization_failed:${error.message}`);
-    const available = (data ?? []).some((row) => normalizeInstagramProfile(row.profile_username) === profile);
+    const available = ((data ?? []) as Array<{ profile_username?: unknown }>).some((row) => normalizeInstagramProfile(row.profile_username) === profile);
     if (!available) return send(res, 403, { ok: false, error: 'instagram_profile_not_available_for_current_user' });
 
     const issued = await issueInstagramExtensionToken({ userId: auth.publicUserId, profile });

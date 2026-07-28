@@ -886,7 +886,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                       <td><Tag tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' || job.status === 'timed_out' ? 'danger' : job.status === 'aborted' ? 'neutral' : 'warning'}>{job.importedAt ? 'importado' : job.status}</Tag></td>
                       <td>{job.accountName}</td><td>{job.location}</td><td>{job.branchName}</td><td title={job.searchTerms.join(' · ')}>{job.searchTerms.length}</td><td>{job.totalReceived}</td><td>{job.totalImported}</td><td>{job.totalDuplicates}</td><td>{job.totalRejected}</td><td>{job.createdAt ? new Date(job.createdAt).toLocaleString('pt-BR') : '—'}</td>
                       <td>
-                        <div className="apify-run-actions" onClick={(event) => event.stopPropagation()}>
+                        <div className="apify-run-actions" onClick={(event: import('react').MouseEvent<HTMLDivElement>) => event.stopPropagation()}>
                           {!job.importedAt && job.status !== 'failed' && job.status !== 'aborted' && job.status !== 'timed_out' ? <Button size="sm" variant="secondary" iconLeft={RefreshCw} onClick={() => void syncJob(job)}>Sincronizar</Button> : null}
                           {job.status === 'starting' || job.status === 'ready' || job.status === 'running' ? <Button size="sm" variant="danger" iconLeft={StopCircle} onClick={() => void abortJob(job)}>Cancelar</Button> : null}
                         </div>

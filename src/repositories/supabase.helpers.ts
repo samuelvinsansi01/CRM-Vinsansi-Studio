@@ -45,7 +45,7 @@ export function rowData<T>(row: JsonRecordRow<T>): T {
 export async function selectJsonRecords<T>(table: string) {
   const { data, error } = await getSupabaseClient().from(table).select('id,data,status,active,kind,channel,created_at,updated_at');
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => rowData(row as JsonRecordRow<T>)).filter(Boolean);
+  return ((data ?? []) as Array<JsonRecordRow<T>>).map((row) => rowData(row)).filter(Boolean);
 }
 
 export async function insertJsonRecord<T extends { id: string }>(table: string, record: T, extra: Record<string, unknown> = {}) {

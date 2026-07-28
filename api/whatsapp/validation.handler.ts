@@ -43,6 +43,15 @@ type AuthContext = {
   publicUserId: string;
 };
 
+type ValidationLeadRow = {
+  leads_id: number | string;
+  users_id?: number | string | null;
+  leads_name?: string | null;
+  leads_phone?: string | null;
+  lead_status_id?: number | string | null;
+  channels_id?: number | string | null;
+};
+
 function env(name: string) {
   return String(process.env[name] ?? '').trim();
 }
@@ -155,7 +164,7 @@ async function resolveOwnedLeads(
     .in('leads_id', ids.map(Number));
   if (error) throw new Error(`Falha ao conferir os leads no banco: ${error.message}`);
 
-  const rows = new Map((data ?? []).map((row) => [String(row.leads_id), row]));
+  const rows = new Map<string, ValidationLeadRow>(((data ?? []) as ValidationLeadRow[]).map((row) => [String(row.leads_id), row]));
   if (rows.size !== ids.length) throw new Error('Um ou mais leads não existem ou não pertencem ao usuário autenticado.');
 
   return requested.map((lead) => {

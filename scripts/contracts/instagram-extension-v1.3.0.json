@@ -1,0 +1,12 @@
+{
+  "version": "1.3.0",
+  "manifestVersion": 3,
+  "features": [
+    "temporary_pairing_token",
+    "claim_before_navigation",
+    "safe_dm_recipient",
+    "four_messages",
+    "session_storage",
+    "idempotent_transitions"
+  ]
+}

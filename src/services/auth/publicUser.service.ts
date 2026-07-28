@@ -10,17 +10,17 @@ export type PublicUserRow = {
 const PUBLIC_USER_COLUMNS = 'users_id, auth_user_id, status_id';
 
 async function findPublicUser(authUserId: string): Promise<PublicUserRow | null> {
-  const { data, error } = await getSupabaseClient()
+  const { data: rawData, error } = await getSupabaseClient()
     .from('users')
     .select(PUBLIC_USER_COLUMNS)
     .eq('auth_user_id', authUserId)
-    .maybeSingle<PublicUserRow>();
+    .maybeSingle();
 
   if (error) {
     throw new Error(`Falha ao carregar o usuário interno: ${error.message}`);
   }
 
-  return data;
+  return rawData ? rawData as PublicUserRow : null;
 }
 
 /**

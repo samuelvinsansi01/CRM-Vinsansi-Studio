@@ -46,7 +46,7 @@ async function auth(req: ApiRequest): Promise<AuthContext> {
 async function assertOwned(authContext: AuthContext, ids: string[]) {
   const { data, error } = await authContext.client.from(queueTable()).select('id,user_id,status').eq('user_id', authContext.publicUserId).in('id', ids);
   if (error) throw new Error(`queue_authorization_check_failed:${error.message}`);
-  const returned = new Set((data ?? []).map((row) => String(row.id)));
+  const returned = new Set(((data ?? []) as Array<{ id?: unknown }>).map((row) => String(row.id)));
   if (returned.size !== ids.length || ids.some((id) => !returned.has(id))) throw new Error('queue_item_not_available_for_current_user');
 }
 
