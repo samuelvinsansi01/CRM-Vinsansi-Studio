@@ -221,11 +221,6 @@ export const mockInstagramQueueRepository: InstagramQueueRepository = {
     return updated;
   },
 
-  async send(ids: string[]) {
-    await delay();
-    setStatus(ids, 'sent');
-  },
-
   async pause(ids: string[]) {
     await delay();
     setStatus(ids, 'paused');

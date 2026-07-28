@@ -9,7 +9,6 @@ export interface InstagramQueueRepository {
   /** Remove apenas um item ainda não iniciado. Usado como compensação quando o status canônico não pode avançar. */
   removeQueued(id: string): Promise<void>;
   updateLead(id: string, input: UpdateInstagramQueueLeadInput): Promise<unknown>;
-  send(ids: string[]): Promise<void>;
   pause(ids: string[]): Promise<void>;
   resume(ids: string[]): Promise<void>;
   reprocess(ids: string[]): Promise<void>;

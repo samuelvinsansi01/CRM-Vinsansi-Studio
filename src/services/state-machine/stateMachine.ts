@@ -132,9 +132,9 @@ function canInstagramQueue(request: TransitionRequest): TransitionResult {
 
   if (from === 'sent') return denied(request, 'Lead enviado nao pode ser alterado na fila Instagram.');
   if (request.action === 'edit') return includes(['queued', 'paused', 'error', 'following', 'dm_opened'], from) ? allowed(request) : denied(request, 'Apenas itens ativos podem ser editados.');
-  if (request.action === 'send') return includes(['queued', 'paused', 'following', 'dm_opened'], from) ? allowed(request) : denied(request, 'Apenas itens ativos podem ser enviados.');
+  if (request.action === 'send') return denied(request, 'O envio Instagram é exclusivo da extensão vinculada.');
   if (request.action === 'mark_sending') return to === 'dm_opened' && includes(['queued', 'paused', 'following'], from) ? allowed(request) : denied(request, 'Apenas itens ativos podem abrir DM.');
-  if (request.action === 'mark_sent') return to === 'sent' && includes(['queued', 'paused', 'following', 'dm_opened'], from) ? allowed(request) : denied(request, 'Apenas itens ativos podem finalizar como enviados.');
+  if (request.action === 'mark_sent') return to === 'sent' && from === 'dm_opened' ? allowed(request) : denied(request, 'Somente uma DM aberta pode ser finalizada como enviada.');
   if (request.action === 'pause') return to === 'paused' && includes(['queued', 'following', 'dm_opened'], from) ? allowed(request) : denied(request, 'Apenas itens ativos podem ser pausados.');
   if (request.action === 'resume') return to === 'queued' && from === 'paused' ? allowed(request) : denied(request, 'Apenas itens pausados podem ser retomados.');
   if (request.action === 'reprocess') return to === 'queued' && from === 'error' ? allowed(request) : denied(request, 'Apenas itens com erro podem ser reprocessados.');

@@ -90,7 +90,7 @@ requireText('src/services/whatsapp-queue/whatsappQueue.service.ts', [
   "part: 'message_4'",
 ]);
 requireText('src/services/instagram-queue/instagramQueue.service.ts', [
-  'hasAllTemplateMessages(lead)',
+  'hasAllTemplateMessages(candidate)',
 ]);
 
 

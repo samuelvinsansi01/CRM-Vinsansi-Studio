@@ -133,7 +133,6 @@ async function allLeads() {
   return (queueResponse.data ?? [])
     .filter((row) => !isDeletedRow(row))
     .map((row) => rowToLead(row))
-    .filter((lead) => isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'sending') || isStatusGroup(lead.status, 'paused'))
     .map((lead) => applyCurrentBranchMedia(lead, branchForBoundRecord(lead, branches)));
 }
 
@@ -320,17 +319,25 @@ async function updateStatus(ids: string[], status: InstagramQueueStatus, errorMe
   const userId = await getCurrentUserId();
   await Promise.all(ids.map(async (id) => {
     const lead = leads.find((item) => item.id === id);
-    if (!lead) return;
+    if (!lead) throw new Error(`Item Instagram não encontrado: ${id}.`);
     const updated: InstagramQueueLead = {
       ...lead,
       status,
       error_message: errorMessage || (status === 'error' ? lead.error_message : ''),
       sent_at: status === 'sent' ? timestamp : lead.sent_at,
-      retry_count: status === 'queued' ? lead.retry_count + 1 : lead.retry_count,
+      retry_count: status === 'queued' && lead.status === 'error' ? lead.retry_count + 1 : lead.retry_count,
       updated_at: timestamp,
     };
-    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id).eq('user_id', userId);
+    const { data, error } = await getSupabaseClient()
+      .from(table())
+      .update(dbPayload(updated, userId))
+      .eq('id', id)
+      .eq('user_id', userId)
+      .eq('status', lead.status)
+      .select('id')
+      .maybeSingle();
     if (error) throw new Error(error.message);
+    if (!data) throw new Error(`Conflito ao atualizar o item Instagram ${id}. Recarregue a fila.`);
   }));
 }
 
@@ -376,12 +383,8 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
       const scheduledDate = safeInput.scheduled_date ?? todayIsoDate();
       const batch = nextBatch(working, safeInput.profile, limit, scheduledDate);
       const lead = buildLead(safeInput, batch);
-      // The legacy database may expose source_pre_send_id only through a partial
-      // unique index. PostgREST cannot use a partial index as an ON CONFLICT
-      // target, which made a valid Instagram queue allocation fail before the
-      // item was created. Duplicates are guarded above from the persisted queue
-      // snapshot, so this path can use a regular insert and remain idempotent
-      // for normal panel actions.
+      // A deduplicação é feita contra a fila persistida antes do insert.
+      // O item só é considerado criado depois de o banco confirmar a gravação.
       const { error } = await getSupabaseClient().from(table()).insert({ ...dbPayload(lead, userId), created_at: lead.created_at });
       if (error) throw new Error(error.message);
       working.push(lead);
@@ -420,13 +423,17 @@ export const supabaseInstagramQueueRepository: InstagramQueueRepository = {
       updated_at: nowIso(),
     };
     const userId = await getCurrentUserId();
-    const { error } = await getSupabaseClient().from(table()).update(dbPayload(updated, userId)).eq('id', id).eq('user_id', userId);
+    const { data, error } = await getSupabaseClient()
+      .from(table())
+      .update(dbPayload(updated, userId))
+      .eq('id', id)
+      .eq('user_id', userId)
+      .eq('status', lead.status)
+      .select('*')
+      .maybeSingle();
     if (error) throw new Error(error.message);
-    return updated;
-  },
-
-  async send(ids) {
-    await updateStatus(ids, 'sent');
+    if (!data) throw new Error('O item Instagram foi alterado por outra sessão. Recarregue a fila.');
+    return rowToLead(data as Record<string, unknown>);
   },
 
   async pause(ids) {

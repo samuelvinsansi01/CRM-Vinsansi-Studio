@@ -75,14 +75,6 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
     [refresh],
   );
 
-  const send = useCallback(
-    async (ids: string[]) => {
-      await instagramQueueService.send(ids);
-      refresh();
-    },
-    [refresh],
-  );
-
   const pause = useCallback(
     async (ids: string[]) => {
       await instagramQueueService.pause(ids);
@@ -124,7 +116,6 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
     error,
     refresh,
     updateLead,
-    send,
     pause,
     resume,
     reprocess,

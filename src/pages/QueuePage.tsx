@@ -11,6 +11,7 @@ import { hasWhatsAppOperationalIssue, hasWhatsAppWorkerContract } from '../servi
 import type { WhatsAppQueueBatch, WhatsAppQueueLead, WhatsAppQueueStatus } from '../services/whatsapp-queue/types';
 import { toLocalDateInputValue } from '../utils/date';
 import { hasWebsiteForTemplate } from '../services/templates/templateSelector';
+import { instagramExtensionGateway } from '../services/instagram-extension';
 
 type QueuePageProps = {
   channel: 'whatsapp' | 'instagram';
@@ -218,7 +219,7 @@ function WhatsAppQueuePage() {
     setSaving(false);
     setEditingLead(null);
     setDrawerMode('view');
-    pushToast({ title: 'Lead atualizado', description: 'Alterações salvas na fila local.', tone: 'success' });
+    pushToast({ title: 'Lead atualizado', description: 'Alterações salvas na fila do CRM.', tone: 'success' });
   };
 
   const handleInvalidate = async () => {
@@ -480,8 +481,10 @@ function InstagramQueuePage() {
   const [confirmLead, setConfirmLead] = useState<InstagramQueueLead | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [pairing, setPairing] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
 
-  const { profiles, batches, summary, loading, refreshing, error, updateLead, invalidate } = useInstagramQueue(activeProfile, scheduledDate);
+  const { profiles, batches, summary, loading, refreshing, error, updateLead, invalidate, reprocess } = useInstagramQueue(activeProfile, scheduledDate);
 
   useEffect(() => {
     if (activeProfile && !profiles.includes(activeProfile)) {
@@ -504,7 +507,7 @@ function InstagramQueuePage() {
     setSaving(false);
     setEditingLead(null);
     setDrawerMode('view');
-    pushToast({ title: 'Lead Instagram atualizado', description: 'Alterações salvas na fila local.', tone: 'success' });
+    pushToast({ title: 'Lead Instagram atualizado', description: 'Alterações salvas na fila do CRM.', tone: 'success' });
   };
 
   const handleInvalidate = async () => {
@@ -512,6 +515,52 @@ function InstagramQueuePage() {
     await invalidate(confirmLead);
     setConfirmLead(null);
     pushToast({ title: 'Lead invalidado', description: `${confirmLead.instagram} saiu da fila ativa.`, tone: 'warning' });
+  };
+
+  const handlePairExtension = async () => {
+    const profile = activeProfile || (profiles.length === 1 ? profiles[0] : '');
+    if (!profile) {
+      pushToast({ title: 'Selecione um perfil', description: 'Escolha o perfil Instagram antes de gerar o vínculo.', tone: 'warning' });
+      return;
+    }
+    setPairing(true);
+    try {
+      const pairing = await instagramExtensionGateway.pair(profile);
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(pairing.token);
+        copied = true;
+      } catch {
+        window.prompt(`Copie o token temporário para a extensão do perfil @${pairing.profile}:`, pairing.token);
+      }
+      const expires = pairing.expiresAt ? new Date(pairing.expiresAt).toLocaleString('pt-BR') : 'nas próximas horas';
+      pushToast({
+        title: copied ? 'Token copiado' : 'Token gerado',
+        description: `${copied ? 'Cole' : 'Use o token exibido'} na extensão do perfil @${pairing.profile}. Expira em ${expires}.`,
+        tone: 'success',
+      });
+    } catch (err) {
+      pushToast({ title: 'Falha ao vincular extensão', description: err instanceof Error ? err.message : 'Não foi possível gerar o vínculo.', tone: 'danger' });
+    } finally {
+      setPairing(false);
+    }
+  };
+
+  const handleReprocessErrors = async () => {
+    const errorIds = visibleBatches.flatMap((batch) => batch.leads).filter((lead) => isStatusGroup(lead.status, 'error')).map((lead) => lead.id);
+    if (!errorIds.length) {
+      pushToast({ title: 'Sem erros', description: 'Não há itens com erro neste filtro.', tone: 'warning' });
+      return;
+    }
+    setReprocessing(true);
+    try {
+      await reprocess(errorIds);
+      pushToast({ title: 'Itens liberados', description: `${errorIds.length} item(ns) voltaram para a fila.`, tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Falha ao reprocessar', description: err instanceof Error ? err.message : 'Não foi possível reprocessar os itens.', tone: 'danger' });
+    } finally {
+      setReprocessing(false);
+    }
   };
 
   const profileFilterOptions = [{ label: 'Todos os perfis', value: '' }, ...profiles.map((profile) => ({ label: profile, value: profile }))];
@@ -527,8 +576,12 @@ function InstagramQueuePage() {
         <MetricCard icon={Bug} value={String(summary.errors)} label="Erros" tone="warning" />
         <MetricCard icon={X} value={String(summary.invalid)} label="Invalidos" tone="danger" />
       </section>
-      <div className="queue-topline queue-topline--filter-only">
-        <SelectField className="queue-inline-filter" options={profileFilterOptions} value={activeProfile} onChange={setActiveProfile} placeholder="Todos os perfis" />
+      <div className="queue-topline queue-topline--actions">
+        <div className="queue-controls">
+          <SelectField className="queue-inline-filter" options={profileFilterOptions} value={activeProfile} onChange={setActiveProfile} placeholder="Todos os perfis" />
+          <Button variant="secondary" iconLeft={RefreshCcw} loading={reprocessing} disabled={loading || reprocessing} onClick={handleReprocessErrors}>Reprocessar erros</Button>
+          <Button iconLeft={Send} loading={pairing} disabled={loading || pairing} onClick={handlePairExtension}>Vincular extensão</Button>
+        </div>
       </div>
       <section className="queue-list-card">
         <div className="queue-list-card__header">

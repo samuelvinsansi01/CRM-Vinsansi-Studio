@@ -1,18 +1,12 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
-import type { ConfigRecord, InstagramConfigRecord } from '../config/types';
-import { normalizeDomain, normalizePhone } from '../import/importValidation';
-import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { permissionsFor } from '../permissions';
-import { internalWorkerInstagramGateway } from './instagram.gateway';
-import type { InstagramQueueFilters, InstagramQueueLead, UpdateInstagramQueueLeadInput } from './types';
-import { preSendService } from '../pre-send/preSend.service';
 import { settingsService } from '../settings/settings.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
-import { renderTemplateVariables } from '../templates/templateVariables';
 import { hasAllTemplateMessages } from '../templates/templateContract';
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
+import type { InstagramQueueFilters, InstagramQueueLead, UpdateInstagramQueueLeadInput } from './types';
 
 async function getSelectedLeads(ids: string[]) {
   const batches = await repositories.instagramQueue.listBatches({});
@@ -20,69 +14,26 @@ async function getSelectedLeads(ids: string[]) {
   return batches.flatMap((batch) => batch.leads).filter((lead) => idSet.has(lead.id));
 }
 
-function allowedIds(leads: InstagramQueueLead[], action: 'mark_sending' | 'mark_sent' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'fail', toStatus: string) {
-  return leads.filter((lead) => {
-    try {
-      assertTransition({ entity: 'instagram-queue', fromStatus: lead.status, toStatus, action });
-      return true;
-    } catch {
-      return false;
-    }
-  }).map((lead) => lead.id);
-}
-
-function assertAllAllowed(leads: InstagramQueueLead[], action: 'mark_sending' | 'mark_sent' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'fail', toStatus: string, message: string) {
-  if (!leads.length) throw new Error(message);
-  const allowed = allowedIds(leads, action, toStatus);
-  if (allowed.length !== leads.length) throw new Error(message);
-  return allowed;
-}
-
-function assertAllSendable(leads: InstagramQueueLead[]) {
-  if (!leads.length) throw new Error('Nenhum item Instagram selecionado pode ser enviado.');
-  const blocked = leads.find((lead) => !permissionsFor('instagram-queue', lead.status).canSend());
-  if (blocked) throw new Error(`Item Instagram nao pode ser enviado: ${blocked.company || blocked.id}.`);
-  return leads;
-}
-
 function assertStatusPatch(current: InstagramQueueLead, input: UpdateInstagramQueueLeadInput) {
   if (input.status === undefined || normalizeStatusGroup(input.status) === normalizeStatusGroup(current.status)) return;
   assertTransition({ entity: 'instagram-queue', fromStatus: current.status, toStatus: input.status, action: 'status_update' });
 }
 
-function toBaseDestination(type: InstagramQueueLead['type']) {
-  return type === 'Agregador' ? 'Agregador' : 'Instagram';
-}
-
-function sourceLeadId(lead: InstagramQueueLead) {
-  return lead.lead_id || lead.sourcePreSendId || lead.id;
-}
-
-function assertTemplateReady(leads: InstagramQueueLead[]) {
-  const missing = leads.find((lead) => !hasAllTemplateMessages(lead) || lead.message1.toLowerCase().includes('template nao configurado'));
-  if (missing) throw new Error(`Template valido ausente para Instagram / ${missing.branch} / ${missing.type}.`);
+function assertAllAllowed(
+  leads: InstagramQueueLead[],
+  action: 'pause' | 'resume' | 'reprocess' | 'invalidate',
+  toStatus: string,
+  message: string,
+) {
+  if (!leads.length) throw new Error(message);
+  for (const lead of leads) {
+    assertTransition({ entity: 'instagram-queue', fromStatus: lead.status, toStatus, action });
+  }
+  return leads.map((lead) => lead.id);
 }
 
 function activeQueueStatus(status: unknown) {
   return isStatusGroup(status, 'queued') || isStatusGroup(status, 'paused') || isStatusGroup(status, 'following') || isStatusGroup(status, 'dm_opened');
-}
-
-function isInstagramProfile(record: ConfigRecord): record is InstagramConfigRecord {
-  return record.kind === 'instagram';
-}
-
-
-async function activeInstagramProfileRecords() {
-  return (await repositories.config.list('instagram'))
-    .filter(isInstagramProfile)
-    .filter((profile) => profile.active && profile.status !== 'Arquivado' && profile.status !== 'deleted' && profile.username.trim());
-}
-
-async function activeInstagramProfiles() {
-  return (await repositories.config.list('instagram'))
-    .filter(isInstagramProfile)
-    .filter((profile) => profile.active && profile.status !== 'Arquivado' && profile.status !== 'deleted' && profile.username.trim())
-    .map((profile) => profile.username);
 }
 
 function queueRolloverTargetDate() {
@@ -93,23 +44,18 @@ function queueRolloverTargetDate() {
 async function rolloverOverdueInstagramItems() {
   const targetDate = queueRolloverTargetDate();
   const settings = await settingsService.getDispatchSettings();
-  const profiles = await activeInstagramProfileRecords();
-  const profileLimits = new Map(profiles.map((profile) => [profile.username, Math.max(1, profile.dailyLimit)]));
-  const fallbackDailyLimit = Math.max(1, settings.instagram.dailyLimit);
   const batchLimit = Math.max(1, settings.instagram.perBatch);
+  const fallbackDailyLimit = Math.max(1, settings.instagram.dailyLimit);
   const allLeads = (await repositories.instagramQueue.listBatches({})).flatMap((batch) => batch.leads);
   const candidates = allLeads
     .filter((lead) => (isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')) && lead.scheduled_date < targetDate)
     .sort((a, b) => `${a.scheduled_date}:${a.batch_number}:${a.position}:${a.created_at}`.localeCompare(`${b.scheduled_date}:${b.batch_number}:${b.position}:${b.created_at}`));
 
   if (!candidates.length) return;
-
   const candidateIds = new Set(candidates.map((lead) => lead.id));
   const occupancy = new Map<string, number>();
-
   for (const lead of allLeads) {
-    if (candidateIds.has(lead.id)) continue;
-    if (!activeQueueStatus(lead.status)) continue;
+    if (candidateIds.has(lead.id) || !activeQueueStatus(lead.status)) continue;
     const key = `${lead.profile}:${lead.scheduled_date}`;
     occupancy.set(key, (occupancy.get(key) ?? 0) + 1);
   }
@@ -117,17 +63,13 @@ async function rolloverOverdueInstagramItems() {
   for (const lead of candidates) {
     let scheduledDate = targetDate;
     let key = `${lead.profile}:${scheduledDate}`;
-
-    const dailyLimit = profileLimits.get(lead.profile) ?? fallbackDailyLimit;
-    while ((occupancy.get(key) ?? 0) >= dailyLimit) {
+    while ((occupancy.get(key) ?? 0) >= fallbackDailyLimit) {
       scheduledDate = dateInputAddDays(scheduledDate, 1);
       key = `${lead.profile}:${scheduledDate}`;
     }
-
     const nextPosition = (occupancy.get(key) ?? 0) + 1;
     const batchNumber = Math.floor((nextPosition - 1) / batchLimit) + 1;
     occupancy.set(key, nextPosition);
-
     await repositories.instagramQueue.updateLead(lead.id, {
       scheduled_date: scheduledDate,
       position: nextPosition,
@@ -142,7 +84,7 @@ function logQueueEvent(action: string, lead: Partial<InstagramQueueLead>, status
     source: 'instagram-queue',
     action,
     channel: 'instagram',
-    leadId: lead.lead_id ?? lead.sourcePreSendId,
+    leadId: lead.lead_id,
     queueItemId: lead.id,
     status,
     message,
@@ -154,97 +96,9 @@ function logQueueEvent(action: string, lead: Partial<InstagramQueueLead>, status
   }).catch(() => undefined);
 }
 
-async function persistSentToBase(leads: InstagramQueueLead[]) {
-  const sentAt = new Date().toISOString();
-  await Promise.all(
-    leads.map((lead) =>
-      repositories.base.upsertSent({
-        sourceLeadId: sourceLeadId(lead),
-        company: lead.company,
-        branch: lead.branch,
-        state: lead.state ?? '',
-        city: lead.city ?? '',
-        phone: lead.phone ?? '',
-        site: lead.site ?? '',
-        normalizedPhone: normalizePhone(lead.phone),
-        normalizedSite: normalizeDomain(lead.site),
-        instagram: lead.instagram_url ?? lead.instagram,
-        normalizedInstagram: normalizeInstagramUsername(lead.instagram_url ?? lead.instagram),
-        mapsUrl: lead.mapsUrl ?? '',
-        origin: 'Instagram',
-        destination: toBaseDestination(lead.type),
-        original_destination: lead.original_destination,
-        destination_override: lead.destination_override,
-        send_instagram: lead.send_instagram ?? false,
-        instagram_override_reason: lead.instagram_override_reason,
-        override_by: lead.override_by,
-        override_at: lead.override_at,
-        status: 'enviado',
-        sentAt,
-        template: renderTemplateVariables(lead.message1, lead),
-        chipOrProfile: lead.profile,
-        notes: lead.instagram,
-      }),
-    ),
-  );
-}
-
-async function finishSentPersistence(queueIds: string[], leads: InstagramQueueLead[], preSendIds: string[]) {
-  // A Base e gravada primeiro para que nenhum item apareca como enviado sem historico persistente.
-  if (leads.length) await persistSentToBase(leads);
-  if (queueIds.length) await repositories.instagramQueue.send(queueIds);
-  if (preSendIds.length) await preSendService.markSent(preSendIds);
-}
-
 export const instagramQueueService = {
-  async listQueuedForWorker(limit = 50) {
-    await rolloverOverdueInstagramItems();
-    const batches = await repositories.instagramQueue.listBatches({});
-    return batches
-      .flatMap((batch) => batch.leads)
-      .filter((lead) => isStatusGroup(lead.status, 'queued'))
-      .sort((a, b) => `${a.scheduled_date}:${a.batch_number}:${a.position}`.localeCompare(`${b.scheduled_date}:${b.batch_number}:${b.position}`))
-      .slice(0, limit);
-  },
-
-  async markSending(ids: string[]) {
-    const leads = await getSelectedLeads(ids);
-    const allowed = assertAllAllowed(leads, 'mark_sending', 'dm_opened', 'Todos os itens Instagram selecionados precisam poder iniciar envio.');
-    await Promise.all(allowed.map((id) => repositories.instagramQueue.updateLead(id, { status: 'dm_opened' })));
-    leads.filter((lead) => allowed.includes(lead.id)).forEach((lead) => logQueueEvent('sending', lead, 'dm_opened'));
-    eventBus.emit('instagram-queue:changed', { action: 'sending' });
-  },
-
-  async markSent(ids: string[]) {
-    const sentLeads = await getSelectedLeads(ids);
-    const allowed = assertAllAllowed(sentLeads, 'mark_sent', 'sent', 'Todos os itens Instagram selecionados precisam estar em envio para marcar como enviados.');
-    const allowedLeads = sentLeads.filter((lead) => allowed.includes(lead.id));
-    const sentPreSendIds = allowedLeads.map((lead) => lead.sourcePreSendId).filter((id): id is string => Boolean(id));
-
-    try {
-      await finishSentPersistence(allowed, allowedLeads, sentPreSendIds);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao persistir envio Instagram.';
-      await Promise.all(allowedLeads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'error', error_message: message })));
-      allowedLeads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
-      eventBus.emit('instagram-queue:changed', { action: 'error' });
-      throw new Error(`Confirmacao Instagram recebida, mas a persistencia falhou. Itens movidos para erro para reconciliacao: ${message}`);
-    }
-    allowedLeads.forEach((lead) => logQueueEvent('sent', lead, 'sent'));
-    eventBus.emit('instagram-queue:changed', { action: 'worker-sent' });
-    if (allowedLeads.length) eventBus.emit('base:changed', { action: 'update' });
-  },
-
-  async registerError(id: string, message: string) {
-    const [lead] = await getSelectedLeads([id]);
-    if (lead) assertTransition({ entity: 'instagram-queue', fromStatus: lead.status, toStatus: 'error', action: 'fail' });
-    await repositories.instagramQueue.updateLead(id, { status: 'error', error_message: message });
-    logQueueEvent('error', lead ?? { id }, 'error', message);
-    eventBus.emit('instagram-queue:changed', { action: 'error' });
-  },
-
   async listProfiles() {
-    return activeInstagramProfiles();
+    return repositories.instagramQueue.listProfiles();
   },
 
   async listBatches(filters: InstagramQueueFilters) {
@@ -259,67 +113,32 @@ export const instagramQueueService = {
 
   async updateLead(id: string, input: UpdateInstagramQueueLeadInput) {
     const [current] = await getSelectedLeads([id]);
-    if (current) {
-      assertTransition({ entity: 'instagram-queue', fromStatus: current.status, action: 'edit' });
-      assertStatusPatch(current, input);
+    if (!current) throw new Error('Item não encontrado na fila Instagram.');
+    if (!permissionsFor('instagram-queue', current.status).canEdit()) throw new Error('Este item não pode ser editado no estado atual.');
+    assertStatusPatch(current, input);
+    if ([input.message1, input.message2, input.message3, input.message4].some((message) => message !== undefined)) {
+      const candidate = { ...current, ...input };
+      if (!hasAllTemplateMessages(candidate)) throw new Error('O item precisa manter as quatro mensagens do template.');
     }
     const lead = await repositories.instagramQueue.updateLead(id, input);
+    logQueueEvent('updated', current, current.status);
     eventBus.emit('instagram-queue:changed', { action: 'update' });
     return lead;
   },
 
-  async send(ids: string[]) {
-    const leads = assertAllSendable(await getSelectedLeads(ids));
-    assertTemplateReady(leads);
-    leads.forEach((lead) => assertTransition({ entity: 'instagram-queue', fromStatus: lead.status, toStatus: 'dm_opened', action: 'mark_sending' }));
-    await Promise.all(leads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'dm_opened', error_message: '' })));
-    leads.forEach((lead) => logQueueEvent('sending', lead, 'dm_opened'));
-
-    let results;
-    try {
-      results = await internalWorkerInstagramGateway.send(leads);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao acionar worker Instagram.';
-      await Promise.all(leads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'error', error_message: message })));
-      leads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
-      eventBus.emit('instagram-queue:changed', { action: 'error' });
-      throw new Error(`Worker Instagram indisponivel. Itens movidos para erro e prontos para reprocessamento: ${message}`);
-    }
-
-    const sentIds = results.filter((result) => result.status === 'sent').map((result) => result.leadId);
-    const errorResults = results.filter((result) => result.status === 'error');
-    const sentLeads = leads.filter((lead) => sentIds.includes(lead.id));
-    const sentPreSendIds = sentLeads.map((lead) => lead.sourcePreSendId).filter((id): id is string => Boolean(id));
-    const sentAllowedIds = allowedIds(sentLeads.map((lead) => ({ ...lead, status: 'dm_opened' })), 'mark_sent', 'sent');
-
-    try {
-      await finishSentPersistence(sentAllowedIds, sentLeads, sentPreSendIds);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao persistir envio Instagram.';
-      await Promise.all(sentLeads.map((lead) => repositories.instagramQueue.updateLead(lead.id, { status: 'error', error_message: message })));
-      sentLeads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
-      eventBus.emit('instagram-queue:changed', { action: 'error' });
-      throw new Error(`Envio confirmado pelo worker, mas a persistencia falhou. Itens foram movidos para erro para reconciliacao: ${message}`);
-    }
-
-    await Promise.all(errorResults.map((result) => repositories.instagramQueue.updateLead(result.leadId, { status: 'error', error_message: result.errorMessage ?? 'Erro ao enviar Instagram.' })));
-    sentLeads.forEach((lead) => logQueueEvent('sent', lead, 'sent'));
-    errorResults.forEach((result) => logQueueEvent('error', leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId }, 'error', result.errorMessage ?? 'Erro ao enviar Instagram.'));
-    eventBus.emit('instagram-queue:changed', { action: 'send' });
-    if (sentLeads.length) eventBus.emit('base:changed', { action: 'update' });
-  },
-
   async pause(ids: string[]) {
     const leads = await getSelectedLeads(ids);
-    const allowed = assertAllAllowed(leads, 'pause', 'paused', 'Todos os itens Instagram selecionados precisam poder ser pausados.');
+    const allowed = assertAllAllowed(leads, 'pause', 'paused', 'Todos os itens selecionados precisam estar disponíveis para pausa.');
     await repositories.instagramQueue.pause(allowed);
+    leads.forEach((lead) => logQueueEvent('paused', lead, 'paused'));
     eventBus.emit('instagram-queue:changed', { action: 'pause' });
   },
 
   async resume(ids: string[]) {
     const leads = await getSelectedLeads(ids);
-    const allowed = assertAllAllowed(leads, 'resume', 'queued', 'Todos os itens Instagram selecionados precisam poder ser retomados.');
+    const allowed = assertAllAllowed(leads, 'resume', 'queued', 'Todos os itens selecionados precisam estar pausados.');
     await repositories.instagramQueue.resume(allowed);
+    leads.forEach((lead) => logQueueEvent('resumed', lead, 'queued'));
     eventBus.emit('instagram-queue:changed', { action: 'resume' });
   },
 
@@ -327,13 +146,16 @@ export const instagramQueueService = {
     const leads = await getSelectedLeads(ids);
     const allowed = assertAllAllowed(leads, 'reprocess', 'queued', 'Apenas itens Instagram com erro podem ser reprocessados.');
     await repositories.instagramQueue.reprocess(allowed);
+    leads.forEach((lead) => logQueueEvent('reprocessed', lead, 'queued'));
     eventBus.emit('instagram-queue:changed', { action: 'reprocess' });
   },
 
   async invalidate(id: string) {
     const [lead] = await getSelectedLeads([id]);
-    if (lead) assertTransition({ entity: 'instagram-queue', fromStatus: lead.status, toStatus: 'invalid', action: 'invalidate' });
+    if (!lead) throw new Error('Item não encontrado na fila Instagram.');
+    assertTransition({ entity: 'instagram-queue', fromStatus: lead.status, toStatus: 'invalid', action: 'invalidate' });
     await repositories.instagramQueue.invalidate(id);
+    logQueueEvent('invalidated', lead, 'invalid');
     eventBus.emit('instagram-queue:changed', { action: 'invalidate' });
   },
 };

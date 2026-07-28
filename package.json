@@ -1,6 +1,6 @@
 {
   "name": "gease-visual-shell",
-  "version": "3.41.0",
+  "version": "3.42.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,8 @@
     "verify:f05-provider": "node scripts/verify-f05-provider-contract.mjs",
     "verify:f05": "npm run verify:f05-validation && npm run verify:f05-provider",
     "verify:f06": "node scripts/verify-f06-queue-preparation.mjs",
-    "verify:f07": "node scripts/verify-f07-whatsapp-queue.mjs"
+    "verify:f07": "node scripts/verify-f07-whatsapp-queue.mjs",
+    "verify:f08": "node scripts/verify-f08-instagram-queue.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
