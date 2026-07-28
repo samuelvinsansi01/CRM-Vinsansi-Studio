@@ -10,7 +10,6 @@ import { isValidInstagram, normalizeInstagramUsername } from '../instagram/insta
 import { sortByLeadScore } from '../lead-score/leadScore.service';
 import type { ImportLead } from '../import/types';
 import type { CreateInstagramQueueLeadInput, InstagramQueueLead } from '../instagram-queue/types';
-import type { CreateBaseLeadInput } from '../base/types';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { assertTransition } from '../state-machine';
 import { renderLeadMessages } from '../templates/templateVariables';
@@ -913,50 +912,6 @@ async function toInstagramQueueLeads(leads: PreSendLead[]): Promise<CreateInstag
   );
 }
 
-function baseDestinationFromPreSend(destination: PreSendLead['destination']): CreateBaseLeadInput['destination'] {
-  if (destination === 'Agregadores') return 'Agregador';
-  if (destination === 'Com site') return 'Com site';
-  if (destination === 'Instagram') return 'Instagram';
-  return 'WhatsApp';
-}
-
-function preSendLeadToBaseInput(lead: PreSendLead, sentAt: string, reason: string): CreateBaseLeadInput {
-  return {
-    sourceLeadId: lead.sourceImportId,
-    company: lead.company,
-    branch: lead.branch,
-    branch_id: lead.branch_id,
-    branch_slug: lead.branch_slug,
-    state: lead.state ?? '',
-    city: lead.city ?? '',
-    phone: lead.phone ?? '',
-    site: lead.site ?? '',
-    instagram: lead.instagram_url ?? lead.instagram ?? '',
-    mapsUrl: lead.mapsUrl ?? '',
-    origin: lead.channel,
-    destination: baseDestinationFromPreSend(lead.destination),
-    original_destination: lead.original_destination ?? lead.destination,
-    destination_override: lead.destination_override,
-    send_instagram: lead.send_instagram,
-    instagram_override_reason: lead.instagram_override_reason,
-    override_by: lead.override_by,
-    override_at: lead.override_at,
-    status: 'enviado',
-    sentAt,
-    template: '',
-    chipOrProfile: lead.profile,
-    notes: reason,
-    history: [
-      {
-        id: `history-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        date: sentAt.slice(0, 10),
-        title: 'Marcado como ja enviado',
-        description: reason,
-      },
-    ],
-  };
-}
-
 async function appendValidationAudit(input: EventLogInput) {
   try {
     await repositories.events.append(input);
@@ -1592,7 +1547,6 @@ export const preSendService = {
     const sentAt = new Date().toISOString();
 
     for (const lead of selected) {
-      await repositories.base.upsertSent(preSendLeadToBaseInput(lead, sentAt, reason));
       await repositories.events.append({
         source: 'pre-send',
         action: 'manual_mark_sent',

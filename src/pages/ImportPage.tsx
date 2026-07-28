@@ -88,7 +88,6 @@ const duplicateReasonCodes = new Set([
   'duplicate_site',
   'already_in_base',
   'duplicate_lead_id',
-  'already_sent',
 ]);
 
 function formatRejectionReasons(result: ImportParseResult) {

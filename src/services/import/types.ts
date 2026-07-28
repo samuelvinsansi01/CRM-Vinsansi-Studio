@@ -19,7 +19,6 @@ export type ImportRejectionCode =
   | 'duplicate_site'
   | 'already_in_base'
   | 'duplicate_lead_id'
-  | 'already_sent'
   | 'invalid_item';
 
 export type ImportLead = {
@@ -116,11 +115,6 @@ export type ImportExecutionOptions = {
     baseSites?: string[];
     baseInstagrams?: string[];
     baseMapsUrls?: string[];
-    sentLeadIds?: string[];
-    sentPhones?: string[];
-    sentSites?: string[];
-    sentInstagrams?: string[];
-    sentMapsUrls?: string[];
   };
 };
 

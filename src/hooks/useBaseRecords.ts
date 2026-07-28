@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { baseService } from '../services/base/base.service';
-import { leadValidationService } from '../services/leads/lead-validation.service';
-import type { BaseFilters, BaseLead, BaseSummary, UpdateBaseLeadInput } from '../services/base/types';
+import type { BaseArchiveResult, BaseFilters, BaseLead, BaseSummary } from '../services/base/types';
 
 type BaseOptions = {
   origins: string[];
@@ -19,7 +18,7 @@ const emptySummary: BaseSummary = {
   sentInstagram: 0,
   archived: 0,
   invalid: 0,
-  errors: 0,
+  duplicates: 0,
 };
 
 const emptyOptions: BaseOptions = {
@@ -36,7 +35,7 @@ export function useBaseRecords(filters: BaseFilters) {
   const [summary, setSummary] = useState<BaseSummary>(emptySummary);
   const [options, setOptions] = useState<BaseOptions>(emptyOptions);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const hasLoadedRef = useRef(false);
@@ -45,20 +44,15 @@ export function useBaseRecords(filters: BaseFilters) {
 
   useEffect(() => {
     let active = true;
-
     async function load() {
-      const isInitialLoad = !hasLoadedRef.current;
-      if (isInitialLoad) setLoading(true);
-      else setRefreshing(true);
+      setLoading(!hasLoadedRef.current);
       setError(null);
-
       try {
         const [nextRecords, nextSummary, nextOptions] = await Promise.all([
           baseService.list(filters),
           baseService.summary(),
           baseService.options(),
         ]);
-
         if (!active) return;
         setRecords(nextRecords);
         setSummary(nextSummary);
@@ -66,7 +60,7 @@ export function useBaseRecords(filters: BaseFilters) {
       } catch (err) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar Base Permanente.');
-        if (isInitialLoad) {
+        if (!hasLoadedRef.current) {
           setRecords([]);
           setSummary(emptySummary);
           setOptions(emptyOptions);
@@ -75,72 +69,23 @@ export function useBaseRecords(filters: BaseFilters) {
         if (active) {
           hasLoadedRef.current = true;
           setLoading(false);
-          setRefreshing(false);
         }
       }
     }
-
     void load();
-
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [filters, refreshKey]);
 
-  const updateLead = useCallback(
-    async (id: string, input: UpdateBaseLeadInput) => {
-      await baseService.update(id, input);
-      refresh();
-    },
-    [refresh],
-  );
-
-  const archiveLead = useCallback(
-    async (lead: BaseLead) => {
-      await baseService.archive(lead.id);
-      refresh();
-    },
-    [refresh],
-  );
-
-  const archiveMany = useCallback(
-    async (ids: string[]) => {
-      await baseService.archiveMany(ids);
-      refresh();
-    },
-    [refresh],
-  );
-
-  const validateLead = useCallback(
-    async (id: string) => {
-      const result = await leadValidationService.validateLead(id);
+  const archiveMany = useCallback(async (ids: string[]): Promise<BaseArchiveResult> => {
+    setSaving(true);
+    try {
+      const result = await baseService.archiveMany(ids);
       refresh();
       return result;
-    },
-    [refresh],
-  );
+    } finally {
+      setSaving(false);
+    }
+  }, [refresh]);
 
-  const validateMany = useCallback(
-    async (ids?: string[]) => {
-      const result = await leadValidationService.validateMany(ids);
-      refresh();
-      return result;
-    },
-    [refresh],
-  );
-
-  return {
-    records,
-    summary,
-    options,
-    loading,
-    refreshing,
-    error,
-    refresh,
-    updateLead,
-    archiveLead,
-    archiveMany,
-    validateLead,
-    validateMany,
-  };
+  return { records, summary, options, loading, saving, error, refresh, archiveMany };
 }

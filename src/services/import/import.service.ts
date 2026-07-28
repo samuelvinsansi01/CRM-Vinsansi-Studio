@@ -6,7 +6,6 @@ import { isValidInstagram } from '../instagram/instagram.utils';
 import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
-import type { CreateBaseLeadInput } from '../base/types';
 import type { ImportExecutionOptions, ImportLead, ImportLeadInput, ImportListFilters } from './types';
 
 type BulkImportAction = 'approve' | 'reject' | 'unapprove' | 'invalidate' | 'archive';
@@ -37,16 +36,8 @@ function bulkTarget(action: BulkImportAction): BulkTarget {
   return { status: 'archived' as const, transition: 'archive' as const, input: { status: 'archived' } };
 }
 
-function baseDestinationFromImport(lead: ImportLead): CreateBaseLeadInput['destination'] {
-  const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-  if (destination === 'Instagram') return 'Instagram';
-  if (destination === 'Com site') return 'Com site';
-  if (destination === 'Agregadores') return 'Agregador';
-  return 'WhatsApp';
-}
-
-function baseOriginFromImport(lead: ImportLead): CreateBaseLeadInput['origin'] {
-  return (lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino) === 'Instagram' ? 'Instagram' : 'WhatsApp';
+function channelFromImport(lead: ImportLead): 'instagram' | 'whatsapp' {
+  return (lead.send_instagram || (lead.destination ?? lead.destino) === 'Instagram') ? 'instagram' : 'whatsapp';
 }
 
 function isActivePreSendAllocation(status: unknown) {
@@ -130,47 +121,6 @@ function isAllocatedInPipeline(lead: ImportLead, keys: ActivePipelineAllocationK
   return Boolean(instagram && keys.instagrams.has(instagram));
 }
 
-function importLeadToBaseInput(lead: ImportLead, sentAt: string, reason: string): CreateBaseLeadInput {
-  const instagram = lead.instagram_url ?? lead.instagram ?? '';
-  return {
-    sourceLeadId: lead.id,
-    company: lead.empresa,
-    branch: lead.ramo,
-    branch_id: lead.branch_id,
-    branch_slug: lead.branch_slug,
-    state: lead.estado ?? '',
-    city: lead.cidade ?? '',
-    phone: lead.whatsapp ?? '',
-    site: lead.site ?? '',
-    normalizedPhone: normalizePhone(lead.whatsapp),
-    normalizedSite: normalizeSiteIdentity(lead.site),
-    instagram,
-    normalizedInstagram: normalizeInstagramUsername(instagram),
-    mapsUrl: lead.normalizedMapsUrl ?? '',
-    origin: baseOriginFromImport(lead),
-    destination: baseDestinationFromImport(lead),
-    original_destination: lead.original_destination,
-    destination_override: lead.destination_override,
-    send_instagram: lead.send_instagram,
-    instagram_override_reason: lead.instagram_override_reason,
-    override_by: lead.override_by,
-    override_at: lead.override_at,
-    status: 'enviado',
-    sentAt,
-    template: '',
-    chipOrProfile: '',
-    notes: reason,
-    history: [
-      {
-        id: `history-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        date: sentAt.slice(0, 10),
-        title: 'Marcado como ja enviado',
-        description: reason,
-      },
-    ],
-  };
-}
-
 async function routeApprovedInstagramToQueue(leads: ImportLead[]) {
   const eligible = leads.filter((lead) =>
     isStatusGroup(lead.status, 'approved') &&
@@ -231,37 +181,16 @@ export const importService = {
   },
 
   async importFromJson(jsonText: string, options?: ImportExecutionOptions) {
-    const [baseLeads, sentIdentities] = await Promise.all([
-      repositories.base.list({}),
-      repositories.base.listSentIdentities(),
-    ]);
-    const basePhones = compactStrings(
-      baseLeads.map((lead) => normalizePhone(lead.normalizedPhone ?? lead.phone)),
-    );
-    const baseSites = compactStrings(baseLeads.map((lead) => normalizeSiteIdentity(lead.normalizedSite ?? lead.site)));
-    const baseInstagrams = compactStrings(baseLeads.map((lead) => lead.normalizedInstagram ?? lead.instagram));
-    const baseMapsUrls = compactStrings(baseLeads.map((lead) => lead.mapsUrl));
-    const sentLeads = baseLeads.filter((lead) => isStatusGroup(lead.status, 'sent'));
+    const finalIdentities = await repositories.base.listFinalIdentities();
     const result = await repositories.import.importFromJson(jsonText, {
       ...options,
       context: {
         ...(options?.context ?? {}),
-        baseLeadIds: compactStrings(baseLeads.map((lead) => lead.sourceLeadId)),
-        basePhones,
-        baseSites,
-        baseInstagrams,
-        baseMapsUrls,
-        sentLeadIds: compactStrings(sentLeads.map((lead) => lead.sourceLeadId)),
-        sentPhones: compactStrings([
-          ...sentIdentities.phones.map((phone) => normalizePhone(phone)),
-          ...sentLeads.map((lead) => normalizePhone(lead.normalizedPhone ?? lead.phone)),
-        ]),
-        sentSites: compactStrings([
-          ...sentIdentities.sites.map((site) => normalizeSiteIdentity(site)),
-          ...sentLeads.map((lead) => normalizeSiteIdentity(lead.normalizedSite ?? lead.site)),
-        ]),
-        sentInstagrams: [...sentIdentities.instagrams, ...compactStrings(sentLeads.map((lead) => lead.normalizedInstagram ?? lead.instagram))],
-        sentMapsUrls: [...sentIdentities.mapsUrls, ...compactStrings(sentLeads.map((lead) => lead.mapsUrl))],
+        baseLeadIds: [],
+        basePhones: compactStrings(finalIdentities.phones.map((phone) => normalizePhone(phone))),
+        baseSites: compactStrings(finalIdentities.sites.map((site) => normalizeSiteIdentity(site))),
+        baseInstagrams: compactStrings(finalIdentities.instagrams),
+        baseMapsUrls: compactStrings(finalIdentities.mapsUrls),
       },
     });
     eventBus.emit('import:changed', { source: 'json' });
@@ -372,7 +301,6 @@ export const importService = {
     for (const lead of selectedLeads) {
       if (isStatusGroup(lead.status, 'sent')) continue;
       assertTransition({ entity: 'import', fromStatus: lead.status, toStatus: 'sent', action: 'mark_sent' });
-      await repositories.base.upsertSent(importLeadToBaseInput(lead, sentAt, reason));
       await repositories.import.update(lead.id, {
         status: 'sent',
         motivo: reason,
@@ -380,7 +308,7 @@ export const importService = {
       await repositories.events.append({
         source: 'import',
         action: 'manual_mark_sent',
-        channel: baseOriginFromImport(lead) === 'Instagram' ? 'instagram' : 'whatsapp',
+        channel: channelFromImport(lead),
         leadId: lead.id,
         status: 'sent',
         message: reason,

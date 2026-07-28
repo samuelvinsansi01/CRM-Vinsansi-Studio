@@ -1,4 +1,10 @@
-import type { BaseFilters, BaseLead, BaseLeadStatus, BaseSummary, CreateBaseLeadInput, SentContactIdentities, UpdateBaseLeadInput } from '../../services/base/types';
+import type {
+  BaseFilters,
+  BaseFinalStatusId,
+  BaseLead,
+  BaseSummary,
+  FinalLeadIdentities,
+} from '../../services/base/types';
 
 export interface BaseRepository {
   list(filters?: BaseFilters): Promise<BaseLead[]>;
@@ -11,9 +17,7 @@ export interface BaseRepository {
     destinations: string[];
     statuses: string[];
   }>;
-  listSentIdentities(): Promise<SentContactIdentities>;
-  upsertSent(input: CreateBaseLeadInput): Promise<BaseLead>;
-  update(id: string, input: UpdateBaseLeadInput): Promise<BaseLead>;
-  setStatus(id: string, status: BaseLeadStatus): Promise<BaseLead>;
-  archive(id: string): Promise<BaseLead>;
+  listFinalIdentities(): Promise<FinalLeadIdentities>;
+  listByIds(ids: string[]): Promise<BaseLead[]>;
+  compareAndArchive(id: string, expectedStatus: Exclude<BaseFinalStatusId, 8>): Promise<BaseLead | null>;
 }

@@ -1,65 +1,94 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
-import { assertTransition } from '../state-machine';
-import { normalizeStatusGroup } from '../status/status.mapper';
-import type { BaseFilters, BaseLeadStatus, UpdateBaseLeadInput } from './types';
+import type { BaseArchiveResult, BaseFilters } from './types';
+
+function emptyResult(requested: number): BaseArchiveResult {
+  return {
+    requested,
+    succeeded: 0,
+    unchanged: 0,
+    failed: 0,
+    succeededIds: [],
+    unchangedIds: [],
+    failures: [],
+    auditWarnings: [],
+  };
+}
 
 export const baseService = {
-  async list(filters: BaseFilters = {}) {
+  list(filters: BaseFilters = {}) {
     return repositories.base.list(filters);
   },
 
-  async summary() {
+  summary() {
     return repositories.base.summary();
   },
 
-  async options() {
+  options() {
     return repositories.base.options();
   },
 
-  async update(id: string, input: UpdateBaseLeadInput) {
-    if (input.status !== undefined) {
-      const current = (await repositories.base.list({})).find((lead) => lead.id === id);
-      if (current && normalizeStatusGroup(input.status) !== normalizeStatusGroup(current.status)) {
-        assertTransition({ entity: 'base', fromStatus: current.status, toStatus: input.status, action: 'status_update' });
+  listFinalIdentities() {
+    return repositories.base.listFinalIdentities();
+  },
+
+  async archiveMany(ids: string[]): Promise<BaseArchiveResult> {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (!uniqueIds.length) throw new Error('Selecione pelo menos um lead finalizado.');
+
+    const result = emptyResult(uniqueIds.length);
+    const records = await repositories.base.listByIds(uniqueIds);
+    const byId = new Map(records.map((lead) => [lead.id, lead]));
+
+    for (const id of uniqueIds) {
+      const current = byId.get(id);
+      if (!current) {
+        result.failures.push({ id, reason: 'Lead não encontrado, não finalizado ou sem permissão de acesso.' });
+        continue;
+      }
+      if (current.statusId === 8) {
+        result.unchangedIds.push(id);
+        continue;
+      }
+
+      try {
+        const archived = await repositories.base.compareAndArchive(id, current.statusId);
+        if (!archived) {
+          result.failures.push({ id, company: current.company, reason: 'O lead foi alterado por outra operação. Atualize a Base Permanente.' });
+          continue;
+        }
+        result.succeededIds.push(id);
+        try {
+          await repositories.events.append({
+            source: 'base-permanente',
+            action: 'archive-final-lead',
+            channel: current.origin === 'Instagram' ? 'instagram' : 'whatsapp',
+            leadId: id,
+            status: '8',
+            metadata: {
+              company_name: current.company,
+              previous_status_id: current.statusId,
+              target_status_id: 8,
+              flow: 'F09',
+              canonical_source: 'leads',
+            },
+          });
+        } catch (error) {
+          result.auditWarnings.push(`Lead ${id}: ${error instanceof Error ? error.message : 'falha ao registrar auditoria.'}`);
+        }
+      } catch (error) {
+        result.failures.push({
+          id,
+          company: current.company,
+          reason: error instanceof Error ? error.message : 'Falha inesperada ao arquivar o lead.',
+        });
       }
     }
-    const lead = await repositories.base.update(id, input);
-    eventBus.emit('base:changed', { action: 'update' });
-    return lead;
+
+    result.succeeded = result.succeededIds.length;
+    result.unchanged = result.unchangedIds.length;
+    result.failed = result.failures.length;
+    if (result.succeeded || result.unchanged) eventBus.emit('base:changed', { action: 'archive' });
+    return result;
   },
-
-  async setStatus(id: string, status: BaseLeadStatus) {
-    const current = (await repositories.base.list({})).find((lead) => lead.id === id);
-    if (current) assertTransition({ entity: 'base', fromStatus: current.status, toStatus: status, action: 'status_update' });
-    const lead = await repositories.base.setStatus(id, status);
-    eventBus.emit('base:changed', { action: 'status' });
-    return lead;
-  },
-
-  async archive(id: string) {
-    const current = (await repositories.base.list({})).find((lead) => lead.id === id);
-    if (current) assertTransition({ entity: 'base', fromStatus: current.status, toStatus: 'archived', action: 'archive' });
-    const lead = await repositories.base.archive(id);
-    eventBus.emit('base:changed', { action: 'archive' });
-    return lead;
-  },
-
-  async archiveMany(ids: string[]) {
-    if (!ids.length) throw new Error('Selecione pelo menos um lead.');
-    const uniqueIds = Array.from(new Set(ids));
-    const records = await repositories.base.list({});
-    const byId = new Map(records.map((lead) => [lead.id, lead]));
-    const selected = uniqueIds.map((id) => byId.get(id));
-    if (selected.some((lead) => !lead)) throw new Error('Um ou mais leads nao foram encontrados.');
-    const leads = selected as NonNullable<(typeof selected)[number]>[];
-    leads.forEach((lead) => assertTransition({ entity: 'base', fromStatus: lead.status, toStatus: 'archived', action: 'archive' }));
-    const updated = await Promise.all(leads.map((lead) => repositories.base.archive(lead.id)));
-    eventBus.emit('base:changed', { action: 'archive' });
-    return updated;
-  },
-
-
-
-
 };

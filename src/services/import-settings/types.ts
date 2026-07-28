@@ -13,7 +13,6 @@ export type ImportDeduplicationSettings = {
   byPhone: boolean;
   bySite: boolean;
   blockBasePermanent: boolean;
-  blockSentContacts: boolean;
   allowSmartReimport: boolean;
   incrementalImport: boolean;
 };

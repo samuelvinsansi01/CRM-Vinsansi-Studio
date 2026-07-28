@@ -2,19 +2,16 @@ import { getSupabaseClient } from '../../lib/supabase';
 import { mapLead } from '../../mappers/lead.mapper';
 import type {
   BaseFilters,
+  BaseFinalStatusId,
   BaseLead,
-  BaseLeadStatus,
   BaseSummary,
-  CreateBaseLeadInput,
-  SentContactIdentities,
-  UpdateBaseLeadInput,
+  FinalLeadIdentities,
 } from '../../services/base/types';
-import { LEAD_STATUS, type LeadDatabaseRow } from '../../types/lead.types';
+import type { LeadDatabaseRow } from '../../types/lead.types';
 import { getCurrentUserId } from '../supabase.helpers';
 import type { BaseRepository } from './base.repository';
 
 const FINAL_LEAD_STATUS_IDS = [5, 6, 7, 8] as const;
-const FINAL_LEAD_STATUSES = new Set<BaseLeadStatus>(['enviado', 'invalido', 'duplicado', 'arquivado']);
 
 const LEADS_SELECT = `
   leads_id,
@@ -81,113 +78,63 @@ function filterRecords(records: BaseLead[], filters: BaseFilters = {}) {
 }
 
 function calculateSummary(records: BaseLead[]): BaseSummary {
-  const sent = records.filter((lead) => lead.status === 'enviado');
+  const sent = records.filter((lead) => lead.statusId === 5);
   return {
     total: records.length,
     sent: sent.length,
     sentWhatsApp: sent.filter((lead) => lead.origin === 'WhatsApp').length,
-    sentInstagram: sent.filter((lead) => lead.origin === 'Instagram' || lead.destination === 'Instagram').length,
-    archived: records.filter((lead) => lead.status === 'arquivado').length,
-    invalid: records.filter((lead) => lead.status === 'invalido' || lead.status === 'duplicado').length,
-    errors: 0,
+    sentInstagram: sent.filter((lead) => lead.origin === 'Instagram').length,
+    archived: records.filter((lead) => lead.statusId === 8).length,
+    invalid: records.filter((lead) => lead.statusId === 6).length,
+    duplicates: records.filter((lead) => lead.statusId === 7).length,
   };
 }
 
-async function listAll(): Promise<BaseLead[]> {
+async function listRowsByStatuses(statuses: readonly number[]): Promise<LeadDatabaseRow[]> {
   const userId = await getCurrentUserId();
   const pageSize = 1000;
   const rows: LeadDatabaseRow[] = [];
 
-  // PostgREST limita cada resposta. A paginação garante que a Base Permanente
-  // sempre inclua todos os leads atuais e também os inseridos futuramente.
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await getSupabaseClient()
       .from('leads')
       .select(LEADS_SELECT)
       .eq('users_id', userId)
-      .in('lead_status_id', [...FINAL_LEAD_STATUS_IDS])
-      .order('leads_created_at', { ascending: false })
+      .in('lead_status_id', [...statuses])
+      .order('leads_updated_at', { ascending: false, nullsFirst: false })
       .order('leads_id', { ascending: false })
       .range(from, from + pageSize - 1);
 
-    if (error) throw new Error(`Não foi possível carregar os leads: ${error.message}`);
-
+    if (error) throw new Error(`Não foi possível carregar a Base Permanente: ${error.message}`);
     const page = (data ?? []) as unknown as LeadDatabaseRow[];
     rows.push(...page);
     if (page.length < pageSize) break;
   }
 
-  // Defesa adicional: mesmo que uma política/view do banco altere o resultado da
-  // consulta, nenhuma etapa ativa pode vazar para a Base Permanente.
-  return rows
-    .filter((row) => FINAL_LEAD_STATUS_IDS.includes(Number(row.lead_status_id) as 5 | 6 | 7 | 8))
-    .map(mapLead)
-    .filter((lead) => FINAL_LEAD_STATUSES.has(lead.status));
+  return rows.filter((row) => FINAL_LEAD_STATUS_IDS.includes(Number(row.lead_status_id) as 5 | 6 | 7 | 8));
 }
 
-async function resolveLookupId(table: string, idColumn: string, nameColumn: string, value: string): Promise<number | null> {
-  const normalized = normalizeText(value);
-  if (!normalized) return null;
-
-  type LookupQueryResult = {
-    data: Record<string, unknown>[] | null;
-    error: { message: string } | null;
-  };
-
-  const lookupQuery = getSupabaseClient().from(table) as unknown as {
-    select: (columns: string) => PromiseLike<LookupQueryResult>;
-  };
-
-  const { data, error } = await lookupQuery.select(`${idColumn},${nameColumn}`);
-  if (error) throw new Error(error.message);
-
-  const row = (data ?? []).find((item) => normalizeText(item[nameColumn]) === normalized);
-  return row ? Number(row[idColumn]) : null;
+async function listAll(): Promise<BaseLead[]> {
+  return (await listRowsByStatuses(FINAL_LEAD_STATUS_IDS)).map(mapLead);
 }
 
-function statusId(status: BaseLeadStatus) {
-  return LEAD_STATUS[status];
-}
+async function listByIds(ids: string[]): Promise<BaseLead[]> {
+  const numericIds = Array.from(new Set(ids)).map(Number);
+  if (!numericIds.length) return [];
+  if (numericIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw new Error('Um ou mais identificadores de lead são inválidos.');
+  }
 
-async function updateLeadRow(id: string, input: UpdateBaseLeadInput): Promise<BaseLead> {
   const userId = await getCurrentUserId();
-  const payload: Record<string, unknown> = { leads_updated_at: new Date().toISOString() };
-
-  if (input.company !== undefined) payload.leads_name = input.company.trim();
-  if (input.phone !== undefined) payload.leads_phone = input.phone.trim() || null;
-  if (input.instagram !== undefined) payload.leads_instagram = input.instagram.trim() || null;
-  if (input.site !== undefined) payload.leads_website = input.site.trim() || null;
-  if (input.mapsUrl !== undefined) payload.leads_maps = input.mapsUrl.trim() || null;
-  if (input.status !== undefined) payload.lead_status_id = statusId(input.status);
-
-  if (input.branch_id !== undefined && input.branch_id) {
-    payload.branches_id = Number(input.branch_id);
-  } else if (input.branch !== undefined) {
-    const branchId = await resolveLookupId('branches', 'branches_id', 'branches_name', input.branch);
-    if (!branchId) throw new Error('O ramo informado não existe na tabela branches.');
-    payload.branches_id = branchId;
-  }
-
-  if (input.state !== undefined) {
-    const stateId = await resolveLookupId('states', 'states_id', 'states_name', input.state)
-      ?? await resolveLookupId('states', 'states_id', 'states_code', input.state);
-    payload.states_id = stateId;
-  }
-
-  if (input.city !== undefined) {
-    payload.cities_id = await resolveLookupId('cities', 'cities_id', 'cities_name', input.city);
-  }
-
   const { data, error } = await getSupabaseClient()
     .from('leads')
-    .update(payload)
-    .eq('leads_id', Number(id))
-    .eq('users_id', userId)
     .select(LEADS_SELECT)
-    .single();
+    .eq('users_id', userId)
+    .in('leads_id', numericIds)
+    .in('lead_status_id', [...FINAL_LEAD_STATUS_IDS]);
 
-  if (error) throw new Error(`Não foi possível atualizar o lead: ${error.message}`);
-  return mapLead(data as unknown as LeadDatabaseRow);
+  if (error) throw new Error(`Não foi possível carregar os leads finalizados: ${error.message}`);
+  return ((data ?? []) as unknown as LeadDatabaseRow[]).map(mapLead);
 }
 
 export const supabaseBaseRepository: BaseRepository = {
@@ -212,77 +159,33 @@ export const supabaseBaseRepository: BaseRepository = {
     };
   },
 
-  async listSentIdentities(): Promise<SentContactIdentities> {
-    const records = (await listAll()).filter((lead) => lead.status === 'enviado');
+  async listFinalIdentities(): Promise<FinalLeadIdentities> {
+    const records = await listAll();
+    const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
     return {
-      phones: records.map((lead) => lead.normalizedPhone ?? '').filter(Boolean),
-      sites: records.map((lead) => lead.normalizedSite ?? '').filter(Boolean),
-      instagrams: records.map((lead) => lead.normalizedInstagram ?? '').filter(Boolean),
-      mapsUrls: records.map((lead) => lead.mapsUrl ?? '').filter(Boolean),
+      phones: unique(records.map((lead) => lead.normalizedPhone ?? '')),
+      sites: unique(records.map((lead) => lead.normalizedSite ?? '')),
+      instagrams: unique(records.map((lead) => lead.normalizedInstagram ?? '')),
+      mapsUrls: unique(records.map((lead) => lead.mapsUrl ?? '')),
     };
   },
 
-  async upsertSent(input: CreateBaseLeadInput) {
+  listByIds,
+
+  async compareAndArchive(id: string, expectedStatus: Exclude<BaseFinalStatusId, 8>) {
+    const numericId = Number(id);
+    if (!Number.isSafeInteger(numericId) || numericId <= 0) throw new Error('Identificador de lead inválido.');
     const userId = await getCurrentUserId();
-    const branchId = input.branch_id
-      ? Number(input.branch_id)
-      : await resolveLookupId('branches', 'branches_id', 'branches_name', input.branch);
-
-    if (!branchId) throw new Error('Selecione um ramo existente antes de criar o lead.');
-
-    const stateId = input.state
-      ? await resolveLookupId('states', 'states_id', 'states_name', input.state)
-        ?? await resolveLookupId('states', 'states_id', 'states_code', input.state)
-      : null;
-    const cityId = input.city
-      ? await resolveLookupId('cities', 'cities_id', 'cities_name', input.city)
-      : null;
-
-    const hasInstagram = Boolean(input.instagram?.trim());
-    const hasWebsite = Boolean(input.site?.trim());
-    const isAggregator = input.destination === 'Agregador';
-    const contactSourceId = hasInstagram ? 4 : isAggregator ? 3 : hasWebsite ? 2 : 1;
-    const channelId = hasInstagram || input.destination === 'Instagram' ? 2 : 1;
-
-    const payload = {
-      users_id: Number(userId),
-      branches_id: branchId,
-      countries_id: 1,
-      states_id: stateId,
-      cities_id: cityId,
-      channels_id: channelId,
-      lead_status_id: statusId(input.status),
-      contact_sources_id: contactSourceId,
-      leads_name: input.company.trim(),
-      leads_phone: input.phone.trim() || null,
-      leads_instagram: input.instagram?.trim() || null,
-      leads_website: input.site.trim() || null,
-      leads_maps: input.mapsUrl?.trim() || null,
-      leads_categories: input.branch ? [input.branch] : [],
-      leads_origin: 'manual',
-    };
-
     const { data, error } = await getSupabaseClient()
       .from('leads')
-      .insert(payload)
+      .update({ lead_status_id: 8, leads_updated_at: new Date().toISOString() })
+      .eq('leads_id', numericId)
+      .eq('users_id', userId)
+      .eq('lead_status_id', expectedStatus)
       .select(LEADS_SELECT)
-      .single();
+      .maybeSingle();
 
-    if (error) throw new Error(`Não foi possível criar o lead: ${error.message}`);
-    return mapLead(data as unknown as LeadDatabaseRow);
+    if (error) throw new Error(`Não foi possível arquivar o lead: ${error.message}`);
+    return data ? mapLead(data as unknown as LeadDatabaseRow) : null;
   },
-
-  async update(id, input) {
-    return updateLeadRow(id, input);
-  },
-
-  async setStatus(id, status) {
-    return updateLeadRow(id, { status });
-  },
-
-  async archive(id) {
-    return updateLeadRow(id, { status: 'arquivado' });
-  },
-
-
 };

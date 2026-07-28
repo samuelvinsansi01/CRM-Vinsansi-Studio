@@ -18,7 +18,6 @@ export const defaultImportSettings: ImportSettings = {
     byPhone: true,
     bySite: true,
     blockBasePermanent: true,
-    blockSentContacts: true,
     allowSmartReimport: false,
     incrementalImport: true,
   },

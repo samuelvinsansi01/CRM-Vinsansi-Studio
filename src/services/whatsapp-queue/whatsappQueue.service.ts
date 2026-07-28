@@ -1,7 +1,6 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
-import { normalizeDomain, normalizePhone } from '../import/importValidation';
-import { normalizeInstagramUsername } from '../instagram/instagram.utils';
+import { normalizePhone } from '../import/importValidation';
 import { permissionsFor } from '../permissions';
 import { whatsappGateway } from './whatsapp.gateway';
 import { whatsappBatchGateway, type WhatsAppBatchState } from './whatsapp.batch.gateway';
@@ -16,6 +15,7 @@ import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { renderTemplateVariables } from '../templates/templateVariables';
 import { hasAllTemplateMessages } from '../templates/templateContract';
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
+import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle/supabaseLeadCycle.repository';
 
 function isChip(record: ConfigRecord): record is ChipConfigRecord {
   return record.kind === 'chips';
@@ -138,12 +138,6 @@ function assertStatusPatch(current: WhatsAppQueueLead, input: UpdateWhatsAppQueu
   }
 }
 
-function toBaseDestination(type: WhatsAppQueueLead['type']) {
-  if (type === 'Agregador') return 'Agregador';
-  if (type === 'Com site') return 'Com site';
-  return 'WhatsApp';
-}
-
 function sourceLeadId(lead: WhatsAppQueueLead) {
   return lead.lead_id || lead.sourcePreSendId || lead.id;
 }
@@ -212,41 +206,28 @@ function logQueueEvent(action: string, lead: Partial<WhatsAppQueueLead>, status?
   }).catch(() => undefined);
 }
 
-async function persistSentToBase(leads: WhatsAppQueueLead[]) {
-  const sentAt = new Date().toISOString();
-  await Promise.all(
-    leads.map((lead) =>
-      repositories.base.upsertSent({
-        sourceLeadId: sourceLeadId(lead),
-        company: lead.company,
-        branch: lead.branch,
-        state: lead.state ?? '',
-        city: lead.city ?? '',
-        phone: lead.phone,
-        site: lead.site ?? '',
-        normalizedPhone: normalizePhone(lead.phone),
-        normalizedSite: normalizeDomain(lead.site),
-        instagram: lead.instagram_url ?? lead.instagram ?? '',
-        normalizedInstagram: normalizeInstagramUsername(lead.instagram_url ?? lead.instagram),
-        mapsUrl: lead.mapsUrl ?? '',
-        origin: 'WhatsApp',
-        destination: toBaseDestination(lead.type),
-        original_destination: lead.original_destination,
-        destination_override: lead.destination_override,
-        send_instagram: lead.send_instagram ?? false,
-        instagram_override_reason: lead.instagram_override_reason,
-        override_by: lead.override_by,
-        override_at: lead.override_at,
-        status: 'enviado',
-        sentAt,
-        template: renderTemplateVariables(lead.message1, lead),
-        chipOrProfile: lead.chip,
-        notes: lead.imageName ? `Imagem: ${lead.imageName}` : '',
-      }),
-    ),
-  );
+async function syncCanonicalSentStatus(leads: WhatsAppQueueLead[]) {
+  await Promise.allSettled(leads.map(async (lead) => {
+    const leadId = sourceLeadId(lead);
+    if (!/^\d+$/.test(leadId)) return;
+    const updated = await supabaseLeadCycleRepository.compareAndSet(leadId, 4, { lead_status_id: 5 });
+    if (updated) return;
+    await repositories.events.append({
+      source: 'whatsapp-queue',
+      action: 'canonical_sent_sync_conflict',
+      channel: 'whatsapp',
+      leadId,
+      queueItemId: lead.id,
+      status: 'sent',
+      metadata: {
+        flow: 'F09',
+        canonical_source: 'leads',
+        expected_status_id: 4,
+        target_status_id: 5,
+      },
+    });
+  }));
 }
-
 async function finishSentPersistence({
   queueIds,
   leads,
@@ -258,9 +239,8 @@ async function finishSentPersistence({
   preSendIds: string[];
   replayed?: boolean;
 }) {
-  // Ordem intencional: a Base Permanente e a fonte de recuperacao. Ela precisa ser
-  // gravada antes de qualquer item ser exibido como "enviado" na fila.
-  if (leads.length) await persistSentToBase(leads);
+  // A tabela leads é a única fonte canônica da Base Permanente.
+  if (leads.length) await syncCanonicalSentStatus(leads);
   if (queueIds.length) await repositories.whatsappQueue.send(queueIds);
   if (preSendIds.length) await preSendService.markSent(preSendIds);
   if (leads.length) await logDispatchMessages(leads, replayed);

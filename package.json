@@ -14,7 +14,8 @@
     "verify:f05": "npm run verify:f05-validation && npm run verify:f05-provider",
     "verify:f06": "node scripts/verify-f06-queue-preparation.mjs",
     "verify:f07": "node scripts/verify-f07-whatsapp-queue.mjs",
-    "verify:f08": "node scripts/verify-f08-instagram-queue.mjs"
+    "verify:f08": "node scripts/verify-f08-instagram-queue.mjs",
+    "verify:f09": "node scripts/verify-f09-base-permanente.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

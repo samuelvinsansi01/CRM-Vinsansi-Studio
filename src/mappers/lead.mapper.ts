@@ -1,6 +1,6 @@
 import type { BaseLead, BaseLeadDestination, BaseLeadOrigin } from '../services/base/types';
 import { normalizeBrazilState } from '../services/geo/brazilState';
-import type { LeadDatabaseRow, LeadRelation, LeadStatusName } from '../types/lead.types';
+import type { LeadDatabaseRow, LeadRelation } from '../types/lead.types';
 
 function one<T>(relation: LeadRelation<T>): T | null {
   if (Array.isArray(relation)) return relation[0] ?? null;
@@ -52,17 +52,14 @@ export function mapLead(row: LeadDatabaseRow): BaseLead {
   const city = one(row.cities);
   const channel = one(row.channels);
   const status = one(row.lead_status);
-  const source = one(row.contact_sources);
   const website = row.leads_website ?? '';
   const phone = row.leads_phone ?? '';
   const instagram = row.leads_instagram ?? '';
   const origin = originFromChannel(channel?.channels_name);
   const destination = destinationFromLead(channel?.channels_name, row.contact_sources_id, website);
-  const statusName = (status?.lead_status_name ?? '') as LeadStatusName;
 
   return {
     id: String(row.leads_id),
-    sourceLeadId: row.apify_import_jobs_id ? String(row.apify_import_jobs_id) : undefined,
     company: row.leads_name,
     branch: branch?.branches_name ?? row.leads_categories?.[0] ?? '',
     branch_id: String(row.branches_id),
@@ -77,18 +74,8 @@ export function mapLead(row: LeadDatabaseRow): BaseLead {
     mapsUrl: row.leads_maps ?? '',
     origin,
     destination,
-    original_destination: destination,
-    send_instagram: destination === 'Instagram',
-    status: statusName,
-    sentAt: row.leads_updated_at ?? row.leads_created_at,
-    template: '',
-    chipOrProfile: '',
-    notes: '',
-    history: [{
-      id: `lead-${row.leads_id}-created`,
-      date: row.leads_created_at.slice(0, 10),
-      title: 'Lead cadastrado',
-      description: `Origem: ${source?.contact_sources_name ?? row.leads_origin}`,
-    }],
+    status: status?.lead_status_name ?? ({ 1: 'importado', 2: 'validado', 3: 'pre_envio', 4: 'na_fila', 5: 'enviado', 6: 'invalido', 7: 'duplicado', 8: 'arquivado' } as const)[row.lead_status_id],
+    statusId: row.lead_status_id as BaseLead['statusId'],
+    finalizedAt: row.leads_updated_at ?? row.leads_created_at,
   };
 }

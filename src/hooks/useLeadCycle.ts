@@ -10,13 +10,12 @@ import type { LeadStatusId } from '../types/lead.types';
 import { whatsappValidationService } from '../services/whatsapp-validation/whatsappValidation.service';
 import type { WhatsAppValidationBatchResult } from '../services/whatsapp-validation/types';
 
-export type LeadCycleView = 'imported' | 'valid' | 'pre-send' | 'permanent';
+export type LeadCycleView = 'imported' | 'valid' | 'pre-send';
 
 const loaders = {
   imported: leadCycleService.listImported,
   valid: leadCycleService.listValid,
   'pre-send': leadCycleService.listPreSend,
-  permanent: leadCycleService.listPermanent,
 };
 
 export function useLeadCycle(view: LeadCycleView) {

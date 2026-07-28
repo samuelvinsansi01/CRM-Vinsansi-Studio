@@ -220,7 +220,6 @@ export const leadCycleService = {
   listImported: () => listByStatuses([1]),
   listValid: () => listByStatuses([2]),
   listPreSend: () => listByStatuses([3], 1),
-  listPermanent: () => listByStatuses([5, 6, 7, 8]),
   executeRoutingCommand,
   update,
 };

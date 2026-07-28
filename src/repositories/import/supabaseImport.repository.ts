@@ -450,11 +450,6 @@ export const supabaseImportRepository: ImportRepository = {
       baseSites: new Set(options.context?.baseSites ?? []),
       baseInstagrams: new Set(options.context?.baseInstagrams ?? []),
       baseMapsUrls: new Set(options.context?.baseMapsUrls ?? []),
-      sentLeadIds: new Set(options.context?.sentLeadIds ?? []),
-      sentPhones: new Set(options.context?.sentPhones ?? []),
-      sentSites: new Set(options.context?.sentSites ?? []),
-      sentInstagrams: new Set(options.context?.sentInstagrams ?? []),
-      sentMapsUrls: new Set(options.context?.sentMapsUrls ?? []),
     });
 
     const duplicateCodes = new Set([
@@ -463,7 +458,6 @@ export const supabaseImportRepository: ImportRepository = {
       'duplicate_site',
       'already_in_base',
       'duplicate_lead_id',
-      'already_sent',
     ]);
     const preparedItems = normalized.items.map((item) => ({
       ...item,

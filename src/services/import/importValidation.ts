@@ -20,11 +20,6 @@ export type ImportValidationContext = {
   baseSites?: Set<string>;
   baseInstagrams?: Set<string>;
   baseMapsUrls?: Set<string>;
-  sentLeadIds?: Set<string>;
-  sentPhones?: Set<string>;
-  sentSites?: Set<string>;
-  sentInstagrams?: Set<string>;
-  sentMapsUrls?: Set<string>;
 };
 
 export type NormalizedImportItem = {
@@ -114,7 +109,6 @@ const REASON_LABELS: Record<ImportRejectionCode | 'ignored' | 'approved', string
   duplicate_site: 'Site/dominio duplicado',
   duplicate_lead_id: 'Lead duplicado',
   already_in_base: 'Base Permanente',
-  already_sent: 'Ja enviado em sent_contacts',
   invalid_item: 'Item invalido',
 };
 
@@ -476,14 +470,6 @@ function findDuplicate(
     if (payload.existingLeadIds.has(sourceLeadId)) return reject('payload_duplicate', 'lead_id duplicado no JSON atual', true);
   }
 
-  if (settings.deduplication.blockSentContacts) {
-    if (phone && context.sentPhones.has(phone)) return reject('already_sent', 'telefone ja esta em sent_contacts', true);
-    if (site && context.sentSites.has(site)) return reject('already_sent', 'site ja esta em sent_contacts', true);
-    if (instagram && context.sentInstagrams.has(instagram)) return reject('already_sent', 'instagram ja esta em sent_contacts', true);
-    if (mapsUrl && context.sentMapsUrls.has(mapsUrl)) return reject('already_sent', 'maps ja esta em sent_contacts', true);
-    if (sourceLeadId && context.sentLeadIds.has(sourceLeadId)) return reject('already_sent', 'lead_id ja esta em sent_contacts', true);
-  }
-
   if (settings.deduplication.blockBasePermanent) {
     if (phone && context.basePhones.has(phone)) return reject('already_in_base', 'telefone ja existe na base permanente', true);
     if (site && context.baseSites.has(site)) return reject('already_in_base', 'site ja existe na base permanente', true);
@@ -688,11 +674,6 @@ export async function normalizeImportItems(rawItems: unknown[], context: ImportV
     baseSites: new Set(Array.from(context.baseSites ?? []).map(normalizeSiteIdentity).filter(Boolean)),
     baseInstagrams: new Set(context.baseInstagrams ?? []),
     baseMapsUrls: new Set(context.baseMapsUrls ?? []),
-    sentLeadIds: new Set(context.sentLeadIds ?? []),
-    sentPhones: normalizePhoneSet(context.sentPhones ?? []),
-    sentSites: new Set(Array.from(context.sentSites ?? []).map(normalizeSiteIdentity).filter(Boolean)),
-    sentInstagrams: new Set(context.sentInstagrams ?? []),
-    sentMapsUrls: new Set(context.sentMapsUrls ?? []),
   };
   const payloadIdentity = {
     existingLeadIds: new Set<string>(),

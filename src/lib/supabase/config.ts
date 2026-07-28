@@ -18,8 +18,6 @@ export type SupabaseRuntimeConfig = {
     preSendLeads: string;
     whatsappQueueItems: string;
     instagramQueueItems: string;
-    basePermanent: string;
-    sentContacts: string;
     events: string;
     settings: string;
     importBatches: string;
@@ -61,8 +59,6 @@ export function getSupabaseConfig(): SupabaseRuntimeConfig {
       preSendLeads: import.meta.env.VITE_SUPABASE_TABLE_PRE_SEND_LEADS ?? 'pre_send_leads',
       whatsappQueueItems: import.meta.env.VITE_SUPABASE_TABLE_WHATSAPP_QUEUE_ITEMS ?? 'whatsapp_queue_items',
       instagramQueueItems: import.meta.env.VITE_SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS ?? 'instagram_queue_items',
-      basePermanent: import.meta.env.VITE_SUPABASE_TABLE_BASE_PERMANENTE ?? 'base_permanente',
-      sentContacts: import.meta.env.VITE_SUPABASE_TABLE_SENT_CONTACTS ?? 'sent_contacts',
       events: import.meta.env.VITE_SUPABASE_TABLE_EVENTS ?? 'lead_events',
       settings: import.meta.env.VITE_SUPABASE_TABLE_SETTINGS ?? 'app_settings',
       importBatches: import.meta.env.VITE_SUPABASE_TABLE_IMPORT_BATCHES ?? 'import_batches',
