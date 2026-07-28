@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import ts from '/opt/nvm/versions/node/v22.16.0/lib/node_modules/typescript/lib/typescript.js';
+import { loadTypeScript } from './load-typescript.mjs';
 
+const ts = await loadTypeScript();
 const root = process.cwd();
 const workerRoot = process.env.WORKER_F09_ROOT ? path.resolve(process.env.WORKER_F09_ROOT) : '';
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
