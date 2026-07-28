@@ -268,6 +268,15 @@ export const importService = {
     return result;
   },
 
+  async persistLeads(leads: ImportLead[], options?: ImportExecutionOptions) {
+    const result = await repositories.import.persist(leads, options);
+    if (result.created.length) {
+      await routeApprovedInstagramToQueue(result.created);
+      eventBus.emit('import:changed', { source: 'json' });
+    }
+    return result;
+  },
+
   async create(input: ImportLeadInput) {
     const lead = await repositories.import.create(input);
     await routeApprovedInstagramToQueue([lead]);

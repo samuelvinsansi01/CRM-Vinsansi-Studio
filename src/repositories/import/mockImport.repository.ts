@@ -159,6 +159,33 @@ export const mockImportRepository: ImportRepository = {
     };
   },
 
+  async persist(leads) {
+    const created: ImportLead[] = [];
+    const duplicateClientIds: string[] = [];
+
+    for (const lead of leads) {
+      const phone = normalizePhone(lead.normalizedPhone ?? lead.whatsapp);
+      const site = normalizeDomain(lead.normalizedSite ?? lead.site);
+      const instagram = String(lead.normalizedInstagram ?? '').trim();
+      const maps = String(lead.normalizedMapsUrl ?? '').trim();
+      const duplicate = memoryStore.some((stored) =>
+        Boolean(phone && normalizePhone(stored.normalizedPhone ?? stored.whatsapp) === phone)
+        || Boolean(site && normalizeDomain(stored.normalizedSite ?? stored.site) === site)
+        || Boolean(instagram && String(stored.normalizedInstagram ?? '').trim() === instagram)
+        || Boolean(maps && String(stored.normalizedMapsUrl ?? '').trim() === maps));
+
+      if (duplicate) {
+        duplicateClientIds.push(lead.id);
+        continue;
+      }
+
+      created.push({ ...lead, id: createId() });
+    }
+
+    memoryStore = [...created, ...memoryStore];
+    return { created, duplicateClientIds };
+  },
+
   async create(input: ImportLeadInput) {
     const lead = { id: createId(), ...normalizeLeadInput(input) };
     memoryStore = [lead, ...memoryStore];

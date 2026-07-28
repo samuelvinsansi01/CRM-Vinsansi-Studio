@@ -1,4 +1,5 @@
 import type { StatusGroup } from '../status/status.mapper';
+import type { LeadOrigin } from '../../types/lead.types';
 
 export type ImportLeadStatus = 'pending' | 'approved' | 'rejected' | 'queued' | 'sent';
 
@@ -106,6 +107,8 @@ export type ImportParseResult = {
 
 export type ImportExecutionOptions = {
   simulate?: boolean;
+  apifyImportJobId?: number | null;
+  origin?: LeadOrigin;
   context?: {
     existingLeadIds?: string[];
     baseLeadIds?: string[];
@@ -119,4 +122,9 @@ export type ImportExecutionOptions = {
     sentInstagrams?: string[];
     sentMapsUrls?: string[];
   };
+};
+
+export type ImportPersistResult = {
+  created: ImportLead[];
+  duplicateClientIds: string[];
 };

@@ -1,16 +1,36 @@
-import { getSupabaseClient, getSupabaseConfig } from '../../lib/supabase';
-import { branchIdOrNull } from '../../services/config/branchIdentity';
+import { getSupabaseClient } from '../../lib/supabase';
+import { mapLead } from '../../mappers/lead.mapper';
 import { normalizeBrazilState } from '../../services/geo/brazilState';
-import { extractImportItems, normalizeDomain, normalizeImportItems, normalizePhone, normalizeSiteIdentity } from '../../services/import/importValidation';
-import type { ImportExecutionOptions, ImportLead, ImportLeadDestination, ImportLeadInput, ImportListFilters, ImportParseResult, ImportSummary } from '../../services/import/types';
+import {
+  buildExistingLeadInsert,
+  buildExistingLeadUpdate,
+  leadIdentityValues,
+  mergePersistedLead,
+  type CanonicalLeadLookup,
+} from '../../services/import/canonicalLead';
+import {
+  extractImportItems,
+  normalizeImportItems,
+  normalizePhone,
+  normalizeSiteIdentity,
+} from '../../services/import/importValidation';
+import type {
+  ImportExecutionOptions,
+  ImportLead,
+  ImportLeadDestination,
+  ImportLeadInput,
+  ImportListFilters,
+  ImportParseResult,
+  ImportPersistResult,
+  ImportSummary,
+} from '../../services/import/types';
 import { normalizeInstagramUsername } from '../../services/instagram/instagram.utils';
 import { isStatusGroup } from '../../services/status/status.mapper';
-import { mapLead } from '../../mappers/lead.mapper';
-import type { BaseLead } from '../../services/base/types';
-import type { LeadDatabaseRow } from '../../types/lead.types';
-import { createId, createUuid, getCurrentUserId, nowIso } from '../supabase.helpers';
+import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
+import { createId, getCurrentUserId } from '../supabase.helpers';
 import type { ImportRepository } from './import.repository';
 
+/** Somente colunas já existentes no banco novo. */
 const NORMALIZED_LEADS_SELECT = `
   leads_id,
   users_id,
@@ -44,44 +64,21 @@ const NORMALIZED_LEADS_SELECT = `
   contact_sources:contact_sources_id ( contact_sources_id, contact_sources_name )
 `;
 
-function baseLeadToImportLead(lead: BaseLead): ImportLead {
-  return {
-    id: lead.id,
-    empresa: lead.company,
-    ramo: lead.branch,
-    branch_id: lead.branch_id,
-    subcategoria: lead.branch,
-    destino: lead.destination === 'Agregador' ? 'Agregadores' : lead.destination,
-    original_destination: lead.destination === 'Agregador' ? 'Agregadores' : lead.destination,
-    destination: lead.destination === 'Agregador' ? 'Agregadores' : lead.destination,
-    send_instagram: lead.destination === 'Instagram',
-    instagram_url: lead.instagram,
-    status: lead.status,
-    motivo: '',
-    rating: 0,
-    reviews: 0,
-    whatsapp: lead.phone,
-    instagram: lead.instagram,
-    site: lead.site,
-    cidade: lead.city,
-    estado: lead.state,
-    normalizedPhone: lead.normalizedPhone ?? '',
-    normalizedSite: lead.normalizedSite ?? '',
-    normalizedInstagram: lead.normalizedInstagram ?? '',
-    normalizedMapsUrl: lead.mapsUrl ?? '',
-    sourceLeadId: lead.sourceLeadId ?? '',
-  };
-}
+const ACTIVE_IMPORT_STATUS_IDS: LeadStatusId[] = [1, 2];
+const ALL_LEAD_STATUS_IDS: LeadStatusId[] = [1, 2, 3, 4, 5, 6, 7, 8];
 
-type BranchRule = {
-  id: string;
-  slug: string;
-  name: string;
-  terms: string[];
-};
+type LookupRow = Record<string, unknown>;
+type IdentityType = keyof ReturnType<typeof leadIdentityValues>;
+type IdentityIndex = Record<IdentityType, Map<string, string>>;
 
-function table() {
-  return getSupabaseConfig().tables.importLeads;
+function normalizeComparable(value: unknown) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
 }
 
 function normalizeLeadInput(input: ImportLeadInput): ImportLeadInput {
@@ -95,178 +92,52 @@ function normalizeLeadInput(input: ImportLeadInput): ImportLeadInput {
     destination_override: sendInstagram ? 'Instagram' : input.destination_override,
     send_instagram: sendInstagram,
     instagram_url: input.instagram_url ?? input.instagram,
-    instagram_override_reason: sendInstagram ? input.instagram_override_reason || 'Override manual para Instagram' : '',
+    instagram_override_reason: sendInstagram
+      ? input.instagram_override_reason || 'Override manual para Instagram'
+      : '',
     override_by: sendInstagram ? input.override_by || 'Operador local' : '',
     override_at: sendInstagram ? input.override_at || now : '',
   };
 }
 
-function normalizeComparable(value: unknown) {
-  return String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ');
-}
+function rowToImportLead(row: LeadDatabaseRow): ImportLead {
+  const mapped = mapLead(row);
+  const destination = mapped.destination === 'Agregador' ? 'Agregadores' : mapped.destination;
 
-function exactNormalizedMatch(a: unknown, b: unknown) {
-  return normalizeComparable(a) === normalizeComparable(b);
-}
-
-function textFrom(...values: unknown[]) {
-  const found = values.find((value) => String(value ?? '').trim());
-  return String(found ?? '');
-}
-
-function hasText(value: unknown) {
-  return String(value ?? '').trim().length > 0;
-}
-
-function normalizeDestinationValue(value: unknown): ImportLeadDestination | undefined {
-  const normalized = normalizeComparable(value);
-  if (!normalized) return undefined;
-  if (normalized.includes('instagram')) return 'Instagram';
-  if (normalized.includes('agreg') || normalized.includes('aggregator')) return 'Agregadores';
-  if (normalized.includes('com site') || normalized.includes('site proprio') || normalized.includes('own site')) return 'Com site';
-  if (normalized === 'whatsapp' || normalized === 'sem site') return 'WhatsApp';
-  return undefined;
-}
-
-function isAggregatorWebsite(site: string, websiteType: string) {
-  const normalizedType = normalizeComparable(websiteType);
-  if (['aggregator', 'external', 'linktree', 'beacons', 'carrd', 'taplink'].includes(normalizedType)) return true;
-  return /(^|[/.])(linktr\.ee|linktree|beacons\.ai|carrd\.co|taplink|bio\.link|lnk\.bio)([/.]|$)/i.test(site);
-}
-
-function isOwnWebsite(site: string, websiteType: string) {
-  const normalizedType = normalizeComparable(websiteType);
-  if (!site.trim()) return false;
-  if (['none', 'whatsapp', 'instagram', 'facebook'].includes(normalizedType)) return false;
-  if (isAggregatorWebsite(site, websiteType)) return false;
-  return true;
-}
-
-function classifyLegacyDestination(row: Record<string, unknown>, data: Partial<ImportLead>, raw: Partial<ImportLead>): ImportLeadDestination {
-  const explicitDestination = normalizeDestinationValue(data.destination ?? row.destination ?? data.destino);
-  if (explicitDestination) return explicitDestination;
-
-  const phone = textFrom(row.normalized_phone, row.phone, data.normalizedPhone, data.whatsapp, raw.normalizedPhone, raw.whatsapp, (raw as Record<string, unknown>).phone);
-  const instagram = textFrom(
-    row.instagram_url,
-    row.instagram,
-    row.instagram_username,
-    data.instagram_url,
-    data.instagram,
-    data.normalizedInstagram,
-    raw.instagram_url,
-    raw.instagram,
-    raw.normalizedInstagram,
-  );
-  const site = textFrom(row.website, data.site, raw.site, (raw as Record<string, unknown>).website);
-  const websiteType = textFrom(row.website_type, row.website_quality, (data as Record<string, unknown>).website_type, (raw as Record<string, unknown>).website_type, (raw as Record<string, unknown>).websiteType);
-
-  if (hasText(phone) && isOwnWebsite(site, websiteType)) return 'Com site';
-  if (hasText(phone) && isAggregatorWebsite(site, websiteType)) return 'Agregadores';
-  if (hasText(phone)) return 'WhatsApp';
-  if (hasText(instagram)) return 'Instagram';
-
-  return normalizeDestinationValue(row.lead_channel ?? row.lead_type ?? data.destino) ?? 'WhatsApp';
-}
-
-function normalizeParentBranch(branchRules: BranchRule[], ...values: unknown[]) {
-  return resolveParentBranch(branchRules, ...values)?.name ?? textFrom(...values);
-}
-
-function resolveParentBranch(branchRules: BranchRule[], ...values: unknown[]) {
-  const candidates = values.map(normalizeComparable).filter(Boolean);
-  if (!candidates.length) return null;
-
-  for (const branch of branchRules) {
-    const terms = [branch.id, branch.slug, branch.name, ...branch.terms].map(normalizeComparable).filter(Boolean);
-    const matches = candidates.some((candidate) => terms.some((term) => exactNormalizedMatch(candidate, term)));
-    if (matches) return branch;
-  }
-
-  return null;
-}
-
-function isTestLead(lead: ImportLead) {
-  const signature = normalizeComparable(`${lead.empresa} ${lead.ramo} ${lead.subcategoria ?? ''} ${lead.site ?? ''} ${lead.instagram ?? ''}`);
-  return signature.includes('teste supabase') || signature.includes('supabase real') || signature.includes('codex') || signature.includes('lead fake');
-}
-
-function rowToLead(row: Record<string, unknown>, branchRules: BranchRule[]): ImportLead {
-  const data = (row.data && typeof row.data === 'object' ? row.data : {}) as Partial<ImportLead>;
-  const raw = (row.raw_payload && typeof row.raw_payload === 'object' ? row.raw_payload : {}) as Partial<ImportLead>;
-  const website = textFrom(row.website, data.site, raw.site, (raw as Record<string, unknown>).website);
-  const instagram = textFrom(row.instagram_url, row.instagram, data.instagram_url, data.instagram, raw.instagram_url, raw.instagram);
-  const destino = classifyLegacyDestination(row, data, raw);
-  const branchRule = resolveParentBranch(
-    branchRules,
-    row.branch_id,
-    (data as Record<string, unknown>).branch_id,
-    row.category_name,
-    (data as Record<string, unknown>).subcategoria,
-    (raw as Record<string, unknown>).categoryName,
-    row.parent_category,
-    (data as Record<string, unknown>).parent_category,
-    data.ramo,
-    raw.ramo,
-  );
-  const parentBranch = branchRule?.name ?? normalizeParentBranch(
-    branchRules,
-    row.parent_category,
-    (data as Record<string, unknown>).parent_category,
-    data.ramo,
-    raw.ramo,
-    row.category_name,
-    (data as Record<string, unknown>).subcategoria,
-    (raw as Record<string, unknown>).categoryName,
-  );
   return {
-    id: String(row.id),
-    empresa: textFrom(row.company_name, data.empresa, raw.empresa, (raw as Record<string, unknown>).title),
-    ramo: parentBranch,
-    branch_id: branchRule?.id ?? String((data as Record<string, unknown>).branch_id ?? row.branch_id ?? ''),
-    branch_slug: branchRule?.slug ?? String((data as Record<string, unknown>).branch_slug ?? row.branch_slug ?? ''),
-    subcategoria: textFrom(row.category_name, row.category, data.subcategoria, raw.subcategoria, (raw as Record<string, unknown>).categoryName),
-    destino,
-    original_destination: normalizeDestinationValue(data.original_destination ?? row.original_destination) ?? destino,
-    destination: normalizeDestinationValue(data.destination ?? row.destination) ?? destino,
-    destination_override: normalizeDestinationValue(data.destination_override ?? row.destination_override),
-    send_instagram: Boolean(data.send_instagram ?? row.send_instagram ?? false),
-    instagram_url: String(data.instagram_url ?? row.instagram_url ?? instagram),
-    instagram_override_reason: String(data.instagram_override_reason ?? row.instagram_override_reason ?? ''),
-    override_by: String(data.override_by ?? row.override_by ?? ''),
-    override_at: String(data.override_at ?? row.override_at ?? ''),
-    status: (row.status ?? data.status ?? 'approved') as ImportLead['status'],
-    motivo: String(row.rejected_reason ?? data.motivo ?? ''),
-    rejectionCode: data.rejectionCode,
-    rating: Number(row.rating ?? data.rating ?? 0),
-    reviews: Number(row.reviews_count ?? data.reviews ?? 0),
-    whatsapp: textFrom(row.phone, data.whatsapp, raw.whatsapp, (raw as Record<string, unknown>).phone),
-    instagram,
-    site: website,
-    cidade: textFrom(row.city, data.cidade, raw.cidade, (raw as Record<string, unknown>).city),
-    estado: normalizeBrazilState(textFrom(row.state, data.estado, raw.estado, (raw as Record<string, unknown>).state)),
-    existingId: data.existingId,
-    normalizedPhone: String(row.normalized_phone ?? data.normalizedPhone ?? ''),
-    normalizedSite: String(row.website_domain ?? data.normalizedSite ?? normalizeDomain(website)),
-    normalizedInstagram: String(row.instagram_username ?? data.normalizedInstagram ?? normalizeInstagramUsername(instagram)),
-    normalizedMapsUrl: String(row.maps_url ?? data.normalizedMapsUrl ?? ''),
-    sourceLeadId: String((data as Record<string, unknown>).sourceLeadId ?? row.sourceLeadId ?? ''),
-    returned_from_queue: Boolean((data as Record<string, unknown>).returned_from_queue ?? false),
-    returned_at: String((data as Record<string, unknown>).returned_at ?? ''),
-    return_reason: String((data as Record<string, unknown>).return_reason ?? ''),
+    id: mapped.id,
+    empresa: mapped.company,
+    ramo: mapped.branch,
+    branch_id: mapped.branch_id,
+    subcategoria: row.leads_categories?.[1] ?? row.leads_categories?.[0] ?? mapped.branch,
+    destino: destination,
+    original_destination: destination,
+    destination,
+    send_instagram: destination === 'Instagram',
+    instagram_url: mapped.instagram,
+    status: mapped.status,
+    motivo: '',
+    rating: 0,
+    reviews: Number(row.leads_reviews_count ?? 0),
+    whatsapp: mapped.phone,
+    instagram: mapped.instagram,
+    site: mapped.site,
+    cidade: mapped.city,
+    estado: mapped.state,
+    normalizedPhone: normalizePhone(mapped.phone),
+    normalizedSite: normalizeSiteIdentity(mapped.site),
+    normalizedInstagram: normalizeInstagramUsername(mapped.instagram),
+    normalizedMapsUrl: String(row.leads_maps ?? '').trim().toLowerCase(),
+    sourceLeadId: '',
   };
 }
 
 function applyFilters(records: ImportLead[], filters: ImportListFilters) {
   const query = filters.search?.trim().toLowerCase() ?? '';
   return records.filter((lead) => {
-    const matchesStatus = isStatusGroup(lead.status, filters.status);
+    const matchesStatus = filters.status === 'rejected'
+      ? isStatusGroup(lead.status, 'rejected') || isStatusGroup(lead.status, 'invalid')
+      : isStatusGroup(lead.status, filters.status);
     const matchesQuery = !query || JSON.stringify(lead).toLowerCase().includes(query);
     return matchesStatus && matchesQuery;
   });
@@ -276,8 +147,9 @@ function calculateSummary(records: ImportLead[]): ImportSummary {
   const approved = records.filter((lead) => isStatusGroup(lead.status, 'approved'));
   const pending = records.filter((lead) => isStatusGroup(lead.status, 'pending'));
   const operational = [...approved, ...pending];
-  const rejected = records.filter((lead) => isStatusGroup(lead.status, 'rejected'));
+  const rejected = records.filter((lead) => isStatusGroup(lead.status, 'rejected') || isStatusGroup(lead.status, 'invalid'));
   const finalDestination = (lead: ImportLead) => (lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino);
+
   return {
     total: records.length,
     approved: approved.length,
@@ -299,178 +171,253 @@ function idMap(records: ImportLead[], key: 'normalizedPhone' | 'normalizedSite' 
   return map;
 }
 
-function findDuplicateLead(records: ImportLead[], lead: ImportLead) {
-  const identities: Array<keyof Pick<ImportLead, 'normalizedPhone' | 'normalizedSite' | 'normalizedInstagram' | 'normalizedMapsUrl'>> = [
-    'normalizedPhone',
-    'normalizedSite',
-    'normalizedInstagram',
-    'normalizedMapsUrl',
-  ];
-
-  return records.find((record) =>
-    identities.some((key) => {
-      const current = String(lead[key] ?? '').trim();
-      return current && current === String(record[key] ?? '').trim();
-    }),
-  );
-}
-
 function isOperationalStoredLead(lead: ImportLead) {
-  return !isStatusGroup(lead.status, 'rejected') && !isStatusGroup(lead.status, 'deleted');
+  return !isStatusGroup(lead.status, 'rejected')
+    && !isStatusGroup(lead.status, 'invalid')
+    && !isStatusGroup(lead.status, 'deleted');
 }
 
-async function allLeads(includeDeleted = false) {
+async function listRows(statusIds?: LeadStatusId[]): Promise<LeadDatabaseRow[]> {
   const userId = await getCurrentUserId();
   const pageSize = 1000;
   const rows: LeadDatabaseRow[] = [];
 
-  // A tabela normalizada usa leads_id e relacionamentos. Buscar em páginas
-  // evita o teto de 1000 linhas do PostgREST e mantém novos leads visíveis.
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await getSupabaseClient()
+    let query = getSupabaseClient()
       .from('leads')
       .select(NORMALIZED_LEADS_SELECT)
       .eq('users_id', userId)
-      .in('lead_status_id', [1, 2])
       .order('leads_created_at', { ascending: false })
       .order('leads_id', { ascending: false })
       .range(from, from + pageSize - 1);
 
-    if (error) throw new Error(error.message);
+    if (statusIds?.length) query = query.in('lead_status_id', statusIds);
+    const { data, error } = await query;
+    if (error) throw new Error(`Não foi possível carregar os leads: ${error.message}`);
+
     const page = (data ?? []) as unknown as LeadDatabaseRow[];
     rows.push(...page);
     if (page.length < pageSize) break;
   }
 
-  return rows
-    .map((row) => baseLeadToImportLead(mapLead(row)))
-    .filter((lead) => !isTestLead(lead) && (includeDeleted || !isStatusGroup(lead.status, 'deleted')));
+  return rows;
 }
 
-function isTestConfigLike(record: Record<string, unknown>) {
-  const signature = normalizeComparable(JSON.stringify(record));
-  return signature.includes('teste supabase') || signature.includes('supabase real') || signature.includes('codex');
+function statusIdsForFilter(status: ImportListFilters['status']): LeadStatusId[] {
+  if (status === 'pending') return [1];
+  if (status === 'approved') return [2];
+  if (status === 'review') return [3];
+  if (status === 'queued') return [4];
+  if (status === 'sent') return [5];
+  if (status === 'rejected' || status === 'invalid') return [6, 7];
+  if (status === 'archived' || status === 'deleted') return [8];
+  return ALL_LEAD_STATUS_IDS;
 }
 
-async function loadBranchRules(): Promise<BranchRule[]> {
-  const { data, error } = await getSupabaseClient().from(getSupabaseConfig().tables.branches).select('*');
-  if (error) throw new Error(error.message);
-
-  return (data ?? [])
-    .map((row) => {
-      const record = row as Record<string, unknown>;
-      const config = (record.data && typeof record.data === 'object' ? record.data : {}) as Record<string, unknown>;
-      if (record.active === false || config.active === false) return null;
-      if (isTestConfigLike(record) || isTestConfigLike(config)) return null;
-
-      const name = textFrom(record.name, config.name, record.category, config.category);
-      if (!name) return null;
-      const id = textFrom(record.id, config.id);
-      const slug = textFrom(record.slug, config.slug, name);
-      const terms = [
-        id,
-        slug,
-        name,
-        ...(Array.isArray(record.subcategories) ? record.subcategories : []),
-        ...(Array.isArray(config.subcategories) ? config.subcategories : []),
-      ].map(String);
-
-      return { id, slug, name, terms };
-    })
-    .filter((rule): rule is BranchRule => Boolean(rule));
+async function allLeads(statusIds: LeadStatusId[] = ACTIVE_IMPORT_STATUS_IDS) {
+  return (await listRows(statusIds)).map(rowToImportLead);
 }
 
-function dbLeadPayload(lead: ImportLead, userId: string) {
-  const rawSite = lead.site ?? '';
-  // Encurtadores ficam preservados no payload JSON, mas nao sao gravados na
-  // coluna website. Isso evita que validacoes/triggers legados do banco usem
-  // dominios compartilhados como bit.ly como identidade unica de empresa.
-  const site = normalizeSiteIdentity(rawSite) ? rawSite : '';
-  const instagram = lead.instagram_url ?? lead.instagram ?? '';
-  const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-  const normalizedLead = { ...lead, estado: normalizeBrazilState(lead.estado), sourceLeadId: lead.sourceLeadId ?? '' };
+async function getLeadRow(id: string): Promise<LeadDatabaseRow> {
+  if (!/^\d+$/.test(id)) throw new Error('O lead ainda não foi persistido no banco.');
+  const userId = await getCurrentUserId();
+  const { data, error } = await getSupabaseClient()
+    .from('leads')
+    .select(NORMALIZED_LEADS_SELECT)
+    .eq('leads_id', Number(id))
+    .eq('users_id', userId)
+    .single();
+
+  if (error) throw new Error(`Lead não encontrado: ${error.message}`);
+  return data as unknown as LeadDatabaseRow;
+}
+
+async function selectLookupRows(table: string, columns: string): Promise<LookupRow[]> {
+  type Result = { data: LookupRow[] | null; error: { message: string } | null };
+  const query = getSupabaseClient().from(table) as unknown as {
+    select: (columns: string) => PromiseLike<Result>;
+  };
+  const { data, error } = await query.select(columns);
+  if (error) throw new Error(`Falha ao carregar ${table}: ${error.message}`);
+  return data ?? [];
+}
+
+async function resolveLookups(leads: ImportLead[]): Promise<Map<string, CanonicalLeadLookup>> {
+  const [branches, countries, states, cities] = await Promise.all([
+    selectLookupRows('branches', 'branches_id,branches_name'),
+    selectLookupRows('countries', 'countries_id,countries_name,countries_code'),
+    selectLookupRows('states', 'states_id,states_name,states_code'),
+    selectLookupRows('cities', 'cities_id,cities_name,states_id'),
+  ]);
+
+  const brazil = countries.find((row) => {
+    const code = normalizeComparable(row.countries_code);
+    const name = normalizeComparable(row.countries_name);
+    return code === 'br' || name === 'brasil' || name === 'brazil';
+  }) ?? countries.find((row) => Number(row.countries_id) === 1);
+
+  if (!brazil) throw new Error('O país Brasil não foi encontrado na tabela countries.');
+  const countryId = Number(brazil.countries_id);
+  const result = new Map<string, CanonicalLeadLookup>();
+
+  for (const lead of leads) {
+    const explicitBranchId = Number(lead.branch_id);
+    const branch = Number.isInteger(explicitBranchId) && explicitBranchId > 0
+      ? branches.find((row) => Number(row.branches_id) === explicitBranchId)
+      : branches.find((row) => normalizeComparable(row.branches_name) === normalizeComparable(lead.ramo));
+
+    if (!branch) {
+      throw new Error(`O ramo “${lead.ramo || 'não informado'}” do lead “${lead.empresa}” não existe em branches.`);
+    }
+
+    const state = states.find((row) => {
+      const value = normalizeComparable(lead.estado);
+      return value && (normalizeComparable(row.states_name) === value || normalizeComparable(row.states_code) === value);
+    });
+    const stateId = state ? Number(state.states_id) : null;
+    const city = cities.find((row) => {
+      if (normalizeComparable(row.cities_name) !== normalizeComparable(lead.cidade)) return false;
+      if (!stateId || row.states_id == null) return true;
+      return Number(row.states_id) === stateId;
+    });
+
+    result.set(lead.id, {
+      branchId: Number(branch.branches_id),
+      countryId,
+      stateId,
+      cityId: city ? Number(city.cities_id) : null,
+    });
+  }
+
+  return result;
+}
+
+function emptyIdentityIndex(): IdentityIndex {
   return {
-    id: lead.id,
-    user_id: userId,
-    company_name: lead.empresa,
-    phone: lead.whatsapp,
-    website: site,
-    instagram,
-    instagram_url: instagram,
-    instagram_username: lead.normalizedInstagram || normalizeInstagramUsername(instagram),
-    maps_url: lead.normalizedMapsUrl,
-    status: lead.status,
-    current_status: lead.status,
-    pipeline_status: lead.status,
-    lead_channel: destination,
-    lead_type: destination,
-    branch_id: branchIdOrNull(lead.branch_id),
-    branch_name: lead.ramo,
-    branch_slug: lead.branch_slug,
-    parent_category: lead.ramo,
-    category: lead.ramo,
-    category_name: lead.subcategoria,
-    city: lead.cidade,
-    state: normalizeBrazilState(lead.estado),
-    rating: lead.rating,
-    reviews_count: lead.reviews,
-    has_own_site: destination === 'Com site',
-    rejected_reason: lead.status === 'rejected' ? lead.motivo : null,
-    raw_payload: normalizedLead,
-    crm_data: normalizedLead,
-    data: normalizedLead,
-    original_destination: lead.original_destination,
-    destination,
-    destination_override: lead.destination_override,
-    send_instagram: lead.send_instagram,
-    instagram_override_reason: lead.instagram_override_reason,
-    override_by: lead.override_by,
-    override_at: lead.override_at || null,
-    updated_at: nowIso(),
-    created_at: nowIso(),
+    phone: new Map(),
+    website: new Map(),
+    instagram: new Map(),
+    maps: new Map(),
   };
 }
 
-
-function isDuplicateIdentityDatabaseError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error ?? '');
-  return /duplicate_identity:|duplicate key value violates unique constraint/i.test(message);
+function addLeadToIdentityIndex(index: IdentityIndex, lead: ImportLead) {
+  const identities = leadIdentityValues(lead);
+  (Object.keys(identities) as IdentityType[]).forEach((type) => {
+    const value = identities[type];
+    if (value && !index[type].has(value)) index[type].set(value, lead.id);
+  });
 }
 
-async function rememberRegistries(userId: string, leads: ImportLead[]) {
-  const identityRows = leads.flatMap((lead) => {
-    const identities = [
-      ['lead_id', lead.sourceLeadId ?? ''],
-      ['phone', lead.normalizedPhone || normalizePhone(lead.whatsapp)],
-      ['site', normalizeSiteIdentity(lead.normalizedSite || lead.site)],
-      ['instagram', lead.normalizedInstagram || normalizeInstagramUsername(lead.instagram_url ?? lead.instagram)],
-      ['maps', lead.normalizedMapsUrl],
-    ].filter(([, value]) => value);
-    return identities.map(([identityType, identityValue]) => ({
-      id: createUuid(),
-      user_id: userId,
-      lead_id: lead.id,
-      identity_type: identityType,
-      identity_value: identityValue,
-      source_table: 'leads',
-      status: lead.status,
-      company_name: lead.empresa,
-      first_seen_at: nowIso(),
-      last_seen_at: nowIso(),
-      raw_payload: lead,
-    }));
-  });
-  if (identityRows.length) {
-    const { error } = await getSupabaseClient()
-      .from(getSupabaseConfig().tables.leadRegistry)
-      .upsert(identityRows, { onConflict: 'user_id,identity_type,identity_value', ignoreDuplicates: true });
-    if (error) throw new Error(error.message);
+function buildIdentityIndex(leads: ImportLead[]) {
+  const index = emptyIdentityIndex();
+  leads.forEach((lead) => addLeadToIdentityIndex(index, lead));
+  return index;
+}
+
+function duplicateId(index: IdentityIndex, lead: ImportLead) {
+  const identities = leadIdentityValues(lead);
+  for (const type of Object.keys(identities) as IdentityType[]) {
+    const value = identities[type];
+    if (!value) continue;
+    const existing = index[type].get(value);
+    if (existing) return existing;
   }
+  return null;
+}
+
+function matchPersistedRows(originals: ImportLead[], rows: LeadDatabaseRow[]) {
+  const remaining = rows.map((row) => ({ row, lead: rowToImportLead(row) }));
+  return originals.map((original) => {
+    const originalIdentities = leadIdentityValues(original);
+    const index = remaining.findIndex(({ lead }) => {
+      const persistedIdentities = leadIdentityValues(lead);
+      return (Object.keys(originalIdentities) as IdentityType[])
+        .some((type) => Boolean(originalIdentities[type] && originalIdentities[type] === persistedIdentities[type]));
+    });
+
+    if (index < 0) {
+      throw new Error(`O banco criou o lead “${original.empresa}”, mas não foi possível reconciliar o registro retornado.`);
+    }
+    const [{ lead }] = remaining.splice(index, 1);
+    return mergePersistedLead(original, lead);
+  });
+}
+
+async function persistExistingSchemaLeads(
+  leads: ImportLead[],
+  options: ImportExecutionOptions = {},
+): Promise<ImportPersistResult> {
+  if (!leads.length) return { created: [], duplicateClientIds: [] };
+
+  // Releitura imediatamente antes da gravação reduz a janela de duplicidade
+  // sem exigir tabela, coluna, índice ou função nova no banco.
+  const existing = (await allLeads(ALL_LEAD_STATUS_IDS)).filter(isOperationalStoredLead);
+  const identityIndex = buildIdentityIndex(existing);
+  const accepted: ImportLead[] = [];
+  const duplicateClientIds: string[] = [];
+
+  for (const lead of leads) {
+    if (duplicateId(identityIndex, lead)) {
+      duplicateClientIds.push(lead.id);
+      continue;
+    }
+    accepted.push(lead);
+    addLeadToIdentityIndex(identityIndex, lead);
+  }
+
+  if (!accepted.length) return { created: [], duplicateClientIds };
+
+  const userId = await getCurrentUserId();
+  const lookupByLeadId = await resolveLookups(accepted);
+  const payload = accepted.map((lead) => {
+    const lookup = lookupByLeadId.get(lead.id);
+    if (!lookup) throw new Error(`Não foi possível resolver os relacionamentos do lead “${lead.empresa}”.`);
+    return buildExistingLeadInsert(lead, lookup, userId, {
+      apifyImportJobId: options.apifyImportJobId,
+      origin: options.origin,
+    });
+  });
+
+  const { data, error } = await getSupabaseClient()
+    .from('leads')
+    .insert(payload)
+    .select(NORMALIZED_LEADS_SELECT);
+
+  if (error) {
+    throw new Error(`Não foi possível persistir o lote na tabela leads existente: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as unknown as LeadDatabaseRow[];
+  if (rows.length !== accepted.length) {
+    throw new Error(`O banco retornou ${rows.length} de ${accepted.length} leads inseridos; a importação não pode ser confirmada.`);
+  }
+
+  return {
+    created: matchPersistedRows(accepted, rows),
+    duplicateClientIds,
+  };
+}
+
+function leadIdentityKeys(lead: ImportLead) {
+  const identities = leadIdentityValues(lead);
+  return Object.values(identities).filter(Boolean);
+}
+
+function duplicateLead(lead: ImportLead): ImportLead {
+  return {
+    ...lead,
+    status: 'rejected',
+    destino: 'Recusado',
+    destination: 'Recusado',
+    motivo: 'Lead duplicado: identidade já existente na plataforma.',
+    rejectionCode: 'duplicate_site',
+  };
 }
 
 export const supabaseImportRepository: ImportRepository = {
   async list(filters) {
-    return applyFilters(await allLeads(), filters);
+    return applyFilters(await allLeads(statusIdsForFilter(filters.status)), filters);
   },
 
   async summary() {
@@ -482,20 +429,18 @@ export const supabaseImportRepository: ImportRepository = {
     try {
       parsed = JSON.parse(jsonText);
     } catch {
-      throw new Error('JSON invalido. Revise o conteudo colado e tente novamente.');
+      throw new Error('JSON inválido. Revise o conteúdo colado e tente novamente.');
     }
 
-    // Registros recusados de importacoes antigas nao podem bloquear uma nova
-    // tentativa depois que ramos/sub-ramos ou criterios forem atualizados.
-    const existing = (await allLeads(true)).filter(isOperationalStoredLead);
+    const existing = (await allLeads(ALL_LEAD_STATUS_IDS)).filter(isOperationalStoredLead);
     const startedAt = performance.now?.() ?? Date.now();
     const normalized = await normalizeImportItems(extractImportItems(parsed), {
-      existingLeadIds: new Set(existing.map((lead) => String(lead.sourceLeadId ?? '').trim()).filter(Boolean)),
+      existingLeadIds: new Set(options.context?.existingLeadIds ?? []),
       existingPhones: new Set(existing.map((lead) => normalizePhone(lead.whatsapp)).filter(Boolean)),
       existingSites: new Set(existing.map((lead) => normalizeSiteIdentity(lead.normalizedSite || lead.site)).filter(Boolean)),
       existingInstagrams: new Set(existing.map((lead) => String(lead.normalizedInstagram ?? '').trim()).filter(Boolean)),
       existingMapsUrls: new Set(existing.map((lead) => String(lead.normalizedMapsUrl ?? '').trim()).filter(Boolean)),
-      existingLeadIdToId: idMap(existing, 'sourceLeadId'),
+      existingLeadIdToId: new Map((options.context?.existingLeadIds ?? []).map((id) => [id, id])),
       existingPhoneToId: idMap(existing, 'normalizedPhone'),
       existingSiteToId: new Map(existing.map((lead) => [normalizeSiteIdentity(lead.normalizedSite || lead.site), lead.id] as const).filter(([value]) => Boolean(value))),
       existingInstagramToId: idMap(existing, 'normalizedInstagram'),
@@ -528,54 +473,40 @@ export const supabaseImportRepository: ImportRepository = {
       .filter((item) => !item.ignored && !duplicateCodes.has(String(item.code)))
       .map((item) => item.lead);
     const duplicateAuditItems = preparedItems.filter((item) => !item.ignored && duplicateCodes.has(String(item.code)));
-    // Somente os leads que realmente entram na plataforma sao persistidos.
-    // Recusados permanecem apenas na memoria da sessao para consulta da previa.
     const operationalLeads = sessionLeads.filter((lead) =>
-      isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')
-    );
+      isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending'));
     const simulation = Boolean(options.simulate);
-    const approved = sessionLeads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
-    const rejected = sessionLeads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length;
 
-    let persistedOperationalLeads = operationalLeads;
-    let databaseDuplicateLeads: ImportLead[] = [];
-    if (!simulation) {
-      const userId = await getCurrentUserId();
-      const persisted: ImportLead[] = [];
-      const blocked: ImportLead[] = [];
-      for (const lead of operationalLeads) {
-        const { error } = await getSupabaseClient().from(table()).insert(dbLeadPayload(lead, userId));
-        if (!error) {
-          persisted.push(lead);
-          continue;
-        }
-        if (!isDuplicateIdentityDatabaseError(new Error(error.message))) throw new Error(error.message);
-        blocked.push({
-          ...lead,
-          status: 'rejected',
-          destino: 'Recusado',
-          destination: 'Recusado',
-          motivo: 'Lead duplicado: identidade já existente na plataforma.',
-          rejectionCode: 'duplicate_site',
-        });
-      }
-      persistedOperationalLeads = persisted;
-      databaseDuplicateLeads = blocked;
-      // A importação usa apenas as tabelas já existentes: leads e lead_registry.
-      // Os totais do processamento Apify são gravados em apify_import_jobs pela Edge sync.
-      // Não criamos nem dependemos de import_batches ou lead_imports.
-      await rememberRegistries(userId, persistedOperationalLeads);
+    let persisted: ImportPersistResult = { created: [], duplicateClientIds: [] };
+    if (!simulation) persisted = await persistExistingSchemaLeads(operationalLeads, options);
+
+    const createdByIdentity = new Map<string, ImportLead>();
+    for (const lead of persisted.created) {
+      leadIdentityKeys(lead).forEach((key) => createdByIdentity.set(key, lead));
+    }
+    const createdByOriginalId = new Map<string, ImportLead>();
+    for (const original of operationalLeads) {
+      const match = leadIdentityKeys(original)
+        .map((key) => createdByIdentity.get(key))
+        .find(Boolean);
+      if (match) createdByOriginalId.set(original.id, match);
     }
 
-    const finalSessionLeads = databaseDuplicateLeads.length
-      ? sessionLeads.map((lead) => databaseDuplicateLeads.find((blocked) => blocked.id === lead.id) ?? lead)
-      : sessionLeads;
+    const finalSessionLeads = sessionLeads.map((lead) => {
+      const persistedLead = createdByOriginalId.get(lead.id)
+        ?? leadIdentityKeys(lead).map((key) => createdByIdentity.get(key)).find(Boolean);
+      if (persistedLead) return persistedLead;
+      if (persisted.duplicateClientIds.includes(lead.id)) return duplicateLead(lead);
+      return lead;
+    });
     const finalApproved = finalSessionLeads.filter((lead) => isStatusGroup(lead.status, 'approved')).length;
     const finalRejected = finalSessionLeads.filter((lead) => isStatusGroup(lead.status, 'rejected')).length;
-    const ignored = normalized.items.filter((item) => item.ignored).length + duplicateAuditItems.length + databaseDuplicateLeads.length;
+    const ignored = normalized.items.filter((item) => item.ignored).length
+      + duplicateAuditItems.length
+      + persisted.duplicateClientIds.length;
 
     return {
-      created: simulation ? 0 : persistedOperationalLeads.length,
+      created: simulation ? 0 : persisted.created.length,
       approved: finalApproved,
       rejected: finalRejected,
       ignored,
@@ -584,51 +515,93 @@ export const supabaseImportRepository: ImportRepository = {
       report: {
         simulation,
         processed: normalized.processed,
-        created: simulation ? 0 : persistedOperationalLeads.length,
+        created: simulation ? 0 : persisted.created.length,
         approved: finalApproved,
         rejected: finalRejected,
         ignored,
-        duplicates: normalized.duplicates + databaseDuplicateLeads.length,
+        duplicates: normalized.duplicates + persisted.duplicateClientIds.length,
         durationMs: Math.max(0, Math.round((performance.now?.() ?? Date.now()) - startedAt)),
         reasons: normalized.reasons,
       },
     };
   },
 
+  async persist(leads, options = {}) {
+    const operational = leads.filter((lead) =>
+      !/^\d+$/.test(lead.id)
+      && (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')));
+    return persistExistingSchemaLeads(operational, options);
+  },
+
   async create(input) {
     const lead = { id: createId('lead'), ...normalizeLeadInput(input) } as ImportLead;
-    const existing = findDuplicateLead((await allLeads(true)).filter(isOperationalStoredLead), lead);
-    if (existing) return existing;
-    const userId = await getCurrentUserId();
-    const { error } = await getSupabaseClient().from(table()).insert(dbLeadPayload(lead, userId));
-    if (error) throw new Error(error.message);
-    return lead;
+    const result = await persistExistingSchemaLeads([lead], { origin: 'manual' });
+    if (result.duplicateClientIds.length) throw new Error('duplicate_identity: lead já existente na plataforma.');
+    if (!result.created[0]) throw new Error('O banco não retornou o lead criado.');
+    return result.created[0];
   },
 
   async update(id, input) {
-    const existing = (await allLeads()).find((lead) => lead.id === id);
-    if (!existing) throw new Error('Lead nao encontrado.');
-    const updated = { id, ...normalizeLeadInput({ ...existing, ...input }) } as ImportLead;
+    const currentRow = await getLeadRow(id);
+    const current = rowToImportLead(currentRow);
+    const updated = { id, ...normalizeLeadInput({ ...current, ...input }) } as ImportLead;
+
+    const otherLeads = (await allLeads(ALL_LEAD_STATUS_IDS))
+      .filter((lead) => lead.id !== id && isOperationalStoredLead(lead));
+    if (duplicateId(buildIdentityIndex(otherLeads), updated)) {
+      throw new Error('duplicate_identity: outra empresa já utiliza telefone, site, Instagram ou Maps informado.');
+    }
+
+    const lookupById = await resolveLookups([updated]);
+    const lookup = lookupById.get(id);
+    if (!lookup) throw new Error('Não foi possível resolver os relacionamentos do lead.');
+    const payload = buildExistingLeadUpdate(updated, lookup, {
+      apifyImportJobId: currentRow.apify_import_jobs_id,
+      origin: currentRow.leads_origin,
+    });
     const userId = await getCurrentUserId();
-    const { error } = await getSupabaseClient().from(table()).update(dbLeadPayload(updated, userId)).eq('id', id);
-    if (error) throw new Error(error.message);
-    return updated;
+
+    const { data, error } = await getSupabaseClient()
+      .from('leads')
+      .update(payload)
+      .eq('leads_id', Number(id))
+      .eq('users_id', userId)
+      .select(NORMALIZED_LEADS_SELECT)
+      .maybeSingle();
+
+    if (error) throw new Error(`Não foi possível atualizar o lead: ${error.message}`);
+    if (!data) throw new Error('Lead não encontrado ou sem permissão para atualizar.');
+    return mergePersistedLead(updated, rowToImportLead(data as unknown as LeadDatabaseRow));
   },
 
   async remove(id) {
-    const { error } = await getSupabaseClient().from(table()).update({ status: 'rejected', rejected_reason: 'Removido da lista operacional.', updated_at: nowIso() }).eq('id', id);
-    if (error) throw new Error(error.message);
+    const userId = await getCurrentUserId();
+    const { data, error } = await getSupabaseClient()
+      .from('leads')
+      .update({ lead_status_id: 8, leads_updated_at: new Date().toISOString() })
+      .eq('leads_id', Number(id))
+      .eq('users_id', userId)
+      .select('leads_id')
+      .maybeSingle();
+    if (error) throw new Error(`Não foi possível arquivar o lead: ${error.message}`);
+    if (!data) throw new Error('Lead não encontrado ou sem permissão para arquivar.');
   },
 
   async move(id, status: 'approved' | 'rejected') {
-    const fallbackDestination: ImportLeadDestination = status === 'approved' ? 'WhatsApp' : 'Recusado';
-    return this.update(id, {
-      status,
-      destino: fallbackDestination,
-      destination: fallbackDestination,
-      destination_override: undefined,
-      send_instagram: false,
-      motivo: status === 'rejected' ? 'Movido manualmente para recusados.' : '',
-    });
+    const userId = await getCurrentUserId();
+    const statusId: LeadStatusId = status === 'approved' ? 2 : 6;
+    const { data, error } = await getSupabaseClient()
+      .from('leads')
+      .update({ lead_status_id: statusId, leads_updated_at: new Date().toISOString() })
+      .eq('leads_id', Number(id))
+      .eq('users_id', userId)
+      .select('leads_id')
+      .maybeSingle();
+    if (error) throw new Error(`Não foi possível mover o lead: ${error.message}`);
+    if (!data) throw new Error('Lead não encontrado ou sem permissão para mover.');
+    const moved = rowToImportLead(await getLeadRow(id));
+    return status === 'rejected'
+      ? { ...moved, status: 'rejected', destino: 'Recusado', destination: 'Recusado', motivo: 'Movido manualmente para recusados.' }
+      : moved;
   },
 };

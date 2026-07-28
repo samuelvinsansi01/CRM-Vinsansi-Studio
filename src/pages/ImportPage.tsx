@@ -454,7 +454,11 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       if (sync.imported) return null;
       if (!sync.items) throw new Error('A execução terminou, mas o dataset não foi retornado.');
 
-      const importedResult = await importJson(JSON.stringify(sync.items), { simulate: false });
+      const importedResult = await importJson(JSON.stringify(sync.items), {
+        simulate: false,
+        apifyImportJobId: jobId,
+        origin: 'apify',
+      });
       setLastImport(importedResult);
       setSearch('');
       setPage(1);
@@ -588,7 +592,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       setManualLead({ empresa: '', whatsapp: '', instagram: '' });
       setPage(1);
       setSelectedRows([]);
-      pushToast({ title: 'Lead adicionado', description: 'Lead criado localmente na lista de aprovados.', tone: 'success' });
+      pushToast({ title: 'Lead adicionado', description: 'Lead salvo no banco e incluído na lista de aprovados.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Não foi possível adicionar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
@@ -596,7 +600,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const approveLeads = async () => {
     try {
-      const result = await importJson(jsonText, { simulate: simulateImport });
+      const result = await importJson(jsonText, { simulate: true });
       const created = await sendApprovedToInicio(result.leads);
       setLastImport(result);
       setPage(1);

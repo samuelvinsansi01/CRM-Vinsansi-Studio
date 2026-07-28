@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "verify:existing-schema-import": "node scripts/verify-existing-schema-import.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

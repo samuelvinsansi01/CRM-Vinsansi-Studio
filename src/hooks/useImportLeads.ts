@@ -6,17 +6,6 @@ import { sortByLeadScore } from '../services/lead-score/leadScore.service';
 import { permissionsFor } from '../services/permissions';
 import { isStatusGroup } from '../services/status/status.mapper';
 
-const emptySummary: ImportSummary = {
-  total: 0,
-  approved: 0,
-  pending: 0,
-  rejected: 0,
-  whatsapp: 0,
-  ownSite: 0,
-  aggregators: 0,
-  instagram: 0,
-};
-
 function calculateSummary(records: ImportLead[]): ImportSummary {
   const approved = records.filter((lead) => isStatusGroup(lead.status, 'approved'));
   const pending = records.filter((lead) => isStatusGroup(lead.status, 'pending'));
@@ -49,83 +38,10 @@ function applySessionFilters(records: ImportLead[], status: ImportLeadStatus, se
 }
 
 
-function isDuplicateIdentityError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error ?? '');
-  return /duplicate_identity:|duplicate key value violates unique constraint|already exists/i.test(message);
+function isPersistedLeadId(id: string) {
+  return /^\d+$/.test(id);
 }
 
-function createSessionId() {
-  return `session-lead-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-
-function leadToImportInput(lead: ImportLead, status: ImportLeadStatus = 'approved'): ImportLeadInput {
-  return {
-    empresa: lead.empresa,
-    ramo: lead.ramo,
-    subcategoria: lead.subcategoria,
-    destino: lead.destino,
-    original_destination: lead.original_destination ?? lead.destino,
-    destination: lead.destination ?? (lead.send_instagram ? 'Instagram' : lead.destino),
-    destination_override: lead.destination_override ?? (lead.send_instagram ? 'Instagram' : undefined),
-    send_instagram: lead.send_instagram ?? false,
-    instagram_url: lead.instagram_url ?? lead.instagram,
-    instagram_override_reason: lead.instagram_override_reason ?? '',
-    override_by: lead.override_by ?? '',
-    override_at: lead.override_at ?? '',
-    status,
-    motivo: lead.motivo ?? '',
-    rejectionCode: lead.rejectionCode,
-    rating: lead.rating,
-    reviews: lead.reviews,
-    whatsapp: lead.whatsapp ?? '',
-    instagram: lead.instagram ?? '',
-    site: lead.site ?? '',
-    cidade: lead.cidade ?? '',
-    estado: lead.estado ?? '',
-    existingId: lead.existingId,
-    normalizedPhone: lead.normalizedPhone,
-    normalizedSite: lead.normalizedSite,
-    normalizedInstagram: lead.normalizedInstagram,
-    normalizedMapsUrl: lead.normalizedMapsUrl,
-    returned_from_queue: lead.returned_from_queue,
-    returned_at: lead.returned_at,
-    return_reason: lead.return_reason,
-  };
-}
-
-function toSessionLead(input: ImportLeadInput): ImportLead {
-  return {
-    id: createSessionId(),
-    empresa: input.empresa,
-    ramo: input.ramo,
-    subcategoria: input.subcategoria,
-    destino: input.destino,
-    original_destination: input.original_destination ?? input.destino,
-    destination: input.destination ?? (input.send_instagram ? 'Instagram' : input.destino),
-    destination_override: input.destination_override ?? (input.send_instagram ? 'Instagram' : undefined),
-    send_instagram: input.send_instagram ?? false,
-    instagram_url: input.instagram_url ?? input.instagram,
-    instagram_override_reason: input.instagram_override_reason,
-    override_by: input.override_by,
-    override_at: input.override_at,
-    status: input.status,
-    motivo: input.motivo,
-    rejectionCode: input.rejectionCode,
-    rating: input.rating,
-    reviews: input.reviews,
-    whatsapp: input.whatsapp,
-    instagram: input.instagram,
-    site: input.site,
-    cidade: input.cidade,
-    estado: normalizeBrazilState(input.estado),
-    existingId: input.existingId,
-    normalizedPhone: input.normalizedPhone,
-    normalizedSite: input.normalizedSite,
-    normalizedInstagram: input.normalizedInstagram,
-    normalizedMapsUrl: input.normalizedMapsUrl,
-  };
-}
 
 export function useImportLeads(status: ImportLeadStatus, search: string) {
   const [sessionLeads, setSessionLeads] = useState<ImportLead[]>([]);
@@ -159,44 +75,34 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
   }, []);
 
   const createLead = useCallback(async (input: ImportLeadInput) => {
-    try {
-      const lead = await importService.create(input);
-      setSessionLeads((current) => [lead, ...current]);
-    } catch {
-      setSessionLeads((current) => [toSessionLead(input), ...current]);
-    }
+    const lead = await importService.create(input);
+    setSessionLeads((current) => [lead, ...current]);
+    return lead;
   }, []);
 
   const updateLead = useCallback(async (id: string, input: Partial<ImportLeadInput>) => {
-    let updatedFromRepository: ImportLead | null = null;
-
-    try {
-      updatedFromRepository = await importService.update(id, input);
-    } catch {
-      updatedFromRepository = null;
+    if (!isPersistedLeadId(id)) {
+      setSessionLeads((current) => current.map((lead) => (
+        lead.id === id
+          ? { ...lead, ...input, estado: normalizeBrazilState(input.estado ?? lead.estado), id }
+          : lead
+      )));
+      return;
     }
 
-    setSessionLeads((current) => current.map((lead) => (lead.id === id ? { ...lead, ...(updatedFromRepository ?? input), estado: normalizeBrazilState((updatedFromRepository ?? input).estado ?? lead.estado), id } : lead)));
+    const updated = await importService.update(id, input);
+    setSessionLeads((current) => current.map((lead) => (lead.id === id ? updated : lead)));
   }, []);
 
   const removeLead = useCallback(async (id: string) => {
-    try {
-      await importService.remove(id);
-    } catch {
-      // Leads de simulação existem apenas na sessão atual e não precisam existir no banco para serem removidos da prévia.
-    }
-
+    if (isPersistedLeadId(id)) await importService.remove(id);
     setSessionLeads((current) => current.filter((lead) => lead.id !== id));
   }, []);
 
   const moveLead = useCallback(async (id: string, nextStatus: 'approved' | 'rejected') => {
-    let movedFromRepository: ImportLead | null = null;
-
-    try {
-      movedFromRepository = await importService.move(id, nextStatus);
-    } catch {
-      movedFromRepository = null;
-    }
+    const movedFromRepository = isPersistedLeadId(id)
+      ? await importService.move(id, nextStatus)
+      : null;
 
     setSessionLeads((current) =>
       current.map((lead) =>
@@ -205,10 +111,10 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
               ...lead,
               ...(movedFromRepository ?? {}),
               status: nextStatus,
-              destino: movedFromRepository?.destino ?? (nextStatus === 'approved' ? 'WhatsApp' : 'Recusado'),
-              destination: movedFromRepository?.destination ?? (nextStatus === 'approved' ? 'WhatsApp' : 'Recusado'),
-              destination_override: movedFromRepository?.destination_override,
-              send_instagram: movedFromRepository?.send_instagram ?? false,
+              destino: movedFromRepository?.destino ?? (nextStatus === 'approved' ? (lead.destination ?? lead.destino) : 'Recusado'),
+              destination: movedFromRepository?.destination ?? (nextStatus === 'approved' ? (lead.destination ?? lead.destino) : 'Recusado'),
+              destination_override: movedFromRepository?.destination_override ?? lead.destination_override,
+              send_instagram: movedFromRepository?.send_instagram ?? lead.send_instagram ?? false,
               motivo: movedFromRepository?.motivo ?? (nextStatus === 'rejected' ? 'Movido manualmente para recusados.' : ''),
             }
           : lead,
@@ -228,6 +134,15 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
     );
     if (!allowed) throw new Error('A selecao contem leads incompatíveis com esta acao.');
 
+    const persistedIds = ids.filter(isPersistedLeadId);
+    if (persistedIds.length) {
+      if (nextStatus === 'approved') {
+        await importService.approveMany(persistedIds);
+      } else {
+        await importService.rejectMany(persistedIds);
+      }
+    }
+
     setSessionLeads((current) =>
       current.map((lead) =>
         ids.includes(lead.id)
@@ -241,16 +156,6 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
           : lead,
       ),
     );
-
-    try {
-      if (nextStatus === 'approved') {
-        await importService.approveMany(ids);
-      } else {
-        await importService.rejectMany(ids);
-      }
-    } catch {
-      // Leads simulados da sessao atual podem nao existir no banco; a validacao atomica acima protege a operacao local.
-    }
   }, [sessionLeads]);
 
   const clearSession = useCallback(() => {
@@ -260,33 +165,35 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
 
   const sendApprovedToInicio = useCallback(async (sourceLeads: ImportLead[] = sessionLeads) => {
     const operational = sourceLeads.filter((lead) =>
-      isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')
+      !isPersistedLeadId(lead.id)
+      && (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending'))
     );
-    const created: ImportLead[] = [];
-    const duplicateIds = new Set<string>();
-    for (const lead of operational) {
-      const targetStatus: ImportLeadStatus = isStatusGroup(lead.status, 'pending') ? 'pending' : 'approved';
-      try {
-        const createdLead = await importService.create(leadToImportInput(lead, targetStatus));
-        created.push(createdLead);
-      } catch (error) {
-        if (!isDuplicateIdentityError(error)) throw error;
-        duplicateIds.add(lead.id);
+    const result = await importService.persistLeads(operational);
+    const duplicateIds = new Set(result.duplicateClientIds);
+    const createdByIdentity = new Map<string, ImportLead>();
+    for (const lead of result.created) {
+      const keys = [lead.sourceLeadId, lead.normalizedPhone, lead.normalizedSite, lead.normalizedInstagram, lead.normalizedMapsUrl].filter(Boolean) as string[];
+      keys.forEach((key) => createdByIdentity.set(key, lead));
+    }
+
+    setSessionLeads((current) => current.map((lead) => {
+      if (duplicateIds.has(lead.id)) {
+        return {
+          ...lead,
+          status: 'rejected',
+          destino: 'Recusado',
+          destination: 'Recusado',
+          motivo: 'Lead duplicado: identidade já existente na plataforma.',
+          rejectionCode: 'duplicate_site',
+        };
       }
-    }
-    if (duplicateIds.size) {
-      setSessionLeads((current) => current.map((lead) => duplicateIds.has(lead.id)
-        ? {
-            ...lead,
-            status: 'rejected',
-            destino: 'Recusado',
-            destination: 'Recusado',
-            motivo: 'Lead duplicado: identidade já existente na plataforma.',
-            rejectionCode: 'duplicate_site',
-          }
-        : lead));
-    }
-    return created;
+      const persisted = [lead.sourceLeadId, lead.normalizedPhone, lead.normalizedSite, lead.normalizedInstagram, lead.normalizedMapsUrl]
+        .map((key) => key ? createdByIdentity.get(key) : undefined)
+        .find(Boolean);
+      return persisted ?? lead;
+    }));
+
+    return result.created;
   }, [sessionLeads]);
 
   return {
