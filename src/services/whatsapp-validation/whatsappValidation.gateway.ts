@@ -1,3 +1,4 @@
+import { getSupabaseClient } from '../../lib/supabase';
 import type { PreSendLead } from '../pre-send/types';
 import { normalizePhone } from '../import/importValidation';
 
@@ -100,6 +101,19 @@ function assertOneResultForEachLead(leads: WhatsAppValidationRequest[], normaliz
   }
 }
 
+
+async function authenticatedHeaders(operation: ValidationOperation) {
+  const { data, error } = await getSupabaseClient().auth.getSession();
+  if (error) throw new Error(error.message);
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Sessão inválida. Entre novamente no painel.');
+  return {
+    'Content-Type': 'application/json',
+    'X-Lead-Certo-Operation': operation,
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 async function callValidationWorker(
   endpoint: string,
   operation: ValidationOperation,
@@ -110,10 +124,7 @@ async function callValidationWorker(
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Lead-Certo-Operation': operation,
-    },
+    headers: await authenticatedHeaders(operation),
     body: JSON.stringify({
       channel: 'whatsapp',
       operation,

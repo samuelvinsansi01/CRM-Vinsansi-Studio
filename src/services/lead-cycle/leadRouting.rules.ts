@@ -17,6 +17,8 @@ const COMMAND_DECISIONS: Record<LeadRoutingCommand, LeadRoutingDecision> = {
   'set-valid-channel-whatsapp': { expectedStatus: 2, targetStatus: 2, targetChannel: 1 },
   'set-valid-channel-instagram': { expectedStatus: 2, targetStatus: 2, targetChannel: 2 },
   'archive-valid': { expectedStatus: 2, targetStatus: 8 },
+  'invalidate-pre-send': { expectedStatus: 3, targetStatus: 6 },
+  'archive-pre-send': { expectedStatus: 3, targetStatus: 8 },
 };
 
 export function routingDecision(command: LeadRoutingCommand) {

@@ -7,6 +7,8 @@ import type {
   LeadRoutingResult,
 } from '../services/lead-cycle/types';
 import type { LeadStatusId } from '../types/lead.types';
+import { whatsappValidationService } from '../services/whatsapp-validation/whatsappValidation.service';
+import type { WhatsAppValidationBatchResult } from '../services/whatsapp-validation/types';
 
 export type LeadCycleView = 'imported' | 'valid' | 'pre-send' | 'permanent';
 
@@ -52,6 +54,29 @@ export function useLeadCycle(view: LeadCycleView) {
     }
   }, [refresh]);
 
+
+  const validateWhatsApp = useCallback(async (ids: string[]): Promise<WhatsAppValidationBatchResult> => {
+    setSaving(true);
+    try {
+      const result = await whatsappValidationService.validateInitial(ids);
+      await refresh();
+      return result;
+    } finally {
+      setSaving(false);
+    }
+  }, [refresh]);
+
+  const revalidateWhatsApp = useCallback(async (ids: string[]): Promise<WhatsAppValidationBatchResult> => {
+    setSaving(true);
+    try {
+      const result = await whatsappValidationService.revalidateApproved(ids);
+      await refresh();
+      return result;
+    } finally {
+      setSaving(false);
+    }
+  }, [refresh]);
+
   /** Temporário: utilizado pelos fluxos ainda não migrados para comandos explícitos. */
   const update = useCallback(async (ids: string[], input: LeadCycleUpdate, expectedStatuses?: LeadStatusId[]) => {
     setSaving(true);
@@ -63,5 +88,5 @@ export function useLeadCycle(view: LeadCycleView) {
     }
   }, [refresh]);
 
-  return { records, loading, saving, error, refresh, executeRoutingCommand, update };
+  return { records, loading, saving, error, refresh, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp, update };
 }
