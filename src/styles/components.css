@@ -65,7 +65,7 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-28);
+  gap: var(--space-18);
 }
 
 .nav-item {
@@ -1374,4 +1374,117 @@ button.checkbox {
 
 .location-already-searched__item button:hover {
   text-decoration: underline;
+}
+
+
+/* Navegação reestruturada v3.71 */
+.nav-menu__section {
+  display: grid;
+  align-content: start;
+  gap: var(--space-02);
+  min-width: 190px;
+}
+
+.nav-menu__heading {
+  display: block;
+  padding: var(--space-08) var(--space-12) var(--space-04);
+  color: color-mix(in srgb, var(--app-muted) 78%, transparent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  line-height: 14px;
+  text-transform: uppercase;
+}
+
+.nav-menu button.nav-menu__item--active {
+  background: color-mix(in srgb, var(--action-active) 16%, transparent);
+  color: var(--app-text);
+}
+
+.nav-menu--settings {
+  right: 0;
+  left: auto;
+  width: min(620px, calc(100vw - 48px));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-08);
+  padding: var(--space-08);
+  transform: none;
+}
+
+.settings-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-16);
+}
+
+.settings-overview-card ul {
+  display: grid;
+  gap: var(--space-08);
+  margin: 0;
+  padding-left: var(--space-20);
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.home-welcome-card {
+  max-width: 720px;
+}
+
+.configuration-placeholder-card {
+  max-width: 760px;
+}
+
+.configuration-placeholder-card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-bottom: var(--space-12);
+}
+
+.configuration-placeholder-card__meta code {
+  padding: var(--space-04) var(--space-08);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+  border-radius: var(--radius-06);
+  background: color-mix(in srgb, var(--color-pure-black) 20%, transparent);
+  color: var(--app-text);
+  font-size: 12px;
+}
+
+@media (max-width: 1380px) {
+  .app-header {
+    padding-right: var(--space-24);
+    padding-left: var(--space-24);
+  }
+
+  .app-header__brand,
+  .app-header__actions {
+    width: 180px;
+    flex-basis: 180px;
+  }
+
+  .app-header__nav {
+    gap: var(--space-12);
+  }
+}
+
+@media (max-width: 1080px) {
+  .app-header__brand {
+    width: 150px;
+    flex-basis: 150px;
+  }
+
+  .app-header__actions {
+    width: auto;
+    flex-basis: auto;
+  }
+
+  .nav-link,
+  .nav-menu button {
+    font-size: 12px;
+  }
+
+  .settings-overview-grid {
+    grid-template-columns: 1fr;
+  }
 }

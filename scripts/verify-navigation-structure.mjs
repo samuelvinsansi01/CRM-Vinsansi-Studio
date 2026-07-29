@@ -1,0 +1,51 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const registry = fs.readFileSync(path.join(root, 'src/pages/pageRegistry.ts'), 'utf8');
+const app = fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8');
+const header = fs.readFileSync(path.join(root, 'src/design-system/layouts/Header.tsx'), 'utf8');
+
+const requiredLabels = [
+  'Início',
+  'Leads',
+  'Importação',
+  'Validação e roteamento',
+  'Base Permanente',
+  'Disparos',
+  'Fila WhatsApp',
+  'Fila Instagram',
+  'Remetentes',
+  'Chips WhatsApp',
+  'Perfis Instagram',
+  'Central de Mensagens',
+  'Ramos',
+  'Templates de mensagens',
+  'Variáveis',
+  'Configurações',
+  'Contas Apify',
+  'Fontes de contato',
+  'Critérios de importação',
+  'Canais do sistema',
+  'Níveis',
+  'Instâncias',
+  'Canais de template',
+  'Tipos de template',
+];
+
+const missing = requiredLabels.filter((label) => !registry.includes(label));
+if (missing.length) throw new Error(`Menu incompleto: ${missing.join(', ')}`);
+if (registry.includes("label: 'Pré-Envio'") || registry.includes("label: 'Válidos'")) {
+  throw new Error('Pré-Envio/Válidos não podem permanecer no menu novo.');
+}
+if (!header.includes("navigate('audit')") || !header.includes('Auditoria')) {
+  throw new Error('Auditoria precisa permanecer no menu do usuário.');
+}
+if (!app.includes("activePage === 'validation-routing'")) {
+  throw new Error('Rota de Validação e roteamento ausente.');
+}
+if (!app.includes('legacyPageMap')) {
+  throw new Error('Migração das páginas antigas do sessionStorage ausente.');
+}
+
+console.log('OK: menu, rotas, perfil e migração de navegação validados.');
