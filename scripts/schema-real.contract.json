@@ -1,0 +1,544 @@
+{
+  "schema": "public",
+  "tables": {
+    "apify_accounts": {
+      "primary_key": [
+        "apify_accounts_id"
+      ],
+      "columns": [
+        "apify_accounts_id",
+        "users_id",
+        "account_name",
+        "token_secret",
+        "is_active",
+        "connection_status",
+        "external_username",
+        "last_checked_at",
+        "last_used_at",
+        "last_error",
+        "created_at",
+        "updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "apify_accounts_select_own"
+      ]
+    },
+    "apify_import_jobs": {
+      "primary_key": [
+        "apify_import_jobs_id"
+      ],
+      "columns": [
+        "apify_import_jobs_id",
+        "users_id",
+        "apify_accounts_id",
+        "apify_job_status_id",
+        "apify_actor_id",
+        "apify_run_id",
+        "apify_dataset_id",
+        "apify_search_query",
+        "apify_search_location",
+        "apify_quantity_total",
+        "apify_quantity_created",
+        "apify_quantity_duplicate",
+        "apify_quantity_blocked",
+        "apify_quantity_invalid",
+        "apify_error_message",
+        "apify_started_at",
+        "apify_finished_at",
+        "apify_import_jobs_created_at",
+        "apify_import_jobs_updated_at",
+        "actor_id",
+        "external_run_id",
+        "external_dataset_id",
+        "search_query",
+        "location_query",
+        "requested_limit",
+        "status",
+        "total_received",
+        "error_message",
+        "started_at",
+        "finished_at",
+        "created_at",
+        "updated_at",
+        "search_terms",
+        "total_imported",
+        "total_duplicates",
+        "total_rejected",
+        "imported_at",
+        "branches_id",
+        "branch_name"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "apify_import_jobs_select_own"
+      ]
+    },
+    "backfill_user_map": {
+      "primary_key": [
+        "old_user_id"
+      ],
+      "columns": [
+        "old_user_id",
+        "new_users_id"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "branches": {
+      "primary_key": [
+        "branches_id"
+      ],
+      "columns": [
+        "branches_id",
+        "users_id",
+        "status_id",
+        "branches_name",
+        "branches_categories",
+        "branches_created_at",
+        "branches_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read branches"
+      ]
+    },
+    "channels": {
+      "primary_key": [
+        "channels_id"
+      ],
+      "columns": [
+        "channels_id",
+        "channels_name",
+        "channels_created_at",
+        "channels_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read channels"
+      ]
+    },
+    "chips": {
+      "primary_key": [
+        "chips_id"
+      ],
+      "columns": [
+        "chips_id",
+        "users_id",
+        "instances_id",
+        "levels_id",
+        "status_id",
+        "chips_name",
+        "chips_phone",
+        "chips_created_at",
+        "chips_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "cities": {
+      "primary_key": [
+        "cities_id"
+      ],
+      "columns": [
+        "cities_id",
+        "states_id",
+        "cities_name",
+        "cities_created_at",
+        "cities_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read cities"
+      ]
+    },
+    "contact_sources": {
+      "primary_key": [
+        "contact_sources_id"
+      ],
+      "columns": [
+        "contact_sources_id",
+        "users_id",
+        "status_id",
+        "contact_sources_name",
+        "contact_sources_key",
+        "contact_sources_requires_review",
+        "contact_sources_default_channel_id",
+        "contact_sources_created_at",
+        "contact_sources_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read contact sources"
+      ]
+    },
+    "countries": {
+      "primary_key": [
+        "countries_id"
+      ],
+      "columns": [
+        "countries_id",
+        "countries_name",
+        "countries_code",
+        "countries_created_at",
+        "countries_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read countries"
+      ]
+    },
+    "instances": {
+      "primary_key": [
+        "instances_id"
+      ],
+      "columns": [
+        "instances_id",
+        "users_id",
+        "status_id",
+        "instances_name",
+        "instances_url",
+        "instances_apikey",
+        "instances_created_at",
+        "instances_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "lead_status": {
+      "primary_key": [
+        "lead_status_id"
+      ],
+      "columns": [
+        "lead_status_id",
+        "lead_status_name",
+        "lead_status_created_at",
+        "lead_status_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read lead status"
+      ]
+    },
+    "leads": {
+      "primary_key": [
+        "leads_id"
+      ],
+      "columns": [
+        "leads_id",
+        "users_id",
+        "branches_id",
+        "countries_id",
+        "states_id",
+        "cities_id",
+        "channels_id",
+        "lead_status_id",
+        "apify_import_jobs_id",
+        "leads_name",
+        "leads_phone",
+        "leads_instagram",
+        "leads_website",
+        "leads_maps",
+        "leads_street",
+        "leads_postal_code",
+        "leads_categories",
+        "leads_score",
+        "leads_reviews_count",
+        "leads_origin",
+        "leads_created_at",
+        "leads_updated_at",
+        "contact_sources_id"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "users can insert own leads",
+        "users can select own leads",
+        "users can update own leads"
+      ]
+    },
+    "leads_backfill_stage": {
+      "primary_key": [],
+      "columns": [
+        "user_id",
+        "branch_id",
+        "branch_name",
+        "branch_slug",
+        "company_name",
+        "title",
+        "company",
+        "normalized_phone",
+        "phone",
+        "instagram_username",
+        "instagram_url",
+        "instagram",
+        "website",
+        "street",
+        "postal_code",
+        "city",
+        "state",
+        "categories",
+        "category_name",
+        "category",
+        "rating",
+        "total_score",
+        "reviews_count",
+        "status",
+        "channel",
+        "last_channel",
+        "origin",
+        "raw_payload",
+        "data",
+        "created_at",
+        "updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "leads_migration_stage": {
+      "primary_key": [],
+      "columns": [
+        "company_name",
+        "phone",
+        "instagram",
+        "website",
+        "maps_url",
+        "street",
+        "city",
+        "state",
+        "branch_name",
+        "lead_score",
+        "reviews_count",
+        "categories_pipe",
+        "lead_status_name",
+        "contact_source_name",
+        "created_at",
+        "updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "levels": {
+      "primary_key": [
+        "levels_id"
+      ],
+      "columns": [
+        "levels_id",
+        "users_id",
+        "channels_id",
+        "status_id",
+        "levels_name",
+        "levels_daily_limit",
+        "levels_created_at",
+        "levels_updated_at",
+        "levels_queues"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "queue_items": {
+      "primary_key": [
+        "queue_items_id"
+      ],
+      "columns": [
+        "queue_items_id",
+        "users_id",
+        "queues_id",
+        "leads_id",
+        "chips_id",
+        "socials_id",
+        "templates_id",
+        "status_id",
+        "queue_items_position",
+        "queue_items_attempts",
+        "queue_items_scheduled_at",
+        "queue_items_started_at",
+        "queue_items_finished_at",
+        "queue_items_error_message",
+        "queue_items_created_at",
+        "queue_items_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "queues": {
+      "primary_key": [
+        "queues_id"
+      ],
+      "columns": [
+        "queues_id",
+        "users_id",
+        "channels_id",
+        "status_id",
+        "queues_name",
+        "queues_scheduled_at",
+        "queues_started_at",
+        "queues_finished_at",
+        "queues_created_at",
+        "queues_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "sents": {
+      "primary_key": [
+        "sents_id"
+      ],
+      "columns": [
+        "sents_id",
+        "users_id",
+        "queue_items_id",
+        "leads_id",
+        "channels_id",
+        "chips_id",
+        "socials_id",
+        "templates_id",
+        "status_id",
+        "sents_recipient",
+        "sents_body",
+        "sents_external_id",
+        "sents_attempt",
+        "sents_error_message",
+        "sents_sent_at",
+        "sents_created_at",
+        "sents_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "socials": {
+      "primary_key": [
+        "socials_id"
+      ],
+      "columns": [
+        "socials_id",
+        "users_id",
+        "status_id",
+        "levels_id",
+        "socials_name",
+        "socials_username",
+        "socials_created_at",
+        "socials_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "states": {
+      "primary_key": [
+        "states_id"
+      ],
+      "columns": [
+        "states_id",
+        "countries_id",
+        "states_name",
+        "states_code",
+        "states_created_at",
+        "states_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read states"
+      ]
+    },
+    "status": {
+      "primary_key": [
+        "status_id"
+      ],
+      "columns": [
+        "status_id",
+        "status_name",
+        "status_created_at",
+        "status_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "template_channels": {
+      "primary_key": [
+        "template_channels_id"
+      ],
+      "columns": [
+        "template_channels_id",
+        "template_channels_name",
+        "template_channels_created_at",
+        "template_channels_updated_at",
+        "users_id",
+        "status_id",
+        "template_channels_blocked_channels"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "template_types": {
+      "primary_key": [
+        "template_types_id"
+      ],
+      "columns": [
+        "template_types_id",
+        "users_id",
+        "status_id",
+        "template_types_name",
+        "template_types_created_at",
+        "template_types_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "template_variables": {
+      "primary_key": [
+        "template_variables_id"
+      ],
+      "columns": [
+        "template_variables_id",
+        "users_id",
+        "status_id",
+        "template_variables_name",
+        "template_variables_key",
+        "template_variables_source",
+        "template_variables_default_value",
+        "template_variables_created_at",
+        "template_variables_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "templates": {
+      "primary_key": [
+        "templates_id"
+      ],
+      "columns": [
+        "templates_id",
+        "users_id",
+        "branches_id",
+        "status_id",
+        "templates_name",
+        "templates_message_1",
+        "templates_message_2",
+        "templates_message_3",
+        "templates_message_4",
+        "templates_created_at",
+        "templates_updated_at",
+        "template_channels_id",
+        "template_types_id"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "users": {
+      "primary_key": [
+        "users_id"
+      ],
+      "columns": [
+        "users_id",
+        "auth_user_id",
+        "status_id",
+        "users_created_at",
+        "users_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "users can select own profile",
+        "users_select_own"
+      ]
+    }
+  }
+}

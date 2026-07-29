@@ -1,19 +1,19 @@
 import { supabaseBaseRepository } from './base';
-import { supabaseConfigRepository } from './config';
-import { supabaseEventLogRepository } from './events';
+import { canonicalConfigRepository } from './config';
+import { canonicalEventLogRepository } from './events';
 import { supabaseImportRepository } from './import';
-import { supabaseInstagramQueueRepository } from './instagram-queue';
-import { supabaseSettingsRepository } from './settings';
-import { supabaseWhatsAppQueueRepository } from './whatsapp-queue';
+import { canonicalInstagramQueueRepository } from './instagram-queue';
+import { localSettingsRepository } from './settings';
+import { canonicalWhatsAppQueueRepository } from './whatsapp-queue';
 
 export const repositories = {
-  config: supabaseConfigRepository,
+  config: canonicalConfigRepository,
   import: supabaseImportRepository,
-  whatsappQueue: supabaseWhatsAppQueueRepository,
-  instagramQueue: supabaseInstagramQueueRepository,
+  whatsappQueue: canonicalWhatsAppQueueRepository,
+  instagramQueue: canonicalInstagramQueueRepository,
   base: supabaseBaseRepository,
-  settings: supabaseSettingsRepository,
-  events: supabaseEventLogRepository,
+  settings: localSettingsRepository,
+  events: canonicalEventLogRepository,
 };
 
 export * from './config';

@@ -26,7 +26,7 @@ function numericLeadIds(ids: string[]) {
   return values;
 }
 
-async function listByStatuses(statusIds: LeadStatusId[], channelId?: 1 | 2) {
+async function listByStatuses(statusIds: LeadStatusId[], channelId?: number) {
   const userId = await getCurrentUserId();
   const pageSize = 1000;
   const rows: LeadDatabaseRow[] = [];

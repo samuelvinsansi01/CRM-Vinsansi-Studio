@@ -8,294 +8,183 @@ type QueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'e
 type TokenScope = { userId: string; profile: string };
 declare const process: { env: Record<string, string | undefined> };
 
-function envAny(...names: string[]) {
-  for (const name of names) {
-    const value = process.env[name];
-    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
-  }
-  return '';
-}
-function bodyRecord(body: unknown): RecordValue {
-  if (typeof body === 'string') { try { return JSON.parse(body) as RecordValue; } catch { return {}; } }
-  return body && typeof body === 'object' && !Array.isArray(body) ? body as RecordValue : {};
-}
-function header(req: ApiRequest, name: string) {
-  const key = Object.keys(req.headers ?? {}).find((item) => item.toLowerCase() === name.toLowerCase());
-  const value = key ? req.headers?.[key] : undefined;
-  return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '');
-}
+function envAny(...names: string[]) { for (const name of names) { const value = process.env[name]; if (String(value ?? '').trim()) return String(value).trim(); } return ''; }
+function bodyRecord(body: unknown): RecordValue { if (typeof body === 'string') { try { return JSON.parse(body) as RecordValue; } catch { return {}; } } return body && typeof body === 'object' && !Array.isArray(body) ? body as RecordValue : {}; }
+function header(req: ApiRequest, name: string) { const key = Object.keys(req.headers ?? {}).find((item) => item.toLowerCase() === name.toLowerCase()); const value = key ? req.headers?.[key] : undefined; return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? ''); }
 function bearer(req: ApiRequest) { return header(req, 'authorization').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? ''; }
 function text(value: unknown) { return String(value ?? '').trim(); }
-function numberValue(value: unknown, fallback = 0) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
-function booleanValue(value: unknown, fallback = false) {
-  if (typeof value === 'boolean') return value;
-  const normalized = text(value).toLowerCase();
-  if (['true', '1', 'yes', 'sim'].includes(normalized)) return true;
-  if (['false', '0', 'no', 'nao', 'não'].includes(normalized)) return false;
-  return fallback;
-}
-function queueTable() { return envAny('SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS', 'VITE_SUPABASE_TABLE_INSTAGRAM_QUEUE_ITEMS') || 'instagram_queue_items'; }
-function leadsTable() { return envAny('SUPABASE_TABLE_IMPORT_LEADS', 'VITE_SUPABASE_TABLE_IMPORT_LEADS') || 'leads'; }
-function serviceClient() {
-  const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const key = envAny('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !key) throw new Error('instagram_extension_backend_not_configured');
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
 function requestOrigin(req: ApiRequest) { return header(req, 'origin').trim(); }
-function isAllowedOrigin(req: ApiRequest) {
-  const origin = requestOrigin(req);
-  return !origin || /^chrome-extension:\/\/[a-p]{32}$/i.test(origin);
-}
-function setCors(req: ApiRequest, res: ApiResponse) {
-  const origin = requestOrigin(req);
-  if (/^chrome-extension:\/\/[a-p]{32}$/i.test(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Vary', 'Origin');
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-}
+function setCors(req: ApiRequest, res: ApiResponse) { const origin = requestOrigin(req); if (/^chrome-extension:\/\/[a-p]{32}$/i.test(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); } res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization'); res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); }
 function send(req: ApiRequest, res: ApiResponse, status: number, payload: unknown) { setCors(req, res); return res.status(status).json(payload); }
-function normalizeStatus(value: unknown): QueueStatus {
-  const status = text(value).toLowerCase();
-  if (['following', 'seguindo'].includes(status)) return 'following';
-  if (['dm_opened', 'dm_aberto', 'dm aberto'].includes(status)) return 'dm_opened';
-  if (['sent', 'enviado'].includes(status)) return 'sent';
-  if (['paused', 'pausado'].includes(status)) return 'paused';
-  if (['error', 'erro'].includes(status)) return 'error';
-  if (['invalid', 'invalidated', 'invalido', 'invalidado'].includes(status)) return 'invalid';
-  return 'queued';
-}
-function rowData(row: RecordValue) { return row.data && typeof row.data === 'object' && !Array.isArray(row.data) ? row.data as RecordValue : {}; }
-function queueItem(row: RecordValue) {
-  const data = rowData(row);
-  const instagramUrl = text(row.instagram_url ?? data.instagram_url ?? data.instagram);
-  const username = normalizeInstagramProfile(row.instagram_username ?? data.instagram_username ?? instagramUrl);
-  const message = (number: number) => text(row[`message_${number}`] ?? data[`message_${number}`] ?? data[`message${number}`]);
-  return {
-    id: text(row.id),
-    queue_item_id: text(row.id),
-    lead_id: text(row.lead_id ?? data.lead_id),
-    profile_username: normalizeInstagramProfile(row.profile_username ?? data.profile_username ?? data.profile),
-    scheduled_date: text(row.scheduled_date ?? data.scheduled_date),
-    block_number: numberValue(row.block_number ?? row.batch_number ?? data.block_number ?? data.batch_number, 1),
-    block_size: numberValue(row.block_size ?? row.batch_limit ?? data.block_size ?? data.batch_limit, 15),
-    position: numberValue(row.position ?? data.position ?? data.order, 1),
-    status: normalizeStatus(row.status ?? data.status),
-    company_name: text(row.company_name ?? data.company_name ?? data.company),
-    phone: text(row.phone ?? data.phone),
-    parent_category: text(row.parent_category ?? row.branch_name ?? data.parent_category ?? data.branch),
-    branch_name: text(row.branch_name ?? row.parent_category ?? data.branch_name ?? data.branch),
-    lead_type: text(row.lead_type ?? data.lead_type ?? data.type ?? 'Instagram'),
-    instagram_url: instagramUrl,
-    instagram_username: username,
-    message_1: message(1),
-    message_2: message(2),
-    message_3: message(3),
-    message_4: message(4),
-    image_name: text(data.imageName ?? data.image_name ?? row.image_url),
-    image_required: booleanValue(data.imageRequired ?? data.image_required, Boolean(row.image_url)),
-    image_url: text(row.image_url ?? data.image_url ?? data.imageName),
-    error_message: text(row.error_message ?? data.error_message),
-    sent_at: text(row.sent_at ?? data.sent_at),
-    created_at: text(row.created_at ?? data.created_at),
-    updated_at: text(row.updated_at ?? data.updated_at),
-  };
-}
-function isActive(row: RecordValue) {
-  const data = rowData(row);
-  return row.active !== false && data.active !== false && text(row.status ?? data.status).toLowerCase() !== 'deleted';
-}
-function sortItems(a: ReturnType<typeof queueItem>, b: ReturnType<typeof queueItem>) {
-  return a.block_number - b.block_number || a.position - b.position || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
-}
-function summary(items: Array<ReturnType<typeof queueItem>>) {
-  return {
-    total: items.length,
-    queued: items.filter((item) => ['queued', 'paused', 'following', 'dm_opened'].includes(item.status)).length,
-    sent: items.filter((item) => item.status === 'sent').length,
-    errors: items.filter((item) => item.status === 'error').length,
-    invalid: items.filter((item) => item.status === 'invalid').length,
-  };
-}
-async function scope(req: ApiRequest): Promise<TokenScope> {
+function serviceClient() { const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL'); const key = envAny('SUPABASE_SERVICE_ROLE_KEY'); if (!url || !key) throw new Error('instagram_extension_backend_not_configured'); return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }); }
+function normalize(value: unknown) { return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' '); }
+function semanticStatus(name: unknown): QueueStatus { const value = normalize(name); if (value.includes('enviad') || value.includes('sent') || value.includes('conclu')) return 'sent'; if (value.includes('erro') || value.includes('error') || value.includes('falh')) return 'error'; if (value.includes('invalid') || value.includes('inval')) return 'invalid'; if (value.includes('paus')) return 'paused'; if (value.includes('dm')) return 'dm_opened'; if (value.includes('segu')) return 'following'; return 'queued'; }
+
+async function tokenScope(req: ApiRequest): Promise<TokenScope> {
   const token = bearer(req);
-  if (!token) throw new Error('instagram_extension_token_required');
+  if (!token) throw new Error('extension_token_required');
   const payload = await verifyInstagramExtensionToken(token);
-  return { userId: payload.sub, profile: payload.profile };
+  return { userId: String(payload.sub), profile: normalizeInstagramProfile(payload.profile) };
 }
-async function listItems(client: SupabaseClient, tokenScope: TokenScope, body: RecordValue) {
-  let query = client.from(queueTable()).select('*').eq('user_id', tokenScope.userId);
-  const date = text(body.scheduled_date);
-  if (date) query = query.eq('scheduled_date', date);
-  const { data, error } = await query.order('block_number', { ascending: true }).order('position', { ascending: true }).order('created_at', { ascending: true });
-  if (error) throw new Error(`instagram_queue_read_failed:${error.message}`);
-  const rows = (data ?? []) as RecordValue[];
-  return rows
-    .filter((row) => isActive(row) && normalizeInstagramProfile(row.profile_username ?? rowData(row).profile_username ?? rowData(row).profile) === tokenScope.profile)
-    .map((row) => queueItem(row))
-    .sort(sortItems);
+
+async function catalog(client: SupabaseClient) {
+  const response = await client.from('status').select('status_id,status_name');
+  if (response.error) throw new Error(`status_catalog_failed:${response.error.message}`);
+  const rows = (response.data ?? []) as RecordValue[];
+  const nameById = new Map(rows.map((row) => [String(row.status_id), String(row.status_name)]));
+  const idFor = (status: QueueStatus) => {
+    const candidates: Record<QueueStatus, string[]> = {
+      queued: ['na fila','fila','queued','pendente','ativo'],
+      following: ['seguindo','following','processando'],
+      dm_opened: ['dm aberta','dm aberto','dm_opened','processando'],
+      sent: ['enviado','sent','concluido','finalizado'],
+      paused: ['pausado','paused'],
+      error: ['erro','error','falhou'],
+      invalid: ['invalido','invalid'],
+    };
+    const found = rows.find((row) => candidates[status].some((candidate) => normalize(row.status_name).includes(normalize(candidate))));
+    if (!found) throw new Error(`status_not_found:${status}`);
+    return Number(found.status_id);
+  };
+  return { nameById, idFor };
 }
-async function loadOwnedItem(client: SupabaseClient, tokenScope: TokenScope, id: string) {
-  const { data, error } = await client.from(queueTable()).select('*').eq('id', id).eq('user_id', tokenScope.userId).maybeSingle();
-  if (error) throw new Error(`instagram_queue_item_read_failed:${error.message}`);
-  if (!data) throw new Error('instagram_queue_item_not_available');
-  const row = data as RecordValue;
-  const rowProfile = normalizeInstagramProfile(row.profile_username ?? rowData(row).profile_username ?? rowData(row).profile);
-  if (rowProfile !== tokenScope.profile) throw new Error('instagram_queue_item_not_available');
+
+async function instagramChannelId(client: SupabaseClient) {
+  const response = await client.from('channels').select('channels_id,channels_name');
+  if (response.error) throw new Error(response.error.message);
+  const row = ((response.data ?? []) as RecordValue[]).find((item) => normalize(item.channels_name).includes('instagram'));
+  if (!row) throw new Error('instagram_channel_not_found');
+  return Number(row.channels_id);
+}
+
+async function socialForScope(client: SupabaseClient, scope: TokenScope) {
+  const response = await client.from('socials').select('*').eq('users_id', Number(scope.userId));
+  if (response.error) throw new Error(response.error.message);
+  const row = ((response.data ?? []) as RecordValue[]).find((item) => normalizeInstagramProfile(item.socials_username) === scope.profile);
+  if (!row) throw new Error('instagram_profile_not_available_for_token');
   return row;
 }
-async function claimRow(client: SupabaseClient, tokenScope: TokenScope, row: RecordValue) {
-  const contract = queueItem(row);
-  const missingMessages = [contract.message_1, contract.message_2, contract.message_3, contract.message_4].map((value, index) => value ? null : index + 1).filter(Boolean);
-  if (!contract.instagram_username || missingMessages.length) {
-    throw new Error(`instagram_queue_contract_incomplete:${contract.id}:${missingMessages.join(',') || 'instagram'}`);
-  }
-  const id = text(row.id);
-  const timestamp = new Date().toISOString();
-  const data = rowData(row);
-  const patch = {
-    status: 'following',
-    follow_status: 'following',
-    error_message: '',
-    last_action_at: timestamp,
-    updated_at: timestamp,
-    data: { ...data, status: 'following', follow_status: 'following', error_message: '', updated_at: timestamp },
-  };
-  const { data: claimed, error } = await client.from(queueTable()).update(patch)
-    .eq('id', id).eq('user_id', tokenScope.userId).eq('status', 'queued').select('*').maybeSingle();
-  if (error) throw new Error(`instagram_queue_claim_failed:${error.message}`);
-  return claimed ? queueItem(claimed as RecordValue) : null;
-}
-async function claim(client: SupabaseClient, tokenScope: TokenScope, body: RecordValue) {
-  const requestedId = text(body.id ?? body.queue_item_id);
-  if (requestedId) {
-    const row = await loadOwnedItem(client, tokenScope, requestedId);
-    const current = queueItem(row);
-    if (current.status === 'following') return current;
-    if (current.status !== 'queued') throw new Error(`instagram_queue_item_not_claimable:${current.status}`);
-    const claimed = await claimRow(client, tokenScope, row);
-    if (!claimed) throw new Error('instagram_queue_claim_conflict');
-    return claimed;
-  }
 
-  const items = await listItems(client, tokenScope, body);
-  const block = numberValue(body.block_number, 0);
-  const candidates = items.filter((item: ReturnType<typeof queueItem>) => item.status === 'queued' && (!block || item.block_number === block)).slice(0, 20);
-  for (const candidate of candidates) {
-    const row = await loadOwnedItem(client, tokenScope, candidate.id);
-    const claimed = await claimRow(client, tokenScope, row);
-    if (claimed) return claimed;
-  }
-  return null;
+async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDate?: string) {
+  const social = await socialForScope(client, scope);
+  const channelId = await instagramChannelId(client);
+  let queuesQuery = client.from('queues').select('*').eq('users_id', Number(scope.userId)).eq('channels_id', channelId);
+  if (scheduledDate) queuesQuery = queuesQuery.gte('queues_scheduled_at', `${scheduledDate}T00:00:00.000Z`).lt('queues_scheduled_at', `${scheduledDate}T23:59:59.999Z`);
+  const queuesResponse = await queuesQuery;
+  if (queuesResponse.error) throw new Error(queuesResponse.error.message);
+  const queues = (queuesResponse.data ?? []) as RecordValue[];
+  const queueIds = queues.map((row) => Number(row.queues_id));
+  if (!queueIds.length) return [];
+  const itemsResponse = await client.from('queue_items').select('*').eq('users_id', Number(scope.userId)).eq('socials_id', Number(social.socials_id)).in('queues_id', queueIds).order('queue_items_position');
+  if (itemsResponse.error) throw new Error(itemsResponse.error.message);
+  const items = (itemsResponse.data ?? []) as RecordValue[];
+  const unique = (key: string) => Array.from(new Set(items.map((row) => Number(row[key])).filter(Number.isSafeInteger)));
+  const load = async (table: string, key: string, values: number[]) => { if (!values.length) return [] as RecordValue[]; const response = await client.from(table).select('*').in(key, values); if (response.error) throw new Error(response.error.message); return (response.data ?? []) as RecordValue[]; };
+  const [leads, templates] = await Promise.all<RecordValue[]>([
+    load('leads','leads_id',unique('leads_id')),
+    load('templates','templates_id',unique('templates_id')),
+  ]);
+  const statusesResponse = await client.from('status').select('status_id,status_name');
+  if (statusesResponse.error) throw new Error(statusesResponse.error.message);
+  const branchIds = Array.from(new Set(leads.map((row: RecordValue) => Number(row.branches_id)).filter(Number.isSafeInteger)));
+  const branches: RecordValue[] = await load('branches','branches_id',branchIds);
+  const leadMap = new Map<string, RecordValue>(leads.map((row: RecordValue) => [String(row.leads_id), row]));
+  const templateMap = new Map<string, RecordValue>(templates.map((row: RecordValue) => [String(row.templates_id), row]));
+  const branchMap = new Map<string, RecordValue>(branches.map((row: RecordValue) => [String(row.branches_id), row]));
+  const statusMap = new Map<string, string>(((statusesResponse.data ?? []) as RecordValue[]).map((row: RecordValue) => [String(row.status_id), String(row.status_name)]));
+  const queueMap = new Map(queues.map((row) => [String(row.queues_id), row]));
+  return items.map((item) => {
+    const lead = leadMap.get(String(item.leads_id)) ?? {};
+    const template = templateMap.get(String(item.templates_id)) ?? {};
+    const branch = branchMap.get(String(lead.branches_id)) ?? {};
+    const queue = queueMap.get(String(item.queues_id)) ?? {};
+    const position = Number(item.queue_items_position ?? 1);
+    const blockSize = 15;
+    const status = semanticStatus(statusMap.get(String(item.status_id)) ?? item.status_id);
+    const instagramUrl = text(lead.leads_instagram);
+    return {
+      id: String(item.queue_items_id),
+      queue_item_id: String(item.queue_items_id),
+      lead_id: String(item.leads_id),
+      profile_username: scope.profile,
+      scheduled_date: text(item.queue_items_scheduled_at ?? queue.queues_scheduled_at).slice(0,10),
+      block_number: Math.floor((position - 1) / blockSize) + 1,
+      block_size: blockSize,
+      position,
+      status,
+      company_name: text(lead.leads_name),
+      phone: text(lead.leads_phone),
+      parent_category: text(branch.branches_name),
+      lead_type: lead.leads_website ? 'Com site' : 'Instagram',
+      instagram_url: instagramUrl,
+      instagram_username: normalizeInstagramProfile(instagramUrl),
+      message_1: text(template.templates_message_1),
+      message_2: text(template.templates_message_2),
+      message_3: text(template.templates_message_3),
+      message_4: text(template.templates_message_4),
+      image_url: '',
+      error_message: text(item.queue_items_error_message),
+      attempts: Number(item.queue_items_attempts ?? 0),
+      updated_at: text(item.queue_items_updated_at),
+    };
+  });
 }
-const allowedTransitions: Record<QueueStatus, QueueStatus[]> = {
-  queued: ['following', 'paused', 'error', 'invalid'],
-  following: ['dm_opened', 'error', 'invalid'],
-  dm_opened: ['sent', 'error', 'invalid'],
-  sent: [],
-  paused: ['queued', 'error', 'invalid'],
-  error: ['queued', 'invalid'],
-  invalid: [],
-};
-async function syncCanonicalLead(client: SupabaseClient, tokenScope: TokenScope, item: ReturnType<typeof queueItem>, target: QueueStatus) {
-  if (!/^\d+$/.test(item.lead_id)) return { status: 'skipped', reason: 'lead_id_not_numeric' };
-  const desired = target === 'sent' ? 5 : target === 'invalid' ? 6 : null;
-  if (!desired) return { status: 'skipped' };
-  const { data: current, error: readError } = await client.from(leadsTable()).select('leads_id,users_id,lead_status_id').eq('leads_id', Number(item.lead_id)).eq('users_id', tokenScope.userId).maybeSingle();
-  if (readError) throw new Error(`instagram_lead_sync_read_failed:${readError.message}`);
-  if (!current) return { status: 'missing' };
-  if (Number(current.lead_status_id) === desired) return { status: 'already_synced' };
-  if (Number(current.lead_status_id) !== 4) return { status: 'conflict', observed_status_id: current.lead_status_id };
-  const { data: updated, error } = await client.from(leadsTable()).update({ lead_status_id: desired, leads_updated_at: new Date().toISOString() })
-    .eq('leads_id', Number(item.lead_id)).eq('users_id', tokenScope.userId).eq('lead_status_id', 4).select('leads_id').maybeSingle();
-  if (error) throw new Error(`instagram_lead_sync_failed:${error.message}`);
-  return updated ? { status: 'synced' } : { status: 'conflict' };
-}
-async function transition(client: SupabaseClient, tokenScope: TokenScope, body: RecordValue) {
-  const id = text(body.id ?? body.queue_item_id);
-  if (!id) throw new Error('instagram_queue_item_id_required');
-  const row = await loadOwnedItem(client, tokenScope, id);
-  const current = queueItem(row);
-  const rawTarget = text(body.target_status ?? body.status ?? body.update_action);
-  if (!rawTarget) throw new Error('instagram_queue_target_status_required');
-  const target = normalizeStatus(rawTarget);
-  const expected = normalizeStatus(body.expected_status ?? current.status);
-  if (current.status === target) {
-    const leadSync = await syncCanonicalLead(client, tokenScope, current, target);
-    return { item: current, idempotent: true, lead_sync: leadSync };
-  }
-  if (current.status !== expected) throw new Error(`instagram_queue_transition_conflict:${current.status}`);
-  if (!allowedTransitions[current.status].includes(target)) throw new Error(`instagram_queue_transition_invalid:${current.status}:${target}`);
 
-  const timestamp = new Date().toISOString();
-  const reason = text(body.error_message ?? body.reason ?? body.invalid_reason);
-  const data = rowData(row);
-  const patch = {
-    status: target,
-    follow_status: target,
-    error_message: ['error', 'invalid'].includes(target) ? reason || (target === 'invalid' ? 'Outros' : 'Erro operacional') : '',
-    sent_at: target === 'sent' ? timestamp : row.sent_at ?? null,
-    last_action_at: timestamp,
-    updated_at: timestamp,
-    data: {
-      ...data,
-      status: target,
-      follow_status: target,
-      error_message: ['error', 'invalid'].includes(target) ? reason || (target === 'invalid' ? 'Outros' : 'Erro operacional') : '',
-      invalid_reason: target === 'invalid' ? reason || 'Outros' : text(data.invalid_reason),
-      sent_at: target === 'sent' ? timestamp : text(data.sent_at),
-      updated_at: timestamp,
-    },
+async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, expected: QueueStatus = 'queued') {
+  const items = await loadItems(client, scope);
+  const item = items.find((row) => row.id === id);
+  if (!item || semanticStatus(item.status) !== expected) return null;
+  const statuses = await catalog(client);
+  const response = await client.from('queue_items').update({ status_id: statuses.idFor('following'), queue_items_started_at: new Date().toISOString(), queue_items_updated_at: new Date().toISOString() }).eq('queue_items_id', Number(id)).eq('users_id', Number(scope.userId)).eq('status_id', statuses.idFor(expected)).select('queue_items_id').maybeSingle();
+  if (response.error) throw new Error(response.error.message);
+  if (!response.data) return null;
+  return (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
+}
+
+async function transition(client: SupabaseClient, scope: TokenScope, body: RecordValue) {
+  const id = text(body.id);
+  const target = semanticStatus(body.target_status) as QueueStatus;
+  const expected = semanticStatus(body.expected_status) as QueueStatus;
+  const statuses = await catalog(client);
+  const patch: RecordValue = {
+    status_id: statuses.idFor(target),
+    queue_items_updated_at: new Date().toISOString(),
+    queue_items_error_message: ['error','invalid'].includes(target) ? text(body.reason ?? body.invalid_reason) : null,
   };
-  const { data: updated, error } = await client.from(queueTable()).update(patch)
-    .eq('id', id).eq('user_id', tokenScope.userId).eq('status', current.status).select('*').maybeSingle();
-  if (error) throw new Error(`instagram_queue_transition_failed:${error.message}`);
-  if (!updated) throw new Error('instagram_queue_transition_conflict');
-  const item = queueItem(updated as RecordValue);
-  const leadSync = await syncCanonicalLead(client, tokenScope, item, target);
-  return { item, idempotent: false, lead_sync: leadSync };
+  if (['sent','error','invalid'].includes(target)) patch.queue_items_finished_at = new Date().toISOString();
+  const response = await client.from('queue_items').update(patch).eq('queue_items_id', Number(id)).eq('users_id', Number(scope.userId)).eq('status_id', statuses.idFor(expected)).select('leads_id').maybeSingle();
+  if (response.error) throw new Error(response.error.message);
+  if (!response.data) throw new Error('queue_transition_conflict');
+  if (target === 'sent' || target === 'invalid') {
+    const leadTarget = target === 'sent' ? 5 : 6;
+    await client.from('leads').update({ lead_status_id: leadTarget, leads_updated_at: new Date().toISOString() }).eq('leads_id', Number((response.data as RecordValue).leads_id)).eq('users_id', Number(scope.userId)).eq('lead_status_id', 4);
+  }
+  return (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
-  if (!isAllowedOrigin(req)) return res.status(403).json({ ok: false, error: 'instagram_extension_origin_not_allowed' });
-  setCors(req, res);
-  if (req.method === 'OPTIONS') { res.status(204).end(); return; }
+  if (req.method === 'OPTIONS') { setCors(req, res); return res.status(204).end(); }
   if (req.method !== 'POST') return send(req, res, 405, { ok: false, error: 'method_not_allowed' });
   try {
-    const tokenScope = await scope(req);
+    const scope = await tokenScope(req);
     const body = bodyRecord(req.body);
-    const requestedProfile = normalizeInstagramProfile(body.profile_username);
-    if (requestedProfile && requestedProfile !== tokenScope.profile) return send(req, res, 403, { ok: false, error: 'instagram_extension_profile_scope_mismatch' });
-    const client = serviceClient();
-    const action = text(body.action).toLowerCase();
+    const action = text(body.action);
     const requestId = text(body.request_id);
-    if (!requestId || requestId.length > 128) return send(req, res, 400, { ok: false, error: 'instagram_extension_request_id_required' });
-
-    if (action === 'queue') {
-      const items = await listItems(client, tokenScope, body);
-      return send(req, res, 200, { ok: true, request_id: requestId, items, summary: summary(items) });
+    if (normalizeInstagramProfile(body.profile_username) !== scope.profile) throw new Error('profile_scope_mismatch');
+    const client = serviceClient();
+    if (action === 'queue') return send(req, res, 200, { ok: true, request_id: requestId, items: await loadItems(client, scope, text(body.scheduled_date)) });
+    if (action === 'claim_next') {
+      const items = await loadItems(client, scope, text(body.scheduled_date));
+      const block = Number(body.block_number ?? 0);
+      const candidate = items.find((item) => item.status === 'queued' && (!block || item.block_number === block));
+      return send(req, res, 200, { ok: true, request_id: requestId, item: candidate ? await claimItem(client, scope, candidate.id) : null });
     }
-    if (action === 'claim_next' || action === 'claim_item') {
-      const item = await claim(client, tokenScope, body);
-      return send(req, res, 200, { ok: true, request_id: requestId, item });
-    }
-    if (action === 'transition') {
-      const result = await transition(client, tokenScope, body);
-      return send(req, res, 200, { ok: true, request_id: requestId, ...result });
-    }
-    return send(req, res, 400, { ok: false, error: 'instagram_extension_action_invalid' });
+    if (action === 'claim_item') return send(req, res, 200, { ok: true, request_id: requestId, item: await claimItem(client, scope, text(body.id)) });
+    if (action === 'transition') return send(req, res, 200, { ok: true, request_id: requestId, item: await transition(client, scope, body) });
+    return send(req, res, 400, { ok: false, request_id: requestId, error: 'action_invalid' });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'instagram_extension_api_error';
-    const status = ['instagram_extension_token_required', 'instagram_extension_token_invalid', 'instagram_extension_token_expired'].includes(message) ? 401
-      : ['instagram_extension_profile_scope_mismatch', 'instagram_queue_item_not_available'].includes(message) ? 403
-      : message.includes('_required') || message.includes('_invalid') || message.includes('_not_claimable:') || message.includes('_transition_invalid:') || message.includes('_contract_incomplete:') ? 400
-      : message.includes('_conflict') ? 409
-      : message === 'instagram_extension_backend_not_configured' ? 503
-      : 500;
+    const message = error instanceof Error ? error.message : 'instagram_extension_error';
+    const status = message.includes('token') ? 401 : message.includes('scope') || message.includes('not_available') ? 403 : message.includes('conflict') ? 409 : message.includes('not_configured') ? 503 : 500;
     return send(req, res, status, { ok: false, error: message, message });
   }
 }

@@ -6,7 +6,7 @@ import type { WhatsAppValidationMode } from './types';
 
 export type WhatsAppValidationTarget = {
   statusId: LeadStatusId;
-  channelId: 1 | 2;
+  channelId: number;
   outcome: 'approved' | 'revalidated' | 'redirected' | 'invalidated';
 };
 
@@ -19,26 +19,37 @@ export function isLikelyValidWhatsApp(value: unknown) {
   return normalized.startsWith('55') && (normalized.length === 12 || normalized.length === 13);
 }
 
-export function validationSelectionError(row: LeadDatabaseRow, mode: WhatsAppValidationMode) {
+export function validationSelectionError(
+  row: LeadDatabaseRow,
+  mode: WhatsAppValidationMode,
+  whatsappChannelId: number,
+) {
   const expectedStatus = expectedStatusForValidation(mode);
   if (row.lead_status_id !== expectedStatus) {
     return `O lead mudou de etapa. Esperado status ${expectedStatus}, recebido ${row.lead_status_id}.`;
   }
-  if (row.channels_id !== 1) return 'Somente leads do canal WhatsApp podem ser validados neste fluxo.';
+  if (Number(row.channels_id) !== whatsappChannelId) return 'Somente leads do canal WhatsApp podem ser validados neste fluxo.';
   return null;
 }
 
-export function validWhatsAppTarget(mode: WhatsAppValidationMode): WhatsAppValidationTarget {
+export function validWhatsAppTarget(
+  mode: WhatsAppValidationMode,
+  whatsappChannelId: number,
+): WhatsAppValidationTarget {
   return {
     statusId: LEAD_STATUS.VALIDATED,
-    channelId: 1,
+    channelId: whatsappChannelId,
     outcome: mode === 'initial' ? 'approved' : 'revalidated',
   };
 }
 
-export function invalidWhatsAppTarget(row: LeadDatabaseRow): WhatsAppValidationTarget {
+export function invalidWhatsAppTarget(
+  row: LeadDatabaseRow,
+  whatsappChannelId: number,
+  instagramChannelId: number,
+): WhatsAppValidationTarget {
   if (isValidInstagram(row.leads_instagram)) {
-    return { statusId: LEAD_STATUS.VALIDATED, channelId: 2, outcome: 'redirected' };
+    return { statusId: LEAD_STATUS.VALIDATED, channelId: instagramChannelId, outcome: 'redirected' };
   }
-  return { statusId: LEAD_STATUS.INVALID, channelId: 1, outcome: 'invalidated' };
+  return { statusId: LEAD_STATUS.INVALID, channelId: whatsappChannelId, outcome: 'invalidated' };
 }

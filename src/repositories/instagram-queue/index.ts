@@ -1,2 +1,2 @@
 export * from './instagramQueue.repository';
-export * from './supabaseInstagramQueue.repository';
+export * from './canonicalInstagramQueue.repository';

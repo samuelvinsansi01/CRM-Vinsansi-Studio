@@ -1,7 +1,7 @@
 import { eventBus } from '../../lib/events';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { repositories } from '../../repositories';
-import { supabaseReconciliationRepository } from '../../repositories/reconciliation';
+import { canonicalReconciliationRepository } from '../../repositories/reconciliation';
 import { analyzeReconciliationSnapshot } from './reconciliation.rules';
 import type {
   ReconciliationBulkResult,
@@ -63,8 +63,8 @@ function emitRefreshEvents(issue: ReconciliationIssue) {
 async function scan(): Promise<ReconciliationScan> {
   if (!isSupabaseConfigured()) return emptyScan();
   const [leads, queueItems] = await Promise.all([
-    supabaseReconciliationRepository.loadLeads(),
-    supabaseReconciliationRepository.loadQueueItems(),
+    canonicalReconciliationRepository.loadLeads(),
+    canonicalReconciliationRepository.loadQueueItems(),
   ]);
   const result = analyzeReconciliationSnapshot(leads, queueItems, staleAfterMinutes());
   eventBus.emit('audit:changed', { action: 'scan' });
@@ -73,7 +73,7 @@ async function scan(): Promise<ReconciliationScan> {
 
 async function repair(issue: ReconciliationIssue): Promise<ReconciliationRepairResult> {
   if (!isSupabaseConfigured()) throw new Error('A reconciliação exige conexão com o Supabase.');
-  const result = await supabaseReconciliationRepository.repair(issue);
+  const result = await canonicalReconciliationRepository.repair(issue);
   try {
     await appendRepairAudit(issue, result);
   } catch (error) {

@@ -1,2 +1,2 @@
 export * from './eventLog.repository';
-export * from './supabaseEventLog.repository';
+export * from './canonicalEventLog.repository';

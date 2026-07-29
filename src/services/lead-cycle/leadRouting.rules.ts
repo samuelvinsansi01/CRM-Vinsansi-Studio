@@ -2,21 +2,21 @@ import { normalizeInstagramUsername, isValidInstagram } from '../instagram/insta
 import { normalizePhone } from '../import/importValidation';
 import { LEAD_STATUS } from '../status/leadStatus';
 import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
-import type { LeadRoutingCommand } from './types';
+import type { LeadRoutingCommand, LeadCycleChannel } from './types';
 
 export type LeadRoutingDecision = {
   expectedStatus: LeadStatusId;
   targetStatus: LeadStatusId;
-  targetChannel?: 1 | 2;
+  targetChannel?: LeadCycleChannel;
 };
 
 const COMMAND_DECISIONS: Record<LeadRoutingCommand, LeadRoutingDecision> = {
-  'route-imported-to-whatsapp': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.PRE_SEND, targetChannel: 1 },
-  'route-imported-to-instagram': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 2 },
+  'route-imported-to-whatsapp': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.PRE_SEND, targetChannel: 'WhatsApp' },
+  'route-imported-to-instagram': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 'Instagram' },
   'invalidate-imported': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.INVALID },
   'archive-imported': { expectedStatus: LEAD_STATUS.IMPORTED, targetStatus: LEAD_STATUS.ARCHIVED },
-  'set-valid-channel-whatsapp': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 1 },
-  'set-valid-channel-instagram': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 2 },
+  'set-valid-channel-whatsapp': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 'WhatsApp' },
+  'set-valid-channel-instagram': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 'Instagram' },
   'archive-valid': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.ARCHIVED },
   'invalidate-pre-send': { expectedStatus: LEAD_STATUS.PRE_SEND, targetStatus: LEAD_STATUS.INVALID },
   'archive-pre-send': { expectedStatus: LEAD_STATUS.PRE_SEND, targetStatus: LEAD_STATUS.ARCHIVED },
@@ -53,9 +53,9 @@ export function validateRoutingCommand(row: LeadDatabaseRow, command: LeadRoutin
   return contactValidationError(row, command);
 }
 
-export function isRoutingNoop(row: LeadDatabaseRow, command: LeadRoutingCommand) {
+export function isRoutingNoop(row: LeadDatabaseRow, command: LeadRoutingCommand, targetChannelId?: number) {
   const decision = routingDecision(command);
   const sameStatus = row.lead_status_id === decision.targetStatus;
-  const sameChannel = decision.targetChannel === undefined || row.channels_id === decision.targetChannel;
+  const sameChannel = decision.targetChannel === undefined || row.channels_id === targetChannelId;
   return sameStatus && sameChannel;
 }

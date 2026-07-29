@@ -6,6 +6,7 @@ import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperation
 import { configService } from '../config/config.service';
 import type { ChipConfigRecord } from '../config/types';
 import { normalizePhone } from '../import/importValidation';
+import { channelId } from '../../repositories/schemaCatalog';
 import {
   whatsappValidationGateway,
   WhatsAppValidationUnavailableError,
@@ -66,7 +67,7 @@ function rowsById(rows: LeadDatabaseRow[]) {
   return new Map(rows.map((row) => [String(row.leads_id), row]));
 }
 
-function validateSelection(ids: string[], byId: Map<string, LeadDatabaseRow>, mode: WhatsAppValidationMode) {
+function validateSelection(ids: string[], byId: Map<string, LeadDatabaseRow>, mode: WhatsAppValidationMode, whatsappChannelId: number) {
   const failures: WhatsAppValidationFailure[] = [];
   for (const id of ids) {
     const row = byId.get(id);
@@ -74,7 +75,7 @@ function validateSelection(ids: string[], byId: Map<string, LeadDatabaseRow>, mo
       failures.push({ id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
       continue;
     }
-    const reason = validationSelectionError(row, mode);
+    const reason = validationSelectionError(row, mode, whatsappChannelId);
     if (reason) failures.push({ id, company: row.leads_name, reason });
   }
   return failures;
@@ -145,7 +146,9 @@ async function applyConfirmedResult(
   row: LeadDatabaseRow,
   mode: WhatsAppValidationMode,
   providerResult: WhatsAppValidationResult | null,
-  localReason?: string,
+  localReason: string | undefined,
+  whatsappChannelId: number,
+  instagramChannelId: number,
 ) {
   const id = String(row.leads_id);
   if (providerResult?.status === 'error') {
@@ -167,7 +170,7 @@ async function applyConfirmedResult(
   }
 
   const valid = providerResult?.valid === true;
-  const target = valid ? validWhatsAppTarget(mode) : invalidWhatsAppTarget(row);
+  const target = valid ? validWhatsAppTarget(mode, whatsappChannelId) : invalidWhatsAppTarget(row, whatsappChannelId, instagramChannelId);
   const after = await supabaseLeadCycleRepository.compareAndSet(id, expectedStatusForValidation(mode), {
     lead_status_id: target.statusId,
     channels_id: target.channelId,
@@ -213,9 +216,10 @@ async function applyConfirmedResult(
 async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[]) {
   const ids = numericIds(rawIds);
   const result = emptyResult(mode, ids.length);
+  const [whatsappChannelId, instagramChannelId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]).then(([wa, ig]) => [Number(wa), Number(ig)] as const);
   const rows = await supabaseLeadCycleRepository.listByIds(ids);
   const byId = rowsById(rows);
-  const selectionFailures = validateSelection(ids, byId, mode);
+  const selectionFailures = validateSelection(ids, byId, mode, whatsappChannelId);
 
   if (selectionFailures.length) {
     const invalid = new Set(selectionFailures.map((failure) => failure.id));
@@ -253,7 +257,7 @@ async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[])
   // Formato inequivocamente inválido é tratado localmente somente depois que o
   // preflight remoto do mesmo lote foi concluído com sucesso.
   for (const row of malformed) {
-    await applyConfirmedResult(result, row, mode, null, 'Telefone fora do formato brasileiro esperado para WhatsApp.');
+    await applyConfirmedResult(result, row, mode, null, 'Telefone fora do formato brasileiro esperado para WhatsApp.', whatsappChannelId, instagramChannelId);
   }
 
   for (const row of remoteCandidates) {
@@ -264,7 +268,7 @@ async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[])
       result.errorIds.push(String(row.leads_id));
       continue;
     }
-    await applyConfirmedResult(result, row, mode, providerResult);
+    await applyConfirmedResult(result, row, mode, providerResult, undefined, whatsappChannelId, instagramChannelId);
   }
 
   if (result.approved || result.revalidated || result.redirectedToInstagram || result.invalidated) {

@@ -1,2 +1,2 @@
 export * from './whatsappQueue.repository';
-export * from './supabaseWhatsAppQueue.repository';
+export * from './canonicalWhatsAppQueue.repository';

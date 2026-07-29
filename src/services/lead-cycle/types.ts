@@ -12,7 +12,7 @@ export type LeadCycleLead = {
   instagram: string;
   website: string;
   mapsUrl: string;
-  channelId: 1 | 2;
+  channelId: number;
   channel: LeadCycleChannel;
   contactSourceId: number;
   contactSource: string;

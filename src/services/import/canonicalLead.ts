@@ -12,6 +12,8 @@ export type CanonicalLeadLookup = {
   countryId: number;
   stateId: number | null;
   cityId: number | null;
+  channelId: number;
+  contactSourceId: number;
 };
 
 /**
@@ -24,9 +26,9 @@ export type ExistingLeadInsert = {
   countries_id: number;
   states_id: number | null;
   cities_id: number | null;
-  channels_id: 1 | 2;
+  channels_id: number;
   lead_status_id: LeadStatusId;
-  contact_sources_id: 1 | 2 | 3 | 4;
+  contact_sources_id: number;
   apify_import_jobs_id: number | null;
   leads_name: string;
   leads_phone: string | null;
@@ -57,18 +59,6 @@ export function canonicalStatusId(status: unknown): LeadStatusId {
   if (String(status ?? '').trim().toLowerCase() === 'duplicado') return LEAD_STATUS.DUPLICATE;
   if (isStatusGroup(status, 'archived') || isStatusGroup(status, 'deleted')) return LEAD_STATUS.ARCHIVED;
   throw new Error(`Status de lead desconhecido: ${String(status ?? '') || 'vazio'}.`);
-}
-
-export function canonicalChannelId(lead: ImportLead): 1 | 2 {
-  return destinationOf(lead) === 'Instagram' ? 2 : 1;
-}
-
-export function canonicalContactSourceId(lead: ImportLead): 1 | 2 | 3 | 4 {
-  const destination = destinationOf(lead);
-  if (destination === 'Instagram') return LEAD_STATUS.QUEUED;
-  if (destination === 'Agregadores') return LEAD_STATUS.PRE_SEND;
-  if (destination === 'Com site') return LEAD_STATUS.VALIDATED;
-  return LEAD_STATUS.IMPORTED;
 }
 
 function compactCategories(values: Array<string | undefined>) {
@@ -130,9 +120,9 @@ function commonPayload(
     countries_id: lookup.countryId,
     states_id: lookup.stateId,
     cities_id: lookup.cityId,
-    channels_id: canonicalChannelId(lead),
+    channels_id: lookup.channelId,
     lead_status_id: canonicalStatusId(lead.status),
-    contact_sources_id: canonicalContactSourceId(lead),
+    contact_sources_id: lookup.contactSourceId,
     apify_import_jobs_id: options.apifyImportJobId ?? null,
     leads_name: lead.empresa.trim(),
     leads_phone: String(lead.whatsapp ?? '').trim() || null,

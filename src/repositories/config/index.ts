@@ -1,2 +1,2 @@
 export * from './config.repository';
-export * from './supabaseConfig.repository';
+export * from './canonicalConfig.repository';

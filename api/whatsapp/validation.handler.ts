@@ -164,6 +164,20 @@ async function resolveOwnedLeads(
     .in('leads_id', ids.map(Number));
   if (error) throw new Error(`Falha ao conferir os leads no banco: ${error.message}`);
 
+  const channelResponse = await auth.client
+    .from('channels')
+    .select('channels_id,channels_name');
+  if (channelResponse.error) throw new Error(`Falha ao carregar canais: ${channelResponse.error.message}`);
+  const normalizeName = (value: unknown) => String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  const whatsappChannel = ((channelResponse.data ?? []) as Array<{ channels_id?: unknown; channels_name?: unknown }>)
+    .find((row) => normalizeName(row.channels_name).includes('whatsapp'));
+  if (!whatsappChannel?.channels_id) throw new Error('Canal WhatsApp não encontrado na tabela channels.');
+  const whatsappChannelId = Number(whatsappChannel.channels_id);
+
   const rows = new Map<string, ValidationLeadRow>(((data ?? []) as ValidationLeadRow[]).map((row) => [String(row.leads_id), row]));
   if (rows.size !== ids.length) throw new Error('Um ou mais leads não existem ou não pertencem ao usuário autenticado.');
 
@@ -171,7 +185,7 @@ async function resolveOwnedLeads(
     const id = String(lead.id || lead.lead_id);
     const row = rows.get(id);
     if (!row) throw new Error(`Lead não encontrado: ${id}.`);
-    if (Number(row.lead_status_id) !== expectedStatus || Number(row.channels_id) !== 1) {
+    if (Number(row.lead_status_id) !== expectedStatus || Number(row.channels_id) !== whatsappChannelId) {
       throw new Error(`Lead ${id} não está no status/canal permitido para esta operação.`);
     }
     const phone = phoneDigits(row.leads_phone);

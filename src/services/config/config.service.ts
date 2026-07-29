@@ -324,7 +324,9 @@ function isTemplate(record: ConfigRecord): record is TemplateConfigRecord {
 }
 
 function isArchivedConfig(record: ConfigRecord) {
-  return normalizeText(record.status) === 'arquivado';
+  // O schema real possui status generico, sem coluna dedicada a arquivamento.
+  // Registros inativos representam o estado arquivado na interface.
+  return !record.active || ['arquivado', 'inativo'].includes(normalizeText(record.status));
 }
 
 function isDeletedConfig(record: ConfigRecord) {

@@ -3,6 +3,7 @@ import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
 import type { LeadDatabaseRow, LeadStatusId, LeadStatusName } from '../../types/lead.types';
 import { LEAD_STATUS } from '../status/leadStatus';
+import { channelId } from '../../repositories/schemaCatalog';
 import { isRoutingNoop, routingDecision, validateRoutingCommand } from './leadRouting.rules';
 import type {
   LeadCycleLead,
@@ -15,13 +16,13 @@ function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
-function mapRow(row: LeadDatabaseRow): LeadCycleLead {
+function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): LeadCycleLead {
   const branch = one(row.branches);
   const state = one(row.states);
   const city = one(row.cities);
   const source = one(row.contact_sources);
   const status = one(row.lead_status);
-  const channelId = row.channels_id === 2 ? 2 : 1;
+  const resolvedChannelId = Number(row.channels_id ?? whatsappId);
 
   return {
     id: String(row.leads_id),
@@ -33,8 +34,8 @@ function mapRow(row: LeadDatabaseRow): LeadCycleLead {
     instagram: row.leads_instagram ?? '',
     website: row.leads_website ?? '',
     mapsUrl: row.leads_maps ?? '',
-    channelId,
-    channel: channelId === 2 ? 'Instagram' : 'WhatsApp',
+    channelId: resolvedChannelId,
+    channel: resolvedChannelId === instagramId ? 'Instagram' : 'WhatsApp',
     contactSourceId: row.contact_sources_id,
     contactSource: source?.contact_sources_name ?? '',
     statusId: row.lead_status_id,
@@ -44,8 +45,9 @@ function mapRow(row: LeadDatabaseRow): LeadCycleLead {
   };
 }
 
-async function listByStatuses(statusIds: LeadStatusId[], channelId?: 1 | 2): Promise<LeadCycleLead[]> {
-  return (await supabaseLeadCycleRepository.listByStatuses(statusIds, channelId)).map(mapRow);
+async function listByStatuses(statusIds: LeadStatusId[], filterChannelId?: number): Promise<LeadCycleLead[]> {
+  const [whatsappId, instagramId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]);
+  return (await supabaseLeadCycleRepository.listByStatuses(statusIds, filterChannelId)).map((row) => mapRow(row, Number(whatsappId), Number(instagramId)));
 }
 
 
@@ -141,16 +143,17 @@ async function executeRoutingCommand(command: LeadRoutingCommand, ids: string[])
   }
 
   const decision = routingDecision(command);
+  const targetChannelId = decision.targetChannel ? Number(await channelId(decision.targetChannel)) : undefined;
   for (const id of uniqueIds) {
     const before = rowsById.get(id)!;
-    const noop = isRoutingNoop(before, command);
+    const noop = isRoutingNoop(before, command, targetChannelId);
 
     try {
       // Mesmo quando o destino já é o atual, executamos o compare-and-set.
       // Isso confirma que o status não mudou entre a leitura e a ação do usuário.
       const after = await supabaseLeadCycleRepository.compareAndSet(id, decision.expectedStatus, {
         lead_status_id: decision.targetStatus,
-        ...(decision.targetChannel ? { channels_id: decision.targetChannel } : {}),
+        ...(targetChannelId ? { channels_id: targetChannelId } : {}),
       });
 
       if (!after) {
@@ -196,6 +199,6 @@ async function executeRoutingCommand(command: LeadRoutingCommand, ids: string[])
 export const leadCycleService = {
   listImported: () => listByStatuses([LEAD_STATUS.IMPORTED]),
   listValid: () => listByStatuses([LEAD_STATUS.VALIDATED]),
-  listPreSend: () => listByStatuses([LEAD_STATUS.PRE_SEND], 1),
+  listPreSend: async () => listByStatuses([LEAD_STATUS.PRE_SEND], Number(await channelId('WhatsApp'))),
   executeRoutingCommand,
 };

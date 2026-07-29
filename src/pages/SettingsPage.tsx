@@ -220,7 +220,7 @@ export function SettingsPage() {
       };
       await updateSettings(next);
       setDraft(next);
-      pushToast({ title: 'Configuracoes salvas', description: 'O banco confirmou todos os parametros operacionais.', tone: 'success' });
+      pushToast({ title: 'Configuracoes salvas', description: 'Os parametros foram salvos neste navegador para o usuario autenticado.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Erro ao salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }

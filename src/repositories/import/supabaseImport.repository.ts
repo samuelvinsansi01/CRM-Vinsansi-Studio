@@ -244,11 +244,13 @@ async function selectLookupRows(table: string, columns: string): Promise<LookupR
 }
 
 async function resolveLookups(leads: ImportLead[]): Promise<Map<string, CanonicalLeadLookup>> {
-  const [branches, countries, states, cities] = await Promise.all([
+  const [branches, countries, states, cities, channels, contactSources] = await Promise.all([
     selectLookupRows('branches', 'branches_id,branches_name'),
     selectLookupRows('countries', 'countries_id,countries_name,countries_code'),
     selectLookupRows('states', 'states_id,states_name,states_code'),
     selectLookupRows('cities', 'cities_id,cities_name,states_id'),
+    selectLookupRows('channels', 'channels_id,channels_name'),
+    selectLookupRows('contact_sources', 'contact_sources_id,contact_sources_name,contact_sources_key,contact_sources_default_channel_id'),
   ]);
 
   const brazil = countries.find((row) => {
@@ -260,6 +262,31 @@ async function resolveLookups(leads: ImportLead[]): Promise<Map<string, Canonica
   if (!brazil) throw new Error('O país Brasil não foi encontrado na tabela countries.');
   const countryId = Number(brazil.countries_id);
   const result = new Map<string, CanonicalLeadLookup>();
+
+  const channelFor = (lead: ImportLead) => {
+    const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
+    const target = destination === 'Instagram' ? 'instagram' : 'whatsapp';
+    const row = channels.find((channel) => normalizeComparable(channel.channels_name).includes(target));
+    if (!row) throw new Error(`O canal ${target === 'instagram' ? 'Instagram' : 'WhatsApp'} não existe na tabela channels.`);
+    return Number(row.channels_id);
+  };
+
+  const contactSourceFor = (lead: ImportLead) => {
+    const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
+    const candidates = destination === 'Instagram'
+      ? ['instagram']
+      : destination === 'Agregadores'
+        ? ['agregador', 'agregadores']
+        : destination === 'Com site'
+          ? ['com site', 'site proprio', 'site']
+          : ['whatsapp'];
+    const row = contactSources.find((source) => {
+      const values = [source.contact_sources_name, source.contact_sources_key].map(normalizeComparable);
+      return candidates.some((candidate) => values.some((value) => value === candidate || value.includes(candidate)));
+    }) ?? (contactSources.length === 1 ? contactSources[0] : undefined);
+    if (!row) throw new Error(`A origem/destino “${destination}” não foi encontrada na tabela contact_sources.`);
+    return Number(row.contact_sources_id);
+  };
 
   for (const lead of leads) {
     const explicitBranchId = Number(lead.branch_id);
@@ -287,6 +314,8 @@ async function resolveLookups(leads: ImportLead[]): Promise<Map<string, Canonica
       countryId,
       stateId,
       cityId: city ? Number(city.cities_id) : null,
+      channelId: channelFor(lead),
+      contactSourceId: contactSourceFor(lead),
     });
   }
 

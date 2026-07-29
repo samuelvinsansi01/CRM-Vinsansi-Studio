@@ -2,6 +2,7 @@ import { LEAD_STATUS } from '../status/leadStatus';
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
+import { channelId } from '../../repositories/schemaCatalog';
 import type { LeadDatabaseRow } from '../../types/lead.types';
 import { branchForBoundRecord } from '../config/branchMedia';
 import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperational';
@@ -198,7 +199,7 @@ function preparationReason(
   templates: TemplateConfigRecord[],
 ) {
   if (row.lead_status_id !== LEAD_STATUS.VALIDATED) return 'O lead não está mais no status Validado.';
-  if (Number(row.channels_id) !== (channel === 'WhatsApp' ? 1 : 2)) return 'O canal do lead foi alterado.';
+  if (Number(row.channels_id) !== expectedChannelId) return 'O canal do lead foi alterado.';
   if (channel === 'WhatsApp' && normalizePhone(row.leads_phone).length < 10) return 'Telefone inválido para WhatsApp.';
   if (channel === 'Instagram' && !isValidInstagram(row.leads_instagram)) return 'Instagram inválido ou ausente.';
 
@@ -390,9 +391,10 @@ async function snapshot(
   const config = await loadConfiguration();
   const activeDays = channel === 'WhatsApp' ? config.settings.whatsapp.activeDays : config.settings.instagram.activeDays;
   const date = effectiveScheduleDate(requestedDate, activeDays);
+  const resolvedChannelId = Number(await channelId(channel));
   const [usage, rows] = await Promise.all([
     queueUsage(channel, date.effectiveDate),
-    supabaseLeadCycleRepository.listByStatuses([2], channel === 'WhatsApp' ? 1 : 2),
+    supabaseLeadCycleRepository.listByStatuses([LEAD_STATUS.VALIDATED], resolvedChannelId),
   ]);
   const resources = buildResources(channel, usage, config.chips, config.profiles, config.settings.instagram);
   const selectedResource = resources.find((resource) => resource.id === resourceId) ?? resources[0];
@@ -447,6 +449,7 @@ async function enqueueValidated(
     if (!resource) throw new Error(channel === 'WhatsApp' ? 'Chip ativo não encontrado.' : 'Perfil Instagram ativo não encontrado.');
     if (resource.available <= 0) throw new Error('A capacidade diária deste recurso já foi atingida.');
 
+    const expectedChannelId = Number(await channelId(channel));
     const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
     const byId = new Map(rows.map((row) => [String(row.leads_id), row]));
     const alreadyQueued = await existingQueuedLeadIds(channel, date.effectiveDate);
@@ -458,7 +461,7 @@ async function enqueueValidated(
         addFailure(result, { id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
         continue;
       }
-      if (row.lead_status_id !== LEAD_STATUS.VALIDATED || Number(row.channels_id) !== (channel === 'WhatsApp' ? 1 : 2)) {
+      if (row.lead_status_id !== LEAD_STATUS.VALIDATED || Number(row.channels_id) !== expectedChannelId) {
         addFailure(result, { id, company: row.leads_name, reason: 'O lead mudou de status ou canal antes da preparação.' }, true);
         continue;
       }

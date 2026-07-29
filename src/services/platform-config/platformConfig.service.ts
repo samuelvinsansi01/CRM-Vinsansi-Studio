@@ -83,12 +83,12 @@ export const platformConfigService = {
       generatedAt: new Date().toISOString(),
       instagram: {
         queueContract: {
-          table: 'instagram_queue_items',
-          profileField: 'profile_username',
-          scheduledDateField: 'scheduled_date',
-          statusField: 'status',
-          blockField: 'block_number',
-          orderBy: ['block_number', 'position'],
+          table: 'queue_items',
+          profileField: 'socials_id',
+          scheduledDateField: 'queue_items_scheduled_at',
+          statusField: 'status_id',
+          blockField: 'queues_id',
+          orderBy: ['queues_id', 'queue_items_position'],
           readableStatuses: ['queued', 'ready_to_dispatch', 'scheduled'],
         },
         dispatch: dispatch.instagram,

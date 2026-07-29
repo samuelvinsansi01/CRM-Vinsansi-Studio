@@ -1,2 +1,2 @@
 export * from './reconciliation.repository';
-export * from './supabaseReconciliation.repository';
+export * from './canonicalReconciliation.repository';

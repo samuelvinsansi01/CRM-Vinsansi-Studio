@@ -1,26 +1,16 @@
 {
   "name": "gease-visual-shell",
-  "version": "3.62.0",
+  "version": "3.70.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:existing-schema-import": "node scripts/verify-existing-schema-import.mjs",
-    "verify:f04-routing": "node scripts/verify-f04-routing.mjs",
-    "verify:f05-validation": "node scripts/verify-f05-whatsapp-validation.mjs",
-    "verify:f05-provider": "node scripts/verify-f05-provider-contract.mjs",
-    "verify:f05": "npm run verify:f05-validation && npm run verify:f05-provider",
-    "verify:f06": "node scripts/verify-f06-queue-preparation.mjs",
-    "verify:f07": "node scripts/verify-f07-whatsapp-queue.mjs",
-    "verify:f08": "node scripts/verify-f08-instagram-queue.mjs",
-    "verify:f09": "node scripts/verify-f09-base-permanente.mjs",
-    "verify:f10": "node scripts/verify-f10-reconciliation.mjs",
-    "verify:f01": "node scripts/verify-f01-operational-config.mjs",
-    "verify:f02": "node scripts/verify-f02-apify-acquisition.mjs",
-    "verify:final": "node scripts/verify-final-consolidation.mjs",
-    "verify:all": "npm run verify:f01 && npm run verify:f02 && npm run verify:existing-schema-import && npm run verify:f04-routing && npm run verify:f05 && npm run verify:f06 && npm run verify:f07 && npm run verify:f08 && npm run verify:f09 && npm run verify:f10 && npm run verify:final"
+    "verify:schema-real": "node scripts/verify-real-schema.mjs",
+    "verify:syntax": "node scripts/verify-syntax.mjs",
+    "verify:contracts": "node scripts/verify-business-contracts.mjs",
+    "verify:all": "npm run verify:schema-real && npm run verify:syntax && npm run verify:contracts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
