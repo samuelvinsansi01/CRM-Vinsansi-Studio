@@ -1,0 +1,43 @@
+{
+  "channels": {
+    "1": "whatsapp",
+    "2": "instagram"
+  },
+  "contact_sources": {
+    "1": "sem_site",
+    "2": "dominio_proprio",
+    "3": "agregador",
+    "4": "instagram"
+  },
+  "lead_status": {
+    "1": "importado",
+    "2": "validado",
+    "3": "pre_envio",
+    "4": "na_fila",
+    "5": "enviado",
+    "6": "invalido",
+    "7": "duplicado",
+    "8": "arquivado"
+  },
+  "status": {
+    "1": "ativo",
+    "2": "inativo",
+    "3": "pendente",
+    "4": "processando",
+    "5": "concluido",
+    "6": "erro",
+    "7": "cancelado",
+    "8": "pausado"
+  },
+  "queue_mapping": {
+    "queued": 3,
+    "sending": 4,
+    "following": 4,
+    "dm_opened": 4,
+    "sent": 5,
+    "error": 6,
+    "invalid": 6,
+    "canceled": 7,
+    "paused": 8
+  }
+}

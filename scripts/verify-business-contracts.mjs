@@ -17,8 +17,8 @@ for (const file of [whatsapp, instagram]) {
   assert(file.includes('leads_id'), 'Fila nao referencia leads_id.');
 }
 const validation = read('api/whatsapp/validation.handler.ts');
-assert(validation.includes("from('channels')"), 'Validacao WhatsApp precisa resolver o canal pelo catalogo real.');
-assert(!validation.includes('Number(row.channels_id) !== 1'), 'Validacao WhatsApp ainda presume channels_id=1.');
+assert(validation.includes("from('channels')"), 'Validacao WhatsApp precisa conferir o canal no catalogo real.');
+assert(validation.includes('whatsappChannelId'), 'Validacao WhatsApp precisa usar o canal confirmado.');
 const routing = read('src/services/lead-cycle/leadRouting.rules.ts');
 assert(!/targetChannel:\s*[12]\b/.test(routing), 'Roteamento ainda usa IDs fixos de canal.');
 const settings = read('src/repositories/settings/localSettings.repository.ts');

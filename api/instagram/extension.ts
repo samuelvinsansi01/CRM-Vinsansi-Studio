@@ -8,6 +8,22 @@ type QueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'e
 type TokenScope = { userId: string; profile: string };
 declare const process: { env: Record<string, string | undefined> };
 
+const CATALOG = {
+  channels: { INSTAGRAM: 2 },
+  status: { PENDING: 3, PROCESSING: 4, COMPLETED: 5, ERROR: 6, PAUSED: 8 },
+  leadStatus: { QUEUED: 4, SENT: 5, INVALID: 6 },
+} as const;
+
+const QUEUE_STATUS_IDS: Record<QueueStatus, number> = {
+  queued: CATALOG.status.PENDING,
+  following: CATALOG.status.PROCESSING,
+  dm_opened: CATALOG.status.PROCESSING,
+  sent: CATALOG.status.COMPLETED,
+  paused: CATALOG.status.PAUSED,
+  error: CATALOG.status.ERROR,
+  invalid: CATALOG.status.ERROR,
+};
+
 function envAny(...names: string[]) { for (const name of names) { const value = process.env[name]; if (String(value ?? '').trim()) return String(value).trim(); } return ''; }
 function bodyRecord(body: unknown): RecordValue { if (typeof body === 'string') { try { return JSON.parse(body) as RecordValue; } catch { return {}; } } return body && typeof body === 'object' && !Array.isArray(body) ? body as RecordValue : {}; }
 function header(req: ApiRequest, name: string) { const key = Object.keys(req.headers ?? {}).find((item) => item.toLowerCase() === name.toLowerCase()); const value = key ? req.headers?.[key] : undefined; return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? ''); }
@@ -18,7 +34,7 @@ function setCors(req: ApiRequest, res: ApiResponse) { const origin = requestOrig
 function send(req: ApiRequest, res: ApiResponse, status: number, payload: unknown) { setCors(req, res); return res.status(status).json(payload); }
 function serviceClient() { const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL'); const key = envAny('SUPABASE_SERVICE_ROLE_KEY'); if (!url || !key) throw new Error('instagram_extension_backend_not_configured'); return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }); }
 function normalize(value: unknown) { return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' '); }
-function semanticStatus(name: unknown): QueueStatus { const value = normalize(name); if (value.includes('enviad') || value.includes('sent') || value.includes('conclu')) return 'sent'; if (value.includes('erro') || value.includes('error') || value.includes('falh')) return 'error'; if (value.includes('invalid') || value.includes('inval')) return 'invalid'; if (value.includes('paus')) return 'paused'; if (value.includes('dm')) return 'dm_opened'; if (value.includes('segu')) return 'following'; return 'queued'; }
+function semanticStatus(name: unknown): QueueStatus { const value = normalize(name); if (value === 'concluido' || value === 'sent' || value === 'completed') return 'sent'; if (value === 'erro' || value === 'error' || value === 'failed' || value === 'cancelado') return 'error'; if (value === 'pausado' || value === 'paused') return 'paused'; if (value === 'processando' || value === 'processing') return 'following'; return 'queued'; }
 
 async function tokenScope(req: ApiRequest): Promise<TokenScope> {
   const token = bearer(req);
@@ -32,29 +48,22 @@ async function catalog(client: SupabaseClient) {
   if (response.error) throw new Error(`status_catalog_failed:${response.error.message}`);
   const rows = (response.data ?? []) as RecordValue[];
   const nameById = new Map(rows.map((row) => [String(row.status_id), String(row.status_name)]));
-  const idFor = (status: QueueStatus) => {
-    const candidates: Record<QueueStatus, string[]> = {
-      queued: ['na fila','fila','queued','pendente','ativo'],
-      following: ['seguindo','following','processando'],
-      dm_opened: ['dm aberta','dm aberto','dm_opened','processando'],
-      sent: ['enviado','sent','concluido','finalizado'],
-      paused: ['pausado','paused'],
-      error: ['erro','error','falhou'],
-      invalid: ['invalido','invalid'],
-    };
-    const found = rows.find((row) => candidates[status].some((candidate) => normalize(row.status_name).includes(normalize(candidate))));
-    if (!found) throw new Error(`status_not_found:${status}`);
-    return Number(found.status_id);
-  };
-  return { nameById, idFor };
+  const expected = new Map<number, string>([
+    [1, 'ativo'], [2, 'inativo'], [3, 'pendente'], [4, 'processando'],
+    [5, 'concluido'], [6, 'erro'], [7, 'cancelado'], [8, 'pausado'],
+  ]);
+  for (const [id, name] of expected) {
+    const found = rows.find((row) => Number(row.status_id) === id);
+    if (!found || normalize(found.status_name) !== name) throw new Error(`status_catalog_contract_invalid:${id}:${name}`);
+  }
+  return { nameById, idFor: (status: QueueStatus) => QUEUE_STATUS_IDS[status] };
 }
 
 async function instagramChannelId(client: SupabaseClient) {
-  const response = await client.from('channels').select('channels_id,channels_name');
+  const response = await client.from('channels').select('channels_id,channels_name').eq('channels_id', CATALOG.channels.INSTAGRAM).maybeSingle();
   if (response.error) throw new Error(response.error.message);
-  const row = ((response.data ?? []) as RecordValue[]).find((item) => normalize(item.channels_name).includes('instagram'));
-  if (!row) throw new Error('instagram_channel_not_found');
-  return Number(row.channels_id);
+  if (!response.data || normalize((response.data as RecordValue).channels_name) !== 'instagram') throw new Error('instagram_channel_contract_invalid');
+  return CATALOG.channels.INSTAGRAM;
 }
 
 async function socialForScope(client: SupabaseClient, scope: TokenScope) {
@@ -156,8 +165,8 @@ async function transition(client: SupabaseClient, scope: TokenScope, body: Recor
   if (response.error) throw new Error(response.error.message);
   if (!response.data) throw new Error('queue_transition_conflict');
   if (target === 'sent' || target === 'invalid') {
-    const leadTarget = target === 'sent' ? 5 : 6;
-    await client.from('leads').update({ lead_status_id: leadTarget, leads_updated_at: new Date().toISOString() }).eq('leads_id', Number((response.data as RecordValue).leads_id)).eq('users_id', Number(scope.userId)).eq('lead_status_id', 4);
+    const leadTarget = target === 'sent' ? CATALOG.leadStatus.SENT : CATALOG.leadStatus.INVALID;
+    await client.from('leads').update({ lead_status_id: leadTarget, leads_updated_at: new Date().toISOString() }).eq('leads_id', Number((response.data as RecordValue).leads_id)).eq('users_id', Number(scope.userId)).eq('lead_status_id', CATALOG.leadStatus.QUEUED);
   }
   return (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
 }

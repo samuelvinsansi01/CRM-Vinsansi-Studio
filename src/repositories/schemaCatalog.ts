@@ -3,6 +3,55 @@ import { getCurrentUserId } from './supabase.helpers';
 
 export type CatalogRow = { id: string; name: string };
 
+export const CANONICAL_CATALOG = {
+  channels: {
+    WHATSAPP: 1,
+    INSTAGRAM: 2,
+  },
+  status: {
+    ACTIVE: 1,
+    INACTIVE: 2,
+    PENDING: 3,
+    PROCESSING: 4,
+    COMPLETED: 5,
+    ERROR: 6,
+    CANCELED: 7,
+    PAUSED: 8,
+  },
+  leadStatus: {
+    IMPORTED: 1,
+    VALIDATED: 2,
+    PRE_SEND: 3,
+    QUEUED: 4,
+    SENT: 5,
+    INVALID: 6,
+    DUPLICATE: 7,
+    ARCHIVED: 8,
+  },
+  contactSources: {
+    NO_SITE: 1,
+    OWN_DOMAIN: 2,
+    AGGREGATOR: 3,
+    INSTAGRAM: 4,
+  },
+} as const;
+
+const EXPECTED_STATUS_NAMES = new Map<number, string>([
+  [CANONICAL_CATALOG.status.ACTIVE, 'ativo'],
+  [CANONICAL_CATALOG.status.INACTIVE, 'inativo'],
+  [CANONICAL_CATALOG.status.PENDING, 'pendente'],
+  [CANONICAL_CATALOG.status.PROCESSING, 'processando'],
+  [CANONICAL_CATALOG.status.COMPLETED, 'concluido'],
+  [CANONICAL_CATALOG.status.ERROR, 'erro'],
+  [CANONICAL_CATALOG.status.CANCELED, 'cancelado'],
+  [CANONICAL_CATALOG.status.PAUSED, 'pausado'],
+]);
+
+const EXPECTED_CHANNEL_NAMES = new Map<number, string>([
+  [CANONICAL_CATALOG.channels.WHATSAPP, 'whatsapp'],
+  [CANONICAL_CATALOG.channels.INSTAGRAM, 'instagram'],
+]);
+
 export function normalizeCatalogName(value: unknown) {
   return String(value ?? '')
     .normalize('NFD')
@@ -31,30 +80,33 @@ export async function listChannels(): Promise<CatalogRow[]> {
   }));
 }
 
-export function findCatalogId(rows: CatalogRow[], candidates: string[], fallback?: string) {
-  const candidateSet = candidates.map(normalizeCatalogName);
-  const match = rows.find((row) => candidateSet.some((candidate) => {
-    const value = normalizeCatalogName(row.name);
-    return value === candidate || value.includes(candidate) || candidate.includes(value);
-  }));
-  return match?.id ?? fallback;
+function assertCatalogRow(rows: CatalogRow[], id: number, expectedName: string, catalog: string) {
+  const row = rows.find((item) => Number(item.id) === id);
+  if (!row) throw new Error(`${catalog} ${id} (${expectedName}) nao encontrado no banco.`);
+  if (normalizeCatalogName(row.name) !== normalizeCatalogName(expectedName)) {
+    throw new Error(`${catalog} ${id} deveria ser "${expectedName}", mas o banco retornou "${row.name}".`);
+  }
+}
+
+export async function validateCanonicalCatalogs() {
+  const [statuses, channels] = await Promise.all([listStatuses(), listChannels()]);
+  for (const [id, name] of EXPECTED_STATUS_NAMES) assertCatalogRow(statuses, id, name, 'status');
+  for (const [id, name] of EXPECTED_CHANNEL_NAMES) assertCatalogRow(channels, id, name, 'channels');
+  return true;
 }
 
 export async function activeStatusId() {
-  const rows = await listStatuses();
-  return findCatalogId(rows, ['ativo', 'active', 'enabled', 'conectado', 'connected'], '1')!;
+  return String(CANONICAL_CATALOG.status.ACTIVE);
 }
 
 export async function inactiveStatusId() {
-  const rows = await listStatuses();
-  return findCatalogId(rows, ['inativo', 'inactive', 'disabled', 'desativado', 'arquivado', 'archived'], rows.find((row) => row.id !== '1')?.id ?? '1')!;
+  return String(CANONICAL_CATALOG.status.INACTIVE);
 }
 
 export async function channelId(channel: 'WhatsApp' | 'Instagram') {
-  const rows = await listChannels();
-  const id = findCatalogId(rows, [channel]);
-  if (!id) throw new Error(`Canal ${channel} nao encontrado na tabela channels.`);
-  return id;
+  return String(channel === 'WhatsApp'
+    ? CANONICAL_CATALOG.channels.WHATSAPP
+    : CANONICAL_CATALOG.channels.INSTAGRAM);
 }
 
 export async function currentUserIdNumber() {
@@ -65,35 +117,58 @@ export async function currentUserIdNumber() {
 }
 
 export async function queueStatusId(status: string) {
-  const rows = await listStatuses();
-  const candidates: Record<string, string[]> = {
-    queued: ['na fila', 'fila', 'queued', 'pendente', 'pending', 'ativo'],
-    sending: ['enviando', 'sending', 'processando', 'processing'],
-    following: ['seguindo', 'following', 'processando', 'processing'],
-    dm_opened: ['dm aberta', 'dm aberto', 'dm_opened', 'processando', 'processing'],
-    sent: ['enviado', 'sent', 'concluido', 'completed', 'finalizado'],
-    paused: ['pausado', 'paused'],
-    error: ['erro', 'error', 'falhou', 'failed'],
-    invalid: ['invalido', 'invalid'],
+  const normalized = normalizeCatalogName(status);
+  const mapping: Record<string, number> = {
+    queued: CANONICAL_CATALOG.status.PENDING,
+    pending: CANONICAL_CATALOG.status.PENDING,
+    pendente: CANONICAL_CATALOG.status.PENDING,
+    sending: CANONICAL_CATALOG.status.PROCESSING,
+    processing: CANONICAL_CATALOG.status.PROCESSING,
+    processando: CANONICAL_CATALOG.status.PROCESSING,
+    following: CANONICAL_CATALOG.status.PROCESSING,
+    'dm opened': CANONICAL_CATALOG.status.PROCESSING,
+    dm_opened: CANONICAL_CATALOG.status.PROCESSING,
+    sent: CANONICAL_CATALOG.status.COMPLETED,
+    completed: CANONICAL_CATALOG.status.COMPLETED,
+    concluido: CANONICAL_CATALOG.status.COMPLETED,
+    paused: CANONICAL_CATALOG.status.PAUSED,
+    pausado: CANONICAL_CATALOG.status.PAUSED,
+    error: CANONICAL_CATALOG.status.ERROR,
+    erro: CANONICAL_CATALOG.status.ERROR,
+    invalid: CANONICAL_CATALOG.status.ERROR,
+    invalido: CANONICAL_CATALOG.status.ERROR,
+    canceled: CANONICAL_CATALOG.status.CANCELED,
+    cancelled: CANONICAL_CATALOG.status.CANCELED,
+    cancelado: CANONICAL_CATALOG.status.CANCELED,
+    active: CANONICAL_CATALOG.status.ACTIVE,
+    ativo: CANONICAL_CATALOG.status.ACTIVE,
+    inactive: CANONICAL_CATALOG.status.INACTIVE,
+    inativo: CANONICAL_CATALOG.status.INACTIVE,
   };
-  const id = findCatalogId(rows, candidates[status] ?? [status]);
-  if (!id) throw new Error(`Status operacional "${status}" nao encontrado na tabela status.`);
-  return Number(id);
+  const id = mapping[normalized] ?? mapping[normalized.replace(/ /g, '_')];
+  if (!id) throw new Error(`Status operacional "${status}" nao possui mapeamento canonico.`);
+  return id;
 }
 
 export async function queueStatusNameMap() {
-  const rows = await listStatuses();
-  return new Map(rows.map((row) => [String(row.id), normalizeCatalogName(row.name)]));
+  return new Map<string, string>([
+    [String(CANONICAL_CATALOG.status.ACTIVE), 'ativo'],
+    [String(CANONICAL_CATALOG.status.INACTIVE), 'inativo'],
+    [String(CANONICAL_CATALOG.status.PENDING), 'pendente'],
+    [String(CANONICAL_CATALOG.status.PROCESSING), 'processando'],
+    [String(CANONICAL_CATALOG.status.COMPLETED), 'concluido'],
+    [String(CANONICAL_CATALOG.status.ERROR), 'erro'],
+    [String(CANONICAL_CATALOG.status.CANCELED), 'cancelado'],
+    [String(CANONICAL_CATALOG.status.PAUSED), 'pausado'],
+  ]);
 }
 
 export function operationalStatusFromName(name: unknown) {
   const normalized = normalizeCatalogName(name);
-  if (normalized.includes('enviad') || normalized.includes('sent') || normalized.includes('conclu') || normalized.includes('finaliz')) return 'sent';
-  if (normalized.includes('erro') || normalized.includes('error') || normalized.includes('falh')) return 'error';
-  if (normalized.includes('invalid') || normalized.includes('inval')) return 'invalid';
-  if (normalized.includes('paus') || normalized.includes('paused')) return 'paused';
-  if (normalized.includes('segu') || normalized.includes('following')) return 'following';
-  if (normalized.includes('dm')) return 'dm_opened';
-  if (normalized.includes('enviando') || normalized.includes('sending') || normalized.includes('process')) return 'sending';
+  if (normalized === 'concluido' || normalized === 'completed' || normalized === 'sent') return 'sent';
+  if (normalized === 'erro' || normalized === 'error' || normalized === 'failed') return 'error';
+  if (normalized === 'pausado' || normalized === 'paused') return 'paused';
+  if (normalized === 'processando' || normalized === 'processing' || normalized === 'sending') return 'sending';
+  if (normalized === 'cancelado' || normalized === 'canceled' || normalized === 'cancelled') return 'error';
   return 'queued';
 }
