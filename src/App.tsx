@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DashboardLayout } from './design-system/layouts/DashboardLayout';
 import { AuditPage } from './pages/AuditPage';
 import { BasePage } from './pages/BasePage';
@@ -10,14 +10,29 @@ import { LoginPage } from './pages/LoginPage';
 import { PreSendPage } from './pages/PreSendPage';
 import { QueuePage } from './pages/QueuePage';
 import { SettingsPage } from './pages/SettingsPage';
-import type { PageId } from './pages/pageRegistry';
+import { pageTitles, type PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
+
+const ACTIVE_PAGE_STORAGE_KEY = 'painel:active-page';
+const validPageIds = new Set<PageId>(Object.keys(pageTitles) as PageId[]);
+
+function initialPage(): PageId {
+  if (typeof window === 'undefined') return 'home';
+  const storedPage = window.sessionStorage.getItem(ACTIVE_PAGE_STORAGE_KEY) as PageId | null;
+  return storedPage && validPageIds.has(storedPage) ? storedPage : 'home';
+}
 
 export function App() {
   const { isAuthenticated, loading } = useAuthContext();
-  const [activePage, setActivePage] = useState<PageId>('home');
+  const [activePage, setActivePage] = useState<PageId>(initialPage);
 
-  if (loading) {
+  useEffect(() => {
+    window.sessionStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, activePage);
+  }, [activePage]);
+
+  // Nunca desmontar o painel já autenticado durante renovação de token ou recuperação de foco.
+  // O carregamento bloqueante só é exibido antes de a primeira sessão ser resolvida.
+  if (loading && !isAuthenticated) {
     return (
       <div className="login-page">
         <div className="login-panel login-panel--loading">Carregando sessao...</div>

@@ -1,5 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { User } from '@supabase/supabase-js';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import { ensurePublicUser } from '../services/auth/publicUser.service';
 
@@ -17,6 +26,7 @@ type AuthUser = {
 type AuthContextValue = {
   user: AuthUser | null;
   isAuthenticated: boolean;
+  /** Carregamento bloqueante, usado somente antes da primeira sessão ser resolvida ou em login explícito. */
   loading: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
@@ -46,10 +56,24 @@ async function loadAuthUser(authUser: User | null): Promise<AuthUser | null> {
   };
 }
 
+type SyncOptions = {
+  /** Mantém a árvore autenticada montada durante renovações de token e recuperação de foco. */
+  background?: boolean;
+  /** Evita derrubar uma sessão válida por falha transitória de rede durante sincronização em segundo plano. */
+  preserveCurrentUserOnError?: boolean;
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUserState] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const userRef = useRef<AuthUser | null>(null);
+  const syncSequenceRef = useRef(0);
+
+  const setUser = useCallback((nextUser: AuthUser | null) => {
+    userRef.current = nextUser;
+    setUserState(nextUser);
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -61,23 +85,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = getSupabaseClient();
     let active = true;
 
-    const syncUser = async (authUser: User | null) => {
+    const syncUser = async (authUser: User | null, options: SyncOptions = {}) => {
+      const sequence = ++syncSequenceRef.current;
+      const background = options.background === true;
+      const currentUser = userRef.current;
+
+      if (!background) setLoading(true);
+
       try {
         const resolvedUser = await loadAuthUser(authUser);
-        if (!active) return;
+        if (!active || sequence !== syncSequenceRef.current) return;
         setUser(resolvedUser);
         setError(null);
       } catch (syncError) {
-        if (!active) return;
-        setUser(null);
-        setError(syncError instanceof Error ? syncError.message : 'Falha ao carregar usuário.');
+        if (!active || sequence !== syncSequenceRef.current) return;
+
+        const message = syncError instanceof Error
+          ? syncError.message
+          : 'Falha ao carregar usuário.';
+
+        if (!(options.preserveCurrentUserOnError && currentUser)) {
+          setUser(null);
+        }
+        setError(message);
       } finally {
-        if (active) setLoading(false);
+        if (active && sequence === syncSequenceRef.current && !background) {
+          setLoading(false);
+        }
       }
     };
 
-    client.auth.getSession().then((result: { data: { session: { user: User } | null }; error: { message: string } | null }) => {
-      const { data, error: sessionError } = result;
+    void client.auth.getSession().then(({ data, error: sessionError }) => {
       if (!active) return;
       if (sessionError) {
         setError(sessionError.message);
@@ -87,16 +125,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       void syncUser(data.session?.user ?? null);
     });
 
-    const { data } = client.auth.onAuthStateChange((_event: string, session: { user: User } | null) => {
-      setLoading(true);
-      void syncUser(session?.user ?? null);
+    const { data } = client.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      const authUser = session?.user ?? null;
+      const currentUser = userRef.current;
+
+      if (event === 'SIGNED_OUT' || !authUser) {
+        syncSequenceRef.current += 1;
+        setUser(null);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
+      // O Supabase pode emitir TOKEN_REFRESHED/SIGNED_IN quando a aba recupera foco.
+      // Se o usuário é o mesmo, a sessão continua válida e a árvore React não deve ser desmontada.
+      if (
+        currentUser?.id === authUser.id
+        && (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'INITIAL_SESSION')
+      ) {
+        return;
+      }
+
+      const background = Boolean(currentUser);
+      void syncUser(authUser, {
+        background,
+        preserveCurrentUserOnError: background,
+      });
     });
 
     return () => {
       active = false;
+      syncSequenceRef.current += 1;
       data.subscription.unsubscribe();
     };
-  }, []);
+  }, [setUser]);
 
   const value = useMemo<AuthContextValue>(() => ({
     user,
@@ -143,8 +205,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(signOutError.message);
       }
       setUser(null);
+      setLoading(false);
     },
-  }), [error, loading, user]);
+  }), [error, loading, setUser, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
