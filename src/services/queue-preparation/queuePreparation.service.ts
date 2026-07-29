@@ -195,6 +195,7 @@ function findBranch(row: LeadDatabaseRow, branches: BranchConfigRecord[]) {
 function preparationReason(
   row: LeadDatabaseRow,
   channel: QueuePreparationChannel,
+  expectedChannelId: number,
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
 ) {
@@ -220,10 +221,11 @@ function preparationReason(
 function mapPreparationLead(
   row: LeadDatabaseRow,
   channel: QueuePreparationChannel,
+  expectedChannelId: number,
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
 ): QueuePreparationLead {
-  const reason = preparationReason(row, channel, branches, templates);
+  const reason = preparationReason(row, channel, expectedChannelId, branches, templates);
   const context = leadContext(row, channel);
   return {
     id: String(row.leads_id),
@@ -244,11 +246,12 @@ function prepareWhatsAppInput(
   row: LeadDatabaseRow,
   resource: QueuePreparationResource,
   scheduledDate: string,
+  expectedChannelId: number,
   chips: ChipConfigRecord[],
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
 ): CreateWhatsAppQueueLeadInput {
-  const reason = preparationReason(row, 'WhatsApp', branches, templates);
+  const reason = preparationReason(row, 'WhatsApp', expectedChannelId, branches, templates);
   if (reason) throw new Error(reason);
   const context = leadContext(row, 'WhatsApp');
   const selection = selectTemplateForLead(context, templates)!;
@@ -294,11 +297,12 @@ function prepareInstagramInput(
   row: LeadDatabaseRow,
   resource: QueuePreparationResource,
   scheduledDate: string,
+  expectedChannelId: number,
   profiles: InstagramConfigRecord[],
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
 ): CreateInstagramQueueLeadInput {
-  const reason = preparationReason(row, 'Instagram', branches, templates);
+  const reason = preparationReason(row, 'Instagram', expectedChannelId, branches, templates);
   if (reason) throw new Error(reason);
   const context = leadContext(row, 'Instagram');
   const selection = selectTemplateForLead(context, templates)!;
@@ -399,7 +403,7 @@ async function snapshot(
   const resources = buildResources(channel, usage, config.chips, config.profiles, config.settings.instagram);
   const selectedResource = resources.find((resource) => resource.id === resourceId) ?? resources[0];
   const leads = rows
-    .map((row) => mapPreparationLead(row, channel, config.branches, config.templates))
+    .map((row) => mapPreparationLead(row, channel, resolvedChannelId, config.branches, config.templates))
     .sort((a, b) => Number(b.ready) - Number(a.ready) || b.score - a.score || a.company.localeCompare(b.company));
 
   return {
@@ -470,7 +474,7 @@ async function enqueueValidated(
         continue;
       }
 
-      const reason = preparationReason(row, channel, config.branches, config.templates);
+      const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates);
       if (reason) {
         addFailure(result, { id, company: row.leads_name, reason });
         continue;
@@ -493,10 +497,10 @@ async function enqueueValidated(
       try {
         const createdIds = channel === 'WhatsApp'
           ? await repositories.whatsappQueue.enqueue([
-              prepareWhatsAppInput(row, resource, date.effectiveDate, config.chips, config.branches, config.templates),
+              prepareWhatsAppInput(row, resource, date.effectiveDate, expectedChannelId, config.chips, config.branches, config.templates),
             ])
           : await repositories.instagramQueue.enqueue([
-              prepareInstagramInput(row, resource, date.effectiveDate, config.profiles, config.branches, config.templates),
+              prepareInstagramInput(row, resource, date.effectiveDate, expectedChannelId, config.profiles, config.branches, config.templates),
             ]);
 
         queueItemId = createdIds[0] ?? '';
