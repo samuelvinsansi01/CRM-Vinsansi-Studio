@@ -65,11 +65,14 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-18);
+  gap: var(--space-20);
 }
 
 .nav-item {
   position: relative;
+  display: flex;
+  min-height: var(--space-40);
+  align-items: center;
 }
 
 .nav-link,
@@ -87,18 +90,28 @@
   white-space: nowrap;
 }
 
-.nav-link--active {
-  color: var(--app-text);
+.nav-link {
+  min-height: var(--space-32);
+  padding: 0 var(--space-08);
+  border-radius: var(--radius-08);
+  transition: color 120ms ease, background 120ms ease;
 }
 
-.nav-item {
-  position: relative;
-  padding-bottom: var(--space-12);
+.nav-link:hover,
+.nav-link:focus-visible {
+  background: color-mix(in srgb, var(--color-pure-white) 6%, transparent);
+  color: var(--app-text);
+  outline: none;
+}
+
+.nav-link--active {
+  background: color-mix(in srgb, var(--action-active) 10%, transparent);
+  color: var(--app-text);
 }
 
 .nav-menu {
   position: absolute;
-  top: 100%;
+  top: calc(100% - var(--space-02));
   left: 50%;
   z-index: 50;
   display: none;
@@ -1468,15 +1481,45 @@ button.checkbox {
   }
 }
 
+@media (max-width: 1180px) {
+  .app-header__container {
+    gap: var(--space-16);
+  }
+
+  .app-header__brand {
+    width: 132px;
+    flex-basis: 132px;
+    font-size: 17px;
+  }
+
+  .app-header__actions {
+    width: 154px;
+    flex-basis: 154px;
+  }
+
+  .app-header__nav {
+    gap: var(--space-08);
+  }
+
+  .nav-link {
+    padding-right: var(--space-06);
+    padding-left: var(--space-06);
+  }
+}
+
 @media (max-width: 1080px) {
   .app-header__brand {
-    width: 150px;
-    flex-basis: 150px;
+    display: none;
+  }
+
+  .app-header__nav {
+    flex: 1 1 auto;
+    justify-content: flex-start;
   }
 
   .app-header__actions {
     width: auto;
-    flex-basis: auto;
+    flex: 0 0 auto;
   }
 
   .nav-link,
@@ -1485,6 +1528,187 @@ button.checkbox {
   }
 
   .settings-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Configurações funcionais v3.72 */
+.configuration-crud-page code,
+.channels-page code {
+  padding: var(--space-02) var(--space-06);
+  border-radius: var(--radius-04);
+  background: color-mix(in srgb, var(--color-pure-black) 20%, transparent);
+  color: var(--app-text);
+  font-size: 12px;
+}
+
+.configuration-state {
+  padding: var(--space-28) var(--space-20);
+  color: var(--app-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.configuration-state--error {
+  color: var(--action-danger);
+}
+
+.configuration-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-16);
+}
+
+.configuration-form-grid .field {
+  min-width: 0;
+}
+
+.configuration-form-grid .field__control,
+.configuration-form-grid .select-field {
+  min-height: var(--space-40);
+}
+
+.configuration-form-section--full,
+.configuration-form-note {
+  grid-column: 1 / -1;
+}
+
+.configuration-form-section {
+  display: grid;
+  gap: var(--space-12);
+}
+
+.configuration-form-section > strong {
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.configuration-form-note {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.configuration-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+}
+
+.configuration-check-card {
+  display: flex;
+  min-height: var(--space-48);
+  align-items: center;
+  gap: var(--space-10, 10px);
+  padding: 0 var(--space-12);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+  border-radius: var(--radius-08);
+  background: color-mix(in srgb, var(--color-pure-white) 2%, transparent);
+  color: var(--app-muted);
+  text-align: left;
+}
+
+.configuration-check-card--selected {
+  border-color: color-mix(in srgb, var(--action-active) 46%, transparent);
+  background: color-mix(in srgb, var(--action-active) 10%, transparent);
+  color: var(--app-text);
+}
+
+.configuration-info-callout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  margin-top: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--action-active) 24%, transparent);
+  border-radius: var(--radius-08);
+  background: color-mix(in srgb, var(--action-active) 7%, transparent);
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.configuration-info-callout svg {
+  flex: 0 0 auto;
+  color: var(--action-active);
+}
+
+.configuration-info-callout--stacked {
+  align-items: flex-start;
+}
+
+.settings-overview-card__intro {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-12);
+  margin-bottom: var(--space-16);
+}
+
+.settings-overview-card__intro svg {
+  flex: 0 0 auto;
+  color: var(--action-active);
+}
+
+.settings-overview-card__intro p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.settings-overview-card__links {
+  display: grid;
+  gap: var(--space-08);
+}
+
+.settings-overview-card__links > button {
+  display: flex;
+  min-height: var(--space-48);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding: 0 var(--space-12);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 7%, transparent);
+  border-radius: var(--radius-08);
+  background: color-mix(in srgb, var(--color-pure-white) 2%, transparent);
+  color: var(--app-text);
+  text-align: left;
+}
+
+.settings-overview-card__links > button:hover {
+  border-color: color-mix(in srgb, var(--action-active) 28%, transparent);
+  background: color-mix(in srgb, var(--action-active) 7%, transparent);
+}
+
+.settings-overview-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-08);
+}
+
+.settings-overview-page__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-16);
+}
+
+.import-rules-dedup-card {
+  min-height: 0 !important;
+}
+
+.import-rules-dedup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-24);
+}
+
+@media (max-width: 900px) {
+  .configuration-form-grid,
+  .configuration-checkbox-grid,
+  .import-rules-dedup-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -1,0 +1,476 @@
+import { getSupabaseClient } from '../../lib/supabase';
+import { getCurrentUserId, nowIso } from '../supabase.helpers';
+
+export type StatusOption = { id: string; name: string };
+export type ChannelOption = { id: string; name: string };
+
+export type ContactSourceRecord = {
+  id: string;
+  kind: 'contact_sources';
+  name: string;
+  key: string;
+  requiresReview: boolean;
+  defaultChannelId: string;
+  statusId: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LevelRecord = {
+  id: string;
+  kind: 'levels';
+  name: string;
+  channelId: string;
+  channelName: string;
+  dailyLimit: number;
+  queues: number | null;
+  statusId: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InstanceRecord = {
+  id: string;
+  kind: 'instances';
+  name: string;
+  url: string;
+  statusId: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TemplateChannelRecord = {
+  id: string;
+  kind: 'template_channels';
+  name: string;
+  blockedChannelIds: string[];
+  blockedChannelNames: string[];
+  statusId: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TemplateTypeRecord = {
+  id: string;
+  kind: 'template_types';
+  name: string;
+  statusId: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TemplateVariableRecord = {
+  id: string;
+  kind: 'template_variables';
+  name: string;
+  key: string;
+  source: string;
+  defaultValue: string;
+  statusId: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CatalogRecord =
+  | ContactSourceRecord
+  | LevelRecord
+  | InstanceRecord
+  | TemplateChannelRecord
+  | TemplateTypeRecord
+  | TemplateVariableRecord;
+
+export type CatalogKind = CatalogRecord['kind'];
+
+export type ImportRulesRecord = {
+  id: string;
+  statusId: string;
+  minRating: string;
+  minReviews: string;
+  requireName: boolean;
+  requirePhone: boolean;
+  requireInstagram: boolean;
+  requireWebsite: boolean;
+  requireAnyContact: boolean;
+  deduplicatePhone: boolean;
+  deduplicateInstagram: boolean;
+  deduplicateWebsite: boolean;
+  deduplicateMaps: boolean;
+};
+
+export type ValidationRulesRecord = {
+  id: string;
+  statusId: string;
+  sourceId: string;
+  channelId: string;
+  fallbackChannelId: string;
+  instagramRequiresApproval: boolean;
+  maxTechnicalAttempts: string;
+};
+
+type Row = Record<string, unknown>;
+
+const text = (value: unknown, fallback = '') => value == null ? fallback : String(value);
+const number = (value: unknown, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+const bool = (value: unknown, fallback = false) => typeof value === 'boolean' ? value : fallback;
+const stringArray = (value: unknown) => Array.isArray(value) ? value.map(String) : [];
+const statusIsActive = (statusId: unknown) => Number(statusId) === 1;
+
+async function userIdNumber() {
+  const id = Number(await getCurrentUserId());
+  if (!Number.isSafeInteger(id)) throw new Error('Usuário autenticado inválido.');
+  return id;
+}
+
+export async function listStatusOptions(): Promise<StatusOption[]> {
+  const { data, error } = await getSupabaseClient()
+    .from('status')
+    .select('status_id,status_name')
+    .in('status_id', [1, 2])
+    .order('status_id');
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Row[]).map((row) => ({ id: text(row.status_id), name: text(row.status_name) }));
+}
+
+export async function listChannelOptions(): Promise<ChannelOption[]> {
+  const { data, error } = await getSupabaseClient()
+    .from('channels')
+    .select('channels_id,channels_name')
+    .order('channels_id');
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Row[]).map((row) => ({ id: text(row.channels_id), name: text(row.channels_name) }));
+}
+
+export async function listContactSourceOptions(): Promise<Array<{ id: string; name: string; key: string }>> {
+  const userId = await userIdNumber();
+  const { data, error } = await getSupabaseClient()
+    .from('contact_sources')
+    .select('contact_sources_id,contact_sources_name,contact_sources_key')
+    .eq('users_id', userId)
+    .order('contact_sources_name');
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Row[]).map((row) => ({
+    id: text(row.contact_sources_id),
+    name: text(row.contact_sources_name),
+    key: text(row.contact_sources_key),
+  }));
+}
+
+export async function listCatalogRecords(kind: CatalogKind): Promise<CatalogRecord[]> {
+  const client = getSupabaseClient();
+  const userId = await userIdNumber();
+
+  if (kind === 'contact_sources') {
+    const { data, error } = await client.from('contact_sources')
+      .select('contact_sources_id,status_id,contact_sources_name,contact_sources_key,contact_sources_requires_review,contact_sources_default_channel_id,contact_sources_created_at,contact_sources_updated_at')
+      .eq('users_id', userId)
+      .order('contact_sources_name');
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as Row[]).map((row): ContactSourceRecord => ({
+      id: text(row.contact_sources_id), kind, name: text(row.contact_sources_name), key: text(row.contact_sources_key),
+      requiresReview: bool(row.contact_sources_requires_review, true), defaultChannelId: text(row.contact_sources_default_channel_id),
+      statusId: text(row.status_id), active: statusIsActive(row.status_id), createdAt: text(row.contact_sources_created_at), updatedAt: text(row.contact_sources_updated_at),
+    }));
+  }
+
+  if (kind === 'levels') {
+    const channels = new Map((await listChannelOptions()).map((item) => [item.id, item.name]));
+    const { data, error } = await client.from('levels')
+      .select('levels_id,channels_id,status_id,levels_name,levels_daily_limit,levels_queues,levels_created_at,levels_updated_at')
+      .eq('users_id', userId)
+      .order('levels_name');
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as Row[]).map((row): LevelRecord => ({
+      id: text(row.levels_id), kind, name: text(row.levels_name), channelId: text(row.channels_id),
+      channelName: channels.get(text(row.channels_id)) ?? '—', dailyLimit: number(row.levels_daily_limit, 1),
+      queues: row.levels_queues == null ? null : number(row.levels_queues), statusId: text(row.status_id),
+      active: statusIsActive(row.status_id), createdAt: text(row.levels_created_at), updatedAt: text(row.levels_updated_at),
+    }));
+  }
+
+  if (kind === 'instances') {
+    const { data, error } = await client.from('instances')
+      .select('instances_id,status_id,instances_name,instances_url,instances_created_at,instances_updated_at')
+      .eq('users_id', userId)
+      .order('instances_name');
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as Row[]).map((row): InstanceRecord => ({
+      id: text(row.instances_id), kind, name: text(row.instances_name), url: text(row.instances_url),
+      statusId: text(row.status_id), active: statusIsActive(row.status_id),
+      createdAt: text(row.instances_created_at), updatedAt: text(row.instances_updated_at),
+    }));
+  }
+
+  if (kind === 'template_channels') {
+    const channels = new Map((await listChannelOptions()).map((item) => [item.id, item.name]));
+    const { data, error } = await client.from('template_channels')
+      .select('template_channels_id,template_channels_name,template_channels_blocked_channels,status_id,template_channels_created_at,template_channels_updated_at')
+      .eq('users_id', userId)
+      .order('template_channels_name');
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as Row[]).map((row): TemplateChannelRecord => {
+      const blockedChannelIds = stringArray(row.template_channels_blocked_channels);
+      return {
+        id: text(row.template_channels_id), kind, name: text(row.template_channels_name), blockedChannelIds,
+        blockedChannelNames: blockedChannelIds.map((id) => channels.get(id) ?? id), statusId: text(row.status_id),
+        active: statusIsActive(row.status_id), createdAt: text(row.template_channels_created_at), updatedAt: text(row.template_channels_updated_at),
+      };
+    });
+  }
+
+  if (kind === 'template_types') {
+    const { data, error } = await client.from('template_types')
+      .select('template_types_id,template_types_name,status_id,template_types_created_at,template_types_updated_at')
+      .eq('users_id', userId)
+      .order('template_types_name');
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as Row[]).map((row): TemplateTypeRecord => ({
+      id: text(row.template_types_id), kind, name: text(row.template_types_name), statusId: text(row.status_id),
+      active: statusIsActive(row.status_id), createdAt: text(row.template_types_created_at), updatedAt: text(row.template_types_updated_at),
+    }));
+  }
+
+  const { data, error } = await client.from('template_variables')
+    .select('template_variables_id,template_variables_name,template_variables_key,template_variables_source,template_variables_default_value,status_id,template_variables_created_at,template_variables_updated_at')
+    .eq('users_id', userId)
+    .order('template_variables_name');
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Row[]).map((row): TemplateVariableRecord => ({
+    id: text(row.template_variables_id), kind: 'template_variables', name: text(row.template_variables_name),
+    key: text(row.template_variables_key), source: text(row.template_variables_source), defaultValue: text(row.template_variables_default_value),
+    statusId: text(row.status_id), active: statusIsActive(row.status_id), createdAt: text(row.template_variables_created_at), updatedAt: text(row.template_variables_updated_at),
+  }));
+}
+
+function normalizedKey(value: unknown) {
+  return text(value).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function activeStatusId(input: Record<string, unknown>) {
+  return text(input.statusId || (input.active === false ? '2' : '1'), '1') === '2' ? 2 : 1;
+}
+
+export async function createCatalogRecord(kind: CatalogKind, input: Record<string, unknown>) {
+  const client = getSupabaseClient();
+  const usersId = await userIdNumber();
+  const statusId = activeStatusId(input);
+
+  if (kind === 'contact_sources') {
+    const name = text(input.name).trim();
+    const key = normalizedKey(input.key || name);
+    if (!name || !key) throw new Error('Nome e chave da fonte são obrigatórios.');
+    const { error } = await client.from('contact_sources').insert({
+      users_id: usersId, status_id: statusId, contact_sources_name: name, contact_sources_key: key,
+      contact_sources_requires_review: bool(input.requiresReview, true),
+      contact_sources_default_channel_id: text(input.defaultChannelId) ? Number(input.defaultChannelId) : null,
+    });
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (kind === 'levels') {
+    const name = text(input.name).trim();
+    const channelId = Number(input.channelId);
+    const dailyLimit = Math.max(1, number(input.dailyLimit, 1));
+    if (!name || !Number.isSafeInteger(channelId)) throw new Error('Nome e canal do nível são obrigatórios.');
+    const { error } = await client.from('levels').insert({
+      users_id: usersId, channels_id: channelId, status_id: statusId, levels_name: name,
+      levels_daily_limit: dailyLimit, levels_queues: text(input.queues) ? Math.max(1, number(input.queues, 1)) : null,
+    });
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (kind === 'instances') {
+    const name = text(input.name).trim();
+    const apiKey = text(input.apiKey).trim();
+    if (!name) throw new Error('Nome da instância é obrigatório.');
+    const { error } = await client.from('instances').insert({
+      users_id: usersId, status_id: statusId, instances_name: name,
+      instances_url: text(input.url).trim() || null, instances_apikey: apiKey || null,
+    });
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (kind === 'template_channels') {
+    const name = text(input.name).trim();
+    if (!name) throw new Error('Nome do canal de template é obrigatório.');
+    const { error } = await client.from('template_channels').insert({
+      users_id: usersId, status_id: statusId, template_channels_name: name,
+      template_channels_blocked_channels: stringArray(input.blockedChannelIds).map(Number),
+    });
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (kind === 'template_types') {
+    const name = text(input.name).trim();
+    if (!name) throw new Error('Nome do tipo de template é obrigatório.');
+    const { error } = await client.from('template_types').insert({ users_id: usersId, status_id: statusId, template_types_name: name });
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const name = text(input.name).trim();
+  const key = normalizedKey(input.key || name);
+  const source = text(input.source).trim();
+  if (!name || !key || !source) throw new Error('Nome, chave e origem da variável são obrigatórios.');
+  const { error } = await client.from('template_variables').insert({
+    users_id: usersId, status_id: statusId, template_variables_name: name, template_variables_key: key,
+    template_variables_source: source, template_variables_default_value: text(input.defaultValue),
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function updateCatalogRecord(kind: CatalogKind, id: string, input: Record<string, unknown>) {
+  const client = getSupabaseClient();
+  const usersId = await userIdNumber();
+  const numericId = Number(id);
+  const statusId = activeStatusId(input);
+  if (!Number.isSafeInteger(numericId)) throw new Error('Identificador inválido.');
+
+  if (kind === 'contact_sources') {
+    const name = text(input.name).trim();
+    const key = normalizedKey(input.key || name);
+    const { error } = await client.from('contact_sources').update({
+      status_id: statusId, contact_sources_name: name, contact_sources_key: key,
+      contact_sources_requires_review: bool(input.requiresReview, true),
+      contact_sources_default_channel_id: text(input.defaultChannelId) ? Number(input.defaultChannelId) : null,
+      contact_sources_updated_at: nowIso(),
+    }).eq('contact_sources_id', numericId).eq('users_id', usersId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (kind === 'levels') {
+    const { error } = await client.from('levels').update({
+      status_id: statusId, levels_name: text(input.name).trim(), channels_id: Number(input.channelId),
+      levels_daily_limit: Math.max(1, number(input.dailyLimit, 1)),
+      levels_queues: text(input.queues) ? Math.max(1, number(input.queues, 1)) : null,
+      levels_updated_at: nowIso(),
+    }).eq('levels_id', numericId).eq('users_id', usersId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (kind === 'instances') {
+    const payload: Row = {
+      status_id: statusId, instances_name: text(input.name).trim(), instances_url: text(input.url).trim() || null,
+      instances_updated_at: nowIso(),
+    };
+    const apiKey = text(input.apiKey).trim();
+    if (apiKey) payload.instances_apikey = apiKey;
+    const { error } = await client.from('instances').update(payload).eq('instances_id', numericId).eq('users_id', usersId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (kind === 'template_channels') {
+    const { error } = await client.from('template_channels').update({
+      status_id: statusId, template_channels_name: text(input.name).trim(),
+      template_channels_blocked_channels: stringArray(input.blockedChannelIds).map(Number),
+      template_channels_updated_at: nowIso(),
+    }).eq('template_channels_id', numericId).eq('users_id', usersId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  if (kind === 'template_types') {
+    const { error } = await client.from('template_types').update({
+      status_id: statusId, template_types_name: text(input.name).trim(), template_types_updated_at: nowIso(),
+    }).eq('template_types_id', numericId).eq('users_id', usersId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  const { error } = await client.from('template_variables').update({
+    status_id: statusId, template_variables_name: text(input.name).trim(),
+    template_variables_key: normalizedKey(input.key || input.name), template_variables_source: text(input.source).trim(),
+    template_variables_default_value: text(input.defaultValue), template_variables_updated_at: nowIso(),
+  }).eq('template_variables_id', numericId).eq('users_id', usersId);
+  if (error) throw new Error(error.message);
+}
+
+const idColumn: Record<CatalogKind, string> = {
+  contact_sources: 'contact_sources_id', levels: 'levels_id', instances: 'instances_id',
+  template_channels: 'template_channels_id', template_types: 'template_types_id', template_variables: 'template_variables_id',
+};
+
+export async function deleteCatalogRecord(kind: CatalogKind, id: string) {
+  const usersId = await userIdNumber();
+  const numericId = Number(id);
+  if (!Number.isSafeInteger(numericId)) throw new Error('Identificador inválido.');
+  const { error } = await getSupabaseClient().from(kind).delete().eq(idColumn[kind], numericId).eq('users_id', usersId);
+  if (error) throw new Error(error.message);
+}
+
+export async function loadImportRules(): Promise<ImportRulesRecord> {
+  const usersId = await userIdNumber();
+  const { data, error } = await getSupabaseClient().from('import_rules')
+    .select('*').eq('users_id', usersId).maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = (data ?? {}) as Row;
+  return {
+    id: text(row.import_rules_id), statusId: text(row.status_id, '1'),
+    minRating: row.import_rules_min_rating == null ? '' : text(row.import_rules_min_rating),
+    minReviews: row.import_rules_min_reviews == null ? '' : text(row.import_rules_min_reviews),
+    requireName: bool(row.import_rules_require_name, true), requirePhone: bool(row.import_rules_require_phone),
+    requireInstagram: bool(row.import_rules_require_instagram), requireWebsite: bool(row.import_rules_require_website),
+    requireAnyContact: bool(row.import_rules_require_any_contact, true), deduplicatePhone: bool(row.import_rules_deduplicate_phone, true),
+    deduplicateInstagram: bool(row.import_rules_deduplicate_instagram, true), deduplicateWebsite: bool(row.import_rules_deduplicate_website, true),
+    deduplicateMaps: bool(row.import_rules_deduplicate_maps, true),
+  };
+}
+
+export async function saveImportRules(input: ImportRulesRecord) {
+  const usersId = await userIdNumber();
+  const payload = {
+    users_id: usersId, status_id: Number(input.statusId || 1),
+    import_rules_min_rating: input.minRating === '' ? null : Number(input.minRating),
+    import_rules_min_reviews: input.minReviews === '' ? null : Math.max(0, Number(input.minReviews)),
+    import_rules_require_name: input.requireName, import_rules_require_phone: input.requirePhone,
+    import_rules_require_instagram: input.requireInstagram, import_rules_require_website: input.requireWebsite,
+    import_rules_require_any_contact: input.requireAnyContact, import_rules_deduplicate_phone: input.deduplicatePhone,
+    import_rules_deduplicate_instagram: input.deduplicateInstagram, import_rules_deduplicate_website: input.deduplicateWebsite,
+    import_rules_deduplicate_maps: input.deduplicateMaps, import_rules_updated_at: nowIso(),
+  };
+  const { error } = await getSupabaseClient().from('import_rules').upsert(payload, { onConflict: 'users_id' });
+  if (error) throw new Error(error.message);
+}
+
+export async function loadValidationRules(): Promise<ValidationRulesRecord> {
+  const usersId = await userIdNumber();
+  const { data, error } = await getSupabaseClient().from('validation_rules').select('*').eq('users_id', usersId).maybeSingle();
+  if (error) throw new Error(error.message);
+  const row = (data ?? {}) as Row;
+  return {
+    id: text(row.validation_rules_id), statusId: text(row.status_id, '1'), sourceId: text(row.validation_rules_source_id),
+    channelId: text(row.validation_rules_channel_id), fallbackChannelId: text(row.validation_rules_fallback_channel_id),
+    instagramRequiresApproval: bool(row.validation_rules_instagram_requires_approval, true),
+    maxTechnicalAttempts: text(row.validation_rules_max_technical_attempts, '3'),
+  };
+}
+
+export async function saveValidationRules(input: ValidationRulesRecord) {
+  const usersId = await userIdNumber();
+  if (!input.sourceId || !input.channelId || !input.fallbackChannelId) throw new Error('Origem e canais são obrigatórios.');
+  if (input.channelId === input.fallbackChannelId) throw new Error('O canal validado e o canal de fallback devem ser diferentes.');
+  const payload = {
+    users_id: usersId, status_id: Number(input.statusId || 1), validation_rules_source_id: Number(input.sourceId),
+    validation_rules_channel_id: Number(input.channelId), validation_rules_fallback_channel_id: Number(input.fallbackChannelId),
+    validation_rules_instagram_requires_approval: input.instagramRequiresApproval,
+    validation_rules_max_technical_attempts: Math.min(10, Math.max(1, Number(input.maxTechnicalAttempts) || 3)),
+    validation_rules_updated_at: nowIso(),
+  };
+  const { error } = await getSupabaseClient().from('validation_rules').upsert(payload, { onConflict: 'users_id' });
+  if (error) throw new Error(error.message);
+}

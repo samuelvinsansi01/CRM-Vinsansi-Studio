@@ -539,6 +539,109 @@
         "users can select own profile",
         "users_select_own"
       ]
+    },
+    "import_rules": {
+      "primary_key": [
+        "import_rules_id"
+      ],
+      "columns": [
+        "import_rules_id",
+        "users_id",
+        "status_id",
+        "import_rules_min_rating",
+        "import_rules_min_reviews",
+        "import_rules_require_name",
+        "import_rules_require_phone",
+        "import_rules_require_instagram",
+        "import_rules_require_website",
+        "import_rules_require_any_contact",
+        "import_rules_deduplicate_phone",
+        "import_rules_deduplicate_instagram",
+        "import_rules_deduplicate_website",
+        "import_rules_deduplicate_maps",
+        "import_rules_created_at",
+        "import_rules_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "import_rules_select_own",
+        "import_rules_insert_own",
+        "import_rules_update_own",
+        "import_rules_delete_own"
+      ]
+    },
+    "validation_rules": {
+      "primary_key": [
+        "validation_rules_id"
+      ],
+      "columns": [
+        "validation_rules_id",
+        "users_id",
+        "status_id",
+        "validation_rules_source_id",
+        "validation_rules_channel_id",
+        "validation_rules_fallback_channel_id",
+        "validation_rules_instagram_requires_approval",
+        "validation_rules_max_technical_attempts",
+        "validation_rules_created_at",
+        "validation_rules_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "validation_rules_select_own",
+        "validation_rules_insert_own",
+        "validation_rules_update_own",
+        "validation_rules_delete_own"
+      ]
+    },
+    "lead_validation_results": {
+      "primary_key": [
+        "lead_validation_results_id"
+      ],
+      "columns": [
+        "lead_validation_results_id",
+        "lead_validation_results_key",
+        "lead_validation_results_name",
+        "status_id",
+        "lead_validation_results_created_at",
+        "lead_validation_results_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "lead_validation_results_authenticated_read"
+      ]
+    },
+    "lead_validation_attempts": {
+      "primary_key": [
+        "lead_validation_attempts_id"
+      ],
+      "columns": [
+        "lead_validation_attempts_id",
+        "users_id",
+        "leads_id",
+        "channels_id",
+        "chips_id",
+        "queue_items_id",
+        "validation_rules_id",
+        "lead_validation_results_id",
+        "status_id",
+        "lead_validation_attempts_input_value",
+        "lead_validation_attempts_provider",
+        "lead_validation_attempts_provider_reference",
+        "lead_validation_attempts_http_status",
+        "lead_validation_attempts_error_code",
+        "lead_validation_attempts_error_message",
+        "lead_validation_attempts_response_metadata",
+        "lead_validation_attempts_rules_snapshot",
+        "lead_validation_attempts_started_at",
+        "lead_validation_attempts_finished_at",
+        "lead_validation_attempts_created_at",
+        "lead_validation_attempts_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "lead_validation_attempts_select_own"
+      ]
     }
   }
 }

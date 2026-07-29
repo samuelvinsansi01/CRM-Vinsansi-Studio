@@ -22,6 +22,7 @@ const requiredTables = [
   'users','status','channels','branches','templates','template_channels','template_types',
   'chips','instances','levels','socials','leads','queues','queue_items','sents',
   'apify_accounts','apify_import_jobs','countries','states','cities','contact_sources','lead_status',
+  'import_rules','validation_rules','lead_validation_results','lead_validation_attempts',
 ];
 for (const table of requiredTables) assert(tables.has(table), `Tabela obrigatoria ausente no contrato: ${table}`);
 
@@ -35,6 +36,10 @@ const requiredColumns = {
   queue_items: ['queue_items_id','users_id','queues_id','leads_id','chips_id','socials_id','templates_id','status_id'],
   leads: ['leads_id','users_id','branches_id','channels_id','lead_status_id','contact_sources_id'],
   sents: ['sents_id','users_id','queue_items_id','leads_id','channels_id','sents_body'],
+  import_rules: ['import_rules_id','users_id','status_id'],
+  validation_rules: ['validation_rules_id','users_id','validation_rules_source_id','validation_rules_channel_id','validation_rules_fallback_channel_id'],
+  lead_validation_results: ['lead_validation_results_id','lead_validation_results_key','lead_validation_results_name'],
+  lead_validation_attempts: ['lead_validation_attempts_id','users_id','leads_id','channels_id','status_id','lead_validation_results_id'],
 };
 for (const [table, columns] of Object.entries(requiredColumns)) {
   const actual = new Set(contract.tables[table]?.columns ?? []);

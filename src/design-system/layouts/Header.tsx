@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Bell, ChevronDown, ClipboardList, LogOut } from 'lucide-react';
 import { IconButton } from '../components';
 import { navGroups, type NavGroup, type PageId } from '../../pages/pageRegistry';
@@ -20,23 +20,13 @@ const groupIsActive = (group: NavGroup, page: PageId) => {
   return groupItems(group).some((item) => item.id === page);
 };
 
-const activeGroupId = (page: PageId) => {
-  const group = navGroups.find((item) => groupIsActive(item, page));
-  return group && groupItems(group).length ? group.id : '';
-};
-
 export function Header({ activePage, onNavigate }: HeaderProps) {
   const [openGroup, setOpenGroup] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
   const navRef = useRef<HTMLElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
-  const currentGroupId = useMemo(() => activeGroupId(activePage), [activePage]);
   const { user, signOut } = useAuthContext();
   const firstName = user?.name?.split(' ')[0] || 'Usuário';
-
-  useEffect(() => {
-    setOpenGroup(currentGroupId);
-  }, [currentGroupId]);
 
   useEffect(() => {
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -60,6 +50,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
 
   const navigate = (page: PageId) => {
     onNavigate(page);
+    setOpenGroup('');
     setProfileOpen(false);
   };
 
@@ -89,7 +80,11 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                   aria-expanded={hasItems ? isOpen : undefined}
                   type="button"
                   onClick={() => {
-                    if (hasItems) setOpenGroup(group.id);
+                    if (hasItems) {
+                      setOpenGroup((current) => current === group.id ? '' : group.id);
+                      setProfileOpen(false);
+                      return;
+                    }
                     navigate(group.id);
                   }}
                 >
@@ -108,7 +103,6 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                             key={item.id}
                             type="button"
                             onClick={() => {
-                              setOpenGroup(group.id);
                               navigate(item.id);
                             }}
                           >
@@ -122,7 +116,6 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                         key={item.id}
                         type="button"
                         onClick={() => {
-                          setOpenGroup(group.id);
                           navigate(item.id);
                         }}
                       >
