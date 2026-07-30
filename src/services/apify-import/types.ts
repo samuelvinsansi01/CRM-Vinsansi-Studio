@@ -9,12 +9,9 @@ export type ApifyJobStatus =
 
 export type StartGoogleMapsImportInput = {
   apifyAccountId: number;
-  searchTerms: string[];
-  location: string;
   locationCityId: number;
   limit: number;
   branchId: number;
-  branchName: string;
 };
 
 export type StartGoogleMapsImportResult = {
@@ -78,7 +75,6 @@ export type ApifyImportJob = {
   branchId: number | null;
   branchName: string;
   location: string;
-  searchTerms: string[];
   requestedLimit: number;
   status: ApifyJobStatus;
   runId: string | null;

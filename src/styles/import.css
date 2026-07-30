@@ -486,86 +486,16 @@
   line-height: 22px;
 }
 
-.import-search-terms {
-  display: grid;
-  gap: var(--space-16);
-  margin-top: var(--space-20);
-  padding: var(--space-16);
-  border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
-  border-radius: var(--radius-12);
-  background: color-mix(in srgb, var(--surface-card) 86%, transparent);
-}
-
-.import-search-terms__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-16);
-}
-
-.import-search-terms__header > div {
-  display: grid;
-  gap: var(--space-04);
-}
-
-.import-search-terms__header strong {
-  color: var(--app-text);
-  font-size: 14px;
-  line-height: 22px;
-}
-
-.import-search-terms__header span {
-  color: var(--app-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.import-search-terms__list {
-  display: grid;
-  gap: var(--space-12);
-}
-
-.import-search-term {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-12);
-  align-items: end;
-}
-
-.import-search-term .field__control {
-  min-height: var(--space-48);
-  border-radius: var(--radius-12);
-}
-
-.import-search-term > .button {
-  width: var(--space-48);
-  height: var(--space-48);
-  padding: 0;
-}
-
-@media (max-width: 640px) {
-  .import-search-terms__header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-}
-
-/* Runs reais da Apify */
+/* Execuções Apify */
 .import-extractor-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
 .apify-runs-section { margin-top: var(--space-20); }
-.apify-runs-table-wrap { overflow-x: auto; }
-.apify-runs-table { width: 100%; border-collapse: collapse; min-width: 980px; }
-.apify-runs-table th, .apify-runs-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent); white-space: nowrap; }
-.apify-runs-table tbody tr { cursor: pointer; }
-.apify-runs-table tbody tr:hover { background: color-mix(in srgb, var(--color-pure-white) 4%, transparent); }
 .apify-run-details { display: grid; gap: 16px; }
 .apify-run-summary { display: grid; gap: 6px; }
 .apify-json-viewer { max-height: 62vh; overflow: auto; padding: 16px; border-radius: 12px; background: color-mix(in srgb, var(--surface-card) 78%, black); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 960px) { .import-extractor-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .import-extractor-fields { grid-template-columns: 1fr; } }
 
-/* F02 — aquisição Apify */
-.import-extractor-fields textarea.field__control { min-height: 112px; resize: vertical; }
-.apify-run-actions { display: flex; gap: 8px; align-items: center; }
-.apify-runs-table { min-width: 1320px; }
 .apify-run-summary .table-message { margin-top: 8px; white-space: normal; }
+
+.apify-runs-section .data-table { padding: 0 var(--space-20); overflow-x: auto; }
+.apify-runs-section .data-table table { min-width: 1120px; }

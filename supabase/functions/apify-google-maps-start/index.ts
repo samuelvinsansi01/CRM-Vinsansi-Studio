@@ -36,16 +36,6 @@ function numericStatus(status: JobStatus) {
   if (status === "starting" || status === "ready") return JOB_STATUS.PENDING;
   return JOB_STATUS.PROCESSING;
 }
-function normalizeTerms(raw: unknown) {
-  const values = Array.isArray(raw) ? raw : [raw];
-  const seen = new Set<string>();
-  return values.flatMap((value) => String(value ?? "").split(/[\n,;|]/)).map((value) => value.trim()).filter((value) => {
-    const key = value.toLocaleLowerCase("pt-BR");
-    if (value.length < 2 || value.length > 100 || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 20);
-}
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 30000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -86,12 +76,10 @@ Deno.serve(async (request: Request) => {
     const cityId = Number(body.locationCityId ?? body.cities_id);
     const requestedLimit = Number(body.maxCrawledPlacesPerSearch ?? body.limit ?? 50);
     const limit = Math.min(500, Math.max(1, Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : 50));
-    const searchTerms = normalizeTerms(body.searchTerms ?? body.search_terms ?? body.search);
 
     if (!Number.isInteger(accountId) || accountId <= 0) return jsonResponse({ error: "Selecione uma conta Apify válida." }, 400);
     if (!Number.isInteger(branchId) || branchId <= 0) return jsonResponse({ error: "Selecione um ramo cadastrado." }, 400);
     if (!Number.isInteger(cityId) || cityId <= 0) return jsonResponse({ error: "Selecione uma localidade cadastrada." }, 400);
-    if (!searchTerms.length) return jsonResponse({ error: "Informe ao menos um termo de busca válido." }, 400);
 
     const { data: internalUser, error: userError } = await admin.from("users").select("users_id").eq("auth_user_id", authData.user.id).maybeSingle();
     if (userError) throw new Error(userError.message);
@@ -100,7 +88,7 @@ Deno.serve(async (request: Request) => {
 
     const [{ data: account, error: accountError }, { data: branch, error: branchError }, { data: city, error: cityError }] = await Promise.all([
       admin.from("apify_accounts").select("apify_accounts_id, account_name, token_secret, is_active").eq("apify_accounts_id", accountId).eq("users_id", usersId).maybeSingle(),
-      admin.from("branches").select("branches_id, branches_name, status_id").eq("branches_id", branchId).maybeSingle(),
+      admin.from("branches").select("branches_id, branches_name, status_id").eq("branches_id", branchId).eq("users_id", usersId).maybeSingle(),
       admin.from("cities").select("cities_id, cities_name, states_id, states:states_id(states_id, states_name, states_code)").eq("cities_id", cityId).maybeSingle(),
     ]);
     if (accountError) throw new Error(accountError.message);
@@ -119,7 +107,9 @@ Deno.serve(async (request: Request) => {
     const stateCode = String(state?.states_code ?? state?.states_name ?? "").trim();
     if (!cityName || !stateCode) return jsonResponse({ error: "A localidade selecionada está incompleta no banco." }, 409);
     const locationQuery = `${cityName}, ${stateCode}`;
-    const branchName = String(branch.branches_name ?? body.branchName ?? "").trim();
+    const branchName = String(branch.branches_name ?? "").trim();
+    if (branchName.length < 2 || branchName.length > 100) return jsonResponse({ error: "O ramo selecionado possui um nome inválido para a busca." }, 409);
+    const searchStrings = [branchName];
 
     const { data: existing, error: existingError } = await admin.from("apify_import_jobs")
       .select("apify_import_jobs_id, external_run_id, external_dataset_id, status")
@@ -151,8 +141,8 @@ Deno.serve(async (request: Request) => {
       apify_accounts_id: accountId,
       apify_job_status_id: JOB_STATUS.PENDING,
       actor_id: ACTOR_DATABASE_NAME,
-      search_query: searchTerms.join(" | "),
-      search_terms: searchTerms,
+      search_query: searchStrings.join(" | "),
+      search_terms: searchStrings,
       location_query: locationQuery,
       branches_id: branchId,
       branch_name: branchName,
@@ -179,7 +169,7 @@ Deno.serve(async (request: Request) => {
       scrapeReviewsPersonalData: true,
       scrapeSocialMediaProfiles: { facebooks: false, instagrams: false, tiktoks: false, twitters: false, youtubes: false },
       scrapeTableReservationProvider: false,
-      searchStringsArray: searchTerms,
+      searchStringsArray: searchStrings,
       skipClosedPlaces: false,
       verifyLeadsEnrichmentEmails: false,
     };

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Database, Globe2, Plus, RefreshCw, StopCircle, Users, X } from 'lucide-react';
+import { Database, Globe2, Plus, Users, X } from 'lucide-react';
 import {
   Button,
   ConfirmDialog,
@@ -146,6 +146,37 @@ function DestinationTextBadge({ value }: { value?: string | null }) {
   return <Tag tone={destinationTone(value)}>{label}</Tag>;
 }
 
+function apifyStatusLabel(job: ApifyImportJob) {
+  if (job.importedAt) return 'Importado';
+  if (job.status === 'starting') return 'Iniciando';
+  if (job.status === 'ready') return 'Pronto';
+  if (job.status === 'running') return 'Executando';
+  if (job.status === 'succeeded') return 'Concluído';
+  if (job.status === 'failed') return 'Falhou';
+  if (job.status === 'aborted') return 'Cancelado';
+  return 'Tempo excedido';
+}
+
+function apifyStatusTone(job: ApifyImportJob): 'neutral' | 'success' | 'warning' | 'danger' {
+  if (job.importedAt || job.status === 'succeeded') return 'success';
+  if (job.status === 'failed' || job.status === 'timed_out') return 'danger';
+  if (job.status === 'aborted') return 'neutral';
+  return 'warning';
+}
+
+type ApifyRunRow = {
+  jobId: number;
+  status: string;
+  account: string;
+  branch: string;
+  location: string;
+  results: number;
+  created: number;
+  duplicates: number;
+  rejected: number;
+  date: string;
+};
+
 function SubcategoryTooltip({ value }: { value?: string | null }) {
   const items = splitSubcategories(value);
   if (!items.length) return <span className="import-subcategory import-subcategory--empty">—</span>;
@@ -248,7 +279,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   );
 
   const [mapsLocation, setMapsLocation] = useState('');
-  const [mapsSearchTerms, setMapsSearchTerms] = useState('');
   const [mapsLimit, setMapsLimit] = useState('100');
   const [locationOptions, setLocationOptions] = useState<ApifyLocationOption[]>([]);
   const [searchedLocations, setSearchedLocations] = useState<string[]>([]);
@@ -258,19 +288,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     [locationOptions, mapsLocation],
   );
 
-  const normalizedSearchTerms = useMemo(() => {
-    const seen = new Set<string>();
-    return mapsSearchTerms
-      .split(/[\n,;|]/)
-      .map((term) => term.trim())
-      .filter((term) => {
-        const key = term.toLocaleLowerCase('pt-BR');
-        if (term.length < 2 || term.length > 100 || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 20);
-  }, [mapsSearchTerms]);
 
   const searchedLocationKeys = useMemo(
     () => new Set(searchedLocations.map(normalizeLocationKey)),
@@ -307,6 +324,33 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     totalPages: jobsTotalPages,
     pageItems: pagedApifyJobs,
   } = useClientPagination(apifyJobs, 10);
+  const apifyJobById = useMemo(() => new Map(apifyJobs.map((job) => [job.jobId, job])), [apifyJobs]);
+  const apifyRunRows = useMemo<ApifyRunRow[]>(() => pagedApifyJobs.map((job) => ({
+    jobId: job.jobId,
+    status: apifyStatusLabel(job),
+    account: job.accountName,
+    branch: job.branchName,
+    location: job.location,
+    results: job.totalReceived,
+    created: job.totalImported,
+    duplicates: job.totalDuplicates,
+    rejected: job.totalRejected,
+    date: job.createdAt ? new Date(job.createdAt).toLocaleString('pt-BR') : '—',
+  })), [pagedApifyJobs]);
+  const apifyRunColumns: TableColumn<ApifyRunRow>[] = useMemo(() => [
+    { key: 'status', label: 'Status', width: '11%', render: (row) => {
+      const job = apifyJobById.get(row.jobId);
+      return job ? <Tag tone={apifyStatusTone(job)}>{row.status}</Tag> : row.status;
+    } },
+    { key: 'account', label: 'Conta', width: '18%' },
+    { key: 'branch', label: 'Ramo', width: '16%' },
+    { key: 'location', label: 'Localização', width: '14%' },
+    { key: 'results', label: 'Resultados', width: '8%' },
+    { key: 'created', label: 'Criados', width: '7%' },
+    { key: 'duplicates', label: 'Duplicados', width: '8%' },
+    { key: 'rejected', label: 'Recusados', width: '8%' },
+    { key: 'date', label: 'Data', width: '14%' },
+  ], [apifyJobById]);
   const previewToken = useRef(0);
   const recoveredApifyJob = useRef(false);
 
@@ -339,11 +383,10 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     setMapsLocation('');
     setSearchedLocations([]);
     const branch = uniqueBranches.find((item) => item.id === selectedBranchId);
-    setMapsSearchTerms(branch ? [branch.name, ...branch.subcategories].filter(Boolean).join('\n') : '');
     if (!selectedBranchId) return;
 
     setLocationsLoading(true);
-    void apifyImportService.listSuccessfullySearchedLocations(Number(selectedBranchId))
+    void apifyImportService.listSuccessfullySearchedLocations(Number(selectedBranchId), branch?.name ?? '')
       .then(setSearchedLocations)
       .catch((err) => {
         pushToast({ title: 'Não foi possível verificar as localidades já pesquisadas', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
@@ -579,12 +622,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const startApifyImport = async () => {
     const limit = Number(mapsLimit);
     const selectedBranch = branches.find((branch) => branch.id === selectedBranchId);
-    const searchTerms = normalizedSearchTerms;
     if (!selectedApifyAccountId || !selectedBranch || !selectedLocation || !mapsLocation.trim()) return;
-    if (!searchTerms.length) {
-      pushToast({ title: 'Termos inválidos', description: 'Informe ao menos um termo de busca com 2 a 100 caracteres.', tone: 'danger' });
-      return;
-    }
     if (!Number.isFinite(limit) || limit < 1 || limit > 500) {
       pushToast({ title: 'Quantidade inválida', description: 'Informe uma quantidade entre 1 e 500.', tone: 'danger' });
       return;
@@ -594,12 +632,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     try {
       const result = await apifyImportService.startGoogleMapsExtractor({
         apifyAccountId: Number(selectedApifyAccountId),
-        searchTerms,
-        location: selectedLocation.label,
         locationCityId: selectedLocation.cityId,
         limit,
         branchId: Number(selectedBranch.id),
-        branchName: selectedBranch.name,
       });
       pushToast({
         title: 'Coleta iniciada',
@@ -822,13 +857,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                 onChange={setSelectedBranchId}
               />
             </label>
-            <Field
-              as="textarea"
-              label="Termos de busca"
-              placeholder="Um termo por linha"
-              value={mapsSearchTerms}
-              onChange={setMapsSearchTerms}
-            />
             <label className="field import-select-field">
               <span className="field__label">Localização</span>
               <SelectField
@@ -888,7 +916,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             </label>
             <Field label="Quantidade" type="number" min="1" max="500" value={mapsLimit} onChange={setMapsLimit} />
           </div>
-          <p className="settings-note">{normalizedSearchTerms.length} termo(s) válido(s). Limite de 20 termos; a quantidade é aplicada por termo.</p>
+          <p className="settings-note">{selectedBranch ? <>A busca usará somente o ramo <strong>{selectedBranch.name}</strong>. A localização é enviada separadamente e a quantidade é aplicada a esse ramo.</> : 'Selecione um ramo cadastrado para iniciar a busca.'}</p>
           {mapsLocation && !selectedLocation ? <div className="table-message">Selecione uma localidade do cadastro oficial.</div> : null}
           {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
           {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
@@ -896,7 +924,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             <Button
               iconLeft={Database}
               loading={startingApify}
-              disabled={!selectedApifyAccountId || !selectedBranchId || !selectedLocation || !normalizedSearchTerms.length}
+              disabled={!selectedApifyAccountId || !selectedBranchId || !selectedLocation}
               onClick={startApifyImport}
             >
               Iniciar coleta
@@ -905,7 +933,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         </Panel>
         <section className="apify-runs-section">
           <TableCard
-            title="Runs reais"
+            title="Execuções Apify"
             footerText={`Mostrando ${pagedApifyJobs.length} de ${apifyJobs.length} execução(ões)`}
             footerLeft={<RowsPerPageControl value={jobsPerPage} onChange={setJobsPerPage} />}
             page={jobsPage}
@@ -915,23 +943,27 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             {jobsLoading ? <div className="table-message">Carregando runs...</div> : null}
             {!jobsLoading && !apifyJobs.length ? <div className="table-message">Nenhuma execução encontrada.</div> : null}
             {!jobsLoading && apifyJobs.length ? (
-              <div className="apify-runs-table-wrap">
-                <table className="apify-runs-table">
-                  <thead><tr><th>Status</th><th>Conta</th><th>Localização</th><th>Ramo</th><th>Termos</th><th>Resultados</th><th>Criados</th><th>Duplicados</th><th>Recusados</th><th>Data</th><th>Ações</th></tr></thead>
-                  <tbody>{pagedApifyJobs.map((job) => (
-                    <tr key={job.jobId} onClick={() => void openJobDetails(job)} tabIndex={0}>
-                      <td><Tag tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' || job.status === 'timed_out' ? 'danger' : job.status === 'aborted' ? 'neutral' : 'warning'}>{job.importedAt ? 'importado' : job.status}</Tag></td>
-                      <td>{job.accountName}</td><td>{job.location}</td><td>{job.branchName}</td><td title={job.searchTerms.join(' · ')}>{job.searchTerms.length}</td><td>{job.totalReceived}</td><td>{job.totalImported}</td><td>{job.totalDuplicates}</td><td>{job.totalRejected}</td><td>{job.createdAt ? new Date(job.createdAt).toLocaleString('pt-BR') : '—'}</td>
-                      <td>
-                        <div className="apify-run-actions" onClick={(event: import('react').MouseEvent<HTMLDivElement>) => event.stopPropagation()}>
-                          {!job.importedAt && job.status !== 'failed' && job.status !== 'aborted' && job.status !== 'timed_out' ? <Button size="sm" variant="secondary" iconLeft={RefreshCw} onClick={() => void syncJob(job)}>Sincronizar</Button> : null}
-                          {job.status === 'starting' || job.status === 'ready' || job.status === 'running' ? <Button size="sm" variant="danger" iconLeft={StopCircle} onClick={() => void abortJob(job)}>Cancelar</Button> : null}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
+              <DataTable
+                selectable={false}
+                columns={apifyRunColumns}
+                rows={apifyRunRows}
+                actions={['view', 'refresh', 'cancel']}
+                getRowActions={(row) => {
+                  const job = apifyJobById.get(row.jobId);
+                  if (!job) return [];
+                  const actions: TableAction[] = ['view'];
+                  if (!job.importedAt && !['failed', 'aborted', 'timed_out'].includes(job.status)) actions.push('refresh');
+                  if (['starting', 'ready', 'running'].includes(job.status)) actions.push('cancel');
+                  return actions;
+                }}
+                onAction={(action, row) => {
+                  const job = apifyJobById.get(row.jobId);
+                  if (!job) return;
+                  if (action === 'view') void openJobDetails(job);
+                  if (action === 'refresh') void syncJob(job);
+                  if (action === 'cancel') void abortJob(job);
+                }}
+              />
             ) : null}
           </TableCard>
         </section>
@@ -1027,7 +1059,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               <strong>{selectedJob.branchName}</strong>
               <span>{selectedJob.location} · {selectedJob.status}</span>
               <span>Run ID: {selectedJob.runId ?? '—'} · Dataset ID: {selectedJob.datasetId ?? '—'}</span>
-              <span>Termos: {selectedJob.searchTerms.join(' · ') || '—'} · Limite por termo: {selectedJob.requestedLimit || '—'}</span>
+              <span>Ramo pesquisado: {selectedJob.branchName} · Limite: {selectedJob.requestedLimit || '—'}</span>
               {selectedJob.errorMessage ? <span className="table-message">{selectedJob.errorMessage}</span> : null}
             </div>
             {jobDetailsLoading ? <div className="table-message">Carregando JSON e resultados...</div> : null}

@@ -19,16 +19,6 @@ function normalizeStatus(value: unknown): ApifyJobStatus {
   return 'running';
 }
 
-function normalizeTerms(values: string[]) {
-  const seen = new Set<string>();
-  return values.flatMap((value) => String(value ?? '').split(/[\n,;|]/)).map((value) => value.trim()).filter((value) => {
-    const key = value.toLocaleLowerCase('pt-BR');
-    if (value.length < 2 || value.length > 100 || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 20);
-}
-
 async function invokeSync(body: Record<string, unknown>): Promise<SyncGoogleMapsImportResult> {
   const { data, error } = await getSupabaseClient().functions.invoke('apify-google-maps-sync', { body });
   if (error) throw new Error(error.message);
@@ -73,32 +63,43 @@ export const apifyImportService = {
     });
   },
 
-  async listSuccessfullySearchedLocations(branchId: number): Promise<string[]> {
+  async listSuccessfullySearchedLocations(branchId: number, branchName: string): Promise<string[]> {
     const { data, error } = await getSupabaseClient()
       .from('apify_import_jobs')
-      .select('location_query')
-      .eq('branches_id', branchId)
+      .select('branches_id, branch_name, search_query, search_terms, location_query')
       .eq('status', 'succeeded')
       .not('location_query', 'is', null);
     if (error) throw new Error(error.message);
-    return Array.from(new Set((data ?? []).map((row: any) => String(row.location_query ?? '').trim()).filter(Boolean)));
+
+    const normalize = (value: unknown) => String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .trim()
+      .replace(/\s+/g, ' ');
+    const expectedBranch = normalize(branchName);
+
+    return Array.from(new Set((data ?? []).flatMap((row: any) => {
+      const terms = Array.isArray(row.search_terms) ? row.search_terms.map(String) : [];
+      const legacySearchQuery = String(row.search_query ?? '').split('|')[0]?.trim() ?? '';
+      const storedNames = [row.branch_name, legacySearchQuery, terms[0]].map(normalize).filter(Boolean);
+      const belongsToBranch = Number(row.branches_id) === branchId
+        || (expectedBranch && storedNames.includes(expectedBranch));
+      const location = String(row.location_query ?? '').trim();
+      return belongsToBranch && location ? [location] : [];
+    })));
   },
 
   async startGoogleMapsExtractor(input: StartGoogleMapsImportInput): Promise<StartGoogleMapsImportResult> {
-    const searchTerms = normalizeTerms(input.searchTerms);
-    if (!searchTerms.length) throw new Error('Informe ao menos um termo de busca válido.');
     if (!Number.isInteger(input.locationCityId) || input.locationCityId <= 0) throw new Error('Selecione uma localidade cadastrada.');
     if (!Number.isInteger(input.branchId) || input.branchId <= 0) throw new Error('Selecione um ramo cadastrado.');
 
     const { data, error } = await getSupabaseClient().functions.invoke('apify-google-maps-start', {
       body: {
         apifyAccountId: input.apifyAccountId,
-        searchTerms,
-        locationQuery: input.location.trim(),
         locationCityId: input.locationCityId,
         maxCrawledPlacesPerSearch: input.limit,
         branchId: input.branchId,
-        branchName: input.branchName,
       },
     });
     if (error) throw new Error(error.message);
@@ -125,33 +126,42 @@ export const apifyImportService = {
   async listGoogleMapsJobs(): Promise<ApifyImportJob[]> {
     const { data, error } = await getSupabaseClient()
       .from('apify_import_jobs')
-      .select('apify_import_jobs_id, apify_accounts_id, branches_id, branch_name, location_query, search_terms, requested_limit, status, external_run_id, external_dataset_id, total_received, total_imported, total_duplicates, total_rejected, error_message, imported_at, started_at, created_at, updated_at, finished_at, apify_accounts:apify_accounts_id(account_name)')
+      .select('apify_import_jobs_id, apify_accounts_id, branches_id, branch_name, search_query, location_query, search_terms, requested_limit, status, external_run_id, external_dataset_id, total_received, total_imported, total_duplicates, total_rejected, error_message, imported_at, started_at, created_at, updated_at, finished_at, apify_accounts:apify_accounts_id(account_name), branches:branches_id(branches_name)')
       .order('created_at', { ascending: false })
       .limit(100);
     if (error) throw new Error(error.message);
-    return (data ?? []).map((row: any) => ({
-      jobId: Number(row.apify_import_jobs_id),
-      accountId: row.apify_accounts_id == null ? null : Number(row.apify_accounts_id),
-      accountName: String((Array.isArray(row.apify_accounts) ? row.apify_accounts[0]?.account_name : row.apify_accounts?.account_name) ?? '—'),
-      branchId: row.branches_id == null ? null : Number(row.branches_id),
-      branchName: String(row.branch_name ?? '—'),
-      location: String(row.location_query ?? '—'),
-      searchTerms: Array.isArray(row.search_terms) ? row.search_terms.map(String) : [],
-      requestedLimit: Number(row.requested_limit ?? 0),
-      status: normalizeStatus(row.status),
-      runId: row.external_run_id ? String(row.external_run_id) : null,
-      datasetId: row.external_dataset_id ? String(row.external_dataset_id) : null,
-      totalReceived: Number(row.total_received ?? 0),
-      totalImported: Number(row.total_imported ?? 0),
-      totalDuplicates: Number(row.total_duplicates ?? 0),
-      totalRejected: Number(row.total_rejected ?? 0),
-      errorMessage: String(row.error_message ?? ''),
-      importedAt: row.imported_at ? String(row.imported_at) : null,
-      startedAt: row.started_at ? String(row.started_at) : null,
-      createdAt: String(row.created_at ?? ''),
-      updatedAt: String(row.updated_at ?? ''),
-      finishedAt: row.finished_at ? String(row.finished_at) : null,
-    }));
+    return (data ?? []).map((row: any) => {
+      const account = Array.isArray(row.apify_accounts) ? row.apify_accounts[0] : row.apify_accounts;
+      const branch = Array.isArray(row.branches) ? row.branches[0] : row.branches;
+      const legacyTerms = Array.isArray(row.search_terms) ? row.search_terms.map(String).filter(Boolean) : [];
+      const legacySearchQuery = String(row.search_query ?? '').split('|')[0]?.trim() ?? '';
+      const branchName = [branch?.branches_name, row.branch_name, legacyTerms[0], legacySearchQuery]
+        .map((value) => String(value ?? '').trim())
+        .find(Boolean) ?? '—';
+
+      return {
+        jobId: Number(row.apify_import_jobs_id),
+        accountId: row.apify_accounts_id == null ? null : Number(row.apify_accounts_id),
+        accountName: String(account?.account_name ?? '—'),
+        branchId: row.branches_id == null ? null : Number(row.branches_id),
+        branchName,
+        location: String(row.location_query ?? '—'),
+        requestedLimit: Number(row.requested_limit ?? 0),
+        status: normalizeStatus(row.status),
+        runId: row.external_run_id ? String(row.external_run_id) : null,
+        datasetId: row.external_dataset_id ? String(row.external_dataset_id) : null,
+        totalReceived: Number(row.total_received ?? 0),
+        totalImported: Number(row.total_imported ?? 0),
+        totalDuplicates: Number(row.total_duplicates ?? 0),
+        totalRejected: Number(row.total_rejected ?? 0),
+        errorMessage: String(row.error_message ?? ''),
+        importedAt: row.imported_at ? String(row.imported_at) : null,
+        startedAt: row.started_at ? String(row.started_at) : null,
+        createdAt: String(row.created_at ?? ''),
+        updatedAt: String(row.updated_at ?? ''),
+        finishedAt: row.finished_at ? String(row.finished_at) : null,
+      };
+    });
   },
 
   async getGoogleMapsJobDetails(jobId: number): Promise<SyncGoogleMapsImportResult> {
