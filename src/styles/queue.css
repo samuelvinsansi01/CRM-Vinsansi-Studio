@@ -493,6 +493,31 @@ button.batch__header {
   margin: 0;
 }
 
+.queue-approved-drawer__metrics {
+  gap: var(--space-08);
+}
+
+.queue-approved-drawer__metrics .metric-card {
+  min-width: 0;
+  min-height: var(--space-56);
+  padding: var(--space-08) var(--space-12);
+}
+
+.queue-approved-drawer__metrics .metric-card__text {
+  min-width: 0;
+}
+
+.queue-approved-drawer__metrics .metric-card__text strong {
+  font-size: 18px;
+  line-height: 22px;
+}
+
+.queue-approved-drawer__metrics .metric-card__text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 900px) {
   .queue-list-card__footer {
     align-items: flex-start;

@@ -10,10 +10,11 @@ export type DrawerProps = {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
+  size?: 'default' | 'wide';
   onClose: () => void;
 };
 
-export function Drawer({ open, title, description, children, footer, onClose }: DrawerProps) {
+export function Drawer({ open, title, description, children, footer, size = 'default', onClose }: DrawerProps) {
   useEffect(() => {
     if (!open) return;
 
@@ -37,7 +38,7 @@ export function Drawer({ open, title, description, children, footer, onClose }: 
   return createPortal(
     <div className="drawer-layer" role="presentation">
       <button className="drawer-backdrop" type="button" aria-label="Fechar drawer" onClick={onClose} />
-      <aside className="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+      <aside className={`drawer-panel drawer-panel--${size}`} role="dialog" aria-modal="true" aria-labelledby="drawer-title">
         <header className="drawer-header">
           <div>
             <h2 id="drawer-title">{title}</h2>

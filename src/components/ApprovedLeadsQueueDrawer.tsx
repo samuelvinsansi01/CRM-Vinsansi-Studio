@@ -1,4 +1,4 @@
-import { CheckCircle2, ListChecks, Send, ShieldAlert } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -137,6 +137,7 @@ export function ApprovedLeadsQueueDrawer({
   return (
     <Drawer
       open={open}
+      size="wide"
       title={`Puxar aprovados para a fila ${channel}`}
       description={`Apenas leads com status Validado e destino ${channel} aparecem aqui. A data operacional será ${snapshot?.effectiveDate ?? scheduledDate}.`}
       onClose={onClose}
@@ -163,11 +164,11 @@ export function ApprovedLeadsQueueDrawer({
           />
         </div>
 
-        <div className="metric-grid metric-grid--4">
-          <MetricCard icon={ListChecks} value={String(rows.length)} label="Aprovados disponíveis" />
-          <MetricCard icon={CheckCircle2} value={String(snapshot?.ready ?? 0)} label="Prontos" tone="success" />
-          <MetricCard icon={ShieldAlert} value={String(snapshot?.blocked ?? 0)} label="Bloqueados" tone="warning" />
-          <MetricCard icon={Send} value={String(capacity)} label="Vagas" tone="primary" />
+        <div className="metric-grid metric-grid--4 queue-approved-drawer__metrics">
+          <MetricCard value={String(rows.length)} label="Aprovados" />
+          <MetricCard value={String(snapshot?.ready ?? 0)} label="Prontos" tone="success" />
+          <MetricCard value={String(snapshot?.blocked ?? 0)} label="Bloqueados" tone="warning" />
+          <MetricCard value={String(capacity)} label="Vagas" tone="primary" />
         </div>
 
         <TableCard

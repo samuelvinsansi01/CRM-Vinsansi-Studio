@@ -1137,6 +1137,10 @@ button.checkbox {
   box-shadow: -24px 0 60px color-mix(in srgb, var(--color-pure-black) 58%, transparent);
 }
 
+.drawer-panel--wide {
+  width: min(640px, calc(100vw - var(--space-32)));
+}
+
 .drawer-header {
   display: flex;
   align-items: flex-start;
