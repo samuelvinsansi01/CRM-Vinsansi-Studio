@@ -457,3 +457,50 @@ button.batch__header {
 }
 
 
+
+.queue-list-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-16);
+  margin-top: var(--space-20);
+  padding-top: var(--space-16);
+  border-top: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+}
+
+.queue-list-card__footer-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  color: var(--app-muted);
+}
+
+.queue-approved-drawer {
+  display: grid;
+  gap: var(--space-20);
+}
+
+.queue-approved-drawer__resource {
+  display: grid;
+  gap: var(--space-08);
+}
+
+.queue-approved-drawer .table-card {
+  min-width: 0;
+}
+
+.queue-approved-drawer .metric-grid {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .queue-list-card__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .queue-page .queue-controls {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+}

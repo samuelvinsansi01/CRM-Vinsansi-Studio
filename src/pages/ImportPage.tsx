@@ -20,6 +20,7 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { useImportLeads } from '../hooks/useImportLeads';
 import { useApifyAccounts } from '../hooks/useApifyAccounts';
 import { apifyImportService } from '../services/apify-import';
@@ -298,6 +299,14 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const { activeAccounts: apifyAccounts, loading: loadingApifyAccounts, error: apifyAccountsError } = useApifyAccounts();
   const simulateImport = importSettings?.safeMode.simulationMode ?? true;
   const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToInicio } = useImportLeads(activeStatus, search);
+  const {
+    page: jobsPage,
+    setPage: setJobsPage,
+    rowsPerPage: jobsPerPage,
+    setRowsPerPage: setJobsPerPage,
+    totalPages: jobsTotalPages,
+    pageItems: pagedApifyJobs,
+  } = useClientPagination(apifyJobs, 10);
   const previewToken = useRef(0);
   const recoveredApifyJob = useRef(false);
 
@@ -895,14 +904,21 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           </div>
         </Panel>
         <section className="apify-runs-section">
-          <TableCard title="Runs reais" footerText={`${apifyJobs.length} execução(ões) encontrada(s)`}>
+          <TableCard
+            title="Runs reais"
+            footerText={`Mostrando ${pagedApifyJobs.length} de ${apifyJobs.length} execução(ões)`}
+            footerLeft={<RowsPerPageControl value={jobsPerPage} onChange={setJobsPerPage} />}
+            page={jobsPage}
+            totalPages={jobsTotalPages}
+            onPageChange={setJobsPage}
+          >
             {jobsLoading ? <div className="table-message">Carregando runs...</div> : null}
             {!jobsLoading && !apifyJobs.length ? <div className="table-message">Nenhuma execução encontrada.</div> : null}
             {!jobsLoading && apifyJobs.length ? (
               <div className="apify-runs-table-wrap">
                 <table className="apify-runs-table">
                   <thead><tr><th>Status</th><th>Conta</th><th>Localização</th><th>Ramo</th><th>Termos</th><th>Resultados</th><th>Criados</th><th>Duplicados</th><th>Recusados</th><th>Data</th><th>Ações</th></tr></thead>
-                  <tbody>{apifyJobs.map((job) => (
+                  <tbody>{pagedApifyJobs.map((job) => (
                     <tr key={job.jobId} onClick={() => void openJobDetails(job)} tabIndex={0}>
                       <td><Tag tone={job.status === 'succeeded' ? 'success' : job.status === 'failed' || job.status === 'timed_out' ? 'danger' : job.status === 'aborted' ? 'neutral' : 'warning'}>{job.importedAt ? 'importado' : job.status}</Tag></td>
                       <td>{job.accountName}</td><td>{job.location}</td><td>{job.branchName}</td><td title={job.searchTerms.join(' · ')}>{job.searchTerms.length}</td><td>{job.totalReceived}</td><td>{job.totalImported}</td><td>{job.totalDuplicates}</td><td>{job.totalRejected}</td><td>{job.createdAt ? new Date(job.createdAt).toLocaleString('pt-BR') : '—'}</td>

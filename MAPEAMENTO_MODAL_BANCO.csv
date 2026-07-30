@@ -1,9 +1,0 @@
-area,modal_ou_drawer,tabela_fisica,campos_editaveis_canonicos,campos_removidos_ou_somente_leitura,estado
-Configuração,Ramo,branches,"branches_name; branches_categories; status_id","slug/order/rating/reviews/imagem como colunas independentes",corrigido
-Configuração,Template,templates,"templates_name; branches_id; template_channels_id; template_types_id; templates_message_1; templates_message_2; templates_message_3; templates_message_4; status_id","criação automática de catálogos; rótulos como identidade",corrigido
-Configuração,Chip,chips,"chips_name; chips_phone; instances_id; levels_id; status_id","instances_url; instances_apikey; levels_daily_limit; intervalos; lotes",corrigido
-Configuração,Perfil Instagram,socials,"socials_name; socials_username; levels_id; status_id","levels_daily_limit duplicado no perfil",corrigido
-Importação,Lead,leads,"leads_name; branches_id; channels_id/contact_sources_id resolvidos; leads_phone; leads_instagram; leads_website; states_id/cities_id resolvidos","send_instagram como campo físico; motivo genérico; instagram_override_reason; override_by; override_at",corrigido
-Fila WhatsApp,Item de fila,queue_items,"queue_items_position; queue_items_scheduled_at","empresa; telefone; ramo; template; quatro mensagens; imagem; motivo",corrigido
-Fila Instagram,Item de fila,queue_items,"queue_items_position; queue_items_scheduled_at","empresa; usuário destino; perfil; template; quatro mensagens; imagem; motivo",corrigido
-Catálogos,Fontes/níveis/instâncias/canais/tipos/variáveis,"contact_sources; levels; instances; template_channels; template_types; template_variables","campos já correspondentes ao schema físico",auditado-sem-alteração

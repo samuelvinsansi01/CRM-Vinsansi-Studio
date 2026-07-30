@@ -7,6 +7,7 @@ import {
   MetricCard,
   SearchInput,
   SelectField,
+  RowsPerPageControl,
   TableCard,
   Tag,
   ToastViewport,
@@ -16,6 +17,7 @@ import {
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useBaseRecords } from '../hooks/useBaseRecords';
+import { useClientPagination } from '../hooks/useClientPagination';
 import type { BaseLead } from '../services/base/types';
 
 const STATUS_LABEL = { 5: 'Enviado', 6: 'Inválido', 7: 'Duplicado', 8: 'Arquivado' } as const;
@@ -60,7 +62,8 @@ export function BasePage() {
     status: statusTag(lead),
   })), [records]);
 
-  const selectedIds = selectedRows.map((index) => rows[index]?.id).filter(Boolean);
+  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
+  const selectedIds = selectedRows.map((index) => pageItems[index]?.id).filter(Boolean);
   const toast = (title: string, description: string, tone: ToastItem['tone'] = 'success') => {
     const id = crypto.randomUUID?.() ?? String(Date.now());
     setToasts((current) => [...current, { id, title, description, tone }].slice(-4));
@@ -108,12 +111,19 @@ export function BasePage() {
       </section>
 
       <FiltersBar>
-        <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Arquivado']} placeholder="Status final" onChange={setStatus} />
-        <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal final" onChange={setChannel} />
-        <SearchInput value={search} onChange={setSearch} placeholder="Buscar empresa ou contato" />
+        <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Arquivado']} placeholder="Status final" onChange={(value) => { setStatus(value); resetPage(); setSelectedRows([]); }} />
+        <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal final" onChange={(value) => { setChannel(value); resetPage(); setSelectedRows([]); }} />
+        <SearchInput value={search} onChange={(value) => { setSearch(value); resetPage(); setSelectedRows([]); }} placeholder="Buscar empresa ou contato" />
       </FiltersBar>
 
-      <TableCard title="Leads finalizados" footerText={loading ? 'Carregando...' : `${rows.length} lead(s).`}>
+      <TableCard
+        title="Leads finalizados"
+        footerText={loading ? 'Carregando...' : `Mostrando ${pageItems.length} de ${rows.length} lead(s).`}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setSelectedRows([]); }} />}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={(nextPage) => { setPage(nextPage); setSelectedRows([]); }}
+      >
         {selectedIds.length ? (
           <div className="lead-bulk-actions">
             <span>{selectedIds.length} selecionado(s)</span>
@@ -124,7 +134,7 @@ export function BasePage() {
         {!error && loading ? <div className="table-message">Carregando Base Permanente...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead finalizado.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable columns={columns} rows={rows} actions={['archive']} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={handleAction} />
+          <DataTable columns={columns} rows={pageItems} actions={['archive']} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={handleAction} />
         ) : null}
       </TableCard>
 

@@ -5,6 +5,7 @@ import {
   DataTable,
   Field,
   MetricCard,
+  RowsPerPageControl,
   SegmentedControl,
   SelectField,
   TableCard,
@@ -12,6 +13,7 @@ import {
   type TableColumn,
   type ToastItem,
 } from '../design-system/components';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { useQueuePreparation } from '../hooks/useQueuePreparation';
 import type { QueuePreparationChannel, QueuePreparationResult } from '../services/queue-preparation';
 import { toLocalDateInputValue } from '../utils/date';
@@ -57,11 +59,6 @@ export function QueuePreparationPanel({
     if (!valid) setResourceId(snapshot?.selectedResource?.id ?? '');
   }, [snapshot?.resources, snapshot?.selectedResource?.id, resourceId]);
 
-  useEffect(() => {
-    setSelectedRows([]);
-    setResourceId('');
-  }, [channel]);
-
   const rows = useMemo<Row[]>(() => (snapshot?.leads ?? []).map((lead) => ({
     id: lead.id,
     ready: lead.ready,
@@ -76,9 +73,25 @@ export function QueuePreparationPanel({
       : <span title={lead.blockReason}><Tag tone="warning">Bloqueado</Tag></span>,
   })), [snapshot?.leads]);
 
-  const selectedIds = selectedRows.map((index) => rows[index]?.id).filter(Boolean);
+  const {
+    page,
+    setPage,
+    rowsPerPage,
+    setRowsPerPage,
+    totalPages,
+    pageItems,
+    resetPage,
+  } = useClientPagination(rows, 20);
+
+  useEffect(() => {
+    setSelectedRows([]);
+    setResourceId('');
+    resetPage();
+  }, [channel, resetPage]);
+
+  const selectedIds = selectedRows.map((index) => pageItems[index]?.id).filter(Boolean);
   const selectedReadyIds = selectedRows
-    .map((index) => rows[index])
+    .map((index) => pageItems[index])
     .filter((row): row is Row => Boolean(row?.ready))
     .map((row) => row.id);
   const selectedBlocked = selectedIds.length - selectedReadyIds.length;
@@ -150,7 +163,11 @@ export function QueuePreparationPanel({
 
       <TableCard
         title={`${channel} — ${snapshot?.effectiveDate ?? requestedDate}`}
-        footerText={loading ? 'Carregando...' : `${rows.length} lead(s); ${capacity} vaga(s) no recurso selecionado.`}
+        footerText={loading ? 'Carregando...' : `Mostrando ${pageItems.length} de ${rows.length} lead(s); ${capacity} vaga(s) no recurso selecionado.`}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setSelectedRows([]); }} />}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={(nextPage) => { setPage(nextPage); setSelectedRows([]); }}
       >
         {selectedIds.length ? (
           <div className="lead-bulk-actions">
@@ -167,7 +184,7 @@ export function QueuePreparationPanel({
         {!error && rows.length ? (
           <DataTable
             columns={columns}
-            rows={rows}
+            rows={pageItems}
             actions={[]}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}

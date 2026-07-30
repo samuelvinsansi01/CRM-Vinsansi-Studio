@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { MessageCircle, RefreshCcw } from 'lucide-react';
-import { Button, DataTable, MetricCard, Panel, TableCard, Tag, type TableColumn } from '../design-system/components';
+import { Button, DataTable, MetricCard, Panel, RowsPerPageControl, TableCard, Tag, type TableColumn } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { listChannelOptions, type ChannelOption } from '../repositories/configuration';
 
 type ChannelRow = Record<string, ReactNode> & { id: string };
@@ -37,6 +38,7 @@ export function ChannelsPage() {
     name: channel.name,
     status: <Tag tone="success">Disponível</Tag>,
   }));
+  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems } = useClientPagination(rows, 20);
 
   return (
     <div className="config-table-page channels-page">
@@ -51,10 +53,17 @@ export function ChannelsPage() {
       <Panel title="Contrato protegido" className="settings-card settings-card--readiness">
         <p className="settings-note">Os IDs dos canais fazem parte do contrato do painel, Worker e extensão. Por segurança, não há criação, edição ou exclusão nesta tela.</p>
       </Panel>
-      <TableCard title="Canais canônicos" footerText={`${channels.length} registros`}>
+      <TableCard
+        title="Canais canônicos"
+        footerText={`Mostrando ${pageItems.length} de ${channels.length} registro(s)`}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} />}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      >
         {error ? <div className="configuration-state configuration-state--error">{error}</div> : null}
         {loading ? <div className="configuration-state">Carregando canais...</div> : null}
-        {!loading && !error ? <DataTable<ChannelRow> rows={rows} columns={columns} actions={[]} selectable={false} /> : null}
+        {!loading && !error ? <DataTable<ChannelRow> rows={pageItems} columns={columns} actions={[]} selectable={false} /> : null}
       </TableCard>
     </div>
   );

@@ -110,13 +110,8 @@ const removedFiles = [
 ];
 for (const file of removedFiles) assert(!fs.existsSync(path.join(root, file)), `Repository legado ainda empacotado: ${file}`);
 
-const rls = read('SCHEMA_REAL_RLS.sql');
-for (const table of ['chips','instances','levels','socials','templates','queues','queue_items','sents']) {
-  assert(rls.includes(`'${table}'`) || rls.includes(`ON public.${table}`), `SQL de RLS nao cobre ${table}.`);
-}
-assert(!/create\s+table/i.test(rls), 'SQL de RLS nao pode criar tabela.');
-assert(!/alter\s+table\s+.*add\s+column/i.test(rls), 'SQL de RLS nao pode criar coluna.');
-assert(rls.includes('GRANT SELECT, INSERT, UPDATE, DELETE'), 'SQL de RLS precisa incluir grants operacionais.');
+// As policies RLS são validadas diretamente na base de produção pelo precheck.
+// O pacote do frontend não carrega SQL solto nem tenta reaplicar policies automaticamente.
 
 if (failures.length) {
   console.error(`\nFalhas do contrato real (${failures.length}):`);

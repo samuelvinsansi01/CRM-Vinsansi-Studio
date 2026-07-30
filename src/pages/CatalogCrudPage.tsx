@@ -11,6 +11,7 @@ import {
   MetricCard,
   SearchInput,
   SelectField,
+  RowsPerPageControl,
   TableCard,
   Tag,
   ToastViewport,
@@ -20,6 +21,7 @@ import {
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useCatalogRecords } from '../hooks/useCatalogRecords';
+import { useClientPagination } from '../hooks/useClientPagination';
 import {
   listChannelOptions,
   type CatalogKind,
@@ -288,6 +290,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
   }, []);
 
   const rows = useMemo(() => filteredRecords.map((record) => rowFor(record, channels)), [channels, filteredRecords]);
+  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
   const activeCount = records.filter((record) => record.active).length;
   const inactiveCount = records.length - activeCount;
 
@@ -351,18 +354,25 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
       </section>
 
       <FiltersBar>
-        <SearchInput value={search} placeholder="Buscar registros" onChange={setSearch} />
-        <SelectField value={status} options={filterStatusOptions} onChange={setStatus} />
+        <SearchInput value={search} placeholder="Buscar registros" onChange={(value) => { setSearch(value); resetPage(); }} />
+        <SelectField value={status} options={filterStatusOptions} onChange={(value) => { setStatus(value); resetPage(); }} />
         <Button variant="secondary" iconLeft={RefreshCcw} loading={refreshing} onClick={() => void refresh()}>Atualizar</Button>
       </FiltersBar>
 
-      <TableCard title={definition.tableTitle} footerText={`${filteredRecords.length} de ${records.length} registros`}>
+      <TableCard
+        title={definition.tableTitle}
+        footerText={`Mostrando ${pageItems.length} de ${filteredRecords.length} registro(s); ${records.length} no total.`}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} />}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      >
         {error ? <div className="configuration-state configuration-state--error">{error}</div> : null}
         {loading ? <div className="configuration-state">Carregando registros...</div> : null}
         {!loading && !error && !rows.length ? <div className="configuration-state">{definition.emptyMessage}</div> : null}
         {!loading && !error && rows.length ? (
           <DataTable<CatalogTableRow>
-            rows={rows}
+            rows={pageItems}
             columns={columnsFor(kind)}
             actions={['edit', 'delete']}
             selectable={false}

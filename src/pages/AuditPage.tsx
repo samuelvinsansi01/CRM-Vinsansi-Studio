@@ -1,7 +1,8 @@
 import { AlertTriangle, CheckCircle2, Clock3, Eye, RefreshCcw, Search, ShieldAlert, Wrench } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Button, MetricCard, Panel, Tag } from '../design-system/components';
+import { Button, MetricCard, Pagination, Panel, RowsPerPageControl, Tag } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { useReconciliation } from '../hooks/useReconciliation';
 import { useNotificationContext } from '../providers/NotificationProvider';
 import type { ReconciliationIssue, ReconciliationRepairAction, ReconciliationSeverity } from '../services/reconciliation/types';
@@ -60,6 +61,8 @@ export function AuditPage() {
     });
   }, [repairability, scan.issues, search, severity]);
 
+  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(visibleIssues, 20);
+
   const handleRepair = async (issue: ReconciliationIssue) => {
     try {
       const result = await repair(issue);
@@ -111,15 +114,15 @@ export function AuditPage() {
         <div className="audit-filters">
           <label className="audit-search">
             <Search size={16} />
-            <input value={search} onChange={(event: import('react').ChangeEvent<HTMLInputElement>) => setSearch(event.target.value)} placeholder="Buscar por lead, fila ou problema" />
+            <input value={search} onChange={(event: import('react').ChangeEvent<HTMLInputElement>) => { setSearch(event.target.value); resetPage(); }} placeholder="Buscar por lead, fila ou problema" />
           </label>
-          <select value={severity} onChange={(event: import('react').ChangeEvent<HTMLSelectElement>) => setSeverity(event.target.value as 'all' | ReconciliationSeverity)}>
+          <select value={severity} onChange={(event: import('react').ChangeEvent<HTMLSelectElement>) => { setSeverity(event.target.value as 'all' | ReconciliationSeverity); resetPage(); }}>
             <option value="all">Todas as severidades</option>
             <option value="critical">Críticas</option>
             <option value="warning">Atenção</option>
             <option value="info">Informativas</option>
           </select>
-          <select value={repairability} onChange={(event: import('react').ChangeEvent<HTMLSelectElement>) => setRepairability(event.target.value as typeof repairability)}>
+          <select value={repairability} onChange={(event: import('react').ChangeEvent<HTMLSelectElement>) => { setRepairability(event.target.value as typeof repairability); resetPage(); }}>
             <option value="all">Todos os tratamentos</option>
             <option value="repairable">Com reparo</option>
             <option value="manual">Revisão manual</option>
@@ -149,7 +152,7 @@ export function AuditPage() {
                 </tr>
               </thead>
               <tbody>
-                {visibleIssues.map((issue) => (
+                {pageItems.map((issue) => (
                   <tr key={issue.id}>
                     <td><Tag tone={severityTone[issue.severity]}>{severityLabel[issue.severity]}</Tag></td>
                     <td>
@@ -183,6 +186,15 @@ export function AuditPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        ) : null}
+        {!loading && visibleIssues.length ? (
+          <div className="audit-pagination">
+            <div className="audit-pagination__left">
+              <RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} />
+              <small>Mostrando {pageItems.length} de {visibleIssues.length} inconsistência(s)</small>
+            </div>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
           </div>
         ) : null}
       </Panel>

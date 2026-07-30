@@ -7,11 +7,13 @@ import {
   MetricCard,
   SearchInput,
   SelectField,
+  RowsPerPageControl,
   TableCard,
   Tag,
   type TableColumn,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { useLeadCycle } from '../hooks/useLeadCycle';
 import type { LeadCycleLead } from '../services/lead-cycle/types';
 
@@ -133,6 +135,8 @@ export function ValidationRoutingPage() {
     channel: channelTag(lead),
   })), [visible]);
 
+  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
+
   return (
     <div className="dashboard-table-page lead-list-page validation-routing-page">
       <PageHeader
@@ -159,19 +163,26 @@ export function ValidationRoutingPage() {
       </section>
 
       <FiltersBar>
-        <SelectField value={status} options={['Todos', 'Importado', 'Validado']} placeholder="Status" onChange={(value) => setStatus(value as StatusFilter)} />
-        <SelectField value={source} options={['Todos', 'Sem site', 'Domínio próprio', 'Agregador', 'Instagram']} placeholder="Origem" onChange={(value) => setSource(value as SourceFilter)} />
-        <SelectField value={branch} options={branches} placeholder="Ramo" onChange={setBranch} />
-        <SelectField value={state} options={states} placeholder="Estado" onChange={setState} />
-        <SearchInput value={search} placeholder="Buscar empresa ou contato" onChange={setSearch} />
+        <SelectField value={status} options={['Todos', 'Importado', 'Validado']} placeholder="Status" onChange={(value) => { setStatus(value as StatusFilter); resetPage(); }} />
+        <SelectField value={source} options={['Todos', 'Sem site', 'Domínio próprio', 'Agregador', 'Instagram']} placeholder="Origem" onChange={(value) => { setSource(value as SourceFilter); resetPage(); }} />
+        <SelectField value={branch} options={branches} placeholder="Ramo" onChange={(value) => { setBranch(value); resetPage(); }} />
+        <SelectField value={state} options={states} placeholder="Estado" onChange={(value) => { setState(value); resetPage(); }} />
+        <SearchInput value={search} placeholder="Buscar empresa ou contato" onChange={(value) => { setSearch(value); resetPage(); }} />
       </FiltersBar>
 
-      <TableCard title="Leads disponíveis" footerText={`${rows.length} lead(s) exibido(s)`}>
+      <TableCard
+        title="Leads disponíveis"
+        footerText={`Mostrando ${pageItems.length} de ${rows.length} lead(s)`}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} />}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      >
         {error ? <div className="table-message">{error}</div> : null}
         {!error && loading ? <div className="table-message">Carregando leads...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead encontrado para os filtros selecionados.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable columns={columns} rows={rows} actions={[]} selectable={false} />
+          <DataTable columns={columns} rows={pageItems} actions={[]} selectable={false} />
         ) : null}
       </TableCard>
     </div>

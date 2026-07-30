@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bug, Calendar, CheckSquare, ChevronDown, ChevronUp, Eye, Flag, List, Pause, Play, RefreshCcw, Send, Square, Users, X } from 'lucide-react';
-import { Button, ConfirmDialog, Drawer, Field, MetricCard, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
+import { Bug, Calendar, CheckSquare, ChevronDown, ChevronUp, Eye, Flag, List, ListPlus, Pause, Play, RefreshCcw, Send, Square, Users, X } from 'lucide-react';
+import { Button, ConfirmDialog, Drawer, Field, MetricCard, Pagination, RowsPerPageControl, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { ApprovedLeadsQueueDrawer } from '../components/ApprovedLeadsQueueDrawer';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { useInstagramQueue } from '../hooks/useInstagramQueue';
 import { useWhatsAppQueue } from '../hooks/useWhatsAppQueue';
 import type { InstagramQueueBatch, InstagramQueueLead, InstagramQueueStatus } from '../services/instagram-queue/types';
@@ -80,8 +82,18 @@ function WhatsAppQueuePage() {
   const [confirmLead, setConfirmLead] = useState<WhatsAppQueueLead | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [approvedDrawerOpen, setApprovedDrawerOpen] = useState(false);
 
-  const { chips, batches, summary, batchState, loading, refreshing, error, updateLead, startBatch, pauseBatch, resumeBatch, stopBatch, reprocess, invalidate } = useWhatsAppQueue(activeChip, scheduledDate);
+  const { chips, batches, summary, batchState, loading, refreshing, error, refresh, updateLead, startBatch, pauseBatch, resumeBatch, stopBatch, reprocess, invalidate } = useWhatsAppQueue(activeChip, scheduledDate);
+  const {
+    page: batchPage,
+    setPage: setBatchPage,
+    rowsPerPage: batchesPerPage,
+    setRowsPerPage: setBatchesPerPage,
+    totalPages: batchTotalPages,
+    pageItems: pagedBatches,
+    resetPage: resetBatchPage,
+  } = useClientPagination(batches, 10);
   const running = batchState.enabled && batchState.status === 'running';
 
   useEffect(() => {
@@ -93,7 +105,8 @@ function WhatsAppQueuePage() {
   useEffect(() => {
     setSelectedIds([]);
     setStarting(false);
-  }, [activeChip, scheduledDate]);
+    resetBatchPage();
+  }, [activeChip, scheduledDate, resetBatchPage]);
 
   const visibleLeads = () => batches.flatMap((batch) => batch.leads);
   const visibleActionIds = (predicate: (lead: WhatsAppQueueLead) => boolean) => visibleLeads().filter(predicate).map((lead) => lead.id);
@@ -262,6 +275,7 @@ function WhatsAppQueuePage() {
       <div className="queue-topline queue-topline--actions">
         <div className="queue-controls">
           <SelectField className="queue-inline-filter" options={chipFilterOptions} value={activeChip} onChange={setActiveChip} placeholder="Todos os chips" />
+          <Button variant="secondary" iconLeft={ListPlus} disabled={loading || running} onClick={() => setApprovedDrawerOpen(true)}>Puxar aprovados</Button>
           <Button variant="danger" iconLeft={Square} disabled={!running && batchState.status !== 'paused'} onClick={handleStop}>Parar</Button>
           {running ? (
             <Button variant="secondary" iconLeft={Pause} onClick={handlePause}>Pausar</Button>
@@ -288,7 +302,7 @@ function WhatsAppQueuePage() {
         {!error && loading && !batches.length ? <div className="table-message">Carregando fila WhatsApp...</div> : null}
         {!error && !loading && !refreshing && !batches.length ? <div className="table-message">Nenhum lote WhatsApp disponivel.</div> : null}
         <div className="batch-list">
-          {!error ? batches.map((batch, index) => (
+          {!error ? pagedBatches.map((batch, index) => (
             <WhatsAppBatch
               key={batch.id}
               batch={batch}
@@ -299,8 +313,26 @@ function WhatsAppQueuePage() {
             />
           )) : null}
         </div>
+        {batches.length ? (
+          <div className="queue-list-card__footer">
+            <div className="queue-list-card__footer-left">
+              <RowsPerPageControl value={batchesPerPage} onChange={setBatchesPerPage} />
+              <small>Mostrando {pagedBatches.length} de {batches.length} lote(s)</small>
+            </div>
+            <Pagination page={batchPage} totalPages={batchTotalPages} onPageChange={setBatchPage} />
+          </div>
+        ) : null}
       </section>
 
+      <ApprovedLeadsQueueDrawer
+        open={approvedDrawerOpen}
+        channel="WhatsApp"
+        scheduledDate={scheduledDate}
+        preferredResourceId={activeChip}
+        onClose={() => setApprovedDrawerOpen(false)}
+        onPrepared={refresh}
+        onToast={(title, description, tone) => pushToast({ title, description, tone })}
+      />
       <QueueLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
         open={Boolean(confirmLead)}
@@ -484,14 +516,28 @@ function InstagramQueuePage() {
   const [saving, setSaving] = useState(false);
   const [pairing, setPairing] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [approvedDrawerOpen, setApprovedDrawerOpen] = useState(false);
 
-  const { profiles, batches, summary, loading, refreshing, error, updateLead, invalidate, reprocess } = useInstagramQueue(activeProfile, scheduledDate);
+  const { profiles, batches, summary, loading, refreshing, error, refresh, updateLead, invalidate, reprocess } = useInstagramQueue(activeProfile, scheduledDate);
+  const {
+    page: batchPage,
+    setPage: setBatchPage,
+    rowsPerPage: batchesPerPage,
+    setRowsPerPage: setBatchesPerPage,
+    totalPages: batchTotalPages,
+    pageItems: pagedBatches,
+    resetPage: resetBatchPage,
+  } = useClientPagination(batches, 10);
 
   useEffect(() => {
     if (activeProfile && !profiles.includes(activeProfile)) {
       setActiveProfile('');
     }
   }, [activeProfile, profiles]);
+
+  useEffect(() => {
+    resetBatchPage();
+  }, [activeProfile, scheduledDate, resetBatchPage]);
 
   const visibleBatches = batches;
 
@@ -590,6 +636,7 @@ function InstagramQueuePage() {
       <div className="queue-topline queue-topline--actions">
         <div className="queue-controls">
           <SelectField className="queue-inline-filter" options={profileFilterOptions} value={activeProfile} onChange={setActiveProfile} placeholder="Todos os perfis" />
+          <Button variant="secondary" iconLeft={ListPlus} disabled={loading} onClick={() => setApprovedDrawerOpen(true)}>Puxar aprovados</Button>
           <Button variant="secondary" iconLeft={RefreshCcw} loading={reprocessing} disabled={loading || reprocessing} onClick={handleReprocessErrors}>Reprocessar erros</Button>
           <Button iconLeft={Send} loading={pairing} disabled={loading || pairing} onClick={handlePairExtension}>Vincular extensão</Button>
         </div>
@@ -603,7 +650,7 @@ function InstagramQueuePage() {
         {!error && loading && !visibleBatches.length ? <div className="table-message">Carregando fila Instagram...</div> : null}
         {!error && !loading && !refreshing && !visibleBatches.length ? <div className="table-message">Nenhum lote Instagram disponivel.</div> : null}
         <div className="batch-list">
-          {!error ? visibleBatches.map((batch, index) => (
+          {!error ? pagedBatches.map((batch, index) => (
             <InstagramBatch
               key={batch.id}
               batch={batch}
@@ -614,8 +661,26 @@ function InstagramQueuePage() {
             />
           )) : null}
         </div>
+        {visibleBatches.length ? (
+          <div className="queue-list-card__footer">
+            <div className="queue-list-card__footer-left">
+              <RowsPerPageControl value={batchesPerPage} onChange={setBatchesPerPage} />
+              <small>Mostrando {pagedBatches.length} de {visibleBatches.length} lote(s)</small>
+            </div>
+            <Pagination page={batchPage} totalPages={batchTotalPages} onPageChange={setBatchPage} />
+          </div>
+        ) : null}
       </section>
 
+      <ApprovedLeadsQueueDrawer
+        open={approvedDrawerOpen}
+        channel="Instagram"
+        scheduledDate={scheduledDate}
+        preferredResourceId={activeProfile}
+        onClose={() => setApprovedDrawerOpen(false)}
+        onPrepared={refresh}
+        onToast={(title, description, tone) => pushToast({ title, description, tone })}
+      />
       <InstagramLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
         open={Boolean(confirmLead)}

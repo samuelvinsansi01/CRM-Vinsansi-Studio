@@ -4,6 +4,7 @@ import {
   Button,
   DataTable,
   MetricCard,
+  RowsPerPageControl,
   TableCard,
   Tag,
   ToastViewport,
@@ -13,6 +14,7 @@ import {
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { QueuePreparationPanel } from '../components/QueuePreparationPanel';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { useLeadCycle } from '../hooks/useLeadCycle';
 import type { LeadRoutingCommand, LeadRoutingResult } from '../services/lead-cycle/types';
 import type { WhatsAppValidationBatchResult } from '../services/whatsapp-validation/types';
@@ -73,7 +75,8 @@ export function PreSendPage() {
     phone: lead.phone || '-',
     status: <Tag tone="warning">Aguardando validação</Tag>,
   })), [records]);
-  const selectedIds = selectedRows.map((index) => rows[index]?.id).filter(Boolean);
+  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems } = useClientPagination(rows, 20);
+  const selectedIds = selectedRows.map((index) => pageItems[index]?.id).filter(Boolean);
 
   const toast = (title: string, description: string, tone: ToastItem['tone'] = 'success') => {
     const id = crypto.randomUUID?.() ?? String(Date.now());
@@ -133,7 +136,14 @@ export function PreSendPage() {
       <section className="metric-grid metric-grid--1">
         <MetricCard icon={PhoneCall} value={String(records.length)} label="WhatsApps aguardando validação" tone="success" />
       </section>
-      <TableCard title="Leads aguardando confirmação do WhatsApp" footerText={loading ? 'Carregando...' : `${rows.length} lead(s).`}>
+      <TableCard
+        title="Leads aguardando confirmação do WhatsApp"
+        footerText={loading ? 'Carregando...' : `Mostrando ${pageItems.length} de ${rows.length} lead(s).`}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setSelectedRows([]); }} />}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={(nextPage) => { setPage(nextPage); setSelectedRows([]); }}
+      >
         {selectedIds.length ? (
           <div className="lead-bulk-actions">
             <span>{selectedIds.length} selecionado(s)</span>
@@ -146,7 +156,7 @@ export function PreSendPage() {
         {!error && loading ? <div className="table-message">Carregando Pré-Envio...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum WhatsApp aguardando validação.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable columns={columns} rows={rows} actions={['approve', 'invalidate', 'archive']} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={handleAction} />
+          <DataTable columns={columns} rows={pageItems} actions={['approve', 'invalidate', 'archive']} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={handleAction} />
         ) : null}
       </TableCard>
       <QueuePreparationPanel onToast={toast} />
