@@ -278,29 +278,33 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     [selectedBranchId, uniqueBranches],
   );
 
-  const [mapsLocation, setMapsLocation] = useState('');
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [mapsLimit, setMapsLimit] = useState('100');
   const [locationOptions, setLocationOptions] = useState<ApifyLocationOption[]>([]);
   const [searchedLocations, setSearchedLocations] = useState<string[]>([]);
 
   const selectedLocation = useMemo(
-    () => locationOptions.find((location) => normalizeLocationKey(location.label) === normalizeLocationKey(mapsLocation)) ?? null,
-    [locationOptions, mapsLocation],
+    () => locationOptions.find((location) => String(location.cityId) === selectedLocationId) ?? null,
+    [locationOptions, selectedLocationId],
   );
-
 
   const searchedLocationKeys = useMemo(
     () => new Set(searchedLocations.map(normalizeLocationKey)),
     [searchedLocations],
   );
 
-  const availableLocationOptions = useMemo(
-    () => locationOptions.filter((location) => !searchedLocationKeys.has(normalizeLocationKey(location.label))),
-    [locationOptions, searchedLocationKeys],
+  const selectedLocationWasSearched = Boolean(
+    selectedLocation && searchedLocationKeys.has(normalizeLocationKey(selectedLocation.label)),
   );
 
-  const previouslySearchedLocationOptions = useMemo(
-    () => locationOptions.filter((location) => searchedLocationKeys.has(normalizeLocationKey(location.label))),
+  const locationSelectOptions = useMemo(
+    () => locationOptions.map((location) => {
+      const wasSearched = searchedLocationKeys.has(normalizeLocationKey(location.label));
+      return {
+        label: wasSearched ? `${location.label} — já pesquisada neste ramo` : location.label,
+        value: String(location.cityId),
+      };
+    }),
     [locationOptions, searchedLocationKeys],
   );
   const [locationsLoading, setLocationsLoading] = useState(false);
@@ -380,7 +384,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   }, []);
 
   useEffect(() => {
-    setMapsLocation('');
+    setSelectedLocationId('');
     setSearchedLocations([]);
     const branch = uniqueBranches.find((item) => item.id === selectedBranchId);
     if (!selectedBranchId) return;
@@ -622,7 +626,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const startApifyImport = async () => {
     const limit = Number(mapsLimit);
     const selectedBranch = branches.find((branch) => branch.id === selectedBranchId);
-    if (!selectedApifyAccountId || !selectedBranch || !selectedLocation || !mapsLocation.trim()) return;
+    if (!selectedApifyAccountId || !selectedBranch || !selectedLocation || !selectedLocationId) return;
     if (!Number.isFinite(limit) || limit < 1 || limit > 500) {
       pushToast({ title: 'Quantidade inválida', description: 'Informe uma quantidade entre 1 e 500.', tone: 'danger' });
       return;
@@ -861,63 +865,25 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               <span className="field__label">Localização</span>
               <SelectField
                 className="import-select-control"
-                value={mapsLocation}
+                value={selectedLocationId}
                 placeholder={!selectedBranchId ? 'Selecione primeiro um ramo' : locationsLoading ? 'Carregando localidades...' : 'Selecione uma localidade'}
                 searchable
                 searchPlaceholder="Buscar cidade ou estado..."
-                options={availableLocationOptions.map((location) => ({ label: location.label, value: location.label }))}
-                onChange={setMapsLocation}
-                renderNoResults={(query, selectValue) => {
-                  const normalizedQuery = normalizeLocationKey(query);
-
-                  const searchedMatches = normalizedQuery
-                    ? previouslySearchedLocationOptions
-                        .filter((location) => normalizeLocationKey(location.label).includes(normalizedQuery))
-                        .slice(0, 5)
-                    : [];
-
-                  const catalogMatches = normalizedQuery
-                    ? locationOptions
-                        .filter((location) => normalizeLocationKey(location.label).includes(normalizedQuery))
-                        .slice(0, 5)
-                    : [];
-
-                  if (searchedMatches.length) {
-                    return (
-                      <div className="location-already-searched">
-                        {searchedMatches.map((location) => (
-                          <div className="location-already-searched__item" key={location.cityId}>
-                            <span>
-                              Você já pesquisou <strong>{selectedBranch?.name ?? 'esse ramo'}</strong> em <strong>{location.label}</strong>.
-                            </span>
-                            <button type="button" onClick={() => selectValue(location.label)}>Selecionar mesmo assim</button>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }
-
-                  if (catalogMatches.length) {
-                    return (
-                      <div className="location-already-searched">
-                        {catalogMatches.map((location) => (
-                          <div className="location-already-searched__item" key={location.cityId}>
-                            <span>Localidade encontrada: <strong>{location.label}</strong>.</span>
-                            <button type="button" onClick={() => selectValue(location.label)}>Selecionar</button>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }
-
-                  return <div className="select-field__empty">Nenhuma localidade encontrada.</div>;
-                }}
+                options={locationSelectOptions}
+                onChange={setSelectedLocationId}
               />
             </label>
             <Field label="Quantidade" type="number" min="1" max="500" value={mapsLimit} onChange={setMapsLimit} />
           </div>
-          <p className="settings-note">{selectedBranch ? <>A busca usará somente o ramo <strong>{selectedBranch.name}</strong>. A localização é enviada separadamente e o histórico de cidades é independente para cada ramo.</> : 'Selecione um ramo cadastrado para iniciar a busca.'}</p>
-          {mapsLocation && !selectedLocation ? <div className="table-message">Selecione uma localidade do cadastro oficial.</div> : null}
+          <p className="settings-note">
+            {selectedBranch ? <>A busca usará somente o ramo <strong>{selectedBranch.name}</strong>. A localização é enviada separadamente e o histórico de cidades é independente para cada ramo. <strong>{locationOptions.length.toLocaleString('pt-BR')}</strong> localidade(s) carregada(s) do cadastro oficial.</> : 'Selecione um ramo cadastrado para iniciar a busca.'}
+          </p>
+          {selectedLocationId && !selectedLocation ? <div className="table-message">Selecione uma localidade do cadastro oficial.</div> : null}
+          {selectedLocationWasSearched && selectedLocation ? (
+            <div className="table-message">
+              Você já pesquisou <strong>{selectedBranch?.name ?? 'este ramo'}</strong> em <strong>{selectedLocation.label}</strong>. Uma nova coleta repetirá essa combinação.
+            </div>
+          ) : null}
           {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
           {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
           <div className="import-extractor-actions">

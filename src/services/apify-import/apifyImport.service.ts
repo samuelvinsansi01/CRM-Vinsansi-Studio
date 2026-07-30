@@ -42,34 +42,73 @@ async function invokeSync(body: Record<string, unknown>): Promise<SyncGoogleMaps
 
 export const apifyImportService = {
   async listBrazilLocations(): Promise<ApifyLocationOption[]> {
-    const { data, error } = await getSupabaseClient()
-      .from('cities')
-      .select('cities_id, cities_name, states_id, states:states_id(states_id, states_name, states_code)')
-      .order('cities_name', { ascending: true });
-    if (error) throw new Error(error.message);
+    const client = getSupabaseClient();
+    const pageSize = 1000;
+    const rowsById = new Map<number, any>();
+    let offset = 0;
 
-    return (data ?? []).flatMap((row: any) => {
-      const state = Array.isArray(row.states) ? row.states[0] : row.states;
-      const cityName = String(row.cities_name ?? '').trim();
-      const stateCode = String(state?.states_code ?? state?.states_name ?? '').trim();
-      if (!cityName || !stateCode) return [];
-      return [{
-        cityId: Number(row.cities_id),
-        stateId: Number(row.states_id ?? state?.states_id),
-        cityName,
-        stateCode,
-        label: `${cityName}, ${stateCode}`,
-      }];
-    });
+    // O PostgREST/Supabase limita a quantidade de linhas devolvidas por chamada.
+    // Percorremos o catálogo inteiro para não deixar municípios posteriores no
+    // alfabeto fora do seletor (por exemplo, Curitiba).
+    for (let page = 0; page < 100; page += 1) {
+      const { data, error } = await client
+        .from('cities')
+        .select('cities_id, cities_name, states_id, states:states_id(states_id, states_name, states_code)')
+        .order('cities_name', { ascending: true })
+        .order('cities_id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error(error.message);
+
+      const rows = data ?? [];
+      if (!rows.length) break;
+
+      let inserted = 0;
+      for (const row of rows as any[]) {
+        const cityId = Number(row.cities_id);
+        if (!Number.isInteger(cityId) || cityId <= 0 || rowsById.has(cityId)) continue;
+        rowsById.set(cityId, row);
+        inserted += 1;
+      }
+
+      offset += rows.length;
+      if (!inserted) break;
+    }
+
+    return Array.from(rowsById.values())
+      .flatMap((row: any) => {
+        const state = Array.isArray(row.states) ? row.states[0] : row.states;
+        const cityName = String(row.cities_name ?? '').trim();
+        const stateCode = String(state?.states_code ?? state?.states_name ?? '').trim();
+        const cityId = Number(row.cities_id);
+        const stateId = Number(row.states_id ?? state?.states_id);
+        if (!cityName || !stateCode || !Number.isInteger(cityId) || !Number.isInteger(stateId)) return [];
+        return [{ cityId, stateId, cityName, stateCode, label: `${cityName}, ${stateCode}` }];
+      })
+      .sort((left, right) => left.label.localeCompare(right.label, 'pt-BR', { sensitivity: 'base' }));
   },
 
   async listSuccessfullySearchedLocations(branchId: number, branchName: string): Promise<string[]> {
-    const { data, error } = await getSupabaseClient()
-      .from('apify_import_jobs')
-      .select('branches_id, branch_name, search_query, search_terms, location_query, branches:branches_id(branches_id, branches_name)')
-      .eq('status', 'succeeded')
-      .not('location_query', 'is', null);
-    if (error) throw new Error(error.message);
+    const client = getSupabaseClient();
+    const pageSize = 1000;
+    const allRows: any[] = [];
+    let offset = 0;
+
+    // O histórico também pode ultrapassar o limite padrão do PostgREST.
+    for (let page = 0; page < 100; page += 1) {
+      const { data, error } = await client
+        .from('apify_import_jobs')
+        .select('apify_import_jobs_id, branches_id, branch_name, search_query, search_terms, location_query, branches:branches_id(branches_id, branches_name)')
+        .eq('status', 'succeeded')
+        .not('location_query', 'is', null)
+        .order('apify_import_jobs_id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error(error.message);
+
+      const rows = data ?? [];
+      if (!rows.length) break;
+      allRows.push(...rows);
+      offset += rows.length;
+    }
 
     const normalize = (value: unknown) => String(value ?? '')
       .normalize('NFD')
@@ -79,7 +118,7 @@ export const apifyImportService = {
       .replace(/\s+/g, ' ');
     const expectedBranch = normalize(branchName);
 
-    return Array.from(new Set((data ?? []).flatMap((row: any) => {
+    return Array.from(new Set(allRows.flatMap((row: any) => {
       const relation = Array.isArray(row.branches) ? row.branches[0] : row.branches;
       const terms = Array.isArray(row.search_terms) ? row.search_terms.map(String) : [];
       const legacySearchQuery = String(row.search_query ?? '').split('|')[0]?.trim() ?? '';
