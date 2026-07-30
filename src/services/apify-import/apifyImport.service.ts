@@ -66,7 +66,7 @@ export const apifyImportService = {
   async listSuccessfullySearchedLocations(branchId: number, branchName: string): Promise<string[]> {
     const { data, error } = await getSupabaseClient()
       .from('apify_import_jobs')
-      .select('branches_id, branch_name, search_query, search_terms, location_query')
+      .select('branches_id, branch_name, search_query, search_terms, location_query, branches:branches_id(branches_id, branches_name)')
       .eq('status', 'succeeded')
       .not('location_query', 'is', null);
     if (error) throw new Error(error.message);
@@ -80,11 +80,21 @@ export const apifyImportService = {
     const expectedBranch = normalize(branchName);
 
     return Array.from(new Set((data ?? []).flatMap((row: any) => {
+      const relation = Array.isArray(row.branches) ? row.branches[0] : row.branches;
       const terms = Array.isArray(row.search_terms) ? row.search_terms.map(String) : [];
       const legacySearchQuery = String(row.search_query ?? '').split('|')[0]?.trim() ?? '';
-      const storedNames = [row.branch_name, legacySearchQuery, terms[0]].map(normalize).filter(Boolean);
-      const belongsToBranch = Number(row.branches_id) === branchId
-        || (expectedBranch && storedNames.includes(expectedBranch));
+
+      // A FK resolvida é a fonte mais confiável. Campos denormalizados e termos
+      // históricos só entram como fallback quando o relacionamento não existe.
+      const canonicalStoredBranch = normalize(
+        relation?.branches_name
+          ?? row.branch_name
+          ?? legacySearchQuery
+          ?? terms[0],
+      );
+      const belongsToBranch = canonicalStoredBranch
+        ? canonicalStoredBranch === expectedBranch
+        : Number(row.branches_id) === branchId;
       const location = String(row.location_query ?? '').trim();
       return belongsToBranch && location ? [location] : [];
     })));

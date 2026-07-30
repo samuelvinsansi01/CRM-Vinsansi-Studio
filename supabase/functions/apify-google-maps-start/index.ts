@@ -111,16 +111,36 @@ Deno.serve(async (request: Request) => {
     if (branchName.length < 2 || branchName.length > 100) return jsonResponse({ error: "O ramo selecionado possui um nome inválido para a busca." }, 409);
     const searchStrings = [branchName];
 
-    const { data: existing, error: existingError } = await admin.from("apify_import_jobs")
-      .select("apify_import_jobs_id, external_run_id, external_dataset_id, status")
+    const { data: activeJobs, error: existingError } = await admin.from("apify_import_jobs")
+      .select("apify_import_jobs_id, external_run_id, external_dataset_id, status, branches_id, branch_name, search_query, search_terms, branches:branches_id(branches_id, branches_name)")
       .eq("users_id", usersId)
-      .eq("branches_id", branchId)
       .eq("location_query", locationQuery)
       .in("status", ["starting", "ready", "running"])
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(20);
     if (existingError) throw new Error(existingError.message);
+
+    const normalizeBranch = (value: unknown) => String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("pt-BR")
+      .trim()
+      .replace(/\s+/g, " ");
+    const expectedBranch = normalizeBranch(branchName);
+    const existing = (activeJobs ?? []).find((candidate: any) => {
+      const relation = Array.isArray(candidate.branches) ? candidate.branches[0] : candidate.branches;
+      const terms = Array.isArray(candidate.search_terms) ? candidate.search_terms.map(String) : [];
+      const legacySearchQuery = String(candidate.search_query ?? "").split("|")[0]?.trim() ?? "";
+      const canonicalStoredBranch = normalizeBranch(
+        relation?.branches_name
+          ?? candidate.branch_name
+          ?? legacySearchQuery
+          ?? terms[0],
+      );
+      return canonicalStoredBranch
+        ? canonicalStoredBranch === expectedBranch
+        : Number(candidate.branches_id) === branchId;
+    });
     if (existing?.external_run_id) {
       return jsonResponse({
         success: true,

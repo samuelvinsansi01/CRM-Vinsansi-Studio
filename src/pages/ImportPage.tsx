@@ -916,7 +916,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             </label>
             <Field label="Quantidade" type="number" min="1" max="500" value={mapsLimit} onChange={setMapsLimit} />
           </div>
-          <p className="settings-note">{selectedBranch ? <>A busca usará somente o ramo <strong>{selectedBranch.name}</strong>. A localização é enviada separadamente e a quantidade é aplicada a esse ramo.</> : 'Selecione um ramo cadastrado para iniciar a busca.'}</p>
+          <p className="settings-note">{selectedBranch ? <>A busca usará somente o ramo <strong>{selectedBranch.name}</strong>. A localização é enviada separadamente e o histórico de cidades é independente para cada ramo.</> : 'Selecione um ramo cadastrado para iniciar a busca.'}</p>
           {mapsLocation && !selectedLocation ? <div className="table-message">Selecione uma localidade do cadastro oficial.</div> : null}
           {apifyAccountsError ? <div className="table-message">{apifyAccountsError}</div> : null}
           {!loadingApifyAccounts && !apifyAccounts.length ? <div className="table-message">Cadastre uma conta em Configurações → Importação antes de executar o extractor.</div> : null}
