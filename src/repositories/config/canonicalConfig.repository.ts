@@ -14,7 +14,6 @@ import type {
 import { nowIso } from '../supabase.helpers';
 import {
   activeStatusId,
-  channelId,
   currentUserIdNumber,
   inactiveStatusId,
   listStatuses,
@@ -91,6 +90,7 @@ async function listBranches(userId: number): Promise<BranchConfigRecord[]> {
     return {
       id: String(row.branches_id),
       kind: 'branches',
+      categories: row.branches_categories ?? null,
       slug: String(metadata.slug ?? branchSlug(name)),
       name,
       category: String(metadata.category ?? name),
@@ -148,8 +148,13 @@ async function listTemplates(userId: number): Promise<TemplateConfigRecord[]> {
     return {
       id: String(row.templates_id),
       kind: 'templates',
+      name: String(row.templates_name ?? ''),
       branchId: String(row.branches_id),
       branchName: branch?.name ?? '',
+      templateChannelId: String(row.template_channels_id ?? ''),
+      templateChannelName: channelName,
+      templateTypeId: String(row.template_types_id ?? ''),
+      templateTypeName: typeName,
       channel,
       type: templateType(typeName),
       message1: String(row.templates_message_1 ?? ''),
@@ -190,6 +195,8 @@ async function listChips(userId: number): Promise<ChipConfigRecord[]> {
       kind: 'chips',
       name: String(row.chips_name ?? ''),
       number: String(row.chips_phone ?? ''),
+      instanceId: String(row.instances_id ?? ''),
+      levelId: String(row.levels_id ?? ''),
       level: levelName,
       url: String(instance.instances_url ?? ''),
       instance: String(instance.instances_name ?? ''),
@@ -228,6 +235,8 @@ async function listSocials(userId: number): Promise<InstagramConfigRecord[]> {
       kind: 'instagram',
       name: String(row.socials_name ?? ''),
       username: String(row.socials_username ?? '').replace(/^@/, ''),
+      levelId: String(row.levels_id ?? ''),
+      levelName: String(level.levels_name ?? ''),
       dailyLimit: number(level.levels_daily_limit, 60),
       active,
       status: active ? 'Ativo' : 'Inativo',
@@ -235,47 +244,6 @@ async function listSocials(userId: number): Promise<InstagramConfigRecord[]> {
       updatedAt: String(row.socials_updated_at ?? ''),
     } satisfies InstagramConfigRecord;
   });
-}
-
-async function ensureTemplateCatalog(table: 'template_channels' | 'template_types', userId: number, name: string) {
-  const idColumn = table === 'template_channels' ? 'template_channels_id' : 'template_types_id';
-  const nameColumn = table === 'template_channels' ? 'template_channels_name' : 'template_types_name';
-  const { data, error } = await getSupabaseClient().from(table).select(`${idColumn},${nameColumn}`).eq('users_id', userId);
-  if (error) throw new Error(error.message);
-  const existing = ((data ?? []) as Row[]).find((row) => normalizeCatalogName(row[nameColumn]) === normalizeCatalogName(name));
-  if (existing) return Number(existing[idColumn]);
-  const statusId = Number(await activeStatusId());
-  const payload: Row = { users_id: userId, status_id: statusId, [nameColumn]: name };
-  if (table === 'template_channels') payload.template_channels_blocked_channels = [];
-  const inserted = await getSupabaseClient().from(table).insert(payload).select(idColumn).single();
-  if (inserted.error) throw new Error(inserted.error.message);
-  return Number((inserted.data as Row)[idColumn]);
-}
-
-async function ensureLevel(userId: number, channel: 'WhatsApp' | 'Instagram', name: string, dailyLimit: number, queues: number) {
-  const channelValue = Number(await channelId(channel));
-  const response = await getSupabaseClient().from('levels').select('*').eq('users_id', userId).eq('channels_id', channelValue);
-  if (response.error) throw new Error(response.error.message);
-  const existing = ((response.data ?? []) as Row[]).find((row) => normalizeCatalogName(row.levels_name) === normalizeCatalogName(name));
-  if (existing) {
-    const update = await getSupabaseClient().from('levels').update({
-      levels_daily_limit: dailyLimit,
-      levels_queues: queues,
-      levels_updated_at: nowIso(),
-    }).eq('levels_id', existing.levels_id).eq('users_id', userId);
-    if (update.error) throw new Error(update.error.message);
-    return Number(existing.levels_id);
-  }
-  const inserted = await getSupabaseClient().from('levels').insert({
-    users_id: userId,
-    channels_id: channelValue,
-    status_id: Number(await activeStatusId()),
-    levels_name: name,
-    levels_daily_limit: dailyLimit,
-    levels_queues: queues,
-  }).select('levels_id').single();
-  if (inserted.error) throw new Error(inserted.error.message);
-  return Number((inserted.data as Row).levels_id);
 }
 
 async function createRecord(kind: ConfigKind, input: Record<string, unknown>): Promise<ConfigRecord> {
@@ -286,17 +254,7 @@ async function createRecord(kind: ConfigKind, input: Record<string, unknown>): P
   if (kind === 'branches') {
     const name = String(input.name ?? input.branch ?? '').trim();
     if (!name) throw new Error('O nome do ramo e obrigatorio.');
-    const categories = {
-      slug: String(input.slug ?? branchSlug(name)),
-      category: String(input.category ?? name),
-      subcategories: list(input.subcategories),
-      associatedCategories: list(input.associatedCategories),
-      order: number(input.order, 0),
-      minRating: number(input.minRating, 4),
-      minReviews: number(input.minReviews, 10),
-      imageName: String(input.imageName ?? ''),
-      imageRequired: bool(input.imageRequired, false),
-    };
+    const categories = input.categories ?? null;
     const response = await client.from('branches').insert({ users_id: userId, status_id: statusId, branches_name: name, branches_categories: categories }).select('branches_id').single();
     if (response.error) throw new Error(response.error.message);
     return (await listBranches(userId)).find((item) => item.id === String((response.data as Row).branches_id))!;
@@ -305,10 +263,12 @@ async function createRecord(kind: ConfigKind, input: Record<string, unknown>): P
   if (kind === 'templates') {
     const branchId = Number(input.branchId);
     if (!Number.isSafeInteger(branchId)) throw new Error('Selecione um ramo valido.');
-    const channelName = String(input.channel ?? 'WhatsApp');
-    const typeName = String(input.type ?? 'sem-site') === 'com-site' ? 'Com site' : 'Sem site';
-    const templateChannelId = await ensureTemplateCatalog('template_channels', userId, channelName);
-    const templateTypeId = await ensureTemplateCatalog('template_types', userId, typeName);
+    const templateChannelId = Number(input.templateChannelId);
+    const templateTypeId = Number(input.templateTypeId);
+    if (!Number.isSafeInteger(templateChannelId)) throw new Error('Selecione um canal de template valido.');
+    if (!Number.isSafeInteger(templateTypeId)) throw new Error('Selecione um tipo de template valido.');
+    const templateName = String(input.name ?? '').trim();
+    if (!templateName) throw new Error('O nome do template e obrigatorio.');
     const message1 = String(input.message1 ?? '').trim();
     const message2 = String(input.message2 ?? '').trim();
     const message3 = String(input.message3 ?? '').trim();
@@ -318,7 +278,7 @@ async function createRecord(kind: ConfigKind, input: Record<string, unknown>): P
       users_id: userId,
       branches_id: branchId,
       status_id: statusId,
-      templates_name: String(input.name ?? `${channelName} - ${typeName} - ${Date.now()}`),
+      templates_name: templateName,
       templates_message_1: message1,
       templates_message_2: message2,
       templates_message_3: message3,
@@ -331,24 +291,16 @@ async function createRecord(kind: ConfigKind, input: Record<string, unknown>): P
   }
 
   if (kind === 'chips') {
-    const instanceName = String(input.instance ?? '').trim();
     const name = String(input.name ?? '').trim();
     const phone = String(input.number ?? '').replace(/\D/g, '');
-    if (!name || !instanceName || !phone) throw new Error('Nome, numero e instancia do chip sao obrigatorios.');
-    const levelName = String(input.level ?? 'Padrao');
-    const defaults = chipLevelDefaults(levelName);
-    const levelId = await ensureLevel(userId, 'WhatsApp', levelName, number(input.dailyLimit, defaults.dailyLimit), Math.max(1, number(input.batches, defaults.batchCount)));
-    const instanceResponse = await client.from('instances').insert({
-      users_id: userId,
-      status_id: statusId,
-      instances_name: instanceName,
-      instances_url: String(input.url ?? ''),
-      instances_apikey: String(input.apiKey ?? ''),
-    }).select('instances_id').single();
-    if (instanceResponse.error) throw new Error(instanceResponse.error.message);
+    const instanceId = Number(input.instanceId);
+    const levelId = Number(input.levelId);
+    if (!name || !phone) throw new Error('Nome e numero do chip sao obrigatorios.');
+    if (!Number.isSafeInteger(instanceId)) throw new Error('Selecione uma instancia valida.');
+    if (!Number.isSafeInteger(levelId)) throw new Error('Selecione um nivel valido.');
     const chipResponse = await client.from('chips').insert({
       users_id: userId,
-      instances_id: Number((instanceResponse.data as Row).instances_id),
+      instances_id: instanceId,
       levels_id: levelId,
       status_id: statusId,
       chips_name: name,
@@ -361,8 +313,8 @@ async function createRecord(kind: ConfigKind, input: Record<string, unknown>): P
   const username = String(input.username ?? '').replace(/^@/, '').trim();
   const name = String(input.name ?? username).trim();
   if (!username || !name) throw new Error('Nome e usuario do Instagram sao obrigatorios.');
-  const dailyLimit = Math.max(1, number(input.dailyLimit, 60));
-  const levelId = await ensureLevel(userId, 'Instagram', `Instagram ${username}`, dailyLimit, 1);
+  const levelId = Number(input.levelId);
+  if (!Number.isSafeInteger(levelId)) throw new Error('Selecione um nivel valido para o Instagram.');
   const response = await client.from('socials').insert({
     users_id: userId,
     status_id: statusId,
@@ -385,17 +337,7 @@ async function updateRecord(kind: ConfigKind, id: string, input: Record<string, 
     const current = (await listBranches(userId)).find((item) => item.id === id);
     if (!current) throw new Error('Ramo nao encontrado.');
     const name = String(input.name ?? current.name).trim();
-    const categories = {
-      slug: String(input.slug ?? current.slug),
-      category: String(input.category ?? current.category),
-      subcategories: list(input.subcategories ?? current.subcategories),
-      associatedCategories: list(input.associatedCategories ?? current.associatedCategories),
-      order: number(input.order, current.order),
-      minRating: number(input.minRating, current.minRating),
-      minReviews: number(input.minReviews, current.minReviews),
-      imageName: String(input.imageName ?? current.imageName),
-      imageRequired: bool(input.imageRequired, current.imageRequired),
-    };
+    const categories = input.categories ?? current.categories ?? null;
     const response = await client.from('branches').update({ status_id: statusId, branches_name: name, branches_categories: categories, branches_updated_at: nowIso() }).eq('branches_id', numericId).eq('users_id', userId);
     if (response.error) throw new Error(response.error.message);
     return (await listBranches(userId)).find((item) => item.id === id)!;
@@ -404,17 +346,20 @@ async function updateRecord(kind: ConfigKind, id: string, input: Record<string, 
   if (kind === 'templates') {
     const current = (await listTemplates(userId)).find((item) => item.id === id);
     if (!current) throw new Error('Template nao encontrado.');
-    const channelName = String(input.channel ?? current.channel);
-    const typeName = String(input.type ?? current.type) === 'com-site' ? 'Com site' : 'Sem site';
+    const templateChannelId = Number(input.templateChannelId ?? current.templateChannelId);
+    const templateTypeId = Number(input.templateTypeId ?? current.templateTypeId);
+    if (!Number.isSafeInteger(templateChannelId)) throw new Error('Selecione um canal de template valido.');
+    if (!Number.isSafeInteger(templateTypeId)) throw new Error('Selecione um tipo de template valido.');
     const response = await client.from('templates').update({
       branches_id: Number(input.branchId ?? current.branchId),
       status_id: statusId,
+      templates_name: String(input.name ?? current.name).trim(),
       templates_message_1: String(input.message1 ?? current.message1),
       templates_message_2: String(input.message2 ?? current.message2),
       templates_message_3: String(input.message3 ?? current.message3),
       templates_message_4: String(input.message4 ?? current.message4),
-      template_channels_id: await ensureTemplateCatalog('template_channels', userId, channelName),
-      template_types_id: await ensureTemplateCatalog('template_types', userId, typeName),
+      template_channels_id: templateChannelId,
+      template_types_id: templateTypeId,
       templates_updated_at: nowIso(),
     }).eq('templates_id', numericId).eq('users_id', userId);
     if (response.error) throw new Error(response.error.message);
@@ -422,25 +367,14 @@ async function updateRecord(kind: ConfigKind, id: string, input: Record<string, 
   }
 
   if (kind === 'chips') {
-    const chipResponse = await client.from('chips').select('*').eq('chips_id', numericId).eq('users_id', userId).single();
-    if (chipResponse.error) throw new Error(chipResponse.error.message);
-    const chip = chipResponse.data as Row;
     const current = (await listChips(userId)).find((item) => item.id === id)!;
-    const levelName = String(input.level ?? current.level);
-    const defaults = chipLevelDefaults(levelName);
-    const levelId = await ensureLevel(userId, 'WhatsApp', levelName, number(input.dailyLimit, current.dailyLimit || defaults.dailyLimit), Math.max(1, number(input.batches, current.batches.length || defaults.batchCount)));
-    const apiKey = String(input.apiKey ?? '');
-    const instancePatch: Row = {
-      status_id: statusId,
-      instances_name: String(input.instance ?? current.instance),
-      instances_url: String(input.url ?? current.url),
-      instances_updated_at: nowIso(),
-    };
-    if (apiKey && !/^\*+$/.test(apiKey)) instancePatch.instances_apikey = apiKey;
-    const instanceUpdate = await client.from('instances').update(instancePatch).eq('instances_id', chip.instances_id).eq('users_id', userId);
-    if (instanceUpdate.error) throw new Error(instanceUpdate.error.message);
+    const instanceId = Number(input.instanceId ?? current.instanceId);
+    const levelId = Number(input.levelId ?? current.levelId);
+    if (!Number.isSafeInteger(instanceId)) throw new Error('Selecione uma instancia valida.');
+    if (!Number.isSafeInteger(levelId)) throw new Error('Selecione um nivel valido.');
     const chipUpdate = await client.from('chips').update({
       status_id: statusId,
+      instances_id: instanceId,
       levels_id: levelId,
       chips_name: String(input.name ?? current.name),
       chips_phone: String(input.number ?? current.number).replace(/\D/g, ''),
@@ -452,14 +386,13 @@ async function updateRecord(kind: ConfigKind, id: string, input: Record<string, 
 
   const socialResponse = await client.from('socials').select('*').eq('socials_id', numericId).eq('users_id', userId).single();
   if (socialResponse.error) throw new Error(socialResponse.error.message);
-  const social = socialResponse.data as Row;
   const current = (await listSocials(userId)).find((item) => item.id === id)!;
   const username = String(input.username ?? current.username).replace(/^@/, '').trim();
-  const dailyLimit = Math.max(1, number(input.dailyLimit, current.dailyLimit));
-  const levelUpdate = await client.from('levels').update({ levels_daily_limit: dailyLimit, levels_updated_at: nowIso() }).eq('levels_id', social.levels_id).eq('users_id', userId);
-  if (levelUpdate.error) throw new Error(levelUpdate.error.message);
+  const levelId = Number(input.levelId ?? current.levelId);
+  if (!Number.isSafeInteger(levelId)) throw new Error('Selecione um nivel valido para o Instagram.');
   const update = await client.from('socials').update({
     status_id: statusId,
+    levels_id: levelId,
     socials_name: String(input.name ?? current.name),
     socials_username: username,
     socials_updated_at: nowIso(),

@@ -114,29 +114,5 @@ export type WhatsAppQueueFilters = {
 };
 
 export type UpdateWhatsAppQueueLeadInput = Partial<
-  Pick<
-    WhatsAppQueueLead,
-    | 'company'
-    | 'phone'
-    | 'branch'
-    | 'type'
-    | 'status'
-    | 'message1'
-    | 'message2'
-    | 'message3'
-    | 'message4'
-    | 'imageName'
-    | 'imageRequired'
-    | 'image_url'
-    | 'image_id'
-    | 'site'
-    | 'instagram'
-    | 'instagram_url'
-    | 'retry_count'
-    | 'error_message'
-    | 'scheduled_date'
-    | 'batch_id'
-    | 'batch_number'
-    | 'position'
-  >
+  Pick<WhatsAppQueueLead, 'status' | 'retry_count' | 'error_message' | 'scheduled_date' | 'position'>
 >;

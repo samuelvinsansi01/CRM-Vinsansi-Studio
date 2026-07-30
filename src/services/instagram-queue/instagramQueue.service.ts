@@ -4,7 +4,6 @@ import { permissionsFor } from '../permissions';
 import { settingsService } from '../settings/settings.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
-import { hasAllTemplateMessages } from '../templates/templateContract';
 import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 import type { InstagramQueueFilters, InstagramQueueLead, UpdateInstagramQueueLeadInput } from './types';
 
@@ -44,7 +43,6 @@ function queueRolloverTargetDate() {
 async function rolloverOverdueInstagramItems() {
   const targetDate = queueRolloverTargetDate();
   const settings = await settingsService.getDispatchSettings();
-  const batchLimit = Math.max(1, settings.instagram.perBatch);
   const fallbackDailyLimit = Math.max(1, settings.instagram.dailyLimit);
   const allLeads = (await repositories.instagramQueue.listBatches({})).flatMap((batch) => batch.leads);
   const candidates = allLeads
@@ -68,13 +66,10 @@ async function rolloverOverdueInstagramItems() {
       key = `${lead.profile}:${scheduledDate}`;
     }
     const nextPosition = (occupancy.get(key) ?? 0) + 1;
-    const batchNumber = Math.floor((nextPosition - 1) / batchLimit) + 1;
     occupancy.set(key, nextPosition);
     await repositories.instagramQueue.updateLead(lead.id, {
       scheduled_date: scheduledDate,
       position: nextPosition,
-      batch_number: batchNumber,
-      batch_id: `ig-batch-${lead.profile}-${scheduledDate}-${batchNumber}`,
     });
   }
 }
@@ -116,10 +111,6 @@ export const instagramQueueService = {
     if (!current) throw new Error('Item não encontrado na fila Instagram.');
     if (!permissionsFor('instagram-queue', current.status).canEdit()) throw new Error('Este item não pode ser editado no estado atual.');
     assertStatusPatch(current, input);
-    if ([input.message1, input.message2, input.message3, input.message4].some((message) => message !== undefined)) {
-      const candidate = { ...current, ...input };
-      if (!hasAllTemplateMessages(candidate)) throw new Error('O item precisa manter as quatro mensagens do template.');
-    }
     const lead = await repositories.instagramQueue.updateLead(id, input);
     logQueueEvent('updated', current, current.status);
     eventBus.emit('instagram-queue:changed', { action: 'update' });

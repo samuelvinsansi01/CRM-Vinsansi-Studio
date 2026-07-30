@@ -17,6 +17,8 @@ type ConfigBaseRecord = {
 
 export type BranchConfigRecord = ConfigBaseRecord & {
   kind: 'branches';
+  /** Conteudo fisico de public.branches.branches_categories. */
+  categories: unknown;
   slug: string;
   name: string;
   category: string;
@@ -32,8 +34,13 @@ export type BranchConfigRecord = ConfigBaseRecord & {
 
 export type TemplateConfigRecord = ConfigBaseRecord & {
   kind: 'templates';
+  name: string;
   branchId: string;
   branchName: string;
+  templateChannelId: string;
+  templateChannelName: string;
+  templateTypeId: string;
+  templateTypeName: string;
   channel: TemplateChannel;
   type: TemplateType;
   message1: string;
@@ -47,6 +54,8 @@ export type ChipConfigRecord = ConfigBaseRecord & {
   kind: 'chips';
   name: string;
   number: string;
+  instanceId: string;
+  levelId: string;
   level: string;
   url: string;
   instance: string;
@@ -66,6 +75,8 @@ export type InstagramConfigRecord = ConfigBaseRecord & {
   kind: 'instagram';
   name: string;
   username: string;
+  levelId: string;
+  levelName: string;
   dailyLimit: number;
 };
 

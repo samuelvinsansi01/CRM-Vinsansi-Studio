@@ -107,30 +107,5 @@ export type InstagramQueueFilters = {
 };
 
 export type UpdateInstagramQueueLeadInput = Partial<
-  Pick<
-    InstagramQueueLead,
-    | 'company'
-    | 'instagram'
-    | 'branch'
-    | 'type'
-    | 'status'
-    | 'message1'
-    | 'message2'
-    | 'message3'
-    | 'message4'
-    | 'imageName'
-    | 'imageRequired'
-    | 'image_url'
-    | 'image_id'
-    | 'invalidReason'
-    | 'phone'
-    | 'site'
-    | 'instagram_url'
-    | 'retry_count'
-    | 'error_message'
-    | 'scheduled_date'
-    | 'batch_id'
-    | 'batch_number'
-    | 'position'
-  >
+  Pick<InstagramQueueLead, 'status' | 'retry_count' | 'error_message' | 'scheduled_date' | 'position'>
 >;

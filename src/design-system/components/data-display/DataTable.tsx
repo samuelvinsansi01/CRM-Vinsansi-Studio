@@ -1,9 +1,9 @@
-import { Archive, Check, Edit2, Eye, Instagram, MessageCircle, RefreshCcw, RotateCcw, Send, Trash2, X } from 'lucide-react';
+import { Archive, Check, Edit2, Eye, Instagram, MessageCircle, Power, PowerOff, RefreshCcw, RotateCcw, Send, Trash2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { IconButton } from '../action/IconButton';
 
-export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'invalidate' | 'refresh' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'approve' | 'unapprove' | 'sent' | 'validate';
+export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'activate' | 'deactivate' | 'invalidate' | 'refresh' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'approve' | 'unapprove' | 'sent' | 'validate';
 
 export type TableColumn<T> = {
   key: keyof T | string;
@@ -28,6 +28,8 @@ const actionIcon = {
   edit: Edit2,
   delete: Trash2,
   archive: Archive,
+  activate: Power,
+  deactivate: PowerOff,
   invalidate: X,
   refresh: RefreshCcw,
   whatsapp: MessageCircle,
@@ -45,6 +47,8 @@ const actionLabel = {
   edit: 'Editar',
   delete: 'Excluir',
   archive: 'Arquivar',
+  activate: 'Ativar',
+  deactivate: 'Desativar',
   invalidate: 'Invalidar',
   refresh: 'Reprocessar',
   whatsapp: 'Enviar para WhatsApp',
@@ -62,6 +66,8 @@ const actionTone = {
   edit: 'neutral',
   delete: 'danger',
   archive: 'danger',
+  activate: 'success',
+  deactivate: 'danger',
   invalidate: 'danger',
   refresh: 'neutral',
   whatsapp: 'success',

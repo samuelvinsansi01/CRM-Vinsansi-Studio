@@ -1,7 +1,6 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { platformConfigService } from '../platform-config/platformConfig.service';
-import { settingsService } from '../settings';
 import { assertAllTemplateMessages } from '../templates/templateContract';
 import { branchSlug, normalizeBranchId } from './branchIdentity';
 import {
@@ -10,7 +9,6 @@ import {
   DEFAULT_TEMPLATE_MESSAGE_1,
   DEFAULT_TEMPLATE_MESSAGE_2,
 } from './config.seed';
-import { chipLevelDefaults } from './chipOperational';
 import { assertOperationalConfigRecord } from './operationalConfig.rules';
 import type {
   BranchConfigRecord,
@@ -123,15 +121,6 @@ function isTestConfigRecord(record: ConfigRecord) {
   ].some((marker) => source.includes(marker));
 }
 
-function normalizeTime(value: unknown, fallback: string) {
-  const text = String(value ?? '').trim();
-  const match = text.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return fallback;
-  const hour = Math.min(23, Math.max(0, Number.parseInt(match[1], 10)));
-  const minute = Math.min(59, Math.max(0, Number.parseInt(match[2], 10)));
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-}
-
 function hasOwn(source: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(source, key);
 }
@@ -159,36 +148,80 @@ function stringFromInput(
   return text;
 }
 
-function normalizeBranchInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: BranchConfigRecord): BranchConfigRecord {
-  const raw = input as Record<string, unknown>;
-  const createdAt = String(existing?.createdAt ?? raw.createdAt ?? nowIso());
-  const name = stringFromInput(raw, ['name', 'ramo', 'branch'], existing?.name ?? 'Novo ramo', { required: true });
-  const slugInput = stringFromInput(raw, ['slug'], existing?.slug ?? '');
-  const slug = slugInput || branchSlug(name);
-  const sourceId = stringFromInput(raw, ['id'], existing?.id ?? '');
-  const id = String(existing?.id ?? normalizeBranchId(sourceId));
-  const subcategories = splitList(valueFromInput(raw, ['subcategories', 'subramos', 'keywords'], existing?.subcategories ?? []));
-  const associatedCategories = splitList(valueFromInput(raw, ['associatedCategories', 'categories', 'categoria'], existing?.associatedCategories ?? []));
-  const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
-  const imageName = stringFromInput(raw, ['imageName', 'image_name', 'imagem'], existing?.imageName ?? '');
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 
+function parseJsonInput(value: unknown, fieldLabel: string): unknown {
+  if (typeof value !== 'string') return value;
+  const text = value.trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(`${fieldLabel} deve conter JSON valido.`);
+  }
+}
+
+function branchCategoriesFromInput(
+  raw: Record<string, unknown>,
+  existing: BranchConfigRecord | undefined,
+  name: string,
+) {
+  if (hasOwn(raw, 'categories')) return parseJsonInput(raw.categories, 'Categorias do ramo');
+  if (hasOwn(raw, 'categoriesJson')) return parseJsonInput(raw.categoriesJson, 'Categorias do ramo');
+
+  const legacyKeys = [
+    'slug', 'category', 'subcategories', 'subramos', 'keywords', 'associatedCategories',
+    'categoriesList', 'categoria', 'order', 'ordem', 'minRating', 'notaMinima',
+    'minReviews', 'reviewsMinimos', 'imageName', 'image_name', 'imagem',
+    'imageRequired', 'image_required',
+  ];
+  if (!legacyKeys.some((key) => hasOwn(raw, key))) return existing?.categories ?? null;
+
+  const previous = isPlainObject(existing?.categories) ? existing.categories : {};
+  const imageName = stringFromInput(raw, ['imageName', 'image_name', 'imagem'], existing?.imageName ?? '');
   return {
-    id,
-    kind: 'branches',
-    slug,
-    name,
+    ...previous,
+    slug: stringFromInput(raw, ['slug'], existing?.slug ?? branchSlug(name)) || branchSlug(name),
     category: stringFromInput(raw, ['category', 'ramo'], existing?.category ?? name) || name,
-    // A lista cadastrada pelo usuario e a fonte de verdade. Nenhuma palavra-chave
-    // hardcoded e reintroduzida depois de uma exclusao intencional.
-    subcategories,
-    associatedCategories,
+    subcategories: splitList(valueFromInput(raw, ['subcategories', 'subramos', 'keywords'], existing?.subcategories ?? [])),
+    associatedCategories: splitList(valueFromInput(raw, ['associatedCategories', 'categoriesList', 'categoria'], existing?.associatedCategories ?? [])),
     order: toInteger(valueFromInput(raw, ['order', 'ordem'], existing?.order ?? 0), existing?.order ?? 0, 0),
-    active,
-    status: statusFromActive(active),
     minRating: toNumber(valueFromInput(raw, ['minRating', 'notaMinima'], existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING), existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING, 0),
     minReviews: toInteger(valueFromInput(raw, ['minReviews', 'reviewsMinimos'], existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS), existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS, 0),
     imageName,
     imageRequired: toBoolean(valueFromInput(raw, ['imageRequired', 'image_required'], existing?.imageRequired ?? Boolean(imageName)), existing?.imageRequired ?? Boolean(imageName)),
+  };
+}
+
+function normalizeBranchInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: BranchConfigRecord): BranchConfigRecord {
+  const raw = input as Record<string, unknown>;
+  const createdAt = String(existing?.createdAt ?? raw.createdAt ?? nowIso());
+  const name = stringFromInput(raw, ['name', 'ramo', 'branch'], existing?.name ?? 'Novo ramo', { required: true });
+  const sourceId = stringFromInput(raw, ['id'], existing?.id ?? '');
+  const id = String(existing?.id ?? normalizeBranchId(sourceId));
+  const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
+  const categories = branchCategoriesFromInput(raw, existing, name);
+  const metadata = isPlainObject(categories) ? categories : {};
+  const imageName = String(metadata.imageName ?? metadata.image_name ?? existing?.imageName ?? '');
+
+  return {
+    id,
+    kind: 'branches',
+    categories,
+    slug: String(metadata.slug ?? existing?.slug ?? branchSlug(name)),
+    name,
+    category: String(metadata.category ?? existing?.category ?? name),
+    subcategories: splitList(metadata.subcategories ?? (Array.isArray(categories) ? categories : existing?.subcategories ?? [])),
+    associatedCategories: splitList(metadata.associatedCategories ?? metadata.associated_categories ?? existing?.associatedCategories ?? []),
+    order: toInteger(metadata.order, existing?.order ?? 0, 0),
+    active,
+    status: statusFromActive(active),
+    minRating: toNumber(metadata.minRating ?? metadata.min_rating, existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING, 0),
+    minReviews: toInteger(metadata.minReviews ?? metadata.min_reviews, existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS, 0),
+    imageName,
+    imageRequired: toBoolean(metadata.imageRequired ?? metadata.image_required, existing?.imageRequired ?? Boolean(imageName)),
     createdAt,
     updatedAt: nowIso(),
   };
@@ -225,6 +258,8 @@ function normalizeTemplateInput(
   const branchId = stringFromInput(raw, ['branchId', 'ramoId'], existing?.branchId ?? '', { required: true });
   const branch = branches.find((item) => item.id === branchId) ?? branches.find((item) => normalizeText(item.name) === normalizeText(valueFromInput(raw, ['branchName', 'ramo'], existing?.branchName ?? '')));
   const branchName = branch?.name ?? stringFromInput(raw, ['branchName', 'ramo'], existing?.branchName ?? '');
+  const templateChannelId = stringFromInput(raw, ['templateChannelId', 'template_channels_id'], existing?.templateChannelId ?? '', { required: true });
+  const templateTypeId = stringFromInput(raw, ['templateTypeId', 'template_types_id'], existing?.templateTypeId ?? '', { required: true });
   const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
   const message1 = stringFromInput(raw, ['message1', 'msg1', 'part_1', 'mensagem1', 'mensagem'], existing?.message1 ?? DEFAULT_TEMPLATE_MESSAGE_1);
   const message2 = stringFromInput(raw, ['message2', 'msg2', 'part_2', 'mensagem2'], existing?.message2 ?? DEFAULT_TEMPLATE_MESSAGE_2);
@@ -234,10 +269,15 @@ function normalizeTemplateInput(
   return {
     id: String(existing?.id ?? raw.id ?? fallbackId('templates')),
     kind: 'templates',
+    name: stringFromInput(raw, ['name', 'templateName', 'templates_name'], existing?.name ?? '', { required: true }),
     branchId: branch?.id ?? branchId,
     branchName,
-    channel: normalizeTemplateChannel(valueFromInput(raw, ['channel', 'canal'], existing?.channel ?? 'WhatsApp'), existing?.channel ?? 'WhatsApp'),
-    type: normalizeTemplateType(valueFromInput(raw, ['type', 'tipo'], existing?.type ?? 'sem-site'), existing?.type ?? 'sem-site'),
+    templateChannelId,
+    templateChannelName: stringFromInput(raw, ['templateChannelName'], existing?.templateChannelName ?? existing?.channel ?? ''),
+    templateTypeId,
+    templateTypeName: stringFromInput(raw, ['templateTypeName'], existing?.templateTypeName ?? existing?.type ?? ''),
+    channel: normalizeTemplateChannel(valueFromInput(raw, ['templateChannelName', 'channel', 'canal'], existing?.channel ?? 'WhatsApp'), existing?.channel ?? 'WhatsApp'),
+    type: normalizeTemplateType(valueFromInput(raw, ['templateTypeName', 'type', 'tipo'], existing?.type ?? 'sem-site'), existing?.type ?? 'sem-site'),
     message1,
     message2,
     message3,
@@ -250,33 +290,33 @@ function normalizeTemplateInput(
   };
 }
 
-async function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: ChipConfigRecord): Promise<ChipConfigRecord> {
+function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: ChipConfigRecord): ChipConfigRecord {
   const raw = input as Record<string, unknown>;
   const active = toBoolean(valueFromInput(raw, ['active', 'status'], existing?.active ?? true), existing?.active ?? true);
   const createdAt = String(existing?.createdAt ?? raw.createdAt ?? nowIso());
-  const level = stringFromInput(raw, ['level', 'nivel'], existing?.level ?? 'estabilizado') || 'estabilizado';
-  const dispatchSettings = await settingsService.getDispatchSettings();
-  const defaults = chipLevelDefaults(level, dispatchSettings.chipLevels);
-  const batches = splitList(valueFromInput(raw, ['batches', 'blocks', 'lotes'], existing?.batches ?? defaults.batches))
-    .map((item) => normalizeTime(item, ''))
-    .filter(Boolean);
+  const instanceId = stringFromInput(raw, ['instanceId', 'instances_id'], existing?.instanceId ?? '', { required: true });
+  const levelId = stringFromInput(raw, ['levelId', 'levels_id'], existing?.levelId ?? '', { required: true });
+  const level = stringFromInput(raw, ['levelName', 'level', 'nivel'], existing?.level ?? '');
+  const batches = splitList(valueFromInput(raw, ['batches', 'blocks', 'lotes'], existing?.batches ?? []));
 
   return {
     id: String(existing?.id ?? raw.id ?? fallbackId('chips')),
     kind: 'chips',
     name: stringFromInput(raw, ['name', 'nome'], existing?.name ?? 'Novo chip', { required: true }),
     number: stringFromInput(raw, ['number', 'numero', 'phone'], existing?.number ?? ''),
+    instanceId,
+    levelId,
     level,
-    url: stringFromInput(raw, ['url', 'base_url', 'evolution_url'], existing?.url ?? ''),
-    instance: stringFromInput(raw, ['instance', 'instanceName', 'instance_name'], existing?.instance ?? ''),
+    url: stringFromInput(raw, ['instanceUrl', 'url', 'base_url', 'evolution_url'], existing?.url ?? ''),
+    instance: stringFromInput(raw, ['instanceName', 'instance', 'instance_name'], existing?.instance ?? ''),
     apiKey: stringFromInput(raw, ['apiKey', 'api_key'], existing?.apiKey ?? ''),
     connectionStatus: stringFromInput(raw, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? existing?.status ?? ''),
     priority: toInteger(valueFromInput(raw, ['priority', 'prioridade'], existing?.priority ?? 1), existing?.priority ?? 1, 1),
-    startTime: normalizeTime(valueFromInput(raw, ['startTime', 'horarioInicio'], existing?.startTime ?? defaults.startTime), existing?.startTime ?? defaults.startTime),
-    endTime: normalizeTime(valueFromInput(raw, ['endTime', 'horarioFim'], existing?.endTime ?? defaults.endTime), existing?.endTime ?? defaults.endTime),
-    dailyLimit: toInteger(valueFromInput(raw, ['dailyLimit', 'limiteDiario'], existing?.dailyLimit ?? defaults.dailyLimit), existing?.dailyLimit ?? defaults.dailyLimit, 1),
-    intervalSeconds: toInteger(valueFromInput(raw, ['intervalSeconds', 'intervaloSegundos'], existing?.intervalSeconds ?? defaults.intervalSeconds), existing?.intervalSeconds ?? defaults.intervalSeconds, 1),
-    blockSize: toInteger(valueFromInput(raw, ['blockSize', 'tamanhoBloco'], existing?.blockSize ?? defaults.blockSize), existing?.blockSize ?? defaults.blockSize, 1),
+    startTime: stringFromInput(raw, ['startTime', 'horarioInicio'], existing?.startTime ?? ''),
+    endTime: stringFromInput(raw, ['endTime', 'horarioFim'], existing?.endTime ?? ''),
+    dailyLimit: toInteger(valueFromInput(raw, ['dailyLimit', 'limiteDiario'], existing?.dailyLimit ?? 0), existing?.dailyLimit ?? 0, 0),
+    intervalSeconds: toInteger(valueFromInput(raw, ['intervalSeconds', 'intervaloSegundos'], existing?.intervalSeconds ?? 0), existing?.intervalSeconds ?? 0, 0),
+    blockSize: toInteger(valueFromInput(raw, ['blockSize', 'tamanhoBloco'], existing?.blockSize ?? 0), existing?.blockSize ?? 0, 0),
     batches,
     paused: toBoolean(valueFromInput(raw, ['paused', 'pausado'], existing?.paused ?? false), existing?.paused ?? false),
     active,
@@ -301,12 +341,15 @@ function normalizeInstagramInput(input: CreateConfigRecordInput | UpdateConfigRe
   const createdAt = String(existing?.createdAt ?? raw.createdAt ?? nowIso());
   const username = normalizeInstagramUsername(valueFromInput(raw, ['username', 'instagram', 'profile'], existing?.username ?? ''));
   const name = stringFromInput(raw, ['name', 'nome'], (existing?.name ?? username) || 'Novo perfil', { required: true });
+  const levelId = stringFromInput(raw, ['levelId', 'levels_id'], existing?.levelId ?? '', { required: true });
 
   return {
     id: String(existing?.id ?? raw.id ?? fallbackId('instagram')),
     kind: 'instagram',
     name,
     username,
+    levelId,
+    levelName: stringFromInput(raw, ['levelName', 'nivel'], existing?.levelName ?? ''),
     dailyLimit: toInteger(valueFromInput(raw, ['dailyLimit', 'daily_limit', 'limiteDiario'], existing?.dailyLimit ?? 60), existing?.dailyLimit ?? 60, 1),
     active,
     status: statusFromActive(active),
@@ -321,12 +364,6 @@ function isBranch(record: ConfigRecord): record is BranchConfigRecord {
 
 function isTemplate(record: ConfigRecord): record is TemplateConfigRecord {
   return record.kind === 'templates';
-}
-
-function isArchivedConfig(record: ConfigRecord) {
-  // O schema real possui status generico, sem coluna dedicada a arquivamento.
-  // Registros inativos representam o estado arquivado na interface.
-  return !record.active || ['arquivado', 'inativo'].includes(normalizeText(record.status));
 }
 
 function isDeletedConfig(record: ConfigRecord) {
@@ -380,43 +417,75 @@ function isOpenInstagramStatus(status: unknown) {
   return ['queued', 'following', 'dm_opened', 'paused', 'error'].includes(normalizeText(status));
 }
 
-async function assertArchiveAllowed(record: ConfigRecord) {
-  if (record.kind === 'branches') {
-    const templates = (await repositories.config.list('templates')).filter(isTemplate);
-    const activeTemplates = templates.filter((template) =>
-      template.branchId === record.id && !isArchivedConfig(template) && !isDeletedConfig(template),
-    );
-    if (activeTemplates.length) {
-      throw new Error(`Arquive primeiro os ${activeTemplates.length} template(s) vinculados a este ramo.`);
-    }
-    return;
-  }
-
-  if (record.kind === 'chips') {
-    const batches = await repositories.whatsappQueue.listBatches({ chip: record.instance });
-    const open = batches.flatMap((batch) => batch.leads).filter((lead) => isOpenWhatsAppStatus(lead.status));
-    if (open.length) throw new Error(`Este chip possui ${open.length} item(ns) de fila ainda aberto(s).`);
-    return;
-  }
-
-  if (record.kind === 'instagram') {
-    const batches = await repositories.instagramQueue.listBatches({ profile: record.username });
-    const open = batches.flatMap((batch) => batch.leads).filter((lead) => isOpenInstagramStatus(lead.status));
-    if (open.length) throw new Error(`Este perfil possui ${open.length} item(ns) de fila ainda aberto(s).`);
-    return;
-  }
-
+async function assertNoOpenQueueReferences(record: ConfigRecord) {
   const [whatsappBatches, instagramBatches] = await Promise.all([
     repositories.whatsappQueue.listBatches({}),
     repositories.instagramQueue.listBatches({}),
   ]);
-  const openWhatsApp = whatsappBatches.flatMap((batch) => batch.leads)
-    .filter((lead) => lead.template_id === record.id && isOpenWhatsAppStatus(lead.status));
-  const openInstagram = instagramBatches.flatMap((batch) => batch.leads)
-    .filter((lead) => lead.template_id === record.id && isOpenInstagramStatus(lead.status));
-  if (openWhatsApp.length + openInstagram.length) {
-    throw new Error(`Este template esta congelado em ${openWhatsApp.length + openInstagram.length} item(ns) de fila ainda aberto(s).`);
+  const whatsappItems = whatsappBatches.flatMap((batch) => batch.leads);
+  const instagramItems = instagramBatches.flatMap((batch) => batch.leads);
+
+  const openWhatsApp = whatsappItems.filter((lead) => {
+    if (!isOpenWhatsAppStatus(lead.status)) return false;
+    if (record.kind === 'branches') return lead.branch_id === record.id;
+    if (record.kind === 'chips') return lead.chip_id === record.id;
+    if (record.kind === 'templates') return lead.template_id === record.id;
+    return false;
+  });
+  const openInstagram = instagramItems.filter((lead) => {
+    if (!isOpenInstagramStatus(lead.status)) return false;
+    if (record.kind === 'branches') return lead.branch_id === record.id;
+    if (record.kind === 'instagram') return lead.profile_id === record.id;
+    if (record.kind === 'templates') return lead.template_id === record.id;
+    return false;
+  });
+  const total = openWhatsApp.length + openInstagram.length;
+  if (!total) return;
+
+  const subject = record.kind === 'branches'
+    ? 'Este ramo'
+    : record.kind === 'chips'
+      ? 'Este chip'
+      : record.kind === 'instagram'
+        ? 'Este perfil'
+        : 'Este template';
+  throw new Error(`${subject} esta congelado em ${total} item(ns) de fila ainda aberto(s).`);
+}
+
+async function assertDeactivationAllowed(record: ConfigRecord) {
+  if (record.kind === 'branches') {
+    const templates = (await repositories.config.list('templates')).filter(isTemplate);
+    const activeTemplates = templates.filter((template) =>
+      template.branchId === record.id && template.active && !isDeletedConfig(template),
+    );
+    if (activeTemplates.length) {
+      throw new Error(`Desative primeiro os ${activeTemplates.length} template(s) vinculados a este ramo.`);
+    }
   }
+  await assertNoOpenQueueReferences(record);
+}
+
+function operationalFieldsChanged(current: ConfigRecord, next: ConfigRecord) {
+  if (current.kind !== next.kind) return true;
+  if (current.kind === 'branches' && next.kind === 'branches') {
+    return JSON.stringify(current.categories) !== JSON.stringify(next.categories);
+  }
+  if (current.kind === 'templates' && next.kind === 'templates') {
+    return current.branchId !== next.branchId ||
+      current.templateChannelId !== next.templateChannelId ||
+      current.templateTypeId !== next.templateTypeId ||
+      current.message1 !== next.message1 ||
+      current.message2 !== next.message2 ||
+      current.message3 !== next.message3 ||
+      current.message4 !== next.message4;
+  }
+  if (current.kind === 'chips' && next.kind === 'chips') {
+    return current.number !== next.number || current.instanceId !== next.instanceId || current.levelId !== next.levelId;
+  }
+  if (current.kind === 'instagram' && next.kind === 'instagram') {
+    return current.username !== next.username || current.levelId !== next.levelId;
+  }
+  return true;
 }
 
 async function assertTemplateContract(template: TemplateConfigRecord, editingId?: string) {
@@ -426,25 +495,15 @@ async function assertTemplateContract(template: TemplateConfigRecord, editingId?
     (item) =>
       item.id !== editingId &&
       item.status !== 'deleted' &&
-      !isArchivedConfig(item) &&
+      item.active &&
       item.branchId === template.branchId &&
-      item.channel === template.channel &&
-      item.type === template.type,
+      item.templateChannelId === template.templateChannelId &&
+      item.templateTypeId === template.templateTypeId,
   ).length;
 
   if (activeGroupCount >= TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE) {
     throw new Error(`Limite de ${TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE} templates para este ramo, canal e tipo atingido.`);
   }
-}
-
-function comparableList(items: string[]) {
-  return items.map((item) => normalizeText(item)).filter(Boolean);
-}
-
-function sameList(left: string[], right: string[]) {
-  const a = comparableList(left);
-  const b = comparableList(right);
-  return a.length === b.length && a.every((item, index) => item === b[index]);
 }
 
 function assertPersisted(expected: ConfigRecord, saved: ConfigRecord) {
@@ -458,19 +517,16 @@ function assertPersisted(expected: ConfigRecord, saved: ConfigRecord) {
 
   if (expected.kind === 'branches' && saved.kind === 'branches') {
     if (expected.name !== saved.name) fail('name', expected.name, saved.name);
-    if (expected.slug !== saved.slug) fail('slug', expected.slug, saved.slug);
-    if (!sameList(expected.subcategories, saved.subcategories)) fail('subcategories', expected.subcategories, saved.subcategories);
-    if (!sameList(expected.associatedCategories, saved.associatedCategories)) fail('associatedCategories', expected.associatedCategories, saved.associatedCategories);
-    if (expected.imageName !== saved.imageName) fail('imageName', expected.imageName, saved.imageName);
-    if (expected.imageRequired !== saved.imageRequired) fail('imageRequired', expected.imageRequired, saved.imageRequired);
+    if (JSON.stringify(expected.categories) !== JSON.stringify(saved.categories)) fail('categories', expected.categories, saved.categories);
     if (expected.active !== saved.active) fail('active', expected.active, saved.active);
     return;
   }
 
   if (expected.kind === 'templates' && saved.kind === 'templates') {
+    if (expected.name !== saved.name) fail('name', expected.name, saved.name);
     if (expected.branchId !== saved.branchId) fail('branchId', expected.branchId, saved.branchId);
-    if (expected.channel !== saved.channel) fail('channel', expected.channel, saved.channel);
-    if (expected.type !== saved.type) fail('type', expected.type, saved.type);
+    if (expected.templateChannelId !== saved.templateChannelId) fail('templateChannelId', expected.templateChannelId, saved.templateChannelId);
+    if (expected.templateTypeId !== saved.templateTypeId) fail('templateTypeId', expected.templateTypeId, saved.templateTypeId);
     if (expected.message1 !== saved.message1) fail('message1', expected.message1, saved.message1);
     if (expected.message2 !== saved.message2) fail('message2', expected.message2, saved.message2);
     if (expected.message3 !== saved.message3) fail('message3', expected.message3, saved.message3);
@@ -480,13 +536,9 @@ function assertPersisted(expected: ConfigRecord, saved: ConfigRecord) {
   }
 
   if (expected.kind === 'chips' && saved.kind === 'chips') {
-    for (const field of ['name', 'number', 'level', 'url', 'instance', 'apiKey', 'startTime', 'endTime'] as const) {
+    for (const field of ['name', 'number', 'instanceId', 'levelId'] as const) {
       if (expected[field] !== saved[field]) fail(field, expected[field], saved[field]);
     }
-    for (const field of ['priority', 'dailyLimit', 'intervalSeconds', 'blockSize'] as const) {
-      if (expected[field] !== saved[field]) fail(field, expected[field], saved[field]);
-    }
-    if (!sameList(expected.batches, saved.batches)) fail('batches', expected.batches, saved.batches);
     if (expected.active !== saved.active) fail('active', expected.active, saved.active);
     return;
   }
@@ -494,7 +546,7 @@ function assertPersisted(expected: ConfigRecord, saved: ConfigRecord) {
   if (expected.kind === 'instagram' && saved.kind === 'instagram') {
     if (expected.name !== saved.name) fail('name', expected.name, saved.name);
     if (expected.username !== saved.username) fail('username', expected.username, saved.username);
-    if (expected.dailyLimit !== saved.dailyLimit) fail('dailyLimit', expected.dailyLimit, saved.dailyLimit);
+    if (expected.levelId !== saved.levelId) fail('levelId', expected.levelId, saved.levelId);
     if (expected.active !== saved.active) fail('active', expected.active, saved.active);
   }
 }
@@ -539,6 +591,11 @@ export const configService = {
 
     const normalized = await normalizeByKind(kind, input, current);
     await assertRecordContract(normalized, id);
+    if (current.active && !normalized.active) {
+      await assertDeactivationAllowed(current);
+    } else if (operationalFieldsChanged(current, normalized)) {
+      await assertNoOpenQueueReferences(current);
+    }
 
     const record = await repositories.config.update(kind, id, normalized);
     assertPersisted(normalized, record);
@@ -547,19 +604,13 @@ export const configService = {
     return persisted;
   },
 
-  async remove(kind: ConfigKind, id: string) {
-    const selected = await selectedRecords(kind, [id]);
-    if (!selected.every(isArchivedConfig)) {
-      throw new Error('Excluir exige que o registro esteja arquivado.');
-    }
-
-    await repositories.config.remove(kind, id);
-    await emitConfigChanged(kind);
+  async remove(_kind: ConfigKind, _id: string) {
+    throw new Error('O contrato canonico de configuracao nao possui exclusao ou arquivamento. Use a desativacao.');
   },
 
   async toggleArchive(kind: ConfigKind, id: string) {
     const current = (await selectedRecords(kind, [id]))[0];
-    if (!isArchivedConfig(current)) await assertArchiveAllowed(current);
+    if (current.active) await assertDeactivationAllowed(current);
     const record = await repositories.config.toggleArchive(kind, id);
     await emitConfigChanged(kind);
     return record;
@@ -567,10 +618,10 @@ export const configService = {
 
   async bulkArchive(kind: ConfigKind, ids: string[]) {
     const selected = await selectedRecords(kind, ids);
-    if (!selected.every((record) => !isArchivedConfig(record) && !isDeletedConfig(record))) {
-      throw new Error('Arquivar exige apenas registros ativos ou inativos.');
+    if (!selected.every((record) => record.active && !isDeletedConfig(record))) {
+      throw new Error('Desativar exige apenas registros ativos.');
     }
-    for (const record of selected) await assertArchiveAllowed(record);
+    for (const record of selected) await assertDeactivationAllowed(record);
     const updated: ConfigRecord[] = [];
     for (const record of selected) updated.push(await repositories.config.toggleArchive(kind, record.id));
     await emitConfigChanged(kind);
@@ -579,20 +630,15 @@ export const configService = {
 
   async bulkRestore(kind: ConfigKind, ids: string[]) {
     const selected = await selectedRecords(kind, ids);
-    if (!selected.every(isArchivedConfig)) {
-      throw new Error('Restaurar exige apenas registros arquivados.');
+    if (!selected.every((record) => !record.active && !isDeletedConfig(record))) {
+      throw new Error('Ativar exige apenas registros inativos.');
     }
     const updated = await Promise.all(selected.map((record) => repositories.config.toggleArchive(kind, record.id)));
     await emitConfigChanged(kind);
     return updated;
   },
 
-  async bulkRemove(kind: ConfigKind, ids: string[]) {
-    const selected = await selectedRecords(kind, ids);
-    if (!selected.every(isArchivedConfig)) {
-      throw new Error('Excluir exige que todos os registros selecionados estejam arquivados.');
-    }
-    await Promise.all(selected.map((record) => repositories.config.remove(kind, record.id)));
-    await emitConfigChanged(kind);
+  async bulkRemove(_kind: ConfigKind, _ids: string[]) {
+    throw new Error('O contrato canonico de configuracao nao possui exclusao ou arquivamento. Use a desativacao.');
   },
 };

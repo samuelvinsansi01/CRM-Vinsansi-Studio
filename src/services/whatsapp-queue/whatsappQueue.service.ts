@@ -84,7 +84,6 @@ async function rolloverOverdueWhatsAppItems() {
     const chip = chipMap.get(instance);
     if (!chip) continue;
     const dailyLimit = Math.max(1, chip.dailyLimit);
-    const batchLimit = Math.max(1, chip.blockSize);
     let scheduledDate = targetDate;
     let key = `${instance}:${scheduledDate}`;
 
@@ -94,14 +93,11 @@ async function rolloverOverdueWhatsAppItems() {
     }
 
     const nextPosition = (occupancy.get(key) ?? 0) + 1;
-    const batchNumber = Math.floor((nextPosition - 1) / batchLimit) + 1;
     occupancy.set(key, nextPosition);
 
     await repositories.whatsappQueue.updateLead(lead.id, {
       scheduled_date: scheduledDate,
       position: nextPosition,
-      batch_number: batchNumber,
-      batch_id: `wa-batch-${instance}-${scheduledDate}-${batchNumber}`,
     });
   }
 }

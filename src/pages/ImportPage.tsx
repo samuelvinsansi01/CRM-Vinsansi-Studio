@@ -15,6 +15,7 @@ import {
   TableCard,
   Tag,
   ToastViewport,
+  type TableAction,
   type TableColumn,
   type ToastItem,
 } from '../design-system/components';
@@ -38,32 +39,28 @@ type ImportPageProps = {
 
 type LeadForm = {
   empresa: string;
+  branchId: string;
   ramo: string;
   destino: ImportLeadDestination;
   whatsapp: string;
   instagram: string;
   site: string;
-  send_instagram: 'Sim' | 'Não';
-  instagram_override_reason: string;
   cidade: string;
   estado: string;
-  motivo: string;
 };
 
-const destinationOptions: ImportLeadDestination[] = ['WhatsApp', 'Com site', 'Agregadores', 'Instagram', 'Recusado', 'Já no banco'];
+const destinationOptions: ImportLeadDestination[] = ['WhatsApp', 'Com site', 'Agregadores', 'Instagram'];
 
 const emptyLeadForm: LeadForm = {
   empresa: '',
+  branchId: '',
   ramo: '',
   destino: 'WhatsApp',
   whatsapp: '',
   instagram: '',
   site: '',
-  send_instagram: 'Não',
-  instagram_override_reason: '',
   cidade: '',
   estado: '',
-  motivo: '',
 };
 
 function normalizeLocationKey(value: string) {
@@ -174,37 +171,32 @@ function SubcategoryTooltip({ value }: { value?: string | null }) {
 function toForm(lead: ImportLead): LeadForm {
   return {
     empresa: lead.empresa,
+    branchId: lead.branch_id ?? '',
     ramo: lead.ramo,
-    destino: lead.destino,
+    destino: destinationLabel(lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino) as ImportLeadDestination,
     whatsapp: lead.whatsapp ?? '',
     instagram: lead.instagram ?? '',
     site: lead.site ?? '',
-    send_instagram: lead.send_instagram ? 'Sim' : 'Não',
-    instagram_override_reason: lead.instagram_override_reason ?? '',
     cidade: lead.cidade ?? '',
     estado: lead.estado ?? '',
-    motivo: lead.motivo ?? '',
   };
 }
 
 function formToInput(form: LeadForm, status: ImportLead['status'], previous?: ImportLead | null): ImportLeadInput {
-  const sendInstagram = form.send_instagram === 'Sim';
+  const sendInstagram = form.destino === 'Instagram';
   const originalDestination = previous?.original_destination ?? previous?.destino ?? form.destino;
 
   return {
     empresa: form.empresa,
+    branch_id: form.branchId,
     ramo: form.ramo,
     destino: form.destino,
     original_destination: originalDestination,
-    destination: sendInstagram ? 'Instagram' : form.destino,
-    destination_override: sendInstagram ? 'Instagram' : undefined,
+    destination: form.destino,
+    destination_override: undefined,
     send_instagram: sendInstagram,
     instagram_url: form.instagram,
-    instagram_override_reason: sendInstagram ? form.instagram_override_reason || 'Override manual para Instagram' : '',
-    override_by: sendInstagram ? previous?.override_by || 'Operador local' : '',
-    override_at: sendInstagram ? previous?.override_at || new Date().toISOString() : '',
     status,
-    motivo: status === 'rejected' ? form.motivo || 'Recusado manualmente.' : form.motivo,
     whatsapp: form.whatsapp,
     instagram: form.instagram,
     site: form.site,
@@ -631,14 +623,22 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     setSaving(true);
 
     try {
-      if (leadForm.send_instagram === 'Sim' && !isValidInstagram(leadForm.instagram)) {
-        pushToast({ title: 'Lead sem Instagram válido', description: 'Informe um Instagram válido antes de marcar Enviar Instagram.', tone: 'danger' });
+      if (!leadForm.branchId) {
+        pushToast({ title: 'Ramo obrigatório', description: 'Selecione um ramo existente antes de salvar.', tone: 'danger' });
+        return;
+      }
+      if (leadForm.destino === 'Instagram' && !isValidInstagram(leadForm.instagram)) {
+        pushToast({ title: 'Lead sem Instagram válido', description: 'Informe um Instagram válido para usar o canal Instagram.', tone: 'danger' });
         return;
       }
 
       await updateLead(editingLead.id, formToInput(leadForm, editingLead.status, editingLead));
       closeDrawer();
-      pushToast({ title: 'Lead atualizado', description: 'Alteração salva na camada de importação.', tone: 'success' });
+      pushToast({
+        title: 'Lead atualizado',
+        description: /^\d+$/.test(editingLead.id) ? 'Alteração confirmada na tabela canônica leads.' : 'Alteração aplicada somente à prévia desta sessão.',
+        tone: 'success',
+      });
     } catch (err) {
       pushToast({ title: 'Não foi possível salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
@@ -699,14 +699,35 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const confirmDelete = async () => {
     if (!deleteLead) return;
+    const persisted = /^\d+$/.test(deleteLead.id);
 
     try {
       await removeLead(deleteLead.id);
       setDeleteLead(null);
-      pushToast({ title: 'Lead removido', description: 'Registro removido da camada de importação.', tone: 'danger' });
+      pushToast({
+        title: persisted ? 'Lead arquivado' : 'Item removido da prévia',
+        description: persisted ? 'lead_status_id atualizado para Arquivado (8) na tabela leads.' : 'O item temporário foi removido apenas desta sessão.',
+        tone: persisted ? 'warning' : 'info',
+      });
     } catch (err) {
-      pushToast({ title: 'Não foi possível excluir', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      pushToast({ title: persisted ? 'Não foi possível arquivar' : 'Não foi possível remover', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
+  };
+
+  const rowActions = (lead: ImportLead): TableAction[] => {
+    const permissions = permissionsFor('import', lead.status);
+    const actions: TableAction[] = ['view'];
+    if (permissions.canEdit()) actions.push('edit');
+    if (permissions.canArchive()) actions.push(/^\d+$/.test(lead.id) ? 'archive' : 'delete');
+    return actions;
+  };
+
+  const handleRowAction = (action: TableAction, lead: ImportLead) => {
+    if (action === 'view' || action === 'edit') {
+      openLeadDrawer(lead, action);
+      return;
+    }
+    if (action === 'archive' || action === 'delete') setDeleteLead(lead);
   };
 
   const runBulkMove = async (nextStatus: 'approved' | 'rejected') => {
@@ -967,7 +988,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               selectable
               selectedRows={selectedRows}
               onSelectedRowsChange={setSelectedRows}
-              actions={[]}
+              actions={['view', 'edit', 'archive']}
+              getRowActions={rowActions}
+              onAction={(action, lead) => handleRowAction(action, lead)}
               columns={columns}
               rows={pageRows}
             />
@@ -1005,7 +1028,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       <Drawer
         open={drawerOpen}
         title={drawerMode === 'edit' ? 'Editar lead' : 'Detalhes do lead'}
-        description="Ajuste os dados do lead. Nesta etapa a alteração fica no serviço local de importação."
+        description={editingLead && /^\d+$/.test(editingLead.id)
+          ? 'Edite somente campos físicos de public.leads; o ramo é gravado por branches_id e o destino resolve channels_id/contact_sources_id.'
+          : 'Item ainda não persistido: as alterações afetam somente a prévia desta sessão.'}
         onClose={closeDrawer}
         footer={
           drawerMode === 'edit' ? (
@@ -1025,7 +1050,22 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       >
         <div className={`drawer-form ${drawerMode === 'view' ? 'drawer-form--readonly' : ''}`}>
           <Field label="Nome da empresa" value={leadForm.empresa} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('empresa', value)} />
-          <Field label="Ramo" value={leadForm.ramo} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('ramo', value)} />
+          <label className="drawer-field">
+            <span>Ramo</span>
+            {drawerMode === 'view' ? (
+              <Field value={leadForm.ramo} readOnly />
+            ) : (
+              <SelectField
+                value={leadForm.branchId}
+                options={uniqueBranches.map((branch) => ({ label: branch.name, value: branch.id }))}
+                placeholder="Selecione um ramo cadastrado"
+                onChange={(value) => {
+                  const branch = uniqueBranches.find((item) => item.id === value);
+                  setLeadForm((current) => ({ ...current, branchId: value, ramo: branch?.name ?? '' }));
+                }}
+              />
+            )}
+          </label>
           <label className="drawer-field">
             <span>Destino</span>
             {drawerMode === 'view' ? <Field value={leadForm.destino} readOnly /> : <SelectField value={leadForm.destino} options={destinationOptions} onChange={(value) => updateForm('destino', value)} />}
@@ -1033,22 +1073,18 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           <Field label="WhatsApp" value={leadForm.whatsapp} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('whatsapp', value)} />
           <Field label="Instagram" value={leadForm.instagram} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('instagram', value)} />
           <Field label="Site" value={leadForm.site} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('site', value)} />
-          <label className="drawer-field">
-            <span>Enviar Instagram?</span>
-            {drawerMode === 'view' ? <Field value={leadForm.send_instagram} readOnly /> : <SelectField value={leadForm.send_instagram} options={['Não', 'Sim']} onChange={(value) => updateForm('send_instagram', value as LeadForm['send_instagram'])} />}
-          </label>
-          <Field label="Motivo do override Instagram" value={leadForm.instagram_override_reason} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('instagram_override_reason', value)} />
           <Field label="Cidade" value={leadForm.cidade} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('cidade', value)} />
           <Field label="Estado" value={leadForm.estado} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('estado', value)} />
-          <Field as="textarea" label="Motivo" value={leadForm.motivo} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('motivo', value)} />
         </div>
       </Drawer>
 
       <ConfirmDialog
         open={deleteLead !== null}
-        title="Excluir lead?"
-        description="Essa acao remove o lead apenas da importacao local desta etapa."
-        confirmLabel="Excluir"
+        title={deleteLead && /^\d+$/.test(deleteLead.id) ? 'Arquivar lead?' : 'Remover item da prévia?'}
+        description={deleteLead && /^\d+$/.test(deleteLead.id)
+          ? 'Esta ação grava lead_status_id = 8 (Arquivado) na tabela canônica leads.'
+          : 'Esta ação remove somente o item temporário da prévia atual.'}
+        confirmLabel={deleteLead && /^\d+$/.test(deleteLead.id) ? 'Arquivar' : 'Remover'}
         danger
         onClose={() => setDeleteLead(null)}
         onConfirm={confirmDelete}

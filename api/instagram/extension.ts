@@ -34,7 +34,15 @@ function setCors(req: ApiRequest, res: ApiResponse) { const origin = requestOrig
 function send(req: ApiRequest, res: ApiResponse, status: number, payload: unknown) { setCors(req, res); return res.status(status).json(payload); }
 function serviceClient() { const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL'); const key = envAny('SUPABASE_SERVICE_ROLE_KEY'); if (!url || !key) throw new Error('instagram_extension_backend_not_configured'); return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }); }
 function normalize(value: unknown) { return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' '); }
-function semanticStatus(name: unknown): QueueStatus { const value = normalize(name); if (value === 'concluido' || value === 'sent' || value === 'completed') return 'sent'; if (value === 'erro' || value === 'error' || value === 'failed' || value === 'cancelado') return 'error'; if (value === 'pausado' || value === 'paused') return 'paused'; if (value === 'processando' || value === 'processing') return 'following'; return 'queued'; }
+function semanticStatus(name: unknown): QueueStatus {
+  const value = normalize(name);
+  if (['concluido', 'sent', 'completed', 'enviado'].includes(value)) return 'sent';
+  if (['invalid', 'invalidated', 'invalido', 'invalidado'].includes(value)) return 'invalid';
+  if (['erro', 'error', 'failed', 'cancelado', 'cancelled'].includes(value)) return 'error';
+  if (['pausado', 'paused'].includes(value)) return 'paused';
+  if (['processando', 'processing', 'following', 'dm opened', 'sending'].includes(value)) return 'following';
+  return 'queued';
+}
 
 async function tokenScope(req: ApiRequest): Promise<TokenScope> {
   const token = bearer(req);

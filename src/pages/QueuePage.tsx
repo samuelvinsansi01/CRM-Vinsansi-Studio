@@ -17,7 +17,7 @@ type QueuePageProps = {
   channel: 'whatsapp' | 'instagram';
 };
 
-type QueueDraft = Pick<WhatsAppQueueLead, 'company' | 'phone' | 'branch' | 'type' | 'message1' | 'message2' | 'message3' | 'message4' | 'imageName'>;
+type QueueDraft = { position: string; scheduled_date: string };
 
 const legacyWhatsAppStatusLabel: Record<WhatsAppQueueStatus, string> = {
   queued: 'Em fila',
@@ -28,7 +28,6 @@ const legacyWhatsAppStatusLabel: Record<WhatsAppQueueStatus, string> = {
   invalid: 'Inválida',
 };
 
-const typeOptions = ['Sem site', 'Com site'];
 
 const legacyInstagramStatusLabel: Record<InstagramQueueStatus, string> = {
   queued: 'Em fila',
@@ -40,7 +39,6 @@ const legacyInstagramStatusLabel: Record<InstagramQueueStatus, string> = {
   invalid: 'Inválida',
 };
 
-const instagramTypeOptions = ['Instagram', 'Sem WhatsApp'];
 
 function todayInputValue() {
   return toLocalDateInputValue();
@@ -214,12 +212,22 @@ function WhatsAppQueuePage() {
 
   const handleSaveLead = async (draft: QueueDraft) => {
     if (!editingLead) return;
+    const position = Number(draft.position);
+    if (!Number.isSafeInteger(position) || position < 1) {
+      pushToast({ title: 'Posição inválida', description: 'Informe uma posição inteira maior ou igual a 1.', tone: 'warning' });
+      return;
+    }
     setSaving(true);
-    await updateLead(editingLead.id, draft);
-    setSaving(false);
-    setEditingLead(null);
-    setDrawerMode('view');
-    pushToast({ title: 'Lead atualizado', description: 'Alterações salvas na fila do CRM.', tone: 'success' });
+    try {
+      await updateLead(editingLead.id, { position, scheduled_date: draft.scheduled_date });
+      setEditingLead(null);
+      setDrawerMode('view');
+      pushToast({ title: 'Item de fila atualizado', description: 'Posição e agendamento foram persistidos em queue_items.', tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível atualizar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleInvalidate = async () => {
@@ -414,15 +422,8 @@ function QueueLeadDrawer({
     }
 
     setDraft({
-      company: lead.company,
-      phone: lead.phone,
-      branch: lead.branch,
-      type: lead.type,
-      message1: lead.message1,
-      message2: lead.message2,
-      message3: lead.message3,
-      message4: lead.message4,
-      imageName: lead.imageName,
+      position: String(lead.position),
+      scheduled_date: lead.scheduled_date,
     });
   }, [lead]);
 
@@ -433,8 +434,8 @@ function QueueLeadDrawer({
   return (
     <Drawer
       open={Boolean(lead && draft)}
-      title={mode === 'edit' ? 'Editar lead do lote' : 'Detalhes do lead'}
-      description="Atualize os dados localmente antes do envio pelo gateway configurado."
+      title={mode === 'edit' ? 'Editar item da fila' : 'Detalhes do item da fila'}
+      description="Somente posição e agendamento pertencem ao item da fila. Lead, chip e template são referências canônicas e devem ser alterados em seus próprios cadastros."
       onClose={onClose}
       footer={
         mode === 'edit' ? (
@@ -454,19 +455,19 @@ function QueueLeadDrawer({
     >
       {draft ? (
         <div className={`drawer-form ${mode === 'view' ? 'drawer-form--readonly' : ''}`}>
-          <Field label="Empresa" value={draft.company} readOnly={mode === 'view'} onChange={(value) => updateDraft('company', value)} />
-          <Field label="Telefone" value={draft.phone} readOnly={mode === 'view'} onChange={(value) => updateDraft('phone', value)} />
-          <Field label="Ramo" value={draft.branch} readOnly={mode === 'view'} onChange={(value) => updateDraft('branch', value)} />
-          <label className="drawer-field-group">
-            <span>Tipo</span>
-            {mode === 'view' ? <Field value={draft.type} readOnly /> : <SelectField options={typeOptions} value={draft.type} onChange={(value) => updateDraft('type', value)} />}
-          </label>
+          <Field label="Empresa" value={lead?.company ?? ''} readOnly />
+          <Field label="Telefone" value={lead?.phone ?? ''} readOnly />
+          <Field label="Ramo" value={lead?.branch ?? ''} readOnly />
+          <Field label="Tipo" value={lead?.type ?? ''} readOnly />
+          <Field label="Chip" value={lead?.chip_label || lead?.chip_instance || lead?.chip || ''} readOnly />
+          <Field label="Template ID" value={lead?.template_id ?? ''} readOnly />
           <Field label="Status" value={lead ? statusLabel(lead.status) : ''} readOnly />
-          <Field label="Nome da imagem" value={draft.imageName ?? ''} readOnly={mode === 'view'} onChange={(value) => updateDraft('imageName', value)} />
-          <Field as="textarea" label="Mensagem 1" value={draft.message1} readOnly={mode === 'view'} onChange={(value) => updateDraft('message1', value)} />
-          <Field as="textarea" label="Mensagem 2" value={draft.message2} readOnly={mode === 'view'} onChange={(value) => updateDraft('message2', value)} />
-          <Field as="textarea" label="Mensagem 3" value={draft.message3} readOnly={mode === 'view'} onChange={(value) => updateDraft('message3', value)} />
-          <Field as="textarea" label="Mensagem 4" value={draft.message4} readOnly={mode === 'view'} onChange={(value) => updateDraft('message4', value)} />
+          <Field label="Posição na fila" type="number" min="1" value={draft.position} readOnly={mode === 'view'} onChange={(value) => updateDraft('position', value)} />
+          <Field label="Agendado para" type="date" value={draft.scheduled_date} readOnly={mode === 'view'} onChange={(value) => updateDraft('scheduled_date', value)} />
+          <Field as="textarea" label="Mensagem 1 (template)" value={lead?.message1 ?? ''} readOnly />
+          <Field as="textarea" label="Mensagem 2 (template)" value={lead?.message2 ?? ''} readOnly />
+          <Field as="textarea" label="Mensagem 3 (template)" value={lead?.message3 ?? ''} readOnly />
+          <Field as="textarea" label="Mensagem 4 (template)" value={lead?.message4 ?? ''} readOnly />
         </div>
       ) : null}
     </Drawer>
@@ -502,12 +503,22 @@ function InstagramQueuePage() {
 
   const handleSaveLead = async (draft: InstagramQueueDraft) => {
     if (!editingLead) return;
+    const position = Number(draft.position);
+    if (!Number.isSafeInteger(position) || position < 1) {
+      pushToast({ title: 'Posição inválida', description: 'Informe uma posição inteira maior ou igual a 1.', tone: 'warning' });
+      return;
+    }
     setSaving(true);
-    await updateLead(editingLead.id, draft);
-    setSaving(false);
-    setEditingLead(null);
-    setDrawerMode('view');
-    pushToast({ title: 'Lead Instagram atualizado', description: 'Alterações salvas na fila do CRM.', tone: 'success' });
+    try {
+      await updateLead(editingLead.id, { position, scheduled_date: draft.scheduled_date });
+      setEditingLead(null);
+      setDrawerMode('view');
+      pushToast({ title: 'Item de fila atualizado', description: 'Posição e agendamento foram persistidos em queue_items.', tone: 'success' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível atualizar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleInvalidate = async () => {
@@ -620,7 +631,7 @@ function InstagramQueuePage() {
   );
 }
 
-type InstagramQueueDraft = Pick<InstagramQueueLead, 'company' | 'instagram' | 'branch' | 'type' | 'message1' | 'message2' | 'message3' | 'message4' | 'imageName' | 'invalidReason'>;
+type InstagramQueueDraft = { position: string; scheduled_date: string };
 
 function InstagramBatch({
   batch,
@@ -729,16 +740,8 @@ function InstagramLeadDrawer({
     }
 
     setDraft({
-      company: lead.company,
-      instagram: lead.instagram,
-      branch: lead.branch,
-      type: lead.type,
-      message1: lead.message1,
-      message2: lead.message2,
-      message3: lead.message3,
-      message4: lead.message4,
-      imageName: lead.imageName,
-      invalidReason: lead.invalidReason ?? '',
+      position: String(lead.position),
+      scheduled_date: lead.scheduled_date,
     });
   }, [lead]);
 
@@ -749,8 +752,8 @@ function InstagramLeadDrawer({
   return (
     <Drawer
       open={Boolean(lead && draft)}
-      title={mode === 'edit' ? 'Editar lead do Instagram' : 'Detalhes do lead'}
-      description="Atualize os dados localmente antes do envio pelo gateway configurado."
+      title={mode === 'edit' ? 'Editar item da fila Instagram' : 'Detalhes do item da fila Instagram'}
+      description="Somente posição e agendamento pertencem ao item da fila. Lead, perfil e template são referências canônicas e devem ser alterados em seus próprios cadastros."
       onClose={onClose}
       footer={
         mode === 'edit' ? (
@@ -770,20 +773,19 @@ function InstagramLeadDrawer({
     >
       {draft ? (
         <div className={`drawer-form ${mode === 'view' ? 'drawer-form--readonly' : ''}`}>
-          <Field label="Empresa" value={draft.company} readOnly={mode === 'view'} onChange={(value) => updateDraft('company', value)} />
-          <Field label="Instagram" value={draft.instagram} readOnly={mode === 'view'} onChange={(value) => updateDraft('instagram', value)} />
-          <Field label="Ramo" value={draft.branch} readOnly={mode === 'view'} onChange={(value) => updateDraft('branch', value)} />
-          <label className="drawer-field-group">
-            <span>Tipo</span>
-            {mode === 'view' ? <Field value={draft.type} readOnly /> : <SelectField options={instagramTypeOptions} value={draft.type} onChange={(value) => updateDraft('type', value)} />}
-          </label>
+          <Field label="Empresa" value={lead?.company ?? ''} readOnly />
+          <Field label="Instagram" value={lead?.instagram_username || lead?.instagram || ''} readOnly />
+          <Field label="Ramo" value={lead?.branch ?? ''} readOnly />
+          <Field label="Tipo" value={lead?.type ?? ''} readOnly />
+          <Field label="Perfil remetente" value={lead?.profile ?? ''} readOnly />
+          <Field label="Template ID" value={lead?.template_id ?? ''} readOnly />
           <Field label="Status" value={lead ? statusLabel(lead.status) : ''} readOnly />
-          <Field label="Nome da imagem" value={draft.imageName ?? ''} readOnly={mode === 'view'} onChange={(value) => updateDraft('imageName', value)} />
-          <Field label="Motivo de invalidação" value={draft.invalidReason ?? ''} readOnly={mode === 'view'} onChange={(value) => updateDraft('invalidReason', value)} />
-          <Field as="textarea" label="Mensagem 1" value={draft.message1} readOnly={mode === 'view'} onChange={(value) => updateDraft('message1', value)} />
-          <Field as="textarea" label="Mensagem 2" value={draft.message2} readOnly={mode === 'view'} onChange={(value) => updateDraft('message2', value)} />
-          <Field as="textarea" label="Mensagem 3" value={draft.message3} readOnly={mode === 'view'} onChange={(value) => updateDraft('message3', value)} />
-          <Field as="textarea" label="Mensagem 4" value={draft.message4} readOnly={mode === 'view'} onChange={(value) => updateDraft('message4', value)} />
+          <Field label="Posição na fila" type="number" min="1" value={draft.position} readOnly={mode === 'view'} onChange={(value) => updateDraft('position', value)} />
+          <Field label="Agendado para" type="date" value={draft.scheduled_date} readOnly={mode === 'view'} onChange={(value) => updateDraft('scheduled_date', value)} />
+          <Field as="textarea" label="Mensagem 1 (template)" value={lead?.message1 ?? ''} readOnly />
+          <Field as="textarea" label="Mensagem 2 (template)" value={lead?.message2 ?? ''} readOnly />
+          <Field as="textarea" label="Mensagem 3 (template)" value={lead?.message3 ?? ''} readOnly />
+          <Field as="textarea" label="Mensagem 4 (template)" value={lead?.message4 ?? ''} readOnly />
         </div>
       ) : null}
     </Drawer>

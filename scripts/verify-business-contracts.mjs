@@ -13,7 +13,7 @@ const whatsapp = read('src/repositories/whatsapp-queue/canonicalWhatsAppQueue.re
 const instagram = read('src/repositories/instagram-queue/canonicalInstagramQueue.repository.ts');
 for (const file of [whatsapp, instagram]) {
   assert(file.includes("from('queue_items')"), 'Fila nao usa queue_items.');
-  assert(file.includes('templates_id'), 'Fila nao congela/referencia templates_id.');
+  assert(file.includes('templates_id'), 'Fila nao referencia templates_id.');
   assert(file.includes('leads_id'), 'Fila nao referencia leads_id.');
 }
 const validation = read('api/whatsapp/validation.handler.ts');

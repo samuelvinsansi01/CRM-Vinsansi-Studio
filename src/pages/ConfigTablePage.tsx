@@ -1,10 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
-import { Archive, Instagram, List, MessageSquare, PhoneCall, PhoneOff, Plus, RotateCcw, Send, Smartphone, SquareCheck, Trash2 } from 'lucide-react';
+import { Instagram, List, MessageSquare, PhoneCall, PhoneOff, Plus, Power, PowerOff, Send, Smartphone, SquareCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import {
   Button,
-  ConfirmDialog,
   DataTable,
   Drawer,
   Field,
@@ -21,21 +20,16 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useCatalogRecords } from '../hooks/useCatalogRecords';
 import { useConfigRecords } from '../hooks/useConfigRecords';
-import { useDispatchSettings } from '../hooks/useDispatchSettings';
-import {
-  DEFAULT_BRANCH_MIN_RATING,
-  DEFAULT_BRANCH_MIN_REVIEWS,
-  DEFAULT_TEMPLATE_MESSAGE_1,
-  DEFAULT_TEMPLATE_MESSAGE_2,
-} from '../services/config/config.seed';
-import { CHIP_LEVEL_OPTIONS, chipLevelDefaults, chipStatusLabel, isOperationalWhatsAppChip } from '../services/config/chipOperational';
+import { DEFAULT_TEMPLATE_MESSAGE_1, DEFAULT_TEMPLATE_MESSAGE_2 } from '../services/config/config.seed';
+import { chipStatusLabel, isOperationalWhatsAppChip } from '../services/config/chipOperational';
+import type { InstanceRecord, LevelRecord, TemplateChannelRecord, TemplateTypeRecord } from '../repositories/configuration';
 import type {
   BranchConfigRecord,
   ChipConfigRecord,
   ConfigKind,
   ConfigRecord,
-  TemplateChannel,
   InstagramConfigRecord,
   TemplateConfigRecord,
   TemplateType,
@@ -76,36 +70,15 @@ type ConfigTableRow = Record<string, ReactNode> & {
   id: string;
 };
 
-type ChipLevelPresetsMap = Record<string, Partial<{ dailyLimit: number; batchCount: number; blockSize: number; intervalSeconds: number; batches: string[]; startTime: string; endTime: string }>>;
-
 const statusOptions = [
   { label: 'Todos', value: 'Todos' },
   { label: 'Ativos', value: 'Ativos' },
   { label: 'Inativos', value: 'Inativos' },
-  { label: 'Arquivados', value: 'Arquivados' },
 ];
 
 const activeOptions = [
   { label: 'Ativo', value: 'Ativo' },
   { label: 'Inativo', value: 'Inativo' },
-];
-
-const imageRequirementOptions: SelectOption[] = [
-  { label: 'Obrigatoria — bloquear sem imagem', value: 'true' },
-  { label: 'Opcional — enviar somente texto', value: 'false' },
-];
-
-const templateTypeOptions: SelectOption[] = [
-  { label: 'Sem site', value: 'sem-site' },
-  { label: 'Com site', value: 'com-site' },
-];
-
-const API_KEY_MASK = '••••••••';
-
-const templateChannelOptions: SelectOption[] = [
-  { label: 'Geral', value: 'Geral' },
-  { label: 'WhatsApp', value: 'WhatsApp' },
-  { label: 'Instagram', value: 'Instagram' },
 ];
 
 function isBranch(record: ConfigRecord): record is BranchConfigRecord {
@@ -124,10 +97,6 @@ function isInstagramProfile(record: ConfigRecord): record is InstagramConfigReco
   return record.kind === 'instagram';
 }
 
-function joinList(items: string[]) {
-  return items.length ? items.join(', ') : '-';
-}
-
 function formatTemplateType(type: TemplateType) {
   const labels: Record<TemplateType, string> = {
     'sem-site': 'Sem site',
@@ -136,12 +105,7 @@ function formatTemplateType(type: TemplateType) {
   return labels[type];
 }
 
-function isArchivedConfig(record: ConfigRecord) {
-  return String(record.status ?? '').toLowerCase() === 'arquivado';
-}
-
 function statusTag(record: ConfigRecord) {
-  if (isArchivedConfig(record)) return <Tag tone="neutral">Arquivado</Tag>;
   return <Tag tone={record.active ? 'success' : 'warning'}>{record.active ? 'Ativo' : 'Inativo'}</Tag>;
 }
 
@@ -149,10 +113,6 @@ function chipStatusTag(record: ChipConfigRecord) {
   const label = chipStatusLabel(record);
   const tone = label === 'Ativo' ? 'success' : label === 'Arquivado' ? 'neutral' : 'danger';
   return <Tag tone={tone}>{label}</Tag>;
-}
-
-function toCsv(value: string[]) {
-  return value.join(', ');
 }
 
 function branchOptions(branches: BranchConfigRecord[]): SelectOption[] {
@@ -171,16 +131,34 @@ function branchDisplayName(branches: BranchConfigRecord[], branchId?: string, fa
   return match?.name ?? fallback ?? '-';
 }
 
-function configRecordLabel(record: ConfigRecord | null | undefined, branches: BranchConfigRecord[]) {
-  if (!record) return '';
-  if (isTemplate(record)) {
-    return `${branchDisplayName(branches, record.branchId, record.branchName)} - ${record.channel} - ${formatTemplateType(record.type)}`;
-  }
-  return 'name' in record && record.name ? String(record.name) : record.id;
+type ConfigModalOptions = {
+  branches: BranchConfigRecord[];
+  instances: InstanceRecord[];
+  whatsappLevels: LevelRecord[];
+  instagramLevels: LevelRecord[];
+  templateChannels: TemplateChannelRecord[];
+  templateTypes: TemplateTypeRecord[];
+};
+
+const EMPTY_MODAL_OPTIONS: ConfigModalOptions = {
+  branches: [],
+  instances: [],
+  whatsappLevels: [],
+  instagramLevels: [],
+  templateChannels: [],
+  templateTypes: [],
+};
+
+function recordOptions<T extends { id: string; name: string; active: boolean }>(records: T[], emptyLabel: string): SelectOption[] {
+  if (!records.length) return [{ label: emptyLabel, value: '' }];
+  return records.map((record) => ({
+    label: record.active ? record.name : `${record.name} (inativo)`,
+    value: record.id,
+  }));
 }
 
-function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelPresets: ChipLevelPresetsMap = {}): ScreenDefinition {
-  const branchSelectOptions = branchOptions(branches);
+function makeScreen(kind: ConfigKind, options: ConfigModalOptions): ScreenDefinition {
+  const branchSelectOptions = branchOptions(options.branches);
 
   if (kind === 'branches') {
     return {
@@ -191,22 +169,17 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelP
       emptyMessage: 'Nenhum ramo configurado ainda.',
       metrics: [
         { icon: List, label: 'Total', tone: 'neutral', getValue: (records) => records.length },
-        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter((record) => record.active && !isArchivedConfig(record)).length },
-        { icon: Archive, label: 'Inativos', tone: 'warning', getValue: (records) => records.filter((record) => !record.active && !isArchivedConfig(record)).length },
+        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter((record) => record.active).length },
+        { icon: PowerOff, label: 'Inativos', tone: 'warning', getValue: (records) => records.filter((record) => !record.active).length },
       ],
       columns: [
-        { key: 'name', label: 'Ramo', width: '24%' },
-        { key: 'subcategories', label: 'Sub ramos', width: '34%' },
-        { key: 'imageName', label: 'Nome da imagem', width: '24%' },
-        { key: 'status', label: 'Status', width: '12%' },
+        { key: 'name', label: 'Ramo', width: '34%' },
+        { key: 'categories', label: 'Categorias (JSONB)', width: '48%' },
+        { key: 'status', label: 'Status', width: '14%' },
       ],
       fields: [
-        { key: 'name', label: 'Nome', placeholder: 'Ex.: Moveis Planejados', description: 'Ramo operacional utilizado por toda a plataforma.' },
-        { key: 'slug', label: 'Slug', placeholder: 'moveis-planejados' },
-        { key: 'imageName', label: 'Nome da imagem', placeholder: 'moveis-planejados.jpg', description: 'Arquivo que o Worker procura em /app/images/.' },
-        { key: 'imageRequired', label: 'Imagem no disparo', type: 'select', options: imageRequirementOptions, description: 'Obrigatoria: o Worker confere o arquivo antes da primeira mensagem. Opcional: envia somente texto.' },
-        { key: 'associatedCategories', label: 'Categorias do Google Maps', type: 'textarea', placeholder: 'Categoria principal, aliases...', description: 'Categorias oficiais importadas do Google Maps que serao associadas automaticamente a este ramo.' },
-        { key: 'subcategories', label: 'Palavras-chave de reconhecimento', type: 'textarea', placeholder: 'Marcenaria, marceneiro, moveleiro...', description: 'Termos utilizados para identificar automaticamente este ramo durante a importacao.' },
+        { key: 'name', label: 'Nome', placeholder: 'Ex.: Móveis Planejados', description: 'Mapeia diretamente para branches.branches_name.' },
+        { key: 'categoriesJson', label: 'Categorias (JSON)', type: 'textarea', placeholder: '{\n  "categorias": ["Marcenaria"]\n}', description: 'Conteúdo integral de branches.branches_categories. Chaves desconhecidas são preservadas.' },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
       ],
     };
@@ -221,20 +194,22 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelP
       emptyMessage: 'Nenhum template configurado ainda.',
       metrics: [
         { icon: MessageSquare, label: 'Total', tone: 'neutral', getValue: (records) => records.length },
-        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter((record) => record.active && !isArchivedConfig(record)).length },
-        { icon: Archive, label: 'Inativos', tone: 'warning', getValue: (records) => records.filter((record) => !record.active && !isArchivedConfig(record)).length },
+        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter((record) => record.active).length },
+        { icon: PowerOff, label: 'Inativos', tone: 'warning', getValue: (records) => records.filter((record) => !record.active).length },
       ],
       columns: [
-        { key: 'branch', label: 'Ramo', width: '22%' },
-        { key: 'channel', label: 'Canal', width: '14%' },
-        { key: 'type', label: 'Tipo', width: '14%' },
+        { key: 'name', label: 'Template', width: '18%' },
+        { key: 'branch', label: 'Ramo', width: '16%' },
+        { key: 'channel', label: 'Canal', width: '12%' },
+        { key: 'type', label: 'Tipo', width: '12%' },
         { key: 'messages', label: 'Mensagens', width: '30%' },
         { key: 'status', label: 'Status', width: '10%' },
       ],
       fields: [
+        { key: 'name', label: 'Nome do template', placeholder: 'Ex.: WhatsApp sem site - abordagem A', description: 'Mapeia diretamente para templates.templates_name.' },
         { key: 'branchId', label: 'Ramo', type: 'select', options: branchSelectOptions },
-        { key: 'channel', label: 'Canal', type: 'select', options: templateChannelOptions, description: 'Geral atende WhatsApp e Instagram deste ramo. Entre templates compatíveis, a plataforma sorteia e fixa uma opção por lead.' },
-        { key: 'type', label: 'Tipo', type: 'select', options: templateTypeOptions },
+        { key: 'templateChannelId', label: 'Canal de template', type: 'select', options: recordOptions(options.templateChannels, 'Cadastre um canal de template primeiro') },
+        { key: 'templateTypeId', label: 'Tipo de template', type: 'select', options: recordOptions(options.templateTypes, 'Cadastre um tipo de template primeiro') },
         { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1, description: 'As quatro mensagens são obrigatórias e serão congeladas na fila.' },
         { key: 'message2', label: 'Mensagem 2', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_2 },
         { key: 'message3', label: 'Mensagem 3', type: 'textarea', placeholder: 'Digite a terceira mensagem' },
@@ -253,35 +228,20 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelP
       emptyMessage: 'Nenhum perfil Instagram configurado ainda.',
       metrics: [
         { icon: Instagram, label: 'Total', tone: 'neutral', getValue: (records) => records.filter(isInstagramProfile).length },
-        {
-          icon: SquareCheck,
-          label: 'Ativos',
-          tone: 'success',
-          getValue: (records) => records.filter(isInstagramProfile).filter((record) => record.active && !isArchivedConfig(record)).length,
-        },
-        {
-          icon: PhoneOff,
-          label: 'Inativos',
-          tone: 'danger',
-          getValue: (records) => records.filter(isInstagramProfile).filter((record) => !record.active && !isArchivedConfig(record)).length,
-        },
-        {
-          icon: Archive,
-          label: 'Arquivados',
-          tone: 'warning',
-          getValue: (records) => records.filter(isInstagramProfile).filter(isArchivedConfig).length,
-        },
+        { icon: SquareCheck, label: 'Ativos', tone: 'success', getValue: (records) => records.filter(isInstagramProfile).filter((record) => record.active).length },
+        { icon: PhoneOff, label: 'Inativos', tone: 'danger', getValue: (records) => records.filter(isInstagramProfile).filter((record) => !record.active).length },
       ],
       columns: [
-        { key: 'name', label: 'Nome', width: '36%' },
-        { key: 'username', label: '@Instagram', width: '28%' },
-        { key: 'dailyLimit', label: 'Limite diário', width: '18%' },
-        { key: 'status', label: 'Status', width: '16%' },
+        { key: 'name', label: 'Nome', width: '26%' },
+        { key: 'username', label: '@Instagram', width: '24%' },
+        { key: 'level', label: 'Nível', width: '22%' },
+        { key: 'dailyLimit', label: 'Limite diário', width: '14%' },
+        { key: 'status', label: 'Status', width: '12%' },
       ],
       fields: [
-        { key: 'name', label: 'Nome', placeholder: 'Ex.: Samuel' },
+        { key: 'name', label: 'Nome', placeholder: 'Ex.: Perfil comercial 1' },
         { key: 'username', label: '@Instagram', placeholder: '@perfil' },
-        { key: 'dailyLimit', label: 'Limite diário', placeholder: '60', description: 'Capacidade diária deste perfil na fila e no Pré-Envio.' },
+        { key: 'levelId', label: 'Nível operacional', type: 'select', options: recordOptions(options.instagramLevels, 'Cadastre um nível de Instagram primeiro'), description: 'O limite diário é herdado de levels; não é duplicado no perfil.' },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
       ],
     };
@@ -297,55 +257,41 @@ function makeScreen(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelP
       { icon: Smartphone, label: 'Total', tone: 'neutral', getValue: (records) => records.length },
       { icon: PhoneCall, label: 'Ativos', tone: 'success', getValue: (records) => records.filter(isChip).filter(isOperationalWhatsAppChip).length },
       { icon: PhoneOff, label: 'Inativos', tone: 'danger', getValue: (records) => records.filter(isChip).filter((record) => !isOperationalWhatsAppChip(record)).length },
-      {
-        icon: Send,
-        label: 'Capacidade/dia',
-        tone: 'warning',
-        getValue: (records) => records.filter(isChip).filter(isOperationalWhatsAppChip).reduce((total, record) => total + chipLevelDefaults(record.level, chipLevelPresets).dailyLimit, 0),
-      },
+      { icon: Send, label: 'Capacidade/dia', tone: 'warning', getValue: (records) => records.filter(isChip).filter(isOperationalWhatsAppChip).reduce((total, record) => total + record.dailyLimit, 0) },
     ],
     columns: [
-      { key: 'name', label: 'Nome do chip', width: '18%' },
-      { key: 'number', label: 'Numero', width: '14%' },
-      { key: 'level', label: 'Nivel', width: '14%' },
-      { key: 'url', label: 'URL', width: '16%' },
-      { key: 'instance', label: 'Instance name', width: '14%' },
-      { key: 'apiKey', label: 'API Key', width: '12%' },
+      { key: 'name', label: 'Nome do chip', width: '22%' },
+      { key: 'number', label: 'Número', width: '20%' },
+      { key: 'instance', label: 'Instância', width: '20%' },
+      { key: 'level', label: 'Nível', width: '18%' },
+      { key: 'dailyLimit', label: 'Limite/dia', width: '10%' },
       { key: 'status', label: 'Status', width: '10%' },
     ],
     fields: [
       { key: 'name', label: 'Nome do chip', placeholder: 'Ex.: Principal' },
-      { key: 'number', label: 'Numero', placeholder: 'Ex.: 5511940028922' },
-      { key: 'level', label: 'Nivel', type: 'select', options: CHIP_LEVEL_OPTIONS },
-      { key: 'url', label: 'URL', inputType: 'url', placeholder: 'https://evolution.exemplo.com' },
-      { key: 'instance', label: 'Instance name', placeholder: 'chip-8457' },
-      { key: 'apiKey', label: 'API Key', inputType: 'password', placeholder: 'Chave da instancia', description: 'A chave existente nunca e exibida. Deixe o valor mascarado para preserva-la.' },
+      { key: 'number', label: 'Número', placeholder: 'Ex.: 5511940028922' },
+      { key: 'instanceId', label: 'Instância', type: 'select', options: recordOptions(options.instances, 'Cadastre uma instância primeiro'), description: 'URL e API key são gerenciadas exclusivamente em Configurações > Instâncias.' },
+      { key: 'levelId', label: 'Nível operacional', type: 'select', options: recordOptions(options.whatsappLevels, 'Cadastre um nível de WhatsApp primeiro'), description: 'Limite diário e quantidade de filas são herdados de levels.' },
       { key: 'active', label: 'Status', type: 'select', options: activeOptions },
     ],
   };
 }
 
-function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[], chipLevelPresets: ChipLevelPresetsMap = {}): Record<string, string> {
+function createEmptyForm(kind: ConfigKind, options: ConfigModalOptions): Record<string, string> {
   if (kind === 'branches') {
     return {
       name: '',
-      slug: '',
-      associatedCategories: '',
-      subcategories: '',
-      order: '0',
-      minRating: String(DEFAULT_BRANCH_MIN_RATING),
-      minReviews: String(DEFAULT_BRANCH_MIN_REVIEWS),
-      imageName: '',
-      imageRequired: 'false',
+      categoriesJson: '{}',
       active: 'Ativo',
     };
   }
 
   if (kind === 'templates') {
     return {
-      branchId: branches[0]?.id ?? '',
-      channel: 'WhatsApp',
-      type: 'sem-site',
+      name: '',
+      branchId: options.branches[0]?.id ?? '',
+      templateChannelId: options.templateChannels.find((record) => record.active)?.id ?? options.templateChannels[0]?.id ?? '',
+      templateTypeId: options.templateTypes.find((record) => record.active)?.id ?? options.templateTypes[0]?.id ?? '',
       message1: DEFAULT_TEMPLATE_MESSAGE_1,
       message2: DEFAULT_TEMPLATE_MESSAGE_2,
       message3: '',
@@ -358,56 +304,59 @@ function createEmptyForm(kind: ConfigKind, branches: BranchConfigRecord[], chipL
     return {
       name: '',
       username: '',
-      dailyLimit: String(60),
+      levelId: options.instagramLevels.find((record) => record.active)?.id ?? options.instagramLevels[0]?.id ?? '',
       active: 'Ativo',
     };
   }
 
-  const defaults = chipLevelDefaults('estabilizado', chipLevelPresets);
   return {
-    instance: '',
     name: '',
     number: '',
-    level: 'estabilizado',
-    url: '',
-    apiKey: '',
-    priority: '1',
-    startTime: defaults.startTime,
-    endTime: defaults.endTime,
-    dailyLimit: String(defaults.dailyLimit),
-    blockSize: String(defaults.blockSize),
-    intervalSeconds: String(defaults.intervalSeconds),
-    batches: defaults.batches.join(', '),
+    instanceId: options.instances.find((record) => record.active)?.id ?? options.instances[0]?.id ?? '',
+    levelId: options.whatsappLevels.find((record) => record.active)?.id ?? options.whatsappLevels[0]?.id ?? '',
     active: 'Ativo',
   };
 }
 
-function formFromRecord(record: ConfigRecord, chipLevelPresets: ChipLevelPresetsMap = {}): Record<string, string> {
+function formatCategoriesJson(value: unknown) {
+  if (value == null) return '';
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function parseCategoriesJson(value: string) {
+  const text = value.trim();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error('Categorias do ramo devem conter JSON válido.');
+  }
+}
+
+function formFromRecord(record: ConfigRecord): Record<string, string> {
   if (isBranch(record)) {
     return {
       name: record.name,
-      slug: record.slug,
-      associatedCategories: toCsv(record.associatedCategories),
-      subcategories: toCsv(record.subcategories),
-      order: String(record.order),
-      minRating: String(record.minRating),
-      minReviews: String(record.minReviews),
-      imageName: record.imageName,
-      imageRequired: record.imageRequired ? 'true' : 'false',
-      active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
+      categoriesJson: formatCategoriesJson(record.categories),
+      active: record.active ? 'Ativo' : 'Inativo',
     };
   }
 
   if (isTemplate(record)) {
     return {
+      name: record.name,
       branchId: record.branchId,
-      channel: record.channel,
-      type: record.type,
+      templateChannelId: record.templateChannelId,
+      templateTypeId: record.templateTypeId,
       message1: record.message1,
       message2: record.message2,
       message3: record.message3,
       message4: record.message4,
-      active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
+      active: record.active ? 'Ativo' : 'Inativo',
     };
   }
 
@@ -415,52 +364,52 @@ function formFromRecord(record: ConfigRecord, chipLevelPresets: ChipLevelPresets
     return {
       name: record.name,
       username: record.username ? `@${record.username.replace(/^@/, '')}` : '',
-      dailyLimit: String(record.dailyLimit),
-      active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
+      levelId: record.levelId,
+      active: record.active ? 'Ativo' : 'Inativo',
     };
   }
 
-  const defaults = chipLevelDefaults(record.level, chipLevelPresets);
-
   return {
-    instance: record.instance,
     name: record.name,
     number: record.number,
-    level: record.level,
-    url: record.url,
-    apiKey: record.apiKey ? API_KEY_MASK : '',
-    priority: String(record.priority),
-    startTime: record.startTime ?? defaults.startTime,
-    endTime: record.endTime ?? defaults.endTime,
-    dailyLimit: String(record.dailyLimit ?? defaults.dailyLimit),
-    blockSize: String(record.blockSize ?? defaults.blockSize),
-    intervalSeconds: String(record.intervalSeconds ?? defaults.intervalSeconds),
-    batches: toCsv(record.batches ?? defaults.batches),
-    active: isArchivedConfig(record) ? 'Arquivado' : record.active ? 'Ativo' : 'Inativo',
+    instanceId: record.instanceId,
+    levelId: record.levelId,
+    active: record.active ? 'Ativo' : 'Inativo',
   };
 }
 
-function toInputPayload(kind: ConfigKind, form: Record<string, string>, chipLevelPresets: ChipLevelPresetsMap = {}) {
-  if (kind !== 'chips') {
-    return {
-      ...form,
-      username: form.username?.replace(/^@/, ''),
-      active: form.active === 'Ativo',
-    };
-  }
-
-  const levelDefaults = chipLevelDefaults(form.level, chipLevelPresets);
+function toInputPayload(kind: ConfigKind, form: Record<string, string>, options: ConfigModalOptions) {
   const payload: Record<string, unknown> = {
     ...form,
+    username: form.username?.replace(/^@/, ''),
     active: form.active === 'Ativo',
-    dailyLimit: form.dailyLimit ?? String(levelDefaults.dailyLimit),
-    blockSize: form.blockSize ?? String(levelDefaults.blockSize),
-    intervalSeconds: form.intervalSeconds ?? String(levelDefaults.intervalSeconds),
-    batches: form.batches ?? levelDefaults.batches.join(', '),
-    startTime: form.startTime ?? levelDefaults.startTime,
-    endTime: form.endTime ?? levelDefaults.endTime,
   };
-  if (form.apiKey === API_KEY_MASK) delete payload.apiKey;
+
+  if (kind === 'branches') {
+    payload.categories = parseCategoriesJson(form.categoriesJson ?? '');
+    delete payload.categoriesJson;
+    return payload;
+  }
+
+  if (kind === 'templates') {
+    payload.templateChannelName = options.templateChannels.find((record) => record.id === form.templateChannelId)?.name ?? '';
+    payload.templateTypeName = options.templateTypes.find((record) => record.id === form.templateTypeId)?.name ?? '';
+    return payload;
+  }
+
+  if (kind === 'chips') {
+    const instance = options.instances.find((record) => record.id === form.instanceId);
+    const level = options.whatsappLevels.find((record) => record.id === form.levelId);
+    payload.instanceName = instance?.name ?? '';
+    payload.instanceUrl = instance?.url ?? '';
+    payload.levelName = level?.name ?? '';
+    payload.dailyLimit = level?.dailyLimit ?? 0;
+    return payload;
+  }
+
+  const level = options.instagramLevels.find((record) => record.id === form.levelId);
+  payload.levelName = level?.name ?? '';
+  payload.dailyLimit = level?.dailyLimit ?? 0;
   return payload;
 }
 
@@ -469,8 +418,7 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
     return records.filter(isBranch).map((record) => ({
       id: record.id,
       name: record.name,
-      subcategories: joinList(record.subcategories),
-      imageName: record.imageName || '-',
+      categories: formatCategoriesJson(record.categories).replace(/\s+/g, ' ').slice(0, 180) || '—',
       status: statusTag(record),
     }));
   }
@@ -478,9 +426,10 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
   if (kind === 'templates') {
     return records.filter(isTemplate).map((record) => ({
       id: record.id,
+      name: record.name,
       branch: branchDisplayName(branches, record.branchId, record.branchName),
-      channel: record.channel,
-      type: formatTemplateType(record.type),
+      channel: record.templateChannelName || record.channel,
+      type: record.templateTypeName || formatTemplateType(record.type),
       messages: [record.message1, record.message2, record.message3, record.message4].map(previewMessage).join(' / '),
       status: statusTag(record),
     }));
@@ -491,6 +440,7 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
       id: record.id,
       name: record.name,
       username: record.username ? `@${record.username.replace(/^@/, '')}` : '-',
+      level: record.levelName || '—',
       dailyLimit: record.dailyLimit,
       status: statusTag(record),
     }));
@@ -500,10 +450,9 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
     id: record.id,
     name: record.name,
     number: record.number || '-',
-    level: optionLabel(CHIP_LEVEL_OPTIONS, record.level),
-    url: record.url || '-',
     instance: record.instance || '-',
-    apiKey: record.apiKey ? 'Configurada' : '-',
+    level: record.level || '-',
+    dailyLimit: record.dailyLimit || '—',
     status: chipStatusTag(record),
   }));
 }
@@ -519,7 +468,6 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   const [drawerMode, setDrawerMode] = useState<DrawerMode>('create');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
@@ -528,12 +476,47 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
 
   const branchRecords = useConfigRecords('branches', { search: '', status: 'Todos' });
   const branches = useMemo(() => branchRecords.records.filter(isBranch), [branchRecords.records]);
-  const { settings: dispatchSettings } = useDispatchSettings();
-  const chipLevelPresets = dispatchSettings?.chipLevels ?? {};
-  const screen = useMemo(() => makeScreen(kind, branches, chipLevelPresets), [kind, branches, chipLevelPresets]);
-  const [form, setForm] = useState<Record<string, string>>(() => createEmptyForm(kind, branches));
+  const instanceCatalog = useCatalogRecords('instances', '', 'Todos');
+  const levelCatalog = useCatalogRecords('levels', '', 'Todos');
+  const templateChannelCatalog = useCatalogRecords('template_channels', '', 'Todos');
+  const templateTypeCatalog = useCatalogRecords('template_types', '', 'Todos');
 
-  const { records, loading, error, createRecord, updateRecord, removeRecord, toggleArchive, bulkArchive, bulkRestore, bulkRemove } = useConfigRecords(kind, {
+  const instances = useMemo(
+    () => instanceCatalog.records.filter((record): record is InstanceRecord => record.kind === 'instances'),
+    [instanceCatalog.records],
+  );
+  const levels = useMemo(
+    () => levelCatalog.records.filter((record): record is LevelRecord => record.kind === 'levels'),
+    [levelCatalog.records],
+  );
+  const whatsappLevels = useMemo(
+    () => levels.filter((record) => record.channelName.trim().toLowerCase().includes('whatsapp')),
+    [levels],
+  );
+  const instagramLevels = useMemo(
+    () => levels.filter((record) => record.channelName.trim().toLowerCase().includes('instagram')),
+    [levels],
+  );
+  const templateChannels = useMemo(
+    () => templateChannelCatalog.records.filter((record): record is TemplateChannelRecord => record.kind === 'template_channels'),
+    [templateChannelCatalog.records],
+  );
+  const templateTypes = useMemo(
+    () => templateTypeCatalog.records.filter((record): record is TemplateTypeRecord => record.kind === 'template_types'),
+    [templateTypeCatalog.records],
+  );
+  const modalOptions = useMemo<ConfigModalOptions>(() => ({
+    branches,
+    instances,
+    whatsappLevels,
+    instagramLevels,
+    templateChannels,
+    templateTypes,
+  }), [branches, instances, whatsappLevels, instagramLevels, templateChannels, templateTypes]);
+  const screen = useMemo(() => makeScreen(kind, modalOptions), [kind, modalOptions]);
+  const [form, setForm] = useState<Record<string, string>>(() => createEmptyForm(kind, EMPTY_MODAL_OPTIONS));
+
+  const { records, loading, error, createRecord, updateRecord, toggleArchive, bulkArchive, bulkRestore } = useConfigRecords(kind, {
     search,
     status: statusFilter,
   });
@@ -566,10 +549,9 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
     [pageRows, recordById, selectedRows],
   );
   const selectedIds = selectedRecords.map((record) => record.id);
-  const canBulkArchive = selectedRecords.length > 0 && selectedRecords.every((record) => !isArchivedConfig(record));
-  const canBulkRestore = selectedRecords.length > 0 && selectedRecords.every(isArchivedConfig);
-  const canBulkRemove = selectedRecords.length > 0 && selectedRecords.every(isArchivedConfig);
-  const hasBulkAction = canBulkArchive || canBulkRestore || canBulkRemove;
+  const canBulkDeactivate = selectedRecords.length > 0 && selectedRecords.every((record) => record.active);
+  const canBulkActivate = selectedRecords.length > 0 && selectedRecords.every((record) => !record.active);
+  const hasBulkAction = canBulkDeactivate || canBulkActivate;
 
   const recordMetrics = screen.metrics.map((metric) => ({
     ...metric,
@@ -587,7 +569,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   const openCreateDrawer = () => {
     setDrawerMode('create');
     setEditingId(null);
-    setForm(createEmptyForm(kind, branches, chipLevelPresets));
+    setForm(createEmptyForm(kind, modalOptions));
     setDrawerOpen(true);
   };
 
@@ -596,7 +578,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
     if (!record) return;
     setDrawerMode(mode);
     setEditingId(record.id);
-    setForm(formFromRecord(record, chipLevelPresets));
+    setForm(formFromRecord(record));
     setDrawerOpen(true);
   };
 
@@ -606,48 +588,39 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   };
 
   const updateForm = (key: string, value: string) => {
-    setForm((current) => {
-      if (kind === 'chips' && key === 'level') {
-        const defaults = chipLevelDefaults(value, chipLevelPresets);
-        return {
-          ...current,
-          level: value,
-          startTime: defaults.startTime,
-          endTime: defaults.endTime,
-          dailyLimit: String(defaults.dailyLimit),
-          blockSize: String(defaults.blockSize),
-          intervalSeconds: String(defaults.intervalSeconds),
-          batches: defaults.batches.join(', '),
-        };
-      }
-
-      return { ...current, [key]: value };
-    });
+    setForm((current) => ({ ...current, [key]: value }));
   };
 
   const validateForm = () => {
     if (kind === 'branches') {
       if (!form.name?.trim()) throw new Error('Informe o nome do ramo.');
-      if (form.imageRequired === 'true' && !form.imageName?.trim()) throw new Error('Informe a imagem obrigatoria do ramo.');
+      parseCategoriesJson(form.categoriesJson ?? '');
       return;
     }
 
     if (kind === 'templates') {
-      if (!form.branchId) throw new Error('Cadastre um ramo antes de criar templates.');
+      if (!form.name?.trim()) throw new Error('Informe o nome do template.');
+      if (!form.branchId) throw new Error('Selecione o ramo do template.');
+      if (!form.templateChannelId) throw new Error('Selecione o canal canônico do template.');
+      if (!form.templateTypeId) throw new Error('Selecione o tipo canônico do template.');
       [form.message1, form.message2, form.message3, form.message4].forEach((message, index) => {
-        if (!message?.trim()) throw new Error(`A Mensagem ${index + 1} e obrigatoria.`);
+        if (!message?.trim()) throw new Error(`A Mensagem ${index + 1} é obrigatória.`);
       });
       return;
     }
 
     if (kind === 'instagram') {
-      if (!form.username?.replace(/^@/, '').trim()) throw new Error('Informe o usuario do Instagram.');
+      if (!form.name?.trim()) throw new Error('Informe o nome do perfil do Instagram.');
+      if (!form.username?.replace(/^@/, '').trim()) throw new Error('Informe o usuário do Instagram.');
+      if (!form.levelId) throw new Error('Selecione um nível de Instagram já cadastrado.');
       return;
     }
 
-    if (!form.instance?.trim()) throw new Error('Informe a instancia do chip.');
-    if (!form.url?.trim()) throw new Error('Informe a URL da Evolution.');
-    if (drawerMode === 'create' && !form.apiKey?.trim()) throw new Error('Informe a API Key da instancia.');
+    if (!form.name?.trim()) throw new Error('Informe o nome do chip.');
+    const phone = form.number?.replace(/\D/g, '') ?? '';
+    if (phone && (phone.length < 10 || phone.length > 15)) throw new Error('Informe um telefone com 10 a 15 dígitos.');
+    if (!form.instanceId) throw new Error('Selecione uma instância Evolution já cadastrada.');
+    if (!form.levelId) throw new Error('Selecione um nível de WhatsApp já cadastrado.');
   };
 
   const saveForm = async () => {
@@ -655,7 +628,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
 
     try {
       validateForm();
-      const payload = toInputPayload(kind, form, chipLevelPresets);
+      const payload = toInputPayload(kind, form, modalOptions);
 
       if (drawerMode === 'create') {
         await createRecord(payload);
@@ -673,23 +646,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
     }
   };
 
-  const requestDelete = (row: ConfigTableRow) => {
-    setDeleteId(row.id);
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteId) return;
-
-    try {
-      await removeRecord(deleteId);
-      setDeleteId(null);
-      pushToast({ title: `${screen.singular} removido`, description: 'Registro excluido com sucesso.', tone: 'danger' });
-    } catch (err) {
-      pushToast({ title: 'Nao foi possivel excluir', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
-    }
-  };
-
-  const archiveRow = async (row: ConfigTableRow) => {
+  const toggleStatusRow = async (row: ConfigTableRow) => {
     try {
       await toggleArchive(row.id);
       pushToast({ title: 'Status atualizado', description: 'O status foi alternado com sucesso.', tone: 'info' });
@@ -714,17 +671,10 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
       return;
     }
 
-    if (action === 'delete') {
-      requestDelete(row);
-      return;
-    }
-
-    if (action === 'archive' || action === 'restore') {
-      void archiveRow(row);
+    if (action === 'activate' || action === 'deactivate') {
+      void toggleStatusRow(row);
     }
   };
-
-  const selectedDeleteRecord = deleteId ? recordById.get(deleteId) : null;
   const editingRecord = editingId ? recordById.get(editingId) : undefined;
 
   return (
@@ -758,9 +708,8 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
         {selectedRecords.length ? (
           <div className="lead-bulk-actions">
             <span>{selectedRecords.length} selecionado(s)</span>
-            {canBulkArchive ? <Button size="sm" variant="danger" iconLeft={Archive} onClick={() => runBulkAction('arquivados', () => bulkArchive(selectedIds))}>Arquivar</Button> : null}
-            {canBulkRestore ? <Button size="sm" variant="secondary" iconLeft={RotateCcw} onClick={() => runBulkAction('restaurados', () => bulkRestore(selectedIds))}>Restaurar</Button> : null}
-            {canBulkRemove ? <Button size="sm" variant="danger" iconLeft={Trash2} onClick={() => runBulkAction('excluidos', () => bulkRemove(selectedIds))}>Excluir</Button> : null}
+            {canBulkDeactivate ? <Button size="sm" variant="danger" iconLeft={PowerOff} onClick={() => runBulkAction('desativados', () => bulkArchive(selectedIds))}>Desativar</Button> : null}
+            {canBulkActivate ? <Button size="sm" variant="secondary" iconLeft={Power} onClick={() => runBulkAction('ativados', () => bulkRestore(selectedIds))}>Ativar</Button> : null}
             {!hasBulkAction ? <small>Nenhuma acao disponivel para a selecao atual.</small> : null}
           </div>
         ) : null}
@@ -771,15 +720,15 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
           <DataTable
             columns={screen.columns}
             rows={pageRows}
-            actions={['edit', 'archive']}
+            actions={['edit', 'deactivate']}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
             getRowActions={(row) => {
               const record = recordById.get(row.id);
               if (!record) return [];
-              return isArchivedConfig(record)
-                ? ['view' as TableAction, 'restore' as TableAction, 'delete' as TableAction]
-                : ['edit' as TableAction, 'archive' as TableAction];
+              return record.active
+                ? ['edit' as TableAction, 'deactivate' as TableAction]
+                : ['view' as TableAction, 'activate' as TableAction];
             }}
             onAction={handleAction}
           />
@@ -789,13 +738,13 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
       <Drawer
         open={drawerOpen}
         title={drawerMode === 'create' ? screen.action : drawerMode === 'edit' ? `Editar ${screen.singular}` : `Detalhes do ${screen.singular}`}
-        description="As regras sao salvas pela camada de servico e usadas pelos fluxos operacionais."
+        description="Campos alinhados diretamente às tabelas canônicas. Instâncias, níveis e catálogos são selecionados por ID e mantidos em seus próprios cadastros."
         onClose={closeDrawer}
         footer={
           drawerMode === 'view' ? (
             <>
               <Button variant="secondary" onClick={closeDrawer}>Fechar</Button>
-              {editingRecord && !isArchivedConfig(editingRecord) ? (
+              {editingRecord && editingRecord.active ? (
                 <Button onClick={() => {
                   const row = pageRows.find((item) => item.id === editingId);
                   if (row) openRecordDrawer(row, 'edit');
@@ -849,17 +798,6 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
         </div>
       </Drawer>
 
-      <ConfirmDialog
-        open={deleteId !== null}
-        title={`Excluir ${screen.singular}?`}
-        description="Essa acao remove definitivamente apenas registros arquivados."
-        confirmLabel="Excluir"
-        danger
-        onClose={() => setDeleteId(null)}
-        onConfirm={confirmDelete}
-      >
-        {selectedDeleteRecord ? <strong>{configRecordLabel(selectedDeleteRecord, branches)}</strong> : null}
-      </ConfirmDialog>
 
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toast) => toast.id !== id))} />
     </div>
