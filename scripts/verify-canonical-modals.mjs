@@ -51,6 +51,8 @@ assert(configService.includes('current.active && !normalized.active'), 'Edição
 assert(configService.includes("record.active && !isDeletedConfig(record)"), 'Desativação em massa não está limitada a registros ativos.');
 assert(configService.includes("!record.active && !isDeletedConfig(record)"), 'Ativação em massa não está limitada a registros inativos.');
 assert(!configService.includes('Restaurar exige apenas registros arquivados.'), 'Serviço ainda depende do estado Arquivado inexistente no catálogo físico.');
+assert(configService.includes('number: normalizeChipNumber('), 'Número do chip não é normalizado antes da persistência.');
+assert(configService.includes('normalizeChipNumber(expected.number) !== normalizeChipNumber(saved.number)'), 'Confirmação pós-gravação do chip ainda compara formatação em vez do valor canônico.');
 
 if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));

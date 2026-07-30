@@ -66,6 +66,10 @@ function statusFromActive(active: boolean): ConfigStatus {
   return active ? 'Ativo' : 'Inativo';
 }
 
+function normalizeChipNumber(value: unknown) {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
 const TEMPLATE_LIMIT_PER_BRANCH_CHANNEL_TYPE = 10;
 
 function splitList(value: unknown) {
@@ -303,7 +307,7 @@ function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordI
     id: String(existing?.id ?? raw.id ?? fallbackId('chips')),
     kind: 'chips',
     name: stringFromInput(raw, ['name', 'nome'], existing?.name ?? 'Novo chip', { required: true }),
-    number: stringFromInput(raw, ['number', 'numero', 'phone'], existing?.number ?? ''),
+    number: normalizeChipNumber(valueFromInput(raw, ['number', 'numero', 'phone'], existing?.number ?? '')),
     instanceId,
     levelId,
     level,
@@ -536,8 +540,11 @@ function assertPersisted(expected: ConfigRecord, saved: ConfigRecord) {
   }
 
   if (expected.kind === 'chips' && saved.kind === 'chips') {
-    for (const field of ['name', 'number', 'instanceId', 'levelId'] as const) {
+    for (const field of ['name', 'instanceId', 'levelId'] as const) {
       if (expected[field] !== saved[field]) fail(field, expected[field], saved[field]);
+    }
+    if (normalizeChipNumber(expected.number) !== normalizeChipNumber(saved.number)) {
+      fail('number', normalizeChipNumber(expected.number), normalizeChipNumber(saved.number));
     }
     if (expected.active !== saved.active) fail('active', expected.active, saved.active);
     return;
