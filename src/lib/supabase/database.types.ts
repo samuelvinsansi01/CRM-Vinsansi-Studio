@@ -3,6 +3,8 @@ export type PublicUser = {
   users_id: string;
   auth_user_id: string;
   status_id: string;
+  users_name: string | null;
+  users_avatar_path: string | null;
   users_created_at: string;
   users_updated_at: string;
 };

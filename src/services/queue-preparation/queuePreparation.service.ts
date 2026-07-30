@@ -59,7 +59,7 @@ function activeInstagramProfile(record: InstagramConfigRecord) {
 
 function activeQueueStatus(status: unknown) {
   const value = String(status ?? '').toLowerCase();
-  return ['queued', 'sending', 'paused', 'following', 'dm_opened'].includes(value);
+  return ['queued', 'sending', 'paused', 'following', 'dm_opened', 'sent'].includes(value);
 }
 
 function rowBranch(row: LeadDatabaseRow) {

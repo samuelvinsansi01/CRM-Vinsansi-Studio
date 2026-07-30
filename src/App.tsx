@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DashboardLayout } from './design-system/layouts/DashboardLayout';
+import { AccountPage } from './pages/AccountPage';
 import { ApifyAccountsPage } from './pages/ApifyAccountsPage';
 import { AuditPage } from './pages/AuditPage';
 import { BasePage } from './pages/BasePage';
@@ -14,6 +15,7 @@ import { ImportPage } from './pages/ImportPage';
 import { LoginPage } from './pages/LoginPage';
 import { QueuePage } from './pages/QueuePage';
 import { ValidationRoutingPage } from './pages/ValidationRoutingPage';
+import { ToolsPage } from './pages/ToolsPage';
 import { pageTitles, type PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
 import { syncEvolutionInstances } from './services/evolution-instances/evolutionInstances.service';
@@ -118,6 +120,8 @@ export function App() {
       {activePage === 'config-template-channels' ? <CatalogCrudPage kind="template_channels" /> : null}
       {activePage === 'config-template-types' ? <CatalogCrudPage kind="template_types" /> : null}
 
+      {activePage === 'account' ? <AccountPage /> : null}
+      {activePage === 'tools' ? <ToolsPage /> : null}
       {activePage === 'audit' ? <AuditPage /> : null}
     </DashboardLayout>
   );

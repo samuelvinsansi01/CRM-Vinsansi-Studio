@@ -11,8 +11,9 @@ import {
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import { ensurePublicUser } from '../services/auth/publicUser.service';
+import { createProfileAvatarUrl } from '../services/auth/userProfile.service';
 
-type AuthUser = {
+export type AuthUser = {
   /** UUID do Supabase Auth. */
   id: string;
   /** ID interno bigint da tabela public.users. */
@@ -21,6 +22,8 @@ type AuthUser = {
   email: string;
   role: string;
   statusId: string;
+  avatarPath: string | null;
+  avatarUrl: string | null;
 };
 
 type AuthContextValue = {
@@ -32,6 +35,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -40,11 +44,13 @@ async function loadAuthUser(authUser: User | null): Promise<AuthUser | null> {
   if (!authUser) return null;
 
   const data = await ensurePublicUser(authUser);
-
   const metadata = authUser.user_metadata ?? {};
-  const name = String(
+  const fallbackName = String(
     metadata.name ?? metadata.full_name ?? authUser.email?.split('@')[0] ?? 'Operador',
   );
+  const name = String(data.users_name ?? '').trim() || fallbackName;
+  const avatarPath = data.users_avatar_path ? String(data.users_avatar_path) : null;
+  const avatarUrl = await createProfileAvatarUrl(avatarPath);
 
   return {
     id: authUser.id,
@@ -53,6 +59,8 @@ async function loadAuthUser(authUser: User | null): Promise<AuthUser | null> {
     email: authUser.email ?? '',
     role: String(metadata.role ?? 'operador'),
     statusId: String(data.status_id),
+    avatarPath,
+    avatarUrl,
   };
 }
 
@@ -74,6 +82,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     userRef.current = nextUser;
     setUserState(nextUser);
   }, []);
+
+  const refreshProfile = useCallback(async () => {
+    const { data, error: authError } = await getSupabaseClient().auth.getUser();
+    if (authError || !data.user) {
+      throw new Error(authError?.message ?? 'Usuário não autenticado.');
+    }
+
+    const refreshed = await loadAuthUser(data.user);
+    setUser(refreshed);
+    setError(null);
+  }, [setUser]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -207,7 +226,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setLoading(false);
     },
-  }), [error, loading, setUser, user]);
+    refreshProfile,
+  }), [error, loading, refreshProfile, setUser, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

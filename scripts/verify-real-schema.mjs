@@ -27,7 +27,7 @@ const requiredTables = [
 for (const table of requiredTables) assert(tables.has(table), `Tabela obrigatoria ausente no contrato: ${table}`);
 
 const requiredColumns = {
-  users: ['users_id','auth_user_id'],
+  users: ['users_id','auth_user_id','users_name','users_avatar_path'],
   chips: ['chips_id','users_id','instances_id','levels_id','status_id','chips_name','chips_phone'],
   instances: ['instances_id','users_id','instances_name','instances_url','instances_apikey'],
   socials: ['socials_id','users_id','levels_id','status_id','socials_name','socials_username'],

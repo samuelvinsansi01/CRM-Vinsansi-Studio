@@ -1,5 +1,5 @@
-import { Globe2, Instagram, MessageCircle, RefreshCcw, Users } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { CheckCircle2, Globe2, Instagram, MessageCircle, RefreshCcw, Users } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
   DataTable,
@@ -10,19 +10,25 @@ import {
   RowsPerPageControl,
   TableCard,
   Tag,
+  ToastViewport,
   type TableColumn,
+  type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useLeadCycle } from '../hooks/useLeadCycle';
+import { useQueuePreparation } from '../hooks/useQueuePreparation';
 import type { LeadCycleLead } from '../services/lead-cycle/types';
+import { whatsappCapacityValidationService } from '../services/whatsapp-validation/whatsappCapacityValidation.service';
+import type { WhatsAppCapacityValidationResult } from '../services/whatsapp-validation/whatsappCapacityValidation.service';
+import { toLocalDateInputValue } from '../utils/date';
 
 const SOURCE_NO_SITE = 1;
 const SOURCE_OWN_SITE = 2;
 const SOURCE_AGGREGATOR = 3;
 const SOURCE_INSTAGRAM = 4;
 
-type StatusFilter = 'Todos' | 'Importado' | 'Validado';
+type StatusFilter = 'Todos' | 'Importado' | 'Aguardando validação' | 'Validado';
 type SourceFilter = 'Todos' | 'Sem site' | 'Domínio próprio' | 'Agregador' | 'Instagram';
 type Row = Record<string, ReactNode> & { id: string };
 
@@ -58,8 +64,9 @@ function sourceName(lead: LeadCycleLead): Exclude<SourceFilter, 'Todos'> {
 }
 
 function statusTag(lead: LeadCycleLead) {
-  const isValid = lead.statusId === 2;
-  return <Tag tone={isValid ? 'success' : 'warning'}>{isValid ? 'Validado' : 'Importado'}</Tag>;
+  if (lead.statusId === 2) return <Tag tone="success">Validado</Tag>;
+  if (lead.statusId === 3) return <Tag tone="warning">Aguardando validação</Tag>;
+  return <Tag tone="neutral">Importado</Tag>;
 }
 
 function channelTag(lead: LeadCycleLead) {
@@ -70,21 +77,78 @@ function contactValue(value: string) {
   return value.trim() ? 'Sim' : 'Não';
 }
 
+function capacityValidationDescription(result: WhatsAppCapacityValidationResult) {
+  const parts = [
+    `${result.queued} lead(s) incluído(s) na fila`,
+    `${result.approved} WhatsApp(s) confirmado(s)`,
+  ];
+  if (result.alreadyValidatedQueued) parts.push(`${result.alreadyValidatedQueued} já validado(s) aproveitado(s)`);
+  if (result.invalidated) parts.push(`${result.invalidated} invalidado(s)`);
+  if (result.redirectedToInstagram) parts.push(`${result.redirectedToInstagram} redirecionado(s) ao Instagram`);
+  if (result.errors) parts.push(`${result.errors} erro(s) de validação`);
+  if (result.queueFailures) parts.push(`${result.queueFailures} falha(s) de fila`);
+  let description = `${parts.join(', ')}. ${result.remainingCapacity} vaga(s) restante(s) em ${result.effectiveDate}.`;
+  if (result.exhaustedCandidates) description += ' A base elegível terminou antes de completar a capacidade.';
+  if (result.failures[0]) description += ` ${result.failures[0].reason}`;
+  return description;
+}
+
 export function ValidationRoutingPage() {
   const imported = useLeadCycle('imported');
   const valid = useLeadCycle('valid');
+  const preSend = useLeadCycle('pre-send');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('Importado');
   const [source, setSource] = useState<SourceFilter>('Todos');
   const [branch, setBranch] = useState('Todos');
   const [state, setState] = useState('Todos');
+  const [selectedChip, setSelectedChip] = useState('');
+  const [validatingCapacity, setValidatingCapacity] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const operationalDate = toLocalDateInputValue();
+  const chipCapacity = useQueuePreparation('WhatsApp', operationalDate, selectedChip);
 
-  const allRecords = useMemo(() => [...imported.records, ...valid.records], [imported.records, valid.records]);
-  const loading = imported.loading || valid.loading;
-  const error = imported.error || valid.error;
+  const allRecords = useMemo(() => [...imported.records, ...preSend.records, ...valid.records], [imported.records, preSend.records, valid.records]);
+  const loading = imported.loading || preSend.loading || valid.loading;
+  const error = imported.error || preSend.error || valid.error;
 
   const refresh = async () => {
-    await Promise.all([imported.refresh(), valid.refresh()]);
+    await Promise.all([imported.refresh(), preSend.refresh(), valid.refresh(), chipCapacity.refresh()]);
+  };
+
+  useEffect(() => {
+    const resources = chipCapacity.snapshot?.resources ?? [];
+    if (resources.some((resource) => resource.id === selectedChip)) return;
+    setSelectedChip(resources[0]?.id ?? '');
+  }, [chipCapacity.snapshot?.resources, selectedChip]);
+
+  const toast = (title: string, description: string, tone: ToastItem['tone'] = 'success') => {
+    const id = crypto.randomUUID?.() ?? String(Date.now());
+    setToasts((current) => [...current, { id, title, description, tone }].slice(-4));
+    window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 5200);
+  };
+
+  const validateToCapacity = async () => {
+    if (!selectedChip) {
+      toast('Selecione um chip', 'Somente chips ativos e conectados podem validar e receber leads.', 'warning');
+      return;
+    }
+    setValidatingCapacity(true);
+    try {
+      const result = await whatsappCapacityValidationService.validateAndFill(selectedChip, operationalDate);
+      await refresh();
+      const warning = result.errors || result.conflicts || result.queueFailures || result.remainingCapacity > 0;
+      toast(
+        warning ? 'Validação concluída com pendências' : 'Capacidade do chip preenchida',
+        capacityValidationDescription(result),
+        warning ? 'warning' : 'success',
+      );
+    } catch (err) {
+      await refresh();
+      toast('Não foi possível validar', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
+    } finally {
+      setValidatingCapacity(false);
+    }
   };
 
   const branches = useMemo(
@@ -109,6 +173,7 @@ export function ValidationRoutingPage() {
     const query = search.trim().toLowerCase();
     const matchesStatus = status === 'Todos'
       || (status === 'Importado' && lead.statusId === 1)
+      || (status === 'Aguardando validação' && lead.statusId === 3)
       || (status === 'Validado' && lead.statusId === 2);
     const matchesSource = source === 'Todos' || sourceName(lead) === source;
     const matchesSearch = !query
@@ -141,11 +206,31 @@ export function ValidationRoutingPage() {
     <div className="dashboard-table-page lead-list-page validation-routing-page">
       <PageHeader
         title="Validação e roteamento"
-        description="Consulte leads importados e validados. A validação por capacidade do chip será adicionada nesta tela na próxima etapa."
+        description="Consulte, roteie e valide leads respeitando a capacidade diária do chip selecionado."
         action={(
-          <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading} onClick={() => void refresh()}>
-            Atualizar
-          </Button>
+          <div className="validation-routing__header-actions">
+            <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || validatingCapacity} onClick={() => void refresh()}>
+              Atualizar
+            </Button>
+            <SelectField
+              className="validation-routing__chip-select"
+              value={selectedChip}
+              placeholder={chipCapacity.loading ? 'Carregando chips...' : 'Selecionar chip ativo'}
+              options={(chipCapacity.snapshot?.resources ?? []).map((resource) => ({
+                value: resource.id,
+                label: `${resource.label} — ${resource.used}/${resource.dailyLimit} • ${resource.available} vagas`,
+              }))}
+              onChange={setSelectedChip}
+            />
+            <Button
+              iconLeft={CheckCircle2}
+              loading={validatingCapacity}
+              disabled={loading || chipCapacity.loading || !selectedChip || (chipCapacity.snapshot?.selectedResource?.available ?? 0) <= 0}
+              onClick={() => void validateToCapacity()}
+            >
+              Validar e preencher
+            </Button>
+          </div>
         )}
       />
 
@@ -163,7 +248,7 @@ export function ValidationRoutingPage() {
       </section>
 
       <FiltersBar>
-        <SelectField value={status} options={['Todos', 'Importado', 'Validado']} placeholder="Status" onChange={(value) => { setStatus(value as StatusFilter); resetPage(); }} />
+        <SelectField value={status} options={['Todos', 'Importado', 'Aguardando validação', 'Validado']} placeholder="Status" onChange={(value) => { setStatus(value as StatusFilter); resetPage(); }} />
         <SelectField value={source} options={['Todos', 'Sem site', 'Domínio próprio', 'Agregador', 'Instagram']} placeholder="Origem" onChange={(value) => { setSource(value as SourceFilter); resetPage(); }} />
         <SelectField value={branch} options={branches} placeholder="Ramo" onChange={(value) => { setBranch(value); resetPage(); }} />
         <SelectField value={state} options={states} placeholder="Estado" onChange={(value) => { setState(value); resetPage(); }} />
@@ -185,6 +270,7 @@ export function ValidationRoutingPage() {
           <DataTable columns={columns} rows={pageItems} actions={[]} selectable={false} />
         ) : null}
       </TableCard>
+      <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>
   );
 }

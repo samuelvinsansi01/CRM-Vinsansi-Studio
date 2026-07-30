@@ -5,9 +5,11 @@ export type PublicUserRow = {
   users_id: number | string;
   auth_user_id: string;
   status_id: number | string;
+  users_name: string | null;
+  users_avatar_path: string | null;
 };
 
-const PUBLIC_USER_COLUMNS = 'users_id, auth_user_id, status_id';
+const PUBLIC_USER_COLUMNS = 'users_id, auth_user_id, status_id, users_name, users_avatar_path';
 
 async function findPublicUser(authUserId: string): Promise<PublicUserRow | null> {
   const { data: rawData, error } = await getSupabaseClient()
@@ -17,7 +19,10 @@ async function findPublicUser(authUserId: string): Promise<PublicUserRow | null>
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Falha ao carregar o usuário interno: ${error.message}`);
+    const migrationHint = /users_name|users_avatar_path|column/i.test(error.message)
+      ? ' Aplique a migration de perfil incluída em supabase/migrations.'
+      : '';
+    throw new Error(`Falha ao carregar o usuário interno: ${error.message}.${migrationHint}`);
   }
 
   return rawData ? rawData as PublicUserRow : null;

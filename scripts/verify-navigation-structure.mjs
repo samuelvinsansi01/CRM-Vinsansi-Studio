@@ -31,6 +31,8 @@ const requiredLabels = [
   'Instâncias',
   'Canais de template',
   'Tipos de template',
+  'Ferramentas',
+  'Minha conta',
 ];
 
 const missing = requiredLabels.filter((label) => !registry.includes(label));
@@ -38,11 +40,17 @@ if (missing.length) throw new Error(`Menu incompleto: ${missing.join(', ')}`);
 if (registry.includes("label: 'Pré-Envio'") || registry.includes("label: 'Válidos'")) {
   throw new Error('Pré-Envio/Válidos não podem permanecer no menu novo.');
 }
+if (!header.includes("navigate('account')") || !header.includes('Minha conta')) {
+  throw new Error('Minha conta precisa permanecer no menu do usuário.');
+}
 if (!header.includes("navigate('audit')") || !header.includes('Auditoria')) {
   throw new Error('Auditoria precisa permanecer no menu do usuário.');
 }
 if (!app.includes("activePage === 'validation-routing'")) {
   throw new Error('Rota de Validação e roteamento ausente.');
+}
+if (!app.includes("activePage === 'account'") || !app.includes("activePage === 'tools'")) {
+  throw new Error('Rotas de Minha conta e Ferramentas ausentes.');
 }
 if (!app.includes('legacyPageMap')) {
   throw new Error('Migração das páginas antigas do sessionStorage ausente.');

@@ -180,3 +180,38 @@
   font-size: 14px;
   line-height: 22px;
 }
+
+.validation-routing__header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-08);
+  min-width: 0;
+}
+
+.validation-routing__header-actions .button,
+.validation-routing__header-actions .select-field {
+  margin-bottom: 0;
+}
+
+.validation-routing__chip-select {
+  width: 328px;
+  min-width: 280px;
+}
+
+.validation-routing__chip-select .select-field {
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .validation-routing-page .page-header {
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .validation-routing__header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

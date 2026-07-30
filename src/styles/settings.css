@@ -315,3 +315,174 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Minha conta */
+.account-card,
+.tools-panel {
+  min-height: 0 !important;
+}
+
+.account-profile-grid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: var(--space-32);
+  align-items: start;
+}
+
+.account-avatar-section,
+.account-fields-section {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.account-avatar {
+  position: relative;
+  display: grid;
+  width: 160px;
+  height: 160px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 12%, transparent);
+  border-radius: var(--radius-999);
+  background: var(--surface-raised);
+  background-position: center;
+  background-size: cover;
+  color: var(--app-text);
+}
+
+.account-avatar > span {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.account-avatar > svg {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  padding: 6px;
+  box-sizing: content-box;
+  border-radius: var(--radius-999);
+  background: color-mix(in srgb, var(--app-bg) 86%, transparent);
+  color: var(--app-text);
+}
+
+.account-avatar--image > svg {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.account-avatar--image:hover > svg {
+  opacity: 1;
+}
+
+.account-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-08);
+}
+
+.account-help,
+.tools-updated-at {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.account-storage-note {
+  display: grid;
+  gap: var(--space-04);
+  padding: var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--action-active) 24%, transparent);
+  border-radius: var(--radius-08);
+  background: color-mix(in srgb, var(--action-active) 6%, transparent);
+}
+
+.account-storage-note strong {
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.account-storage-note span {
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Ferramentas */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-16);
+}
+
+.tool-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-16);
+  align-items: start;
+  padding: var(--space-20);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 9%, transparent);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--color-pure-white) 2%, transparent);
+}
+
+.tool-card__icon {
+  display: grid;
+  width: var(--space-48);
+  height: var(--space-48);
+  place-items: center;
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--action-active) 12%, transparent);
+  color: var(--action-active);
+}
+
+.tool-card__content {
+  display: grid;
+  gap: var(--space-08);
+}
+
+.tool-card__content header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-08);
+}
+
+.tool-card__content strong {
+  color: var(--app-text);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.tool-card__content p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.tool-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tool-card__download {
+  grid-column: 1 / -1;
+  width: 100%;
+  text-decoration: none;
+}
+
+@media (max-width: 960px) {
+  .account-profile-grid,
+  .tools-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -532,7 +532,9 @@
         "auth_user_id",
         "status_id",
         "users_created_at",
-        "users_updated_at"
+        "users_updated_at",
+        "users_name",
+        "users_avatar_path"
       ],
       "rls_enabled": true,
       "policies": [

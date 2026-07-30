@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, ChevronDown, ClipboardList, LogOut } from 'lucide-react';
+import { Bell, ChevronDown, ClipboardList, LogOut, UserRound } from 'lucide-react';
 import { IconButton } from '../components';
 import { navGroups, type NavGroup, type PageId } from '../../pages/pageRegistry';
 import { useAuthContext } from '../../providers/AuthProvider';
@@ -14,12 +14,6 @@ function groupItems(group: NavGroup) {
   return group.sections?.flatMap((section) => section.items) ?? [];
 }
 
-const groupIsActive = (group: NavGroup, page: PageId) => {
-  if (group.id === 'import-approved' && page === 'import-rejected') return true;
-  if (group.id === page) return true;
-  return groupItems(group).some((item) => item.id === page);
-};
-
 export function Header({ activePage, onNavigate }: HeaderProps) {
   const [openGroup, setOpenGroup] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
@@ -27,6 +21,11 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
   const profileRef = useRef<HTMLDivElement | null>(null);
   const { user, signOut } = useAuthContext();
   const firstName = user?.name?.split(' ')[0] || 'Usuário';
+  const initials = (user?.name || user?.email || 'U')
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((item) => item[0]?.toUpperCase())
+    .join('');
 
   useEffect(() => {
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -76,7 +75,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                 onFocus={() => hasItems && setOpenGroup(group.id)}
               >
                 <button
-                  className={`nav-link ${groupIsActive(group, activePage) ? 'nav-link--active' : ''}`}
+                  className="nav-link"
                   aria-expanded={hasItems ? isOpen : undefined}
                   type="button"
                   onClick={() => {
@@ -102,9 +101,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                             className={activePage === item.id ? 'nav-menu__item--active' : ''}
                             key={item.id}
                             type="button"
-                            onClick={() => {
-                              navigate(item.id);
-                            }}
+                            onClick={() => navigate(item.id)}
                           >
                             {item.label}
                           </button>
@@ -115,9 +112,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                         className={activePage === item.id || (item.id === 'import-approved' && activePage === 'import-rejected') ? 'nav-menu__item--active' : ''}
                         key={item.id}
                         type="button"
-                        onClick={() => {
-                          navigate(item.id);
-                        }}
+                        onClick={() => navigate(item.id)}
                       >
                         {item.label}
                       </button>
@@ -136,12 +131,22 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
           </span>
           <div className={`profile-menu ${profileOpen ? 'profile-menu--open' : ''}`} ref={profileRef}>
             <button className="profile-chip" type="button" aria-expanded={profileOpen} onClick={() => setProfileOpen((current) => !current)}>
-              <span className="profile-chip__avatar" aria-hidden="true" />
-              <strong>{firstName}</strong>
+              <span
+                className={`profile-chip__avatar ${user?.avatarUrl ? 'profile-chip__avatar--image' : ''}`}
+                style={user?.avatarUrl ? { backgroundImage: `url(${user.avatarUrl})` } : undefined}
+                aria-hidden="true"
+              >
+                {!user?.avatarUrl ? initials : null}
+              </span>
+              <strong title={user?.name}>{firstName}</strong>
               <ChevronDown size={16} strokeWidth={1.8} />
             </button>
             {profileOpen ? (
               <div className="profile-menu__dropdown">
+                <button type="button" onClick={() => navigate('account')}>
+                  <UserRound size={14} strokeWidth={1.8} />
+                  Minha conta
+                </button>
                 <button type="button" onClick={() => navigate('audit')}>
                   <ClipboardList size={14} strokeWidth={1.8} />
                   Auditoria

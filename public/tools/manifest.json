@@ -1,0 +1,23 @@
+{
+  "updatedAt": "2026-07-30T17:10:00-03:00",
+  "tools": [
+    {
+      "id": "worker",
+      "name": "Worker de envios",
+      "description": "Processador das filas WhatsApp, validação pela Evolution e reconciliação operacional.",
+      "version": "3.1.0",
+      "path": "/tools/worker-latest.zip",
+      "fileName": "Worker_v3.1.0_producao_limpo.zip",
+      "size": 6169756
+    },
+    {
+      "id": "instagram-extension",
+      "name": "Extensão Instagram",
+      "description": "Extensão do navegador para assumir e processar a fila Instagram com token temporário.",
+      "version": "1.3.0",
+      "path": "/tools/instagram-extension-latest.zip",
+      "fileName": "Extensao_Instagram_v1.3.0_producao_limpo.zip",
+      "size": 32911
+    }
+  ]
+}

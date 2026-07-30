@@ -81,12 +81,15 @@ function validateSelection(ids: string[], byId: Map<string, LeadDatabaseRow>, mo
   return failures;
 }
 
-async function operationalChips() {
+async function operationalChips(selectedResourceId?: string) {
   const records = await configService.list('chips');
-  return records
+  const chips = records
     .filter((record): record is ChipConfigRecord => record.kind === 'chips')
     .filter(isOperationalWhatsAppChip)
     .sort((left, right) => Number(left.priority ?? 0) - Number(right.priority ?? 0) || left.name.localeCompare(right.name));
+
+  if (!selectedResourceId) return chips;
+  return chips.filter((chip) => chip.id === selectedResourceId || chipInstance(chip) === selectedResourceId);
 }
 
 function requestsForRows(rows: LeadDatabaseRow[], chips: ChipConfigRecord[]): WhatsAppValidationRequest[] {
@@ -213,7 +216,7 @@ async function applyConfirmedResult(
   }
 }
 
-async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[]) {
+async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[], selectedResourceId?: string) {
   const ids = numericIds(rawIds);
   const result = emptyResult(mode, ids.length);
   const [whatsappChannelId, instagramChannelId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]).then(([wa, ig]) => [Number(wa), Number(ig)] as const);
@@ -238,9 +241,11 @@ async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[])
 
   let providerById = new Map<string, WhatsAppValidationResult>();
   if (remoteCandidates.length) {
-    const chips = await operationalChips();
+    const chips = await operationalChips(selectedResourceId);
     if (!chips.length) {
-      throw new WhatsAppValidationUnavailableError('Nenhum chip WhatsApp ativo e conectado está disponível para validação. Nenhum lead do lote foi alterado.');
+      throw new WhatsAppValidationUnavailableError(selectedResourceId
+        ? 'O chip selecionado não está ativo e conectado. Nenhum lead do lote foi alterado.'
+        : 'Nenhum chip WhatsApp ativo e conectado está disponível para validação. Nenhum lead do lote foi alterado.');
     }
 
     // O provider é consultado antes da primeira mutação. Se o Worker/Evolution
@@ -281,6 +286,9 @@ async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[])
 export const whatsappValidationService = {
   validateInitial(ids: string[]) {
     return executeValidation('initial', ids);
+  },
+  validateInitialWithChip(ids: string[], selectedResourceId: string) {
+    return executeValidation('initial', ids, selectedResourceId);
   },
   revalidateApproved(ids: string[]) {
     return executeValidation('revalidation', ids);

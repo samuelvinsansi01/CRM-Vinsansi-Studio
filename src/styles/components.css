@@ -93,20 +93,15 @@
 .nav-link {
   min-height: var(--space-32);
   padding: 0 var(--space-08);
-  border-radius: var(--radius-08);
-  transition: color 120ms ease, background 120ms ease;
+  border-radius: 0;
+  transition: none;
 }
 
 .nav-link:hover,
 .nav-link:focus-visible {
-  background: color-mix(in srgb, var(--color-pure-white) 6%, transparent);
-  color: var(--app-text);
+  background: transparent;
+  color: var(--app-muted);
   outline: none;
-}
-
-.nav-link--active {
-  background: color-mix(in srgb, var(--action-active) 10%, transparent);
-  color: var(--app-text);
 }
 
 .nav-menu {
@@ -202,9 +197,19 @@
   flex: 0 0 var(--space-32);
   overflow: hidden;
   border-radius: var(--radius-999);
-  background-image: url('/assets/profile-avatar.png');
+  display: grid;
+  place-items: center;
+  background: var(--surface-raised);
   background-position: center;
   background-size: cover;
+  color: var(--app-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.profile-chip__avatar--image {
+  color: transparent;
 }
 
 .profile-chip strong {
@@ -230,7 +235,7 @@
   right: 0;
   z-index: 50;
   display: grid;
-  min-width: 132px;
+  min-width: 156px;
   padding: var(--space-04);
   border: 1px solid color-mix(in srgb, var(--color-pure-white) 10%, transparent);
   border-radius: var(--radius-08);

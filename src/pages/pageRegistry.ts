@@ -21,6 +21,8 @@ export type PageId =
   | 'config-instances'
   | 'config-template-channels'
   | 'config-template-types'
+  | 'account'
+  | 'tools'
   | 'audit';
 
 export type NavItem = {
@@ -105,6 +107,12 @@ export const navGroups: readonly NavGroup[] = [
         ],
       },
       {
+        label: 'Sistema',
+        items: [
+          { id: 'tools', label: 'Ferramentas' },
+        ],
+      },
+      {
         label: 'Templates',
         items: [
           { id: 'config-template-channels', label: 'Canais de template' },
@@ -138,5 +146,7 @@ export const pageTitles: Record<PageId, string> = {
   'config-instances': 'Instâncias',
   'config-template-channels': 'Canais de template',
   'config-template-types': 'Tipos de template',
+  account: 'Minha conta',
+  tools: 'Ferramentas',
   audit: 'Auditoria',
 };
