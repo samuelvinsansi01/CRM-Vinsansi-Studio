@@ -1,5 +1,5 @@
 export type LeadCertoEventMap = {
-  'config:changed': { kind: 'chips' | 'instagram' | 'branches' | 'templates' };
+  'config:changed': { kind: 'chips' | 'instagram' | 'branches' | 'templates' | 'instances' | 'levels' };
   'import-settings:changed': { source: 'settings' | 'reset' | 'branches' };
   'dispatch-settings:changed': { source: 'settings' | 'reset' };
   'import:changed': { source: 'manual' | 'json' | 'move' | 'remove' | 'update' | 'mark-sent' };

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { eventBus } from '../lib/events';
 import {
   createCatalogRecord,
   deleteCatalogRecord,
@@ -33,6 +34,10 @@ export function useCatalogRecords(kind: CatalogKind, search: string, status: str
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => eventBus.on('config:changed', ({ kind: changedKind }) => {
+    if (changedKind === kind) void refresh();
+  }), [kind, refresh]);
 
   const filteredRecords = useMemo(() => {
     const query = search.trim().toLowerCase();

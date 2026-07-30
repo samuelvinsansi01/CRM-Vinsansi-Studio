@@ -1,6 +1,6 @@
 {
   "name": "gease-visual-shell",
-  "version": "3.75.3",
+  "version": "3.76.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "verify:schema-real": "node scripts/verify-real-schema.mjs",
     "verify:syntax": "node scripts/verify-syntax.mjs",
     "verify:contracts": "node scripts/verify-business-contracts.mjs",
-    "verify:all": "npm run verify:schema-real && npm run verify:catalogs && npm run verify:syntax && npm run verify:contracts && npm run verify:focus-stability && npm run verify:navigation && npm run verify:config-pages && npm run verify:modals && npm run verify:instagram-contract && npm run verify:pagination-queues && npm run verify:apify-locations && npm run verify:apify-branch-search",
+    "verify:all": "npm run verify:schema-real && npm run verify:catalogs && npm run verify:syntax && npm run verify:contracts && npm run verify:focus-stability && npm run verify:navigation && npm run verify:config-pages && npm run verify:modals && npm run verify:instagram-contract && npm run verify:pagination-queues && npm run verify:apify-locations && npm run verify:apify-branch-search && npm run verify:evolution-instances",
     "verify:catalogs": "node scripts/verify-canonical-catalogs.mjs",
     "verify:focus-stability": "node scripts/verify-focus-stability.mjs",
     "verify:navigation": "node scripts/verify-navigation-structure.mjs",
@@ -19,7 +19,8 @@
     "verify:instagram-contract": "node scripts/verify-instagram-extension-contract.mjs",
     "verify:pagination-queues": "node scripts/verify-pagination-queues.mjs",
     "verify:apify-locations": "node scripts/verify-apify-locations.mjs",
-    "verify:apify-branch-search": "node scripts/verify-apify-branch-search.mjs"
+    "verify:apify-branch-search": "node scripts/verify-apify-branch-search.mjs",
+    "verify:evolution-instances": "node scripts/verify-evolution-instance-sync.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

@@ -294,7 +294,7 @@ export async function createCatalogRecord(kind: CatalogKind, input: Record<strin
     const apiKey = text(input.apiKey).trim();
     if (!name) throw new Error('Nome da instância é obrigatório.');
     const { error } = await client.from('instances').insert({
-      users_id: usersId, status_id: statusId, instances_name: name,
+      users_id: usersId, status_id: 2, instances_name: name,
       instances_url: text(input.url).trim() || null, instances_apikey: apiKey || null,
     });
     if (error) throw new Error(error.message);
@@ -364,7 +364,7 @@ export async function updateCatalogRecord(kind: CatalogKind, id: string, input: 
 
   if (kind === 'instances') {
     const payload: Row = {
-      status_id: statusId, instances_name: text(input.name).trim(), instances_url: text(input.url).trim() || null,
+      instances_name: text(input.name).trim(), instances_url: text(input.url).trim() || null,
       instances_updated_at: nowIso(),
     };
     const apiKey = text(input.apiKey).trim();

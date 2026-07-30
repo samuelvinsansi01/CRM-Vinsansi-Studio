@@ -16,6 +16,7 @@ import { QueuePage } from './pages/QueuePage';
 import { ValidationRoutingPage } from './pages/ValidationRoutingPage';
 import { pageTitles, type PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
+import { syncEvolutionInstances } from './services/evolution-instances/evolutionInstances.service';
 
 const ACTIVE_PAGE_STORAGE_KEY = 'painel:active-page';
 const validPageIds = new Set<PageId>(Object.keys(pageTitles) as PageId[]);
@@ -44,6 +45,36 @@ export function App() {
   useEffect(() => {
     window.sessionStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, activePage);
   }, [activePage]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    let disposed = false;
+
+    const reconcile = async (configureWebhook: boolean) => {
+      if (disposed) return;
+      try {
+        await syncEvolutionInstances({ configureWebhook });
+      } catch (error) {
+        console.warn('Não foi possível sincronizar as instâncias Evolution.', error);
+      }
+    };
+
+    const initialTimer = window.setTimeout(() => void reconcile(true), 500);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void reconcile(false);
+    }, 60_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void reconcile(false);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      disposed = true;
+      window.clearTimeout(initialTimer);
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [isAuthenticated]);
 
   // Não desmontar o painel autenticado durante renovação de token ou recuperação de foco.
   if (loading && !isAuthenticated) {

@@ -1129,7 +1129,7 @@ button.checkbox {
   position: relative;
   z-index: 1;
   display: flex;
-  width: min(520px, calc(100vw - var(--space-32)));
+  width: min(640px, calc(100vw - var(--space-32)));
   height: 100%;
   flex-direction: column;
   border-left: 1px solid color-mix(in srgb, var(--color-pure-white) 10%, transparent);

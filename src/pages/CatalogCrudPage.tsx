@@ -22,6 +22,7 @@ import {
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useCatalogRecords } from '../hooks/useCatalogRecords';
 import { useClientPagination } from '../hooks/useClientPagination';
+import { syncEvolutionInstances } from '../services/evolution-instances/evolutionInstances.service';
 import {
   listChannelOptions,
   type CatalogKind,
@@ -62,7 +63,7 @@ const definitions: Record<CatalogKind, PageDefinition> = {
   },
   instances: {
     title: 'Instâncias',
-    description: 'Cadastre as instâncias de integração usadas pelos chips WhatsApp.',
+    description: 'Cadastre as credenciais das instâncias Evolution. O status é sincronizado automaticamente pela conexão real.',
     singular: 'instância', tableTitle: 'Instâncias cadastradas', emptyMessage: 'Nenhuma instância cadastrada.',
   },
   template_channels: {
@@ -103,7 +104,7 @@ function initialForm(kind: CatalogKind, record?: CatalogRecord | null): FormStat
   if (!record) {
     if (kind === 'contact_sources') return { name: '', key: '', requiresReview: true, defaultChannelId: '', statusId: '1' };
     if (kind === 'levels') return { name: '', channelId: '1', dailyLimit: '1', queues: '', statusId: '1' };
-    if (kind === 'instances') return { name: '', url: '', apiKey: '', statusId: '1' };
+    if (kind === 'instances') return { name: '', url: '', apiKey: '' };
     if (kind === 'template_channels') return { name: '', blockedChannelIds: [], statusId: '1' };
     if (kind === 'template_types') return { name: '', statusId: '1' };
     return { name: '', key: '', source: '', defaultValue: '', statusId: '1' };
@@ -117,7 +118,7 @@ function initialForm(kind: CatalogKind, record?: CatalogRecord | null): FormStat
     name: record.name, channelId: record.channelId, dailyLimit: String(record.dailyLimit),
     queues: record.queues == null ? '' : String(record.queues), statusId: record.statusId,
   };
-  if (record.kind === 'instances') return { name: record.name, url: record.url, apiKey: '', statusId: record.statusId };
+  if (record.kind === 'instances') return { name: record.name, url: record.url, apiKey: '' };
   if (record.kind === 'template_channels') return { name: record.name, blockedChannelIds: record.blockedChannelIds, statusId: record.statusId };
   if (record.kind === 'template_types') return { name: record.name, statusId: record.statusId };
   return { name: record.name, key: record.key, source: record.source, defaultValue: record.defaultValue, statusId: record.statusId };
@@ -132,8 +133,8 @@ function FormSelect({ label, value, options, onChange }: { label: string; value:
   );
 }
 
-function statusTag(active: boolean) {
-  return <Tag tone={active ? 'success' : 'warning'}>{active ? 'Ativo' : 'Inativo'}</Tag>;
+function statusTag(active: boolean, labels: { active: string; inactive: string } = { active: 'Ativo', inactive: 'Inativo' }) {
+  return <Tag tone={active ? 'success' : 'warning'}>{active ? labels.active : labels.inactive}</Tag>;
 }
 
 function columnsFor(kind: CatalogKind): TableColumn<CatalogTableRow>[] {
@@ -188,7 +189,7 @@ function rowFor(record: CatalogRecord, channels: ChannelOption[]): CatalogTableR
   };
   if (record.kind === 'instances') return {
     id: record.id, name: record.name, url: record.url || '—', credential: <Tag tone="neutral">Não exibida</Tag>,
-    status: statusTag(record.active),
+    status: statusTag(record.active, { active: 'Ativa', inactive: 'Inativa' }),
   };
   if (record.kind === 'template_channels') return {
     id: record.id, name: record.name, blocked: record.blockedChannelNames.length ? record.blockedChannelNames.join(', ') : 'Nenhum',
@@ -229,7 +230,7 @@ function CatalogForm({ kind, form, channels, onChange }: { kind: CatalogKind; fo
         <>
           <Field label="URL da instância" type="url" value={stringValue(form.url)} placeholder="https://..." onChange={(value) => onChange('url', value)} />
           <Field label="API key" type="password" value={stringValue(form.apiKey)} placeholder="Deixe vazio para manter a chave atual" autoComplete="new-password" onChange={(value) => onChange('apiKey', value)} />
-          <p className="configuration-form-note">A chave não é exibida na listagem. Em edição, deixe o campo vazio para preservar a credencial atual.</p>
+          <p className="configuration-form-note">A chave não é exibida na listagem. Em edição, deixe o campo vazio para preservar a credencial atual. O status é somente leitura: a Evolution ativa quando a conexão está aberta e inativa quando ela cai.</p>
         </>
       ) : null}
 
@@ -267,7 +268,9 @@ function CatalogForm({ kind, form, channels, onChange }: { kind: CatalogKind; fo
         </>
       ) : null}
 
-      <FormSelect label="Status" value={stringValue(form.statusId) || '1'} options={statusOptions} onChange={(value) => onChange('statusId', value)} />
+      {kind !== 'instances' ? (
+        <FormSelect label="Status" value={stringValue(form.statusId) || '1'} options={statusOptions} onChange={(value) => onChange('statusId', value)} />
+      ) : null}
     </div>
   );
 }
@@ -281,6 +284,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
   const [editing, setEditing] = useState<CatalogRecord | null>(null);
   const [form, setForm] = useState<FormState>(() => initialForm(kind));
   const [saving, setSaving] = useState(false);
+  const [syncingInstances, setSyncingInstances] = useState(false);
   const [deleting, setDeleting] = useState<CatalogRecord | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const { records, filteredRecords, loading, refreshing, error, refresh, create, update, remove } = useCatalogRecords(kind, search, status);
@@ -306,13 +310,51 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
     setDrawerOpen(true);
   };
 
+  const syncInstances = async (showSuccess = true, instanceId?: string) => {
+    setSyncingInstances(true);
+    try {
+      const result = await syncEvolutionInstances({ instanceId, configureWebhook: true });
+      const webhookFailures = result.results.filter((item) => item.webhookError);
+      if (webhookFailures.length) {
+        notify({
+          title: 'Status sincronizado com ressalvas',
+          description: `${result.active} ativa(s), ${result.inactive} inativa(s). ${webhookFailures.length} webhook(s) não puderam ser configurados.`,
+          tone: 'warning',
+        });
+      } else if (showSuccess) {
+        notify({
+          title: 'Evolution sincronizada',
+          description: `${result.active} instância(s) ativa(s) e ${result.inactive} inativa(s).`,
+          tone: 'success',
+        });
+      }
+      return result;
+    } catch (cause) {
+      notify({
+        title: 'Falha ao sincronizar a Evolution',
+        description: cause instanceof Error ? cause.message : 'Erro inesperado.',
+        tone: 'danger',
+      });
+      throw cause;
+    } finally {
+      setSyncingInstances(false);
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     try {
       if (editing) await update(editing.id, form);
       else await create(form);
+      if (kind === 'instances') await syncInstances(false, editing?.id);
       setDrawerOpen(false);
-      notify({ title: editing ? 'Registro atualizado' : 'Registro criado', description: `${definition.singular} salvo com sucesso.`, tone: 'success' });
+      notify({
+        title: editing ? 'Registro atualizado' : 'Registro criado',
+        description: kind === 'instances'
+          ? 'Credenciais salvas e conexão conferida na Evolution.'
+          : `${definition.singular} salvo com sucesso.`,
+        tone: 'success',
+      });
     } catch (cause) {
       notify({ title: 'Não foi possível salvar', description: cause instanceof Error ? cause.message : 'Erro inesperado.', tone: 'danger' });
     } finally {
@@ -349,14 +391,21 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
 
       <section className="metric-grid metric-grid--3">
         <MetricCard icon={Database} value={String(records.length)} label="Total" />
-        <MetricCard icon={SquareCheck} value={String(activeCount)} label="Ativos" tone="success" />
-        <MetricCard icon={SquareX} value={String(inactiveCount)} label="Inativos" tone="warning" />
+        <MetricCard icon={SquareCheck} value={String(activeCount)} label={kind === 'instances' ? 'Ativas' : 'Ativos'} tone="success" />
+        <MetricCard icon={SquareX} value={String(inactiveCount)} label={kind === 'instances' ? 'Inativas' : 'Inativos'} tone="warning" />
       </section>
 
       <FiltersBar>
         <SearchInput value={search} placeholder="Buscar registros" onChange={(value) => { setSearch(value); resetPage(); }} />
         <SelectField value={status} options={filterStatusOptions} onChange={(value) => { setStatus(value); resetPage(); }} />
-        <Button variant="secondary" iconLeft={RefreshCcw} loading={refreshing} onClick={() => void refresh()}>Atualizar</Button>
+        <Button
+          variant="secondary"
+          iconLeft={RefreshCcw}
+          loading={kind === 'instances' ? syncingInstances : refreshing}
+          onClick={() => kind === 'instances' ? void syncInstances(true) : void refresh()}
+        >
+          {kind === 'instances' ? 'Sincronizar Evolution' : 'Atualizar'}
+        </Button>
       </FiltersBar>
 
       <TableCard
