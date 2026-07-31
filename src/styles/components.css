@@ -1434,23 +1434,46 @@ button.checkbox {
 .nav-menu--settings {
   right: 0;
   left: auto;
-  width: min(272px, calc(100vw - 32px));
-  max-height: min(70vh, 560px);
+  width: min(224px, calc(100vw - 32px));
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-02);
-  overflow-y: auto;
-  padding: var(--space-08);
+  overflow: visible;
+  padding: var(--space-04);
   transform: none;
 }
 
-.nav-menu--settings .nav-menu__section + .nav-menu__section {
-  margin-top: var(--space-04);
-  padding-top: var(--space-04);
-  border-top: 1px solid color-mix(in srgb, var(--color-pure-white) 7%, transparent);
+.nav-menu__cascade {
+  position: relative;
+  min-width: 0;
 }
 
-.nav-menu--settings .nav-menu__heading {
-  padding-top: var(--space-04);
+.nav-menu--settings .nav-menu__parent {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.nav-menu--settings .nav-menu__parent svg {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--app-muted) 82%, transparent);
+}
+
+.nav-menu__submenu {
+  position: absolute;
+  top: calc(var(--space-04) * -1);
+  right: calc(100% - var(--space-02));
+  z-index: 2;
+  display: none;
+  min-width: 224px;
+  padding: var(--space-04);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 10%, transparent);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--surface-card) 96%, var(--app-bg));
+  box-shadow: 0 16px 38px color-mix(in srgb, var(--color-pure-black) 72%, transparent);
+}
+
+.nav-menu__cascade:hover > .nav-menu__submenu,
+.nav-menu__cascade:focus-within > .nav-menu__submenu {
+  display: grid;
 }
 
 .settings-overview-grid {

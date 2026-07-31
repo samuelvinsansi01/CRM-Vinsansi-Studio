@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, ChevronDown, ClipboardList, LogOut, UserRound } from 'lucide-react';
+import { Bell, ChevronDown, ChevronLeft, ClipboardList, LogOut, UserRound } from 'lucide-react';
 import { IconButton } from '../components';
 import { navGroups, type NavGroup, type PageId } from '../../pages/pageRegistry';
 import { useAuthContext } from '../../providers/AuthProvider';
@@ -28,9 +28,8 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
     .join('');
 
   useEffect(() => {
-    const closeOnOutsideClick = (event: MouseEvent) => {
+    const closeProfileOnOutsideClick = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (navRef.current && !navRef.current.contains(target)) setOpenGroup('');
       if (profileRef.current && !profileRef.current.contains(target)) setProfileOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -39,10 +38,10 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
       setProfileOpen(false);
     };
 
-    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('mousedown', closeProfileOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('mousedown', closeProfileOnOutsideClick);
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, []);
@@ -65,11 +64,21 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
             const items = groupItems(group);
             const hasItems = items.length > 0;
             const isOpen = hasItems && openGroup === group.id;
+            const hasNestedSections = Boolean(group.sections?.length);
 
             return (
               <div
                 className={`nav-item ${isOpen ? 'nav-item--open' : ''}`}
                 key={group.id}
+                onMouseEnter={() => {
+                  if (!hasItems) return;
+                  setOpenGroup(group.id);
+                  setProfileOpen(false);
+                }}
+                onMouseLeave={() => setOpenGroup('')}
+                onFocus={() => {
+                  if (hasItems) setOpenGroup(group.id);
+                }}
               >
                 <button
                   className="nav-link"
@@ -77,14 +86,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                   aria-haspopup={hasItems ? 'menu' : undefined}
                   aria-controls={hasItems ? `nav-menu-${group.id}` : undefined}
                   type="button"
-                  onClick={() => {
-                    if (hasItems) {
-                      setOpenGroup((current) => current === group.id ? '' : group.id);
-                      setProfileOpen(false);
-                      return;
-                    }
-                    navigate(group.id);
-                  }}
+                  onClick={hasItems ? undefined : () => navigate(group.id)}
                 >
                   <span>{group.label}</span>
                   {hasItems ? <ChevronDown size={12} strokeWidth={1.8} /> : null}
@@ -97,21 +99,32 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                     role="menu"
                     aria-label={group.label}
                   >
-                    {group.sections?.length ? group.sections.map((section) => (
-                      <section className="nav-menu__section" key={section.label} aria-label={section.label}>
-                        <span className="nav-menu__heading">{section.label}</span>
-                        {section.items.map((item) => (
-                          <button
-                            className={activePage === item.id ? 'nav-menu__item--active' : ''}
-                            key={item.id}
-                            type="button"
-                            role="menuitem"
-                            onClick={() => navigate(item.id)}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </section>
+                    {hasNestedSections ? group.sections?.map((section) => (
+                      <div className="nav-menu__cascade" key={section.label}>
+                        <button
+                          className="nav-menu__parent"
+                          type="button"
+                          role="menuitem"
+                          aria-haspopup="menu"
+                        >
+                          <span>{section.label}</span>
+                          <ChevronLeft size={14} strokeWidth={1.8} aria-hidden="true" />
+                        </button>
+
+                        <div className="nav-menu__submenu" role="menu" aria-label={section.label}>
+                          {section.items.map((item) => (
+                            <button
+                              className={activePage === item.id ? 'nav-menu__item--active' : ''}
+                              key={item.id}
+                              type="button"
+                              role="menuitem"
+                              onClick={() => navigate(item.id)}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )) : group.items?.map((item) => (
                       <button
                         className={activePage === item.id || (item.id === 'import-approved' && activePage === 'import-rejected') ? 'nav-menu__item--active' : ''}

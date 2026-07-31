@@ -40,14 +40,17 @@ if (missing.length) throw new Error(`Menu incompleto: ${missing.join(', ')}`);
 if (registry.includes("label: 'Pré-Envio'") || registry.includes("label: 'Válidos'")) {
   throw new Error('Pré-Envio/Válidos não podem permanecer no menu novo.');
 }
-if (header.includes('onMouseEnter') || header.includes('onMouseLeave') || header.includes('onFocus={() => hasItems')) {
-  throw new Error('Dropdowns da navegação ainda abrem por hover ou foco involuntário.');
+if (!header.includes('onMouseEnter') || !header.includes('onMouseLeave')) {
+  throw new Error('Dropdowns da navegação precisam preservar a abertura por hover.');
+}
+if (header.includes("setOpenGroup((current) => current === group.id ? '' : group.id)")) {
+  throw new Error('Dropdowns principais não devem depender de clique para abrir.');
 }
 if (!header.includes("aria-haspopup={hasItems ? 'menu' : undefined}") || !header.includes('role="menuitem"')) {
   throw new Error('Dropdowns da navegação perderam o contrato acessível de menu.');
 }
-if (!header.includes("setOpenGroup((current) => current === group.id ? '' : group.id)")) {
-  throw new Error('Dropdowns da navegação não estão controlados por clique.');
+if (!header.includes('nav-menu__cascade') || !header.includes('nav-menu__submenu') || !header.includes('ChevronLeft')) {
+  throw new Error('Configurações precisa permanecer como dropdown multinível com submenu lateral.');
 }
 if (!header.includes("navigate('account')") || !header.includes('Minha conta')) {
   throw new Error('Minha conta precisa permanecer no menu do usuário.');
