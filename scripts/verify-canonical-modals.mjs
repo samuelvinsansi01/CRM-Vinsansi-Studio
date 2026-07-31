@@ -15,10 +15,18 @@ const whatsappTypes = read('src/services/whatsapp-queue/types.ts');
 const instagramTypes = read('src/services/instagram-queue/types.ts');
 const importPage = read('src/pages/ImportPage.tsx');
 const configService = read('src/services/config/config.service.ts');
+const branchCategories = read('src/utils/branchCategories.ts');
 
-for (const field of ['categoriesJson', 'templateChannelId', 'templateTypeId', 'instanceId', 'levelId']) {
+for (const field of ['categoriesText', 'categoriesJson', 'templateChannelId', 'templateTypeId', 'instanceId', 'levelId']) {
   assert(configPage.includes(field), `Modal canônico não expõe ${field}.`);
 }
+assert(configPage.includes('Categorias associadas'), 'Modal de ramo não expõe o textarea humano de categorias.');
+assert(configPage.includes("readOnly: true"), 'Preview JSON de categorias ainda pode ser editado.');
+assert(branchCategories.includes('normalizeCategoryList'), 'Textarea de categorias não normaliza entradas humanas.');
+assert(configPage.includes('mergeCategoriesJson') && branchCategories.includes('mergeCategoriesJson'), 'Textarea de categorias não reflete automaticamente no JSON.');
+assert(configPage.includes('As demais propriedades existentes no JSON são preservadas.'), 'Editor de categorias não declara a preservação das demais chaves JSON.');
+assert(!configPage.includes("label: 'Categorias (JSON)'"), 'Modal de ramo ainda apresenta o JSON como campo primário editável.');
+assert(configPage.indexOf("key: 'categoriesText'") < configPage.indexOf("key: 'categoriesJson'"), 'Textarea humano deve aparecer antes do preview JSON.');
 assert(configPage.includes('Nome do template'), 'Modal de template não expõe templates_name.');
 assert(configPage.includes('Configurações > Instâncias'), 'Modal de chip não separa o cadastro de instâncias.');
 assert(!configPage.includes("key: 'apiKey'"), 'Modal de chip ainda edita API key da instância.');

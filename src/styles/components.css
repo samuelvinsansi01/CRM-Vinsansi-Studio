@@ -94,7 +94,15 @@
   min-height: var(--space-32);
   padding: 0 var(--space-08);
   border-radius: 0;
-  transition: none;
+  transition: color 160ms ease;
+}
+
+.nav-link svg {
+  transition: transform 160ms ease;
+}
+
+.nav-item--open .nav-link svg {
+  transform: rotate(180deg);
 }
 
 .nav-link:hover,
@@ -106,7 +114,7 @@
 
 .nav-menu {
   position: absolute;
-  top: calc(100% - var(--space-02));
+  top: calc(100% + var(--space-06));
   left: 50%;
   z-index: 50;
   display: none;
@@ -1404,7 +1412,7 @@ button.checkbox {
   display: grid;
   align-content: start;
   gap: var(--space-02);
-  min-width: 190px;
+  min-width: 0;
 }
 
 .nav-menu__heading {
@@ -1426,11 +1434,23 @@ button.checkbox {
 .nav-menu--settings {
   right: 0;
   left: auto;
-  width: min(620px, calc(100vw - 48px));
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-08);
+  width: min(272px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-02);
+  overflow-y: auto;
   padding: var(--space-08);
   transform: none;
+}
+
+.nav-menu--settings .nav-menu__section + .nav-menu__section {
+  margin-top: var(--space-04);
+  padding-top: var(--space-04);
+  border-top: 1px solid color-mix(in srgb, var(--color-pure-white) 7%, transparent);
+}
+
+.nav-menu--settings .nav-menu__heading {
+  padding-top: var(--space-04);
 }
 
 .settings-overview-grid {
@@ -1720,4 +1740,23 @@ button.checkbox {
   .import-rules-dedup-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Editor humano de categorias do ramo */
+.branch-categories-json .field__control {
+  height: 184px;
+  background: color-mix(in srgb, var(--color-pure-black) 16%, transparent);
+}
+
+.branch-categories-json textarea {
+  min-height: 150px;
+  color: color-mix(in srgb, var(--app-muted) 90%, transparent);
+  cursor: default;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.branch-categories-json .field__control:focus-within {
+  border-color: color-mix(in srgb, var(--color-pure-white) 10%, transparent);
 }

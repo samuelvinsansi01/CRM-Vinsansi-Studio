@@ -24,6 +24,7 @@ import { useCatalogRecords } from '../hooks/useCatalogRecords';
 import { useConfigRecords } from '../hooks/useConfigRecords';
 import { DEFAULT_TEMPLATE_MESSAGE_1, DEFAULT_TEMPLATE_MESSAGE_2 } from '../services/config/config.seed';
 import { chipStatusLabel, isOperationalWhatsAppChip } from '../services/config/chipOperational';
+import { categoriesFormValue, formatCategoriesJson, mergeCategoriesJson, parseCategoriesJson } from '../utils/branchCategories';
 import type { InstanceRecord, LevelRecord, TemplateChannelRecord, TemplateTypeRecord } from '../repositories/configuration';
 import type {
   BranchConfigRecord,
@@ -46,6 +47,8 @@ type FieldDefinition = {
   options?: Array<string | SelectOption>;
   placeholder?: string;
   description?: string;
+  readOnly?: boolean;
+  className?: string;
 };
 
 type ScreenMetric = {
@@ -179,7 +182,21 @@ function makeScreen(kind: ConfigKind, options: ConfigModalOptions): ScreenDefini
       ],
       fields: [
         { key: 'name', label: 'Nome', placeholder: 'Ex.: Móveis Planejados', description: 'Mapeia diretamente para branches.branches_name.' },
-        { key: 'categoriesJson', label: 'Categorias (JSON)', type: 'textarea', placeholder: '{\n  "categorias": ["Marcenaria"]\n}', description: 'Conteúdo integral de branches.branches_categories. Chaves desconhecidas são preservadas.' },
+        {
+          key: 'categoriesText',
+          label: 'Categorias associadas',
+          type: 'textarea',
+          placeholder: 'contabilidade, escritório contábil, contador, serviços contábeis',
+          description: 'Digite as categorias separadas por vírgula, ponto e vírgula ou quebra de linha. Espaços, duplicidades e capitalização são normalizados automaticamente.',
+        },
+        {
+          key: 'categoriesJson',
+          label: 'Estrutura JSON gerada',
+          type: 'textarea',
+          readOnly: true,
+          className: 'branch-categories-json',
+          description: 'Visualização somente leitura de branches.branches_categories. As demais propriedades existentes no JSON são preservadas.',
+        },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
       ],
     };
@@ -281,7 +298,8 @@ function createEmptyForm(kind: ConfigKind, options: ConfigModalOptions): Record<
   if (kind === 'branches') {
     return {
       name: '',
-      categoriesJson: '{}',
+      categoriesText: '',
+      categoriesJson: formatCategoriesJson({ associatedCategories: [] }),
       active: 'Ativo',
     };
   }
@@ -318,30 +336,11 @@ function createEmptyForm(kind: ConfigKind, options: ConfigModalOptions): Record<
   };
 }
 
-function formatCategoriesJson(value: unknown) {
-  if (value == null) return '';
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function parseCategoriesJson(value: string) {
-  const text = value.trim();
-  if (!text) return null;
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new Error('Categorias do ramo devem conter JSON válido.');
-  }
-}
-
 function formFromRecord(record: ConfigRecord): Record<string, string> {
   if (isBranch(record)) {
     return {
       name: record.name,
-      categoriesJson: formatCategoriesJson(record.categories),
+      ...categoriesFormValue(record.categories),
       active: record.active ? 'Ativo' : 'Inativo',
     };
   }
@@ -588,7 +587,17 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   };
 
   const updateForm = (key: string, value: string) => {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      if (kind === 'branches' && key === 'categoriesText') {
+        return {
+          ...current,
+          categoriesText: value,
+          categoriesJson: mergeCategoriesJson(current.categoriesJson ?? '', value),
+        };
+      }
+
+      return { ...current, [key]: value };
+    });
   };
 
   const validateForm = () => {
@@ -779,8 +788,10 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
                   placeholder={field.placeholder}
                   type={field.inputType}
                   value={form[field.key] ?? ''}
-                  readOnly={drawerMode === 'view'}
-                  onChange={(value) => updateForm(field.key, value)}
+                  className={field.className}
+                  readOnly={drawerMode === 'view' || field.readOnly}
+                  aria-readonly={drawerMode === 'view' || field.readOnly}
+                  onChange={drawerMode === 'view' || field.readOnly ? undefined : (value) => updateForm(field.key, value)}
                 />
                 {field.description ? <small className="drawer-field__description">{field.description}</small> : null}
               </div>

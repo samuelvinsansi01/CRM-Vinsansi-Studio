@@ -70,13 +70,12 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
               <div
                 className={`nav-item ${isOpen ? 'nav-item--open' : ''}`}
                 key={group.id}
-                onMouseEnter={() => hasItems && setOpenGroup(group.id)}
-                onMouseLeave={() => setOpenGroup('')}
-                onFocus={() => hasItems && setOpenGroup(group.id)}
               >
                 <button
                   className="nav-link"
                   aria-expanded={hasItems ? isOpen : undefined}
+                  aria-haspopup={hasItems ? 'menu' : undefined}
+                  aria-controls={hasItems ? `nav-menu-${group.id}` : undefined}
                   type="button"
                   onClick={() => {
                     if (hasItems) {
@@ -92,7 +91,12 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                 </button>
 
                 {hasItems ? (
-                  <div className={`nav-menu ${group.menuClassName ?? ''} ${isOpen ? 'nav-menu--open' : ''}`}>
+                  <div
+                    className={`nav-menu ${group.menuClassName ?? ''} ${isOpen ? 'nav-menu--open' : ''}`}
+                    id={`nav-menu-${group.id}`}
+                    role="menu"
+                    aria-label={group.label}
+                  >
                     {group.sections?.length ? group.sections.map((section) => (
                       <section className="nav-menu__section" key={section.label} aria-label={section.label}>
                         <span className="nav-menu__heading">{section.label}</span>
@@ -101,6 +105,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                             className={activePage === item.id ? 'nav-menu__item--active' : ''}
                             key={item.id}
                             type="button"
+                            role="menuitem"
                             onClick={() => navigate(item.id)}
                           >
                             {item.label}
@@ -112,6 +117,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                         className={activePage === item.id || (item.id === 'import-approved' && activePage === 'import-rejected') ? 'nav-menu__item--active' : ''}
                         key={item.id}
                         type="button"
+                        role="menuitem"
                         onClick={() => navigate(item.id)}
                       >
                         {item.label}
