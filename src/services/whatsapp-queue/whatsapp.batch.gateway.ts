@@ -4,8 +4,12 @@ export type WhatsAppBatchState = {
   status: 'idle' | 'running' | 'paused' | 'stopped' | 'completed' | 'error';
   enabled: boolean;
   chip?: string;
+  batch_id?: number;
   total: number;
   remaining: number;
+  processed?: number;
+  sent?: number;
+  failed?: number;
   sent_in_block?: number;
   block_number?: number;
   next_run_at?: string;
@@ -47,8 +51,12 @@ async function call(action: BatchAction, input: { ids?: string[]; chip?: string 
     status: String(payload?.status || 'idle') as WhatsAppBatchState['status'],
     enabled: payload?.enabled === true || payload?.status === 'running',
     chip: String(payload?.chip || ''),
+    batch_id: Number(payload?.batch_id || 0),
     total: Number(payload?.total || 0),
     remaining: Number(payload?.remaining ?? payload?.total ?? 0),
+    processed: Number(payload?.processed || 0),
+    sent: Number(payload?.sent || 0),
+    failed: Number(payload?.failed || 0),
     sent_in_block: Number(payload?.sent_in_block || 0),
     block_number: Number(payload?.block_number || 1),
     next_run_at: String(payload?.next_run_at || ''),

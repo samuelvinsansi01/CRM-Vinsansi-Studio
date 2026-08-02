@@ -66,7 +66,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     const body = bodyRecord(req.body);
     const action = String(body.action ?? '').toLowerCase();
-    if (!['start','pause','resume','stop','state'].includes(action)) return send(res, 400, { ok: false, error: 'batch_action_invalid' });
+    if (!['start','pause','resume','stop','state','status'].includes(action)) return send(res, 400, { ok: false, error: 'batch_action_invalid' });
     const auth = await authenticate(req);
     const ids = idsOf(body.queue_item_ids ?? body.ids ?? body.queueItemIds);
     let chip = String(body.chip_instance ?? body.chipInstance ?? '').trim();

@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-08-02T04:38:00-03:00",
+  "updatedAt": "2026-08-02T05:30:00-03:00",
   "tools": [
     {
       "id": "worker",
       "name": "Worker de envios",
-      "description": "Processador das filas WhatsApp que usa mensagens e mídia congeladas no queue_item, validação pela Evolution e reconciliação operacional.",
-      "version": "3.2.0",
+      "description": "Processador WhatsApp com lotes persistentes, retomada após reinício, snapshot imutável e idempotência por mensagem e mídia.",
+      "version": "3.3.0",
       "path": "/tools/worker-latest.zip",
-      "fileName": "Worker_v3.2.0_payload_congelado.zip",
-      "size": 6170793
+      "fileName": "Worker_v3.3.0_lotes_persistentes_idempotencia.zip",
+      "size": 6172539
     },
     {
       "id": "instagram-extension",

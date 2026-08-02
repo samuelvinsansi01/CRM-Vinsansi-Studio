@@ -293,6 +293,8 @@ function WhatsAppQueuePage() {
           {(running || batchState.status === 'paused') && (
             <small className="queue-batch-status" role="status">
               {batchState.status === 'paused' ? 'Lote pausado' : `Lote em execução • ${batchState.remaining} restante(s)`}
+              {Number(batchState.processed || 0) > 0 ? ` • ${batchState.processed} processado(s)` : ''}
+              {Number(batchState.failed || 0) > 0 ? ` • ${batchState.failed} erro(s)` : ''}
               {batchState.next_run_at ? ` • próximo: ${new Date(batchState.next_run_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
             </small>
           )}

@@ -34,7 +34,7 @@ assert(instagramApi.includes('image_sha256'), 'API da extensão não entrega a i
 
 const worker = manifest.tools.find((tool) => tool.id === 'worker');
 const extension = manifest.tools.find((tool) => tool.id === 'instagram-extension');
-assert(worker?.version === '3.2.0', 'Manifesto não publica o Worker 3.2.0.');
+assert(['3.2.0', '3.3.0'].includes(worker?.version), 'Manifesto não publica Worker compatível com snapshot (3.2.0+).');
 assert(extension?.version === '1.4.0', 'Manifesto não publica a extensão 1.4.0.');
 
 if (failures.length) {

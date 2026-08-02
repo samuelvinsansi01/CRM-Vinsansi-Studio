@@ -361,49 +361,53 @@ export const whatsappQueueService = {
     await assertLeadsUseOperationalChips(leads);
     assertWorkerContractReady(leads);
     assertTemplateReady(leads);
-    leads.forEach((lead) => assertTransition({ entity: 'whatsapp-queue', fromStatus: lead.status, toStatus: 'sending', action: 'mark_sending' }));
-
-    // O item passa para envio antes de chamar o worker. Qualquer falha posterior fica
-    // rastreavel como error e pode ser reprocessada, em vez de permanecer em queued.
-    await Promise.all(leads.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'sending', error_message: '' })));
-    leads.forEach((lead) => logQueueEvent('sending', lead, 'sending'));
 
     let results;
     try {
       results = await whatsappGateway.send(leads);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Erro ao acionar worker WhatsApp.';
-      await Promise.all(leads.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'error', error_message: message })));
-      leads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
-      eventBus.emit('whatsapp-queue:changed', { action: 'error' });
-      throw new Error(`Worker WhatsApp indisponivel. Itens movidos para erro e prontos para reprocessamento: ${message}`);
+      // O Worker persiste qualquer item que chegou a reivindicar. Se a chamada ao
+      // proxy falhar, o painel não sobrescreve estados nem cria logs artificiais.
+      eventBus.emit('whatsapp-queue:changed', { action: 'update' });
+      throw new Error(`Não foi possível consultar o resultado do Worker. Atualize a fila antes de tentar novamente: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     const byId = new Map(results.map((result) => [result.leadId, result]));
-    const normalizedResults = leads.map((lead) => byId.get(lead.id) ?? ({ leadId: lead.id, status: 'error' as const, errorMessage: 'Worker WhatsApp nao retornou resultado para este item.' }));
+    const normalizedResults = leads.map((lead) => byId.get(lead.id) ?? ({
+      leadId: lead.id,
+      status: 'error' as const,
+      errorMessage: 'Worker não retornou resultado para este item. Atualize a fila antes de reprocessar.',
+    }));
+
     const sentIds = normalizedResults.filter((result) => result.status === 'sent').map((result) => result.leadId);
+    const sentLeads = leads.filter((lead) => sentIds.includes(lead.id));
     const errorResults = normalizedResults.filter((result) => result.status === 'error');
     const pausedResults = normalizedResults.filter((result) => result.status === 'paused');
-    const sentLeads = leads.filter((lead) => sentIds.includes(lead.id));
 
-    const sentAllowedIds = allowedIds(sentLeads.map((lead) => ({ ...lead, status: 'sending' })), 'mark_sent', 'sent');
-    try {
-      await finishSentPersistence({ queueIds: sentAllowedIds, leads: sentLeads});
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Falha ao persistir envio WhatsApp.';
-      await Promise.all(sentLeads.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'error', error_message: message })));
-      sentLeads.forEach((lead) => logQueueEvent('error', lead, 'error', message));
-      eventBus.emit('whatsapp-queue:changed', { action: 'error' });
-      throw new Error(`Envio confirmado pelo worker, mas a persistencia falhou. Itens foram movidos para erro para reconciliacao: ${message}`);
-    }
+    sentLeads.forEach((lead) => logQueueEvent('sent_by_worker', lead, 'sent'));
+    errorResults.forEach((result) => logQueueEvent(
+      'worker_error',
+      leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId },
+      'error',
+      result.errorMessage,
+    ));
+    pausedResults.forEach((result) => logQueueEvent(
+      'worker_paused',
+      leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId },
+      'paused',
+      result.errorMessage,
+    ));
 
-    await Promise.all(errorResults.map((result) => repositories.whatsappQueue.updateLead(result.leadId, { status: 'error', error_message: result.errorMessage ?? 'Erro ao enviar WhatsApp.' })));
-    await Promise.all(pausedResults.map((result) => repositories.whatsappQueue.updateLead(result.leadId, { status: 'paused', error_message: result.errorMessage ?? 'Chip desconectado.' })));
-    sentLeads.forEach((lead) => logQueueEvent('sent', lead, 'sent'));
-    errorResults.forEach((result) => logQueueEvent('error', leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId }, 'error', result.errorMessage));
-    pausedResults.forEach((result) => logQueueEvent('paused', leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId }, 'paused', result.errorMessage));
     eventBus.emit('whatsapp-queue:changed', { action: 'send' });
     if (sentLeads.length) eventBus.emit('base:changed', { action: 'update' });
+
+    if (errorResults.length || pausedResults.length) {
+      const details = [
+        errorResults.length ? `${errorResults.length} com erro` : '',
+        pausedResults.length ? `${pausedResults.length} pausado(s)` : '',
+      ].filter(Boolean).join(' e ');
+      throw new Error(`O Worker concluiu parcialmente o envio: ${details}. Consulte a fila antes de reprocessar.`);
+    }
   },
 
   async pause(ids: string[]) {
