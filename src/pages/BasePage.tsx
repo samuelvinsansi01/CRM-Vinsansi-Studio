@@ -30,6 +30,7 @@ const columns: TableColumn<Row>[] = [
   { key: 'city', label: 'Cidade', width: '12%' },
   { key: 'channel', label: 'Canal final', width: '10%' },
   { key: 'contact', label: 'Contato', width: '14%' },
+  { key: 'history', label: 'Histórico', width: '10%' },
   { key: 'status', label: 'Status final', width: '12%' },
 ];
 
@@ -59,6 +60,7 @@ export function BasePage() {
     city: lead.city || '-',
     channel: <Tag tone={lead.origin === 'Instagram' ? 'primary' : 'success'}>{lead.origin}</Tag>,
     contact: lead.origin === 'Instagram' ? (lead.instagram || '-') : (lead.phone || '-'),
+    history: <span>{lead.totalLeads ?? 1} lead(s) · {lead.totalDispatches ?? 0} envio(s){lead.suppressed ? ' · suprimido' : ''}</span>,
     status: statusTag(lead),
   })), [records]);
 
@@ -97,7 +99,7 @@ export function BasePage() {
     <div className="dashboard-table-page lead-list-page">
       <PageHeader
         title="Base Permanente"
-        description="Fonte canônica: tabela leads nos estados finais enviado, inválido, duplicado e arquivado."
+        description="Memória consolidada por identidade canônica, com histórico de contatos, supressão e prova de envio."
         action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || saving} onClick={refresh}>Atualizar</Button>}
       />
 
@@ -117,8 +119,8 @@ export function BasePage() {
       </FiltersBar>
 
       <TableCard
-        title="Leads finalizados"
-        footerText={loading ? 'Carregando...' : `Mostrando ${pageItems.length} de ${rows.length} lead(s).`}
+        title="Empresas consolidadas"
+        footerText={loading ? 'Carregando...' : `Mostrando ${pageItems.length} de ${rows.length} empresa(s).`}
         footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setSelectedRows([]); }} />}
         page={page}
         totalPages={totalPages}

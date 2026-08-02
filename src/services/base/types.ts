@@ -7,6 +7,7 @@ export type BaseLeadDestination = 'WhatsApp' | 'Instagram' | 'Com site' | 'Agreg
 
 export type BaseLead = {
   id: string;
+  canonicalId?: string;
   company: string;
   branch: string;
   branch_id?: string;
@@ -24,6 +25,12 @@ export type BaseLead = {
   status: BaseLeadStatus;
   statusId: BaseFinalStatusId;
   finalizedAt: string;
+  totalLeads?: number;
+  totalDispatches?: number;
+  lastSentAt?: string;
+  suppressed?: boolean;
+  commercialOutcome?: string;
+  operatorNotes?: string;
 };
 
 export type FinalLeadIdentities = {

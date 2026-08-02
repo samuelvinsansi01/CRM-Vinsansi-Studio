@@ -786,6 +786,59 @@
       "policies": [
         "contact_suppressions_own_select"
       ]
+    },
+    "permanent_records": {
+      "primary_key": [
+        "permanent_records_id"
+      ],
+      "columns": [
+        "permanent_records_id",
+        "users_id",
+        "canonical_lead_id",
+        "branches_id",
+        "states_id",
+        "cities_id",
+        "channels_id",
+        "last_lead_status_id",
+        "company_name",
+        "normalized_phone",
+        "normalized_instagram",
+        "normalized_domain",
+        "normalized_maps",
+        "total_leads",
+        "total_dispatches",
+        "first_seen_at",
+        "last_activity_at",
+        "last_sent_at",
+        "is_suppressed",
+        "commercial_outcome",
+        "operator_notes",
+        "record_status",
+        "archived_at",
+        "permanent_records_created_at",
+        "permanent_records_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "permanent_records_own_select"
+      ]
+    },
+    "permanent_record_snapshots": {
+      "primary_key": [
+        "permanent_record_snapshots_id"
+      ],
+      "columns": [
+        "permanent_record_snapshots_id",
+        "users_id",
+        "permanent_records_id",
+        "reason",
+        "snapshot",
+        "created_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "permanent_record_snapshots_own_select"
+      ]
     }
   }
 }
