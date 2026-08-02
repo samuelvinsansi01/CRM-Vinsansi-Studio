@@ -5,6 +5,38 @@ import { nowIso } from './supabase.helpers';
 type Row = Record<string, unknown>;
 export type QueueChannel = 'WhatsApp' | 'Instagram';
 
+
+export type QueuePayloadSnapshot = {
+  schema_version?: number;
+  frozen_at?: string;
+  channel?: string;
+  recipient?: Record<string, unknown>;
+  lead?: Record<string, unknown>;
+  variables?: Record<string, unknown>;
+  template?: Record<string, unknown>;
+  messages?: Record<string, unknown>;
+  media?: Record<string, unknown>;
+};
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+export function queuePayloadSnapshot(value: unknown): QueuePayloadSnapshot | null {
+  const payload = objectValue(value);
+  if (!Object.keys(payload).length) return null;
+  return payload as QueuePayloadSnapshot;
+}
+
+export function queueSnapshotPart(snapshot: QueuePayloadSnapshot | null, section: keyof QueuePayloadSnapshot) {
+  return objectValue(snapshot?.[section]);
+}
+
+export function queueSnapshotMessage(snapshot: QueuePayloadSnapshot | null, number: 1 | 2 | 3 | 4) {
+  const messages = queueSnapshotPart(snapshot, 'messages');
+  return String(messages[`message_${number}`] ?? '').trim();
+}
+
 export type AtomicQueuePreparationInput = {
   leadId: string;
   templateId: string;

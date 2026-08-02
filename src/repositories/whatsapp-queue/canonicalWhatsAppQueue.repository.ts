@@ -8,7 +8,7 @@ import type {
 } from '../../services/whatsapp-queue/types';
 import { normalizePhone } from '../../services/import/importValidation';
 import { currentUserIdNumber, queueStatusId } from '../schemaCatalog';
-import { canonicalQueueStatus, dateOnly, loadCanonicalQueue, prepareQueueItems, updateQueueItemStatus } from '../queueSchema';
+import { canonicalQueueStatus, dateOnly, loadCanonicalQueue, prepareQueueItems, queuePayloadSnapshot, queueSnapshotMessage, queueSnapshotPart, updateQueueItemStatus } from '../queueSchema';
 import { nowIso } from '../supabase.helpers';
 import type { WhatsAppQueueRepository } from './whatsappQueue.repository';
 
@@ -21,26 +21,40 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): W
   const chip = row.chip ?? {};
   const instance = row.instance ?? {};
   const branch = row.branch ?? {};
+  const snapshot = queuePayloadSnapshot(item.queue_items_payload_snapshot);
+  const snapshotLead = queueSnapshotPart(snapshot, 'lead');
+  const snapshotRecipient = queueSnapshotPart(snapshot, 'recipient');
+  const snapshotMedia = queueSnapshotPart(snapshot, 'media');
   const queueId = String(item.queues_id ?? '');
   const position = Number(item.queue_items_position ?? 1);
   const scheduled = dateOnly(item.queue_items_scheduled_at ?? row.queue.queues_scheduled_at);
   const dailyLimit = 60;
   const batchNumber = Math.floor((position - 1) / dailyLimit) + 1;
-  const phone = String(lead.leads_phone ?? '');
-  const website = String(lead.leads_website ?? '');
+  const phone = String(snapshotRecipient.phone ?? snapshotLead.phone ?? lead.leads_phone ?? '');
+  const website = String(snapshotLead.site ?? lead.leads_website ?? '');
+  const company = String(snapshotLead.company_name ?? lead.leads_name ?? '');
+  const branchName = String(snapshotLead.branch_name ?? branch.branches_name ?? '');
+  const instagram = String(snapshotLead.instagram ?? lead.leads_instagram ?? '');
+  const mapsUrl = String(snapshotLead.maps_url ?? lead.leads_maps ?? '');
   const status = canonicalQueueStatus(row) as WhatsAppQueueLead['status'];
+  const message1 = queueSnapshotMessage(snapshot, 1) || String(template.templates_message_1 ?? '');
+  const message2 = queueSnapshotMessage(snapshot, 2) || String(template.templates_message_2 ?? '');
+  const message3 = queueSnapshotMessage(snapshot, 3) || String(template.templates_message_3 ?? '');
+  const message4 = queueSnapshotMessage(snapshot, 4) || String(template.templates_message_4 ?? '');
+  const imageName = String(snapshotMedia.name ?? '');
+  const imageRequired = Boolean(snapshotMedia.required);
   return {
     id: String(item.queue_items_id),
     lead_id: String(item.leads_id),
     order: position,
     position,
-    company: String(lead.leads_name ?? ''),
-    company_name: String(lead.leads_name ?? ''),
+    company,
+    company_name: company,
     channel: 'whatsapp',
     phone,
     phone_normalized: normalizePhone(phone),
-    branch: String(branch.branches_name ?? ''),
-    branch_id: String(lead.branches_id ?? ''),
+    branch: branchName,
+    branch_id: String(snapshotLead.branch_id ?? lead.branches_id ?? ''),
     branch_slug: '',
     type: website ? 'Com site' : 'Sem site',
     original_destination: website ? 'Com site' : 'WhatsApp',
@@ -54,21 +68,21 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): W
     chip_id: String(item.chips_id ?? ''),
     scheduled_date: scheduled,
     template_id: String(item.templates_id ?? ''),
-    message1: String(template.templates_message_1 ?? ''),
-    message_1: String(template.templates_message_1 ?? ''),
-    message2: String(template.templates_message_2 ?? ''),
-    message_2: String(template.templates_message_2 ?? ''),
-    message3: String(template.templates_message_3 ?? ''),
-    message_3: String(template.templates_message_3 ?? ''),
-    message4: String(template.templates_message_4 ?? ''),
-    message_4: String(template.templates_message_4 ?? ''),
-    imageName: '',
-    imageRequired: false,
-    image_url: '',
-    image_id: '',
+    message1,
+    message_1: message1,
+    message2,
+    message_2: message2,
+    message3,
+    message_3: message3,
+    message4,
+    message_4: message4,
+    imageName,
+    imageRequired,
+    image_url: imageName,
+    image_id: String(snapshotMedia.sha256 ?? ''),
     site: website,
-    instagram: String(lead.leads_instagram ?? ''),
-    mapsUrl: String(lead.leads_maps ?? ''),
+    instagram,
+    mapsUrl,
     retry_count: Number(item.queue_items_attempts ?? 0),
     error_message: String(item.queue_items_error_message ?? ''),
     sent_at: status === 'sent' ? String(item.queue_items_finished_at ?? '') : '',

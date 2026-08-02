@@ -115,10 +115,16 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
     const template = templateMap.get(String(item.templates_id)) ?? {};
     const branch = branchMap.get(String(lead.branches_id)) ?? {};
     const queue = queueMap.get(String(item.queues_id)) ?? {};
+    const snapshot = bodyRecord(item.queue_items_payload_snapshot);
+    const snapshotLead = bodyRecord(snapshot.lead);
+    const snapshotRecipient = bodyRecord(snapshot.recipient);
+    const snapshotMessages = bodyRecord(snapshot.messages);
+    const snapshotMedia = bodyRecord(snapshot.media);
     const position = Number(item.queue_items_position ?? 1);
     const blockSize = 15;
     const status = semanticStatus(statusMap.get(String(item.status_id)) ?? item.status_id);
-    const instagramUrl = text(lead.leads_instagram);
+    const instagramUrl = text(snapshotRecipient.instagram ?? snapshotLead.instagram ?? lead.leads_instagram);
+    const website = text(snapshotLead.site ?? lead.leads_website);
     return {
       id: String(item.queue_items_id),
       queue_item_id: String(item.queue_items_id),
@@ -129,17 +135,23 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
       block_size: blockSize,
       position,
       status,
-      company_name: text(lead.leads_name),
-      phone: text(lead.leads_phone),
-      parent_category: text(branch.branches_name),
-      lead_type: lead.leads_website ? 'Com site' : 'Instagram',
+      company_name: text(snapshotLead.company_name ?? lead.leads_name),
+      phone: text(snapshotLead.phone ?? lead.leads_phone),
+      parent_category: text(snapshotLead.branch_name ?? branch.branches_name),
+      lead_type: website ? 'Com site' : 'Instagram',
       instagram_url: instagramUrl,
       instagram_username: normalizeInstagramProfile(instagramUrl),
-      message_1: text(template.templates_message_1),
-      message_2: text(template.templates_message_2),
-      message_3: text(template.templates_message_3),
-      message_4: text(template.templates_message_4),
-      image_url: '',
+      message_1: text(snapshotMessages.message_1 ?? template.templates_message_1),
+      message_2: text(snapshotMessages.message_2 ?? template.templates_message_2),
+      message_3: text(snapshotMessages.message_3 ?? template.templates_message_3),
+      message_4: text(snapshotMessages.message_4 ?? template.templates_message_4),
+      image_url: text(snapshotMedia.name),
+      image_name: text(snapshotMedia.name),
+      image_required: Boolean(snapshotMedia.required),
+      image_sha256: text(snapshotMedia.sha256),
+      image_version: text(snapshotMedia.branch_updated_at),
+      payload_hash: text(item.queue_items_payload_hash),
+      payload_frozen_at: text(item.queue_items_payload_created_at),
       error_message: text(item.queue_items_error_message),
       attempts: Number(item.queue_items_attempts ?? 0),
       updated_at: text(item.queue_items_updated_at),

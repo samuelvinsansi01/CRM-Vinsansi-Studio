@@ -8,7 +8,7 @@ import type {
 } from '../../services/instagram-queue/types';
 import { normalizeInstagramUsername } from '../../services/instagram/instagram.utils';
 import { currentUserIdNumber, queueStatusId } from '../schemaCatalog';
-import { canonicalQueueStatus, dateOnly, loadCanonicalQueue, prepareQueueItems, updateQueueItemStatus } from '../queueSchema';
+import { canonicalQueueStatus, dateOnly, loadCanonicalQueue, prepareQueueItems, queuePayloadSnapshot, queueSnapshotMessage, queueSnapshotPart, updateQueueItemStatus } from '../queueSchema';
 import { nowIso } from '../supabase.helpers';
 import type { InstagramQueueRepository } from './instagramQueue.repository';
 
@@ -20,25 +20,40 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): I
   const template = row.template ?? {};
   const social = row.social ?? {};
   const branch = row.branch ?? {};
+  const snapshot = queuePayloadSnapshot(item.queue_items_payload_snapshot);
+  const snapshotLead = queueSnapshotPart(snapshot, 'lead');
+  const snapshotRecipient = queueSnapshotPart(snapshot, 'recipient');
+  const snapshotMedia = queueSnapshotPart(snapshot, 'media');
   const position = Number(item.queue_items_position ?? 1);
   const queueId = String(item.queues_id ?? '');
   const scheduled = dateOnly(item.queue_items_scheduled_at ?? row.queue.queues_scheduled_at);
-  const instagram = String(lead.leads_instagram ?? '');
+  const instagram = String(snapshotRecipient.instagram ?? snapshotLead.instagram ?? lead.leads_instagram ?? '');
   const username = normalizeInstagramUsername(instagram);
+  const company = String(snapshotLead.company_name ?? lead.leads_name ?? '');
+  const branchName = String(snapshotLead.branch_name ?? branch.branches_name ?? '');
+  const phone = String(snapshotLead.phone ?? lead.leads_phone ?? '');
+  const website = String(snapshotLead.site ?? lead.leads_website ?? '');
+  const mapsUrl = String(snapshotLead.maps_url ?? lead.leads_maps ?? '');
   const status = canonicalQueueStatus(row) as InstagramQueueLead['status'];
+  const message1 = queueSnapshotMessage(snapshot, 1) || String(template.templates_message_1 ?? '');
+  const message2 = queueSnapshotMessage(snapshot, 2) || String(template.templates_message_2 ?? '');
+  const message3 = queueSnapshotMessage(snapshot, 3) || String(template.templates_message_3 ?? '');
+  const message4 = queueSnapshotMessage(snapshot, 4) || String(template.templates_message_4 ?? '');
+  const imageName = String(snapshotMedia.name ?? '');
+  const imageRequired = Boolean(snapshotMedia.required);
   return {
     id: String(item.queue_items_id),
     lead_id: String(item.leads_id),
     order: position,
     position,
-    company: String(lead.leads_name ?? ''),
-    company_name: String(lead.leads_name ?? ''),
+    company,
+    company_name: company,
     channel: 'instagram',
     instagram,
     profile: String(social.socials_username ?? ''),
     profile_id: String(item.socials_id ?? ''),
-    branch: String(branch.branches_name ?? ''),
-    branch_id: String(lead.branches_id ?? ''),
+    branch: branchName,
+    branch_id: String(snapshotLead.branch_id ?? lead.branches_id ?? ''),
     branch_slug: '',
     type: 'Instagram',
     original_destination: 'Instagram',
@@ -51,21 +66,21 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): I
     batch_number: 1,
     scheduled_date: scheduled,
     template_id: String(item.templates_id ?? ''),
-    message1: String(template.templates_message_1 ?? ''),
-    message_1: String(template.templates_message_1 ?? ''),
-    message2: String(template.templates_message_2 ?? ''),
-    message_2: String(template.templates_message_2 ?? ''),
-    message3: String(template.templates_message_3 ?? ''),
-    message_3: String(template.templates_message_3 ?? ''),
-    message4: String(template.templates_message_4 ?? ''),
-    message_4: String(template.templates_message_4 ?? ''),
-    imageName: '',
-    imageRequired: false,
-    image_url: '',
-    image_id: '',
-    phone: String(lead.leads_phone ?? ''),
-    site: String(lead.leads_website ?? ''),
-    mapsUrl: String(lead.leads_maps ?? ''),
+    message1,
+    message_1: message1,
+    message2,
+    message_2: message2,
+    message3,
+    message_3: message3,
+    message4,
+    message_4: message4,
+    imageName,
+    imageRequired,
+    image_url: imageName,
+    image_id: String(snapshotMedia.sha256 ?? ''),
+    phone,
+    site: website,
+    mapsUrl,
     retry_count: Number(item.queue_items_attempts ?? 0),
     error_message: String(item.queue_items_error_message ?? ''),
     sent_at: status === 'sent' ? String(item.queue_items_finished_at ?? '') : '',
