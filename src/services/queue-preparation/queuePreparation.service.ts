@@ -5,7 +5,7 @@ import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
 import { channelId } from '../../repositories/schemaCatalog';
 import type { LeadDatabaseRow } from '../../types/lead.types';
 import { branchForBoundRecord } from '../config/branchMedia';
-import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperational';
+import { isOperationalWhatsAppChip } from '../config/chipOperational';
 import type {
   BranchConfigRecord,
   ChipConfigRecord,
@@ -19,8 +19,7 @@ import { renderLeadMessages } from '../templates/templateVariables';
 import { missingTemplateMessageNumbers } from '../templates/templateContract';
 import { settingsService } from '../settings/settings.service';
 import { selectTemplateForLead, templateTypeForLead } from '../templates/templateSelector';
-import type { CreateInstagramQueueLeadInput, InstagramQueueLead } from '../instagram-queue/types';
-import type { CreateWhatsAppQueueLeadInput, WhatsAppQueueLead } from '../whatsapp-queue/types';
+import { prepareQueueItems } from '../../repositories/queueSchema';
 import { effectiveScheduleDate } from './queuePreparation.rules';
 import type {
   QueuePreparationChannel,
@@ -31,7 +30,6 @@ import type {
   QueuePreparationSnapshot,
 } from './types';
 
-const activeCommits = new Set<string>();
 
 function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -95,10 +93,6 @@ function leadContext(row: LeadDatabaseRow, channel: QueuePreparationChannel) {
   };
 }
 
-function resourceKey(channel: QueuePreparationChannel, id: string, date: string) {
-  return `${channel}:${id}:${date}`;
-}
-
 async function loadConfiguration() {
   const [chips, profiles, branches, templates, settings] = await Promise.all([
     repositories.config.list('chips'),
@@ -122,7 +116,7 @@ async function queueUsage(channel: QueuePreparationChannel, scheduledDate: strin
     const counts = new Map<string, number>();
     for (const lead of leads) {
       if (!activeQueueStatus(lead.status)) continue;
-      const id = lead.chip_instance || lead.chip;
+      const id = String(lead.chip_id || '');
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
     return counts;
@@ -132,7 +126,8 @@ async function queueUsage(channel: QueuePreparationChannel, scheduledDate: strin
   const counts = new Map<string, number>();
   for (const lead of leads) {
     if (!activeQueueStatus(lead.status)) continue;
-    counts.set(lead.profile, (counts.get(lead.profile) ?? 0) + 1);
+    const id = String(lead.profile_id || '');
+    counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return counts;
 }
@@ -148,12 +143,13 @@ function buildResources(
     return [...chips]
       .sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name))
       .map((chip) => {
-        const id = chipInstance(chip);
+        const id = String(chip.id);
         const used = usage.get(id) ?? 0;
         const limit = Math.max(1, Number(chip.dailyLimit || 0));
         return {
           id,
           label: chip.name || id,
+          aliases: [chip.name, chip.instance].filter(Boolean),
           channel,
           dailyLimit: limit,
           batchSize: Math.max(1, Number(chip.blockSize || 1)),
@@ -168,12 +164,13 @@ function buildResources(
   return [...profiles]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((profile) => {
-      const id = normalizeInstagramUsername(profile.username);
+      const id = String(profile.id);
       const used = usage.get(id) ?? 0;
       const limit = Math.max(1, Number(profile.dailyLimit || instagramDefaults.dailyLimit || 1));
       return {
         id,
-        label: profile.name || `@${id}`,
+        label: profile.name || `@${normalizeInstagramUsername(profile.username)}`,
+        aliases: [profile.name, profile.username, normalizeInstagramUsername(profile.username)].filter(Boolean),
         channel,
         dailyLimit: limit,
         batchSize: Math.max(1, Number(instagramDefaults.perBatch || 1)),
@@ -242,104 +239,14 @@ function mapPreparationLead(
   };
 }
 
-function prepareWhatsAppInput(
+function templateIdForLead(
   row: LeadDatabaseRow,
-  resource: QueuePreparationResource,
-  scheduledDate: string,
-  expectedChannelId: number,
-  chips: ChipConfigRecord[],
-  branches: BranchConfigRecord[],
+  channel: QueuePreparationChannel,
   templates: TemplateConfigRecord[],
-): CreateWhatsAppQueueLeadInput {
-  const reason = preparationReason(row, 'WhatsApp', expectedChannelId, branches, templates);
-  if (reason) throw new Error(reason);
-  const context = leadContext(row, 'WhatsApp');
-  const selection = selectTemplateForLead(context, templates)!;
-  const messages = renderLeadMessages(context, selection.template);
-  const branch = findBranch(row, branches);
-  const chip = chips.find((item) => chipInstance(item) === resource.id);
-  if (!chip) throw new Error('O chip selecionado não está mais ativo ou conectado.');
-
-  return {
-    lead_id: String(row.leads_id),
-    company: row.leads_name,
-    phone: normalizePhone(row.leads_phone),
-    branch: context.branch,
-    branch_id: String(row.branches_id),
-    branch_slug: branch?.slug,
-    type: context.site ? 'Com site' : 'Sem site',
-    original_destination: context.original_destination,
-    status: 'queued',
-    chip: resource.id,
-    chip_instance: resource.id,
-    chip_label: resource.label,
-    chip_id: String(chip.id),
-    scheduled_date: scheduledDate,
-    batchLimit: resource.batchSize,
-    template_id: selection.template.id,
-    message1: messages.message1,
-    message2: messages.message2,
-    message3: messages.message3,
-    message4: messages.message4,
-    imageName: branch?.imageName ?? '',
-    imageRequired: Boolean(branch?.imageRequired),
-    image_url: branch?.imageRequired ? branch.imageName : '',
-    city: context.city,
-    state: context.state,
-    site: context.site,
-    instagram: context.instagram,
-    instagram_url: context.instagram,
-    mapsUrl: context.mapsUrl,
-  };
-}
-
-function prepareInstagramInput(
-  row: LeadDatabaseRow,
-  resource: QueuePreparationResource,
-  scheduledDate: string,
-  expectedChannelId: number,
-  profiles: InstagramConfigRecord[],
-  branches: BranchConfigRecord[],
-  templates: TemplateConfigRecord[],
-): CreateInstagramQueueLeadInput {
-  const reason = preparationReason(row, 'Instagram', expectedChannelId, branches, templates);
-  if (reason) throw new Error(reason);
-  const context = leadContext(row, 'Instagram');
-  const selection = selectTemplateForLead(context, templates)!;
-  const messages = renderLeadMessages(context, selection.template);
-  const branch = findBranch(row, branches);
-  const profile = profiles.find((item) => normalizeInstagramUsername(item.username) === resource.id);
-  if (!profile) throw new Error('O perfil Instagram selecionado não está mais ativo.');
-
-  return {
-    lead_id: String(row.leads_id),
-    company: row.leads_name,
-    instagram: normalizeInstagramUsername(row.leads_instagram),
-    instagram_url: row.leads_instagram ?? '',
-    profile: resource.id,
-    branch: context.branch,
-    branch_id: String(row.branches_id),
-    branch_slug: branch?.slug,
-    type: 'Instagram',
-    original_destination: 'Instagram',
-    send_instagram: true,
-    status: 'queued',
-    scheduled_date: scheduledDate,
-    batchLimit: resource.batchSize,
-    template_id: selection.template.id,
-    message1: messages.message1,
-    message2: messages.message2,
-    message3: messages.message3,
-    message4: messages.message4,
-    imageName: branch?.imageName ?? '',
-    imageRequired: Boolean(branch?.imageRequired),
-    image_url: branch?.imageRequired ? branch.imageName : '',
-    city: context.city,
-    state: context.state,
-    phone: context.phone,
-    site: context.site,
-    mapsUrl: context.mapsUrl,
-  };
+) {
+  const selection = selectTemplateForLead(leadContext(row, channel), templates);
+  if (!selection) throw new Error(`Nenhum template ${channel} compatível com o lead.`);
+  return String(selection.template.id);
 }
 
 async function appendAudit(
@@ -366,19 +273,6 @@ async function appendAudit(
       target_status_id: 4,
     },
   });
-}
-
-async function existingQueuedLeadIds(channel: QueuePreparationChannel, scheduledDate: string) {
-  if (channel === 'WhatsApp') {
-    return new Set((await repositories.whatsappQueue.listBatches({ scheduledDate }))
-      .flatMap((batch) => batch.leads)
-      .map((lead: WhatsAppQueueLead) => String(lead.lead_id))
-      .filter(Boolean));
-  }
-  return new Set((await repositories.instagramQueue.listBatches({ scheduledDate }))
-    .flatMap((batch) => batch.leads)
-    .map((lead: InstagramQueueLead) => String(lead.lead_id))
-    .filter(Boolean));
 }
 
 function addFailure(result: QueuePreparationResult, failure: QueuePreparationFailure, conflict = false) {
@@ -426,13 +320,10 @@ async function enqueueValidated(
 ): Promise<QueuePreparationResult> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (!uniqueIds.length) throw new Error('Selecione pelo menos um lead validado.');
+
   const config = await loadConfiguration();
   const activeDays = channel === 'WhatsApp' ? config.settings.whatsapp.activeDays : config.settings.instagram.activeDays;
   const date = effectiveScheduleDate(requestedDate, activeDays);
-  const lockKey = resourceKey(channel, resourceId, date.effectiveDate);
-  if (activeCommits.has(lockKey)) throw new Error('Já existe uma preparação em andamento para este recurso e esta data.');
-  activeCommits.add(lockKey);
-
   const result: QueuePreparationResult = {
     channel,
     requested: uniqueIds.length,
@@ -446,112 +337,87 @@ async function enqueueValidated(
     auditWarnings: [],
   };
 
-  try {
-    const usage = await queueUsage(channel, date.effectiveDate);
-    const resources = buildResources(channel, usage, config.chips, config.profiles, config.settings.instagram);
-    const resource = resources.find((item) => item.id === resourceId);
-    if (!resource) throw new Error(channel === 'WhatsApp' ? 'Chip ativo não encontrado.' : 'Perfil Instagram ativo não encontrado.');
-    if (resource.available <= 0) throw new Error('A capacidade diária deste recurso já foi atingida.');
+  const usage = await queueUsage(channel, date.effectiveDate);
+  const resources = buildResources(channel, usage, config.chips, config.profiles, config.settings.instagram);
+  const resource = resources.find((item) => item.id === resourceId);
+  if (!resource) throw new Error(channel === 'WhatsApp' ? 'Chip ativo não encontrado.' : 'Perfil Instagram ativo não encontrado.');
 
-    const expectedChannelId = Number(await channelId(channel));
-    const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
-    const byId = new Map(rows.map((row) => [String(row.leads_id), row]));
-    const alreadyQueued = await existingQueuedLeadIds(channel, date.effectiveDate);
-    let remainingCapacity = resource.available;
+  const expectedChannelId = Number(await channelId(channel));
+  const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
+  const byId = new Map(rows.map((row) => [String(row.leads_id), row]));
+  const rpcItems: Array<{ leadId: string; templateId: string }> = [];
 
-    for (const id of uniqueIds) {
-      const row = byId.get(id);
-      if (!row) {
-        addFailure(result, { id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
-        continue;
-      }
-      if (row.lead_status_id !== LEAD_STATUS.VALIDATED || Number(row.channels_id) !== expectedChannelId) {
-        addFailure(result, { id, company: row.leads_name, reason: 'O lead mudou de status ou canal antes da preparação.' }, true);
-        continue;
-      }
-      if (remainingCapacity <= 0) {
-        addFailure(result, { id, company: row.leads_name, reason: 'Sem capacidade diária disponível para este recurso.' });
-        continue;
-      }
+  for (const id of uniqueIds) {
+    const row = byId.get(id);
+    if (!row) {
+      addFailure(result, { id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
+      continue;
+    }
 
-      const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates);
-      if (reason) {
-        addFailure(result, { id, company: row.leads_name, reason });
-        continue;
-      }
+    if (row.lead_status_id !== LEAD_STATUS.VALIDATED || Number(row.channels_id) !== expectedChannelId) {
+      addFailure(result, { id, company: row.leads_name, reason: 'O lead mudou de status ou canal antes da preparação.' }, true);
+      continue;
+    }
 
-      // Se o item já existe na fila, apenas reconcilia o status canônico.
-      if (alreadyQueued.has(id)) {
-        const reconciled = await supabaseLeadCycleRepository.compareAndSet(id, LEAD_STATUS.VALIDATED, { lead_status_id: LEAD_STATUS.QUEUED });
-        if (!reconciled) {
-          addFailure(result, { id, company: row.leads_name, reason: 'O item já existe na fila, mas o lead foi alterado por outra operação.' }, true);
-          continue;
-        }
+    const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates);
+    if (reason) {
+      addFailure(result, { id, company: row.leads_name, reason });
+      continue;
+    }
+
+    rpcItems.push({
+      leadId: id,
+      templateId: templateIdForLead(row, channel, config.templates),
+    });
+  }
+
+  if (rpcItems.length) {
+    const committed = await prepareQueueItems(channel, resource.id, date.effectiveDate, rpcItems);
+    const returned = new Set<string>();
+
+    for (const rowResult of committed) {
+      const id = rowResult.leadId;
+      returned.add(id);
+      const lead = byId.get(id);
+      const company = lead?.leads_name;
+
+      if (rowResult.outcome === 'queued' || rowResult.outcome === 'reconciled') {
         result.queued += 1;
         result.queuedLeadIds.push(id);
-        remainingCapacity -= 1;
-        continue;
-      }
 
-      let queueItemId = '';
-      try {
-        const createdIds = channel === 'WhatsApp'
-          ? await repositories.whatsappQueue.enqueue([
-              prepareWhatsAppInput(row, resource, date.effectiveDate, expectedChannelId, config.chips, config.branches, config.templates),
-            ])
-          : await repositories.instagramQueue.enqueue([
-              prepareInstagramInput(row, resource, date.effectiveDate, expectedChannelId, config.profiles, config.branches, config.templates),
-            ]);
-
-        queueItemId = createdIds[0] ?? '';
-        if (!queueItemId) {
-          addFailure(result, { id, company: row.leads_name, reason: 'O item não foi criado porque já existe uma duplicidade ativa na fila.' }, true);
-          continue;
-        }
-
-        const updated = await supabaseLeadCycleRepository.compareAndSet(id, LEAD_STATUS.VALIDATED, { lead_status_id: LEAD_STATUS.QUEUED });
-        if (!updated) {
-          if (channel === 'WhatsApp') await repositories.whatsappQueue.removeQueued(queueItemId);
-          else await repositories.instagramQueue.removeQueued(queueItemId);
-          addFailure(result, { id, company: row.leads_name, reason: 'O lead foi alterado por outra operação; o item recém-criado foi desfeito.' }, true);
-          continue;
-        }
-
-        result.queued += 1;
-        result.queuedLeadIds.push(id);
-        alreadyQueued.add(id);
-        remainingCapacity -= 1;
-
-        try {
-          await appendAudit(row, channel, resource, date.effectiveDate, queueItemId);
-        } catch (error) {
-          result.auditWarnings.push(`Lead ${id}: ${error instanceof Error ? error.message : 'falha ao registrar auditoria.'}`);
-        }
-      } catch (error) {
-        if (queueItemId) {
+        if (lead && rowResult.queueItemId) {
           try {
-            if (channel === 'WhatsApp') await repositories.whatsappQueue.removeQueued(queueItemId);
-            else await repositories.instagramQueue.removeQueued(queueItemId);
-          } catch {
-            // A reconciliação completa de compensações falhas pertence ao F10.
+            await appendAudit(lead, channel, resource, date.effectiveDate, rowResult.queueItemId);
+          } catch (error) {
+            result.auditWarnings.push(`Lead ${id}: ${error instanceof Error ? error.message : 'falha ao registrar auditoria.'}`);
           }
         }
-        addFailure(result, {
-          id,
-          company: row.leads_name,
-          reason: error instanceof Error ? error.message : 'Falha inesperada ao preparar a fila.',
-        });
+        continue;
       }
+
+      addFailure(result, {
+        id,
+        company,
+        reason: rowResult.reason || 'O banco recusou a preparação deste lead.',
+      }, rowResult.outcome === 'conflict');
     }
 
-    if (result.queued) {
-      eventBus.emit('import:changed', { source: 'move' });
-      eventBus.emit(channel === 'WhatsApp' ? 'whatsapp-queue:changed' : 'instagram-queue:changed', { action: 'update' });
+    for (const item of rpcItems) {
+      if (returned.has(item.leadId)) continue;
+      addFailure(result, {
+        id: item.leadId,
+        company: byId.get(item.leadId)?.leads_name,
+        reason: 'A transação não retornou um resultado para este lead.',
+      });
     }
-    return result;
-  } finally {
-    activeCommits.delete(lockKey);
   }
+
+  result.failed = result.failures.length;
+  if (result.queued) {
+    eventBus.emit('import:changed', { source: 'move' });
+    eventBus.emit(channel === 'WhatsApp' ? 'whatsapp-queue:changed' : 'instagram-queue:changed', { action: 'update' });
+  }
+  return result;
 }
 
 export const queuePreparationService = {

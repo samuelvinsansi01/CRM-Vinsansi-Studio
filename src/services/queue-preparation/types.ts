@@ -3,6 +3,7 @@ export type QueuePreparationChannel = 'WhatsApp' | 'Instagram';
 export type QueuePreparationResource = {
   id: string;
   label: string;
+  aliases?: string[];
   channel: QueuePreparationChannel;
   dailyLimit: number;
   batchSize: number;

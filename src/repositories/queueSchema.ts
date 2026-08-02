@@ -5,6 +5,59 @@ import { nowIso } from './supabase.helpers';
 type Row = Record<string, unknown>;
 export type QueueChannel = 'WhatsApp' | 'Instagram';
 
+export type AtomicQueuePreparationInput = {
+  leadId: string;
+  templateId: string;
+};
+
+export type AtomicQueuePreparationRow = {
+  leadId: string;
+  queueItemId: string;
+  outcome: 'queued' | 'reconciled' | 'conflict' | 'blocked' | 'failed';
+  reason: string;
+  queueId: string;
+  position: number | null;
+};
+
+function positiveInteger(value: unknown, label: string) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${label} inválido.`);
+  return parsed;
+}
+
+export async function prepareQueueItems(
+  channel: QueueChannel,
+  resourceId: string | number,
+  scheduledDate: string,
+  items: AtomicQueuePreparationInput[],
+): Promise<AtomicQueuePreparationRow[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) throw new Error('Data de agendamento inválida.');
+  if (!items.length) return [];
+
+  const normalizedItems = items.map((item) => ({
+    lead_id: positiveInteger(item.leadId, 'Identificador do lead'),
+    template_id: positiveInteger(item.templateId, 'Identificador do template'),
+  }));
+
+  const { data, error } = await getSupabaseClient().rpc('prepare_queue_items', {
+    p_channel: channel,
+    p_resource_id: positiveInteger(resourceId, channel === 'WhatsApp' ? 'Chip' : 'Perfil Instagram'),
+    p_scheduled_date: scheduledDate,
+    p_items: normalizedItems,
+  });
+
+  if (error) throw new Error(`Não foi possível preparar a fila de forma transacional: ${error.message}`);
+
+  return ((data ?? []) as Row[]).map((row) => ({
+    leadId: String(row.lead_id ?? ''),
+    queueItemId: String(row.queue_item_id ?? ''),
+    outcome: String(row.outcome ?? 'failed') as AtomicQueuePreparationRow['outcome'],
+    reason: String(row.reason ?? ''),
+    queueId: String(row.queue_id ?? ''),
+    position: row.queue_position == null ? null : Number(row.queue_position),
+  }));
+}
+
 export type CanonicalQueueRow = {
   item: Row;
   queue: Row;
@@ -72,25 +125,6 @@ export async function loadCanonicalQueue(channel: QueueChannel): Promise<Canonic
       statusName: statuses.get(String(item.status_id)) ?? String(item.status_id ?? ''),
     };
   });
-}
-
-export async function ensureQueue(channel: QueueChannel, resourceId: number, scheduledDate: string) {
-  const client = getSupabaseClient();
-  const userId = await currentUserIdNumber();
-  const channelValue = Number(await channelId(channel));
-  const queueName = `${channel.toLowerCase()}:${resourceId}:${scheduledDate}`;
-  const existing = await client.from('queues').select('queues_id').eq('users_id', userId).eq('queues_name', queueName).maybeSingle();
-  if (existing.error) throw new Error(existing.error.message);
-  if (existing.data) return Number((existing.data as Row).queues_id);
-  const inserted = await client.from('queues').insert({
-    users_id: userId,
-    channels_id: channelValue,
-    status_id: await queueStatusId('queued'),
-    queues_name: queueName,
-    queues_scheduled_at: `${scheduledDate}T12:00:00.000Z`,
-  }).select('queues_id').single();
-  if (inserted.error) throw new Error(inserted.error.message);
-  return Number((inserted.data as Row).queues_id);
 }
 
 export function canonicalQueueStatus(row: CanonicalQueueRow) {

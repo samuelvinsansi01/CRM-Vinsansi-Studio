@@ -96,7 +96,7 @@ export function ApprovedLeadsQueueDrawer({
   useEffect(() => {
     if (!open) return;
     const preferred = snapshot?.resources.find((resource) =>
-      resource.id === preferredResourceId || resource.label === preferredResourceId
+      resource.id === preferredResourceId || resource.label === preferredResourceId || resource.aliases?.includes(preferredResourceId)
     )?.id;
     const currentIsValid = snapshot?.resources.some((resource) => resource.id === resourceId);
     if (preferred && resourceId !== preferred) setResourceId(preferred);

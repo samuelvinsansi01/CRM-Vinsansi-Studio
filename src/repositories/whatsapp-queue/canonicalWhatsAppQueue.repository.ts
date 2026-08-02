@@ -8,7 +8,7 @@ import type {
 } from '../../services/whatsapp-queue/types';
 import { normalizePhone } from '../../services/import/importValidation';
 import { currentUserIdNumber, queueStatusId } from '../schemaCatalog';
-import { canonicalQueueStatus, dateOnly, ensureQueue, loadCanonicalQueue, updateQueueItemStatus } from '../queueSchema';
+import { canonicalQueueStatus, dateOnly, loadCanonicalQueue, prepareQueueItems, updateQueueItemStatus } from '../queueSchema';
 import { nowIso } from '../supabase.helpers';
 import type { WhatsAppQueueRepository } from './whatsappQueue.repository';
 
@@ -138,32 +138,21 @@ export const canonicalWhatsAppQueueRepository: WhatsAppQueueRepository = {
     };
   },
   async enqueue(inputs) {
-    const client = getSupabaseClient();
-    const userId = await currentUserIdNumber();
     const result: string[] = [];
     for (const input of inputs) {
       const chipId = await resolveChip(input);
       const scheduled = input.scheduled_date ?? new Date().toISOString().slice(0, 10);
-      const queueId = await ensureQueue('WhatsApp', chipId, scheduled);
-      const existing = await client.from('queue_items').select('queue_items_id').eq('queues_id', queueId).eq('leads_id', Number(input.lead_id)).maybeSingle();
-      if (existing.error) throw new Error(existing.error.message);
-      if (existing.data) continue;
-      const count = await client.from('queue_items').select('queue_items_id', { count: 'exact', head: true }).eq('queues_id', queueId);
-      if (count.error) throw new Error(count.error.message);
-      const inserted = await client.from('queue_items').insert({
-        users_id: userId,
-        queues_id: queueId,
-        leads_id: Number(input.lead_id),
-        chips_id: chipId,
-        socials_id: null,
-        templates_id: input.template_id ? Number(input.template_id) : null,
-        status_id: await queueStatusId('queued'),
-        queue_items_position: (count.count ?? 0) + 1,
-        queue_items_attempts: 0,
-        queue_items_scheduled_at: `${scheduled}T12:00:00.000Z`,
-      }).select('queue_items_id').single();
-      if (inserted.error) throw new Error(inserted.error.message);
-      result.push(String((inserted.data as Row).queue_items_id));
+      const [prepared] = await prepareQueueItems('WhatsApp', chipId, scheduled, [{
+        leadId: input.lead_id,
+        templateId: String(input.template_id ?? ''),
+      }]);
+      if (!prepared) throw new Error('A transação não retornou o resultado do lead.');
+      if (prepared.outcome === 'queued' || prepared.outcome === 'reconciled') {
+        if (prepared.queueItemId) result.push(prepared.queueItemId);
+        continue;
+      }
+      if (prepared.outcome === 'conflict') continue;
+      throw new Error(prepared.reason || 'Não foi possível incluir o lead na fila de WhatsApp.');
     }
     return result;
   },

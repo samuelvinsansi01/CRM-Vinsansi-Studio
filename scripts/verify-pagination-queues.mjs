@@ -38,7 +38,7 @@ assert(drawer.includes('resource.id === preferredResourceId || resource.label ==
 
 const preparation = read('src/services/queue-preparation/queuePreparation.service.ts');
 assert(preparation.includes('listByStatuses([LEAD_STATUS.VALIDATED]'), 'A preparação deixou de buscar apenas leads validados.');
-assert(preparation.includes('compareAndSet(id, LEAD_STATUS.VALIDATED'), 'A preparação perdeu a transição condicional do lead validado.');
+assert(preparation.includes('prepareQueueItems(channel, resource.id'), 'A preparação perdeu o commit transacional do lead validado.');
 
 if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));
