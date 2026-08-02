@@ -12,11 +12,11 @@ assert(source.includes("'following'"), 'API Instagram não reconhece o estado fo
 assert(source.includes("'invalidated'"), 'API Instagram não reconhece invalidação enviada pela extensão.');
 assert(source.includes("action === 'claim_item'"), 'API Instagram perdeu o claim condicional por item.');
 assert(source.includes("action === 'transition'"), 'API Instagram perdeu a transição condicional.');
-assert(source.includes("eq('status_id', statuses.idFor(expected))"), 'Transição Instagram deixou de proteger o status esperado.');
+assert(source.includes("instagram_update_queue_progress") && source.includes("p_claim_token"), 'Transição Instagram deixou de proteger o claim persistente.');
 assert(source.includes("verifyInstagramExtensionToken"), 'API Instagram não valida o token temporário.');
 
 if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log('Contrato painel/extensão Instagram aprovado: token temporário, claim e transições semânticas.');
+console.log('Contrato painel/extensão Instagram aprovado: token temporário, claim persistente e transições semânticas.');

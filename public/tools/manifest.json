@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T06:20:00-03:00",
+  "updatedAt": "2026-08-02T07:10:00-03:00",
   "tools": [
     {
       "id": "worker",
@@ -13,11 +13,11 @@
     {
       "id": "instagram-extension",
       "name": "Extensão Instagram",
-      "description": "Extensão do navegador para processar a fila Instagram usando mensagens congeladas e validação da mídia local.",
-      "version": "1.4.0",
+      "description": "Extensão do navegador com progresso persistente por etapa, recuperação segura, mensagens congeladas e validação de mídia.",
+      "version": "1.5.0",
       "path": "/tools/instagram-extension-latest.zip",
-      "fileName": "Extensao_Instagram_v1.4.0_payload_congelado.zip",
-      "size": 33322
+      "fileName": "Extensao_Instagram_v1.5.0_progresso_persistente.zip",
+      "size": 33564
     }
   ]
 }

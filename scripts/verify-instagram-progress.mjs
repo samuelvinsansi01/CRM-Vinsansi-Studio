@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+const read=(p)=>fs.readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
+const sql=read('supabase/migrations/20260802150000_instagram_execution_progress.sql');
+const api=read('api/instagram/extension.ts');
+const pkg=JSON.parse(read('package.json'));
+const required=['instagram_queue_progress','instagram_dispatch_events','instagram_claim_queue_item','instagram_update_queue_progress','instagram_recover_stale_items','reconciliation_required'];
+for (const token of required) if(!sql.includes(token)) throw new Error(`instagram_progress_missing:${token}`);
+for (const token of ['instagram_claim_queue_item','instagram_update_queue_progress','claim_token']) if(!api.includes(token)) throw new Error(`instagram_api_missing:${token}`);
+if(pkg.version!=='4.3.0') throw new Error('package_version_not_4_3_0');
+console.log('Instagram execution progress: OK');
