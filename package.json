@@ -1,6 +1,6 @@
 {
   "name": "gease-visual-shell",
-  "version": "4.5.0",
+  "version": "4.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "verify:schema-real": "node scripts/verify-real-schema.mjs",
     "verify:syntax": "node scripts/verify-syntax.mjs",
     "verify:contracts": "node scripts/verify-business-contracts.mjs",
-    "verify:all": "npm run verify:schema-real && npm run verify:catalogs && npm run verify:syntax && npm run verify:contracts && npm run verify:focus-stability && npm run verify:navigation && npm run verify:config-pages && npm run verify:modals && npm run verify:branch-categories && npm run verify:instagram-contract && npm run verify:pagination-queues && npm run verify:apify-locations && npm run verify:apify-branch-search && npm run verify:evolution-instances && npm run verify:capacity-validation && npm run verify:profile-tools && npm run verify:atomic-queue && npm run verify:queue-snapshot && npm run verify:worker-idempotency && npm run verify:secure-credentials && npm run verify:centralized-settings && npm run verify:persistent-audit && npm run verify:identity-dedup && npm run verify:permanent-base && npm run verify:instagram-progress && npm run verify:database-baseline && npm run verify:observability",
+    "verify:all": "npm run verify:schema-real && npm run verify:catalogs && npm run verify:syntax && npm run verify:contracts && npm run verify:focus-stability && npm run verify:navigation && npm run verify:config-pages && npm run verify:modals && npm run verify:branch-categories && npm run verify:instagram-contract && npm run verify:pagination-queues && npm run verify:apify-locations && npm run verify:apify-branch-search && npm run verify:evolution-instances && npm run verify:capacity-validation && npm run verify:profile-tools && npm run verify:atomic-queue && npm run verify:queue-snapshot && npm run verify:worker-idempotency && npm run verify:secure-credentials && npm run verify:centralized-settings && npm run verify:persistent-audit && npm run verify:identity-dedup && npm run verify:permanent-base && npm run verify:instagram-progress && npm run verify:database-baseline && npm run verify:observability && npm run verify:release-readiness",
     "verify:catalogs": "node scripts/verify-canonical-catalogs.mjs",
     "verify:focus-stability": "node scripts/verify-focus-stability.mjs",
     "verify:navigation": "node scripts/verify-navigation-structure.mjs",
@@ -35,7 +35,8 @@
     "verify:instagram-progress": "node scripts/verify-instagram-progress.mjs",
     "baseline:generate": "node scripts/generate-database-baseline.mjs",
     "verify:database-baseline": "node scripts/verify-database-baseline.mjs",
-    "verify:observability": "node scripts/verify-observability.mjs"
+    "verify:observability": "node scripts/verify-observability.mjs",
+    "verify:release-readiness": "node scripts/verify-release-readiness.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

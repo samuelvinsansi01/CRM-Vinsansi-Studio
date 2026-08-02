@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-02T17:50:46.106Z",
+  "generatedAt": "2026-08-02T17:50:46.362Z",
   "source": "estrutura_banco_novo.sql",
   "baseTables": 27,
   "migrations": [

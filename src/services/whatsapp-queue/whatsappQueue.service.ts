@@ -233,7 +233,7 @@ async function finishSentPersistence({
   leads: WhatsAppQueueLead[];
   replayed?: boolean;
 }) {
-  // A tabela leads é a única fonte canônica da Base Permanente.
+  // O estado do lead é atualizado; a Base Permanente consolidada é sincronizada pelos triggers do banco.
   if (leads.length) await syncCanonicalSentStatus(leads);
   if (queueIds.length) await repositories.whatsappQueue.send(queueIds);
   if (leads.length) await logDispatchMessages(leads, replayed);
