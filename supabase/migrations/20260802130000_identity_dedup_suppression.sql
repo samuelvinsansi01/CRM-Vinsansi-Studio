@@ -166,11 +166,50 @@ FROM (
 ) identities GROUP BY users_id,identity_type,identity_value
 ON CONFLICT(users_id,identity_type,identity_value) DO NOTHING;
 
-INSERT INTO public.contact_suppressions(users_id,identity_type,identity_value,reason,source_lead_id)
-SELECT l.users_id,x.t,x.v,'historical_final_lead',l.leads_id
-FROM public.leads l CROSS JOIN LATERAL (VALUES('phone',l.leads_normalized_phone),('instagram',l.leads_normalized_instagram),('domain',l.leads_normalized_domain),('maps',l.leads_normalized_maps)) x(t,v)
-WHERE l.lead_status_id IN (5,8) AND x.v<>''
-ON CONFLICT(users_id,identity_type,identity_value) DO UPDATE SET is_active=true,updated_at=now();
+WITH suppression_candidates AS (
+  SELECT
+    l.users_id,
+    x.t AS identity_type,
+    x.v AS identity_value,
+    l.leads_id AS source_lead_id,
+    l.leads_updated_at,
+    row_number() OVER (
+      PARTITION BY l.users_id, x.t, x.v
+      ORDER BY l.leads_updated_at DESC NULLS LAST, l.leads_id DESC
+    ) AS candidate_rank
+  FROM public.leads l
+  CROSS JOIN LATERAL (
+    VALUES
+      ('phone', l.leads_normalized_phone),
+      ('instagram', l.leads_normalized_instagram),
+      ('domain', l.leads_normalized_domain),
+      ('maps', l.leads_normalized_maps)
+  ) x(t,v)
+  WHERE l.lead_status_id IN (5,8)
+    AND x.v IS NOT NULL
+    AND x.v <> ''
+)
+INSERT INTO public.contact_suppressions(
+  users_id,
+  identity_type,
+  identity_value,
+  reason,
+  source_lead_id
+)
+SELECT
+  users_id,
+  identity_type,
+  identity_value,
+  'historical_final_lead',
+  source_lead_id
+FROM suppression_candidates
+WHERE candidate_rank = 1
+ON CONFLICT(users_id,identity_type,identity_value) DO UPDATE SET
+  reason = excluded.reason,
+  source_lead_id = excluded.source_lead_id,
+  is_active = true,
+  expires_at = NULL,
+  updated_at = now();
 
 CREATE OR REPLACE FUNCTION public.check_lead_identity(p_phone text DEFAULT NULL,p_instagram text DEFAULT NULL,p_website text DEFAULT NULL,p_maps text DEFAULT NULL)
 RETURNS TABLE(identity_type text,identity_value text,canonical_lead_id bigint,is_suppressed boolean,suppression_reason text)
