@@ -644,6 +644,34 @@
       "policies": [
         "lead_validation_attempts_select_own"
       ]
+    },
+    "instance_credentials": {
+      "primary_key": [
+        "instances_id"
+      ],
+      "columns": [
+        "instances_id",
+        "users_id",
+        "vault_secret_id",
+        "instance_credentials_created_at",
+        "instance_credentials_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "apify_account_credentials": {
+      "primary_key": [
+        "apify_accounts_id"
+      ],
+      "columns": [
+        "apify_accounts_id",
+        "users_id",
+        "vault_secret_id",
+        "apify_account_credentials_created_at",
+        "apify_account_credentials_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
     }
   }
 }

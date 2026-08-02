@@ -102,7 +102,7 @@ Deno.serve(async (request: Request) => {
 
     const { data: job, error: jobError } = await admin
       .from("apify_import_jobs")
-      .select(`apify_import_jobs_id, users_id, apify_accounts_id, external_run_id, external_dataset_id, status, imported_at, error_message, apify_accounts:apify_accounts_id ( apify_accounts_id, token_secret )`)
+      .select(`apify_import_jobs_id, users_id, apify_accounts_id, external_run_id, external_dataset_id, status, imported_at, error_message`)
       .eq("apify_import_jobs_id", jobId)
       .eq("users_id", usersId)
       .maybeSingle();
@@ -110,8 +110,13 @@ Deno.serve(async (request: Request) => {
     if (!job) return jsonResponse({ error: "Job não encontrado." }, 404);
 
     const runId = String(job.external_run_id ?? "").trim();
-    const accountRelation = Array.isArray(job.apify_accounts) ? job.apify_accounts[0] : job.apify_accounts;
-    const token = String(accountRelation?.token_secret ?? "").trim();
+    const { data: secretRows, error: secretError } = await admin.rpc("service_get_apify_account_secret", {
+      p_users_id: usersId,
+      p_apify_accounts_id: Number(job.apify_accounts_id),
+    });
+    if (secretError) throw new Error(secretError.message);
+    const secretRow = Array.isArray(secretRows) ? secretRows[0] : secretRows;
+    const token = String(secretRow?.token_secret ?? "").trim();
     if (!runId) return jsonResponse({ error: "O job não possui runId." }, 409);
     if (!token) return jsonResponse({ error: "A conta Apify não possui token." }, 409);
 

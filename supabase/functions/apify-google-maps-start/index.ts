@@ -87,7 +87,7 @@ Deno.serve(async (request: Request) => {
     const usersId = Number(internalUser.users_id);
 
     const [{ data: account, error: accountError }, { data: branch, error: branchError }, { data: city, error: cityError }] = await Promise.all([
-      admin.from("apify_accounts").select("apify_accounts_id, account_name, token_secret, is_active").eq("apify_accounts_id", accountId).eq("users_id", usersId).maybeSingle(),
+      admin.from("apify_accounts").select("apify_accounts_id, account_name, is_active").eq("apify_accounts_id", accountId).eq("users_id", usersId).maybeSingle(),
       admin.from("branches").select("branches_id, branches_name, status_id").eq("branches_id", branchId).eq("users_id", usersId).maybeSingle(),
       admin.from("cities").select("cities_id, cities_name, states_id, states:states_id(states_id, states_name, states_code)").eq("cities_id", cityId).maybeSingle(),
     ]);
@@ -99,7 +99,13 @@ Deno.serve(async (request: Request) => {
     if (!branch || Number(branch.status_id ?? 1) !== 1) return jsonResponse({ error: "Ramo não encontrado ou inativo." }, 404);
     if (!city) return jsonResponse({ error: "Localidade não encontrada." }, 404);
 
-    const token = String(account.token_secret ?? "").trim();
+    const { data: secretRows, error: secretError } = await admin.rpc("service_get_apify_account_secret", {
+      p_users_id: usersId,
+      p_apify_accounts_id: accountId,
+    });
+    if (secretError) throw new Error(secretError.message);
+    const secretRow = Array.isArray(secretRows) ? secretRows[0] : secretRows;
+    const token = String(secretRow?.token_secret ?? "").trim();
     if (!token) return jsonResponse({ error: "A conta selecionada não possui token Apify." }, 409);
 
     const state = Array.isArray(city.states) ? city.states[0] : city.states;

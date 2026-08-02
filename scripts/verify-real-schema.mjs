@@ -23,6 +23,7 @@ const requiredTables = [
   'chips','instances','levels','socials','leads','queues','queue_items','sents',
   'apify_accounts','apify_import_jobs','countries','states','cities','contact_sources','lead_status',
   'import_rules','validation_rules','lead_validation_results','lead_validation_attempts',
+  'instance_credentials','apify_account_credentials',
 ];
 for (const table of requiredTables) assert(tables.has(table), `Tabela obrigatoria ausente no contrato: ${table}`);
 
@@ -40,6 +41,8 @@ const requiredColumns = {
   validation_rules: ['validation_rules_id','users_id','validation_rules_source_id','validation_rules_channel_id','validation_rules_fallback_channel_id'],
   lead_validation_results: ['lead_validation_results_id','lead_validation_results_key','lead_validation_results_name'],
   lead_validation_attempts: ['lead_validation_attempts_id','users_id','leads_id','channels_id','status_id','lead_validation_results_id'],
+  instance_credentials: ['instances_id','users_id','vault_secret_id'],
+  apify_account_credentials: ['apify_accounts_id','users_id','vault_secret_id'],
 };
 for (const [table, columns] of Object.entries(requiredColumns)) {
   const actual = new Set(contract.tables[table]?.columns ?? []);

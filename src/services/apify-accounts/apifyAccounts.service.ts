@@ -70,48 +70,21 @@ export const apifyAccountsService = {
   },
 
   async save(input: SaveApifyAccountInput): Promise<number> {
-    const userId = await currentUserIdNumber();
     const name = input.name.trim();
     const token = input.token?.trim() ?? '';
     if (!name) throw new Error('Informe o nome da conta Apify.');
     if (!input.id && !token) throw new Error('Informe o token da nova conta Apify.');
 
-    if (input.id) {
-      const patch: Record<string, unknown> = {
-        account_name: name,
-        is_active: input.active,
-        updated_at: new Date().toISOString(),
-      };
-      if (token) {
-        patch.token_secret = token;
-        patch.connection_status = 'not_verified';
-        patch.last_error = null;
-      }
-      const { data, error } = await getSupabaseClient()
-        .from('apify_accounts')
-        .update(patch)
-        .eq('apify_accounts_id', input.id)
-        .eq('users_id', userId)
-        .select('apify_accounts_id')
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      if (!data?.apify_accounts_id) throw new Error('A conta não existe ou foi alterada por outra operação.');
-      return Number(data.apify_accounts_id);
-    }
-
-    const { data, error } = await getSupabaseClient()
-      .from('apify_accounts')
-      .insert({
-        users_id: userId,
-        account_name: name,
-        token_secret: token,
-        is_active: input.active,
-        connection_status: 'not_verified',
-      })
-      .select('apify_accounts_id')
-      .single();
+    const { data, error } = await getSupabaseClient().rpc('save_apify_account', {
+      p_apify_accounts_id: input.id ?? null,
+      p_account_name: name,
+      p_token: token || null,
+      p_is_active: input.active,
+    });
     if (error) throw new Error(error.message);
-    return Number(data.apify_accounts_id);
+    const id = Number(data);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('A conta Apify não retornou um identificador válido.');
+    return id;
   },
 
   async check(id: number): Promise<CheckApifyAccountResult> {
@@ -121,20 +94,7 @@ export const apifyAccountsService = {
 
   async remove(id: number): Promise<void> {
     if (!Number.isInteger(id) || id <= 0) throw new Error('Conta Apify inválida.');
-    const userId = await currentUserIdNumber();
-    const { count, error: countError } = await getSupabaseClient()
-      .from('apify_import_jobs')
-      .select('apify_import_jobs_id', { count: 'exact', head: true })
-      .eq('users_id', userId)
-      .eq('apify_accounts_id', id);
-    if (countError) throw new Error(countError.message);
-    if ((count ?? 0) > 0) throw new Error('Esta conta possui histórico de coletas. Desative-a em vez de removê-la.');
-
-    const { error } = await getSupabaseClient()
-      .from('apify_accounts')
-      .delete()
-      .eq('apify_accounts_id', id)
-      .eq('users_id', userId);
+    const { error } = await getSupabaseClient().rpc('delete_apify_account', { p_apify_accounts_id: id });
     if (error) throw new Error(error.message);
   },
 };

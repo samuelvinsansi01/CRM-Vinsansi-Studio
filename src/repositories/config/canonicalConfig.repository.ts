@@ -173,7 +173,7 @@ async function listTemplates(userId: number): Promise<TemplateConfigRecord[]> {
 async function listChips(userId: number): Promise<ChipConfigRecord[]> {
   const [chipResponse, instanceResponse, levelResponse, status] = await Promise.all([
     getSupabaseClient().from('chips').select('*').eq('users_id', userId).order('chips_name'),
-    getSupabaseClient().from('instances').select('*').eq('users_id', userId),
+    getSupabaseClient().from('instances').select('instances_id,status_id,instances_name,instances_url,instances_created_at,instances_updated_at').eq('users_id', userId),
     getSupabaseClient().from('levels').select('*').eq('users_id', userId),
     statusContext(),
   ]);
@@ -200,7 +200,7 @@ async function listChips(userId: number): Promise<ChipConfigRecord[]> {
       level: levelName,
       url: String(instance.instances_url ?? ''),
       instance: String(instance.instances_name ?? ''),
-      apiKey: instance.instances_apikey ? '********' : '',
+      apiKey: '',
       connectionStatus: active ? 'connected' : 'inactive',
       priority: 1,
       startTime: '13:00',

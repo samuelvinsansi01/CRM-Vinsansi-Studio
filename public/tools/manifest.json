@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-08-02T05:30:00-03:00",
+  "updatedAt": "2026-08-02T05:35:00-03:00",
   "tools": [
     {
       "id": "worker",
       "name": "Worker de envios",
-      "description": "Processador WhatsApp com lotes persistentes, retomada após reinício, snapshot imutável e idempotência por mensagem e mídia.",
-      "version": "3.3.0",
+      "description": "Worker WhatsApp com credenciais Evolution protegidas no Supabase Vault, lotes persistentes e idempotência por parte.",
+      "version": "3.4.0",
       "path": "/tools/worker-latest.zip",
-      "fileName": "Worker_v3.3.0_lotes_persistentes_idempotencia.zip",
-      "size": 6172539
+      "fileName": "Worker_v3.4.0_credenciais_vault.zip",
+      "size": 6173432
     },
     {
       "id": "instagram-extension",

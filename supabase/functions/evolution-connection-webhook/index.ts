@@ -81,10 +81,13 @@ Deno.serve(async (request: Request) => {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const webhookSecret = Deno.env.get("EVOLUTION_WEBHOOK_SECRET") ?? "";
   if (!supabaseUrl || !serviceRoleKey || !webhookSecret) return jsonResponse({ error: "Webhook não configurado." }, 503);
+  if (webhookSecret.length < 32) return jsonResponse({ error: "EVOLUTION_WEBHOOK_SECRET deve ter no mínimo 32 caracteres." }, 503);
 
   const url = new URL(request.url);
   const instanceId = Number(url.searchParams.get("instance_id") ?? request.headers.get("x-evolution-instance-id") ?? 0);
-  const receivedToken = text(url.searchParams.get("token"));
+  // O header é o contrato atual. O query param é aceito apenas para a transição
+  // dos webhooks já configurados pela versão anterior.
+  const receivedToken = text(request.headers.get("x-evolution-signature") ?? url.searchParams.get("token"));
   if (!Number.isSafeInteger(instanceId) || instanceId <= 0 || !receivedToken) return jsonResponse({ error: "Identificação do webhook inválida." }, 401);
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {

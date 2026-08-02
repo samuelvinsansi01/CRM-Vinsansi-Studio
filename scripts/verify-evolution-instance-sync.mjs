@@ -19,12 +19,14 @@ assert(app.includes('syncEvolutionInstances'), 'App não inicializa a sincroniza
 assert(app.includes('60_000'), 'Reconciliação periódica de 60 segundos ausente.');
 assert(page.includes('Sincronizar Evolution'), 'Botão manual de sincronização ausente.');
 assert(page.includes("kind !== 'instances'"), 'Status manual ainda aparece no formulário de instâncias.');
-assert(repository.includes('users_id: usersId, status_id: 2, instances_name: name'), 'Nova instância não inicia fail-closed como inativa.');
-assert(!/if \(kind === 'instances'\)[\s\S]{0,400}status_id: statusId/.test(repository), 'Update de instância ainda aceita status manual.');
+assert(repository.includes("rpc('save_instance_secure'"), 'Instâncias não são salvas pela RPC segura.');
+assert(!repository.includes('instances_apikey'), 'Repository ainda manipula API key na tabela pública.');
 assert(service.includes("functions.invoke('evolution-instance-sync'"), 'Frontend não invoca a função canônica de sincronização.');
 assert(syncFunction.includes('/instance/connectionState/'), 'Consulta de connectionState ausente.');
 assert(syncFunction.includes('/webhook/set/'), 'Configuração automática de webhook ausente.');
 assert(syncFunction.includes('CONNECTION_UPDATE'), 'Evento CONNECTION_UPDATE não foi configurado.');
+assert(syncFunction.includes('service_get_evolution_instances'), 'Edge Function não lê a credencial pelo RPC de service_role.');
+assert(syncFunction.includes('x-evolution-signature'), 'Webhook não recebe assinatura por header.');
 assert(webhookFunction.includes('EVOLUTION_WEBHOOK_SECRET'), 'Webhook não valida o secret.');
 assert(webhookFunction.includes('timingSafeEqual'), 'Webhook não usa comparação segura da assinatura.');
 assert(config.includes('[functions.evolution-connection-webhook]') && config.includes('verify_jwt = false'), 'Webhook público não foi configurado como verify_jwt=false.');

@@ -291,11 +291,16 @@ export async function createCatalogRecord(kind: CatalogKind, input: Record<strin
 
   if (kind === 'instances') {
     const name = text(input.name).trim();
+    const url = text(input.url).trim();
     const apiKey = text(input.apiKey).trim();
     if (!name) throw new Error('Nome da instância é obrigatório.');
-    const { error } = await client.from('instances').insert({
-      users_id: usersId, status_id: 2, instances_name: name,
-      instances_url: text(input.url).trim() || null, instances_apikey: apiKey || null,
+    if (!url) throw new Error('URL da instância é obrigatória.');
+    if (!apiKey) throw new Error('API key é obrigatória para uma nova instância.');
+    const { error } = await client.rpc('save_instance_secure', {
+      p_instances_id: null,
+      p_name: name,
+      p_url: url,
+      p_api_key: apiKey,
     });
     if (error) throw new Error(error.message);
     return;
@@ -363,13 +368,17 @@ export async function updateCatalogRecord(kind: CatalogKind, id: string, input: 
   }
 
   if (kind === 'instances') {
-    const payload: Row = {
-      instances_name: text(input.name).trim(), instances_url: text(input.url).trim() || null,
-      instances_updated_at: nowIso(),
-    };
+    const name = text(input.name).trim();
+    const url = text(input.url).trim();
     const apiKey = text(input.apiKey).trim();
-    if (apiKey) payload.instances_apikey = apiKey;
-    const { error } = await client.from('instances').update(payload).eq('instances_id', numericId).eq('users_id', usersId);
+    if (!name) throw new Error('Nome da instância é obrigatório.');
+    if (!url) throw new Error('URL da instância é obrigatória.');
+    const { error } = await client.rpc('save_instance_secure', {
+      p_instances_id: numericId,
+      p_name: name,
+      p_url: url,
+      p_api_key: apiKey || null,
+    });
     if (error) throw new Error(error.message);
     return;
   }
@@ -409,6 +418,11 @@ export async function deleteCatalogRecord(kind: CatalogKind, id: string) {
   const usersId = await userIdNumber();
   const numericId = Number(id);
   if (!Number.isSafeInteger(numericId)) throw new Error('Identificador inválido.');
+  if (kind === 'instances') {
+    const { error } = await getSupabaseClient().rpc('delete_instance_secure', { p_instances_id: numericId });
+    if (error) throw new Error(error.message);
+    return;
+  }
   const { error } = await getSupabaseClient().from(kind).delete().eq(idColumn[kind], numericId).eq('users_id', usersId);
   if (error) throw new Error(error.message);
 }

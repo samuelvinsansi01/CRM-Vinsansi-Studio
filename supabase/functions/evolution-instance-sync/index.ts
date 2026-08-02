@@ -69,6 +69,18 @@ async function hmacToken(secret: string, value: string) {
   return Array.from(new Uint8Array(signature)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function isManagedWebhookUrl(existingValue: string, expectedValue: string) {
+  try {
+    const existing = new URL(existingValue);
+    const expected = new URL(expectedValue);
+    return existing.origin === expected.origin
+      && existing.pathname === expected.pathname
+      && existing.searchParams.get("instance_id") === expected.searchParams.get("instance_id");
+  } catch {
+    return false;
+  }
+}
+
 async function configureConnectionWebhook(
   row: Row,
   supabaseUrl: string,
@@ -77,13 +89,12 @@ async function configureConnectionWebhook(
   const instanceId = Number(row.instances_id);
   const instanceName = text(row.instances_name);
   const baseUrl = text(row.instances_url).replace(/\/$/, "");
-  const apiKey = text(row.instances_apikey);
+  const apiKey = text(row.api_key);
   if (!instanceId || !instanceName || !baseUrl || !apiKey) throw new Error("Credenciais da instância incompletas.");
 
   const token = await hmacToken(webhookSecret, `${instanceId}:${instanceName}`);
   const webhookUrl = new URL(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/evolution-connection-webhook`);
   webhookUrl.searchParams.set("instance_id", String(instanceId));
-  webhookUrl.searchParams.set("token", token);
 
   let existingEvents: string[] = [];
   const findResponse = await fetchWithTimeout(`${baseUrl}/webhook/find/${encodeURIComponent(instanceName)}`, {
@@ -94,7 +105,7 @@ async function configureConnectionWebhook(
     const existing = await findResponse.json().catch(() => null) as Row | null;
     const existingUrl = text(existing?.url);
     const existingEnabled = existing?.enabled !== false;
-    if (existingEnabled && existingUrl && existingUrl !== webhookUrl.toString()) {
+    if (existingEnabled && existingUrl && !isManagedWebhookUrl(existingUrl, webhookUrl.toString())) {
       throw new Error("A instância já possui outro webhook configurado; ele não foi substituído automaticamente.");
     }
     existingEvents = Array.isArray(existing?.events) ? existing.events.map((event) => text(event)).filter(Boolean) : [];
@@ -114,6 +125,7 @@ async function configureConnectionWebhook(
       events,
       headers: {
         "x-evolution-instance-id": String(instanceId),
+        "x-evolution-signature": token,
       },
       base64: false,
     }),
@@ -138,6 +150,7 @@ Deno.serve(async (request: Request) => {
   const authorization = request.headers.get("Authorization");
 
   if (!supabaseUrl || !anonKey || !serviceRoleKey) return jsonResponse({ error: "Configuração interna do Supabase ausente." }, 500);
+  if (webhookSecret && webhookSecret.length < 32) return jsonResponse({ error: "EVOLUTION_WEBHOOK_SECRET deve ter no mínimo 32 caracteres." }, 500);
   if (!authorization) return jsonResponse({ error: "Sessão não encontrada." }, 401);
 
   const authClient = createClient(supabaseUrl, anonKey, {
@@ -164,14 +177,11 @@ Deno.serve(async (request: Request) => {
     const requestedId = Number(body.instanceId ?? body.instances_id ?? 0);
     const configureWebhook = body.configureWebhook !== false;
 
-    let query = admin
-      .from("instances")
-      .select("instances_id,users_id,status_id,instances_name,instances_url,instances_apikey")
-      .eq("users_id", internalUser.users_id)
-      .order("instances_id");
-    if (requestedId > 0) query = query.eq("instances_id", requestedId);
-
-    const { data: rows, error: rowsError } = await query;
+    const { data: rows, error: rowsError } = await admin.rpc("service_get_evolution_instances", {
+      p_users_id: Number(internalUser.users_id),
+      p_instances_id: requestedId > 0 ? requestedId : null,
+      p_instance_name: null,
+    });
     if (rowsError) throw new Error(rowsError.message);
 
     const checkedAt = new Date().toISOString();
@@ -181,7 +191,7 @@ Deno.serve(async (request: Request) => {
       const instanceId = Number(row.instances_id);
       const instanceName = text(row.instances_name);
       const baseUrl = text(row.instances_url).replace(/\/$/, "");
-      const apiKey = text(row.instances_apikey);
+      const apiKey = text(row.api_key);
       const previousStatus = Number(row.status_id);
       let state = "unavailable";
       let active = false;
