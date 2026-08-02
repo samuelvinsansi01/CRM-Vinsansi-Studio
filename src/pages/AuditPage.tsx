@@ -220,7 +220,7 @@ export function AuditPage() {
                     <td><Tag tone="neutral">{event.source}</Tag></td>
                     <td><strong>{event.action}</strong></td>
                     <td>{event.queueItemId ? `Fila ${event.queueItemId}` : event.leadId ? `Lead ${event.leadId}` : String(event.metadata?.entity_type ?? 'Sistema')}</td>
-                    <td>{event.metadata?.previous_status_id ?? '—'} → {event.metadata?.target_status_id ?? event.status ?? '—'}</td>
+                    <td>{String(event.metadata?.previous_status_id ?? '—')} → {String(event.metadata?.target_status_id ?? event.status ?? '—')}</td>
                     <td><span>{event.message || String(event.metadata?.company_name ?? event.metadata?.reason ?? '') || '—'}</span></td>
                   </tr>
                 ))}
