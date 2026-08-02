@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-08-02T17:50:45.850Z",
+  "source": "estrutura_banco_novo.sql",
+  "baseTables": 27,
+  "migrations": [
+    "20260730171000_user_profile.sql",
+    "20260802070000_atomic_queue_preparation.sql",
+    "20260802080000_queue_payload_snapshot.sql",
+    "20260802090000_worker_persistence_idempotency.sql",
+    "20260802100000_secure_credentials_integrations.sql",
+    "20260802110000_centralized_operational_settings.sql",
+    "20260802120000_persistent_audit_state_machine.sql",
+    "20260802130000_identity_dedup_suppression.sql",
+    "20260802131000_fix_instagram_identity_normalization.sql",
+    "20260802140000_permanent_base_consolidation.sql",
+    "20260802150000_instagram_execution_progress.sql",
+    "20260802160000_schema_release_manifest.sql"
+  ],
+  "baseSha256": "14824eb8aaeccfeab8fd1a480ef8e26662a723f10771e489ccef729a6ef407b4",
+  "bootstrapSha256": "f0be1c7b2657dec97e7b02c1575a29181450dc728e73a9bb387282b50738a208"
+}
