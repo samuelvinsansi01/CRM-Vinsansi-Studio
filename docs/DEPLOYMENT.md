@@ -28,3 +28,8 @@ No banco:
 ```sql
 select public.platform_schema_health();
 ```
+
+
+## Chat por chip
+
+Depois da migration da Etapa 13, publique novamente `evolution-instance-sync` e `evolution-connection-webhook`. Em seguida, use **Sincronizar Evolution** no painel para incluir os eventos de mensagens, chats e contatos no webhook de cada instância. O endpoint de envio `/api/chat/send` exige `SUPABASE_SERVICE_ROLE_KEY` apenas no ambiente server-side.

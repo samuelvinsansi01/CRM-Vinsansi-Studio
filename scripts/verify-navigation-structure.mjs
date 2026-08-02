@@ -15,6 +15,7 @@ const requiredLabels = [
   'Disparos',
   'Fila WhatsApp',
   'Fila Instagram',
+  'Conversas',
   'Remetentes',
   'Chips WhatsApp',
   'Perfis Instagram',
@@ -58,6 +59,7 @@ if (!header.includes("navigate('account')") || !header.includes('Minha conta')) 
 if (!header.includes("navigate('audit')") || !header.includes('Auditoria')) {
   throw new Error('Auditoria precisa permanecer no menu do usuário.');
 }
+if (!app.includes("activePage === 'conversations'")) throw new Error('Rota de Conversas ausente.');
 if (!app.includes("activePage === 'validation-routing'")) {
   throw new Error('Rota de Validação e roteamento ausente.');
 }

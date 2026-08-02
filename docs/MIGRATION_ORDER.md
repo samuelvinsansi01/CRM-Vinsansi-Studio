@@ -12,5 +12,6 @@
 10. `20260802150000_instagram_execution_progress.sql`
 11. `20260802160000_schema_release_manifest.sql`
 12. `20260802170000_observability_recovery.sql`
+13. `20260802180000_chip_conversations_chat.sql`
 
 Nunca pule uma migration em um ambiente novo. Em ambiente existente, execute apenas as ainda não aplicadas.

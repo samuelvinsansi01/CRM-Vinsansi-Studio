@@ -7,6 +7,7 @@ import { BasePage } from './pages/BasePage';
 import { SettingsOverviewPage } from './pages/ConfigurationPages';
 import { CatalogCrudPage } from './pages/CatalogCrudPage';
 import { ChannelsPage } from './pages/ChannelsPage';
+import { ConversationsPage } from './pages/ConversationsPage';
 import { ImportRulesPage } from './pages/ImportRulesPage';
 import { ValidationRulesSettingsPage } from './pages/ValidationRulesSettingsPage';
 import { ConfigTablePage } from './pages/ConfigTablePage';
@@ -103,6 +104,7 @@ export function App() {
       {activePage === 'base' ? <BasePage /> : null}
       {activePage === 'whatsapp' ? <QueuePage channel="whatsapp" /> : null}
       {activePage === 'instagram' ? <QueuePage channel="instagram" /> : null}
+      {activePage === 'conversations' ? <ConversationsPage /> : null}
 
       {activePage === 'sender-chips' ? <ConfigTablePage kind="chips" /> : null}
       {activePage === 'sender-instagram' ? <ConfigTablePage kind="instagram" /> : null}

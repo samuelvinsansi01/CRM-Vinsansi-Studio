@@ -111,7 +111,18 @@ async function configureConnectionWebhook(
     existingEvents = Array.isArray(existing?.events) ? existing.events.map((event) => text(event)).filter(Boolean) : [];
   }
 
-  const events = Array.from(new Set([...existingEvents, "CONNECTION_UPDATE"]));
+  const managedEvents = [
+    "CONNECTION_UPDATE",
+    "MESSAGES_UPSERT",
+    "MESSAGES_UPDATE",
+    "MESSAGES_DELETE",
+    "SEND_MESSAGE",
+    "CHATS_UPSERT",
+    "CHATS_UPDATE",
+    "CONTACTS_UPSERT",
+    "CONTACTS_UPDATE",
+  ];
+  const events = Array.from(new Set([...existingEvents, ...managedEvents]));
   const response = await fetchWithTimeout(`${baseUrl}/webhook/set/${encodeURIComponent(instanceName)}`, {
     method: "POST",
     headers: {

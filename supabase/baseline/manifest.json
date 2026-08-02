@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-02T17:50:46.362Z",
+  "generatedAt": "2026-08-02T17:50:46.614Z",
   "source": "estrutura_banco_novo.sql",
   "baseTables": 27,
   "migrations": [
@@ -15,8 +15,9 @@
     "20260802140000_permanent_base_consolidation.sql",
     "20260802150000_instagram_execution_progress.sql",
     "20260802160000_schema_release_manifest.sql",
-    "20260802170000_observability_recovery.sql"
+    "20260802170000_observability_recovery.sql",
+    "20260802180000_chip_conversations_chat.sql"
   ],
   "baseSha256": "14824eb8aaeccfeab8fd1a480ef8e26662a723f10771e489ccef729a6ef407b4",
-  "bootstrapSha256": "b899cf2304fb7c649fe82508c747aa2dbd051c54befbf86bd552598584ff2c7e"
+  "bootstrapSha256": "3f50b87ddd9c50c28deccd5857848adea75dfed23497ee11eb4c8564798b5dc5"
 }

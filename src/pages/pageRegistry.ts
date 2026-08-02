@@ -6,6 +6,7 @@ export type PageId =
   | 'base'
   | 'whatsapp'
   | 'instagram'
+  | 'conversations'
   | 'sender-chips'
   | 'sender-instagram'
   | 'message-branches'
@@ -61,6 +62,7 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { id: 'whatsapp', label: 'Fila WhatsApp' },
       { id: 'instagram', label: 'Fila Instagram' },
+      { id: 'conversations', label: 'Conversas' },
     ],
   },
   {
@@ -133,6 +135,7 @@ export const pageTitles: Record<PageId, string> = {
   base: 'Base Permanente',
   whatsapp: 'Fila WhatsApp',
   instagram: 'Fila Instagram',
+  conversations: 'Conversas',
   'sender-chips': 'Chips WhatsApp',
   'sender-instagram': 'Perfis Instagram',
   'message-branches': 'Ramos',

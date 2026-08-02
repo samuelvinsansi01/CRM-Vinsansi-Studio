@@ -6,5 +6,5 @@ const pkg=JSON.parse(read('package.json'));
 const required=['instagram_queue_progress','instagram_dispatch_events','instagram_claim_queue_item','instagram_update_queue_progress','instagram_recover_stale_items','reconciliation_required'];
 for (const token of required) if(!sql.includes(token)) throw new Error(`instagram_progress_missing:${token}`);
 for (const token of ['instagram_claim_queue_item','instagram_update_queue_progress','claim_token']) if(!api.includes(token)) throw new Error(`instagram_api_missing:${token}`);
-if(!/^4\.(?:[3-9]|[1-9]\d)\.\d+$/.test(pkg.version)) throw new Error('package_version_below_4_3_0');
+if(!(/^(?:4\.(?:[3-9]|[1-9]\d)|[5-9]\.\d+)\.\d+$/.test(pkg.version))) throw new Error('package_version_below_4_3_0');
 console.log('Instagram execution progress: OK');

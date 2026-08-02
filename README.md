@@ -22,3 +22,8 @@ npm run build
 ```
 
 Consulte `docs/` antes de implantar, recuperar ou publicar uma release.
+
+
+## Conversas por chip
+
+A Etapa 13 adiciona atendimento textual por chip via webhooks Evolution. Consulte `docs/DEPLOYMENT.md` e `docs/RECOVERY.md`.

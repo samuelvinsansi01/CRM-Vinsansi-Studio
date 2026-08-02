@@ -19,3 +19,12 @@ Etapas anteriores ao envio podem voltar à fila. Interrupções durante mensagen
 ## Banco
 
 Não execute o bootstrap completo em ambiente existente. Restaure backup ou aplique migrations faltantes em ordem.
+
+
+## Mensagem de chat com resultado incerto
+
+Não envie novamente automaticamente. Verifique a conversa no WhatsApp/Evolution. A mensagem fica em `reconciliation_required`; um webhook posterior com o identificador externo pode reconciliar o estado.
+
+## Webhook de conversa com erro
+
+Consulte `evolution_webhook_receipts`. Recibos em `error` podem ser reenviados pela Evolution e serão reprocessados; recibos `processed` ou `ignored` são deduplicados pelo hash.

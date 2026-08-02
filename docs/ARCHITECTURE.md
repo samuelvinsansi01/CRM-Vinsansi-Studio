@@ -13,6 +13,7 @@ O Painel novo e o banco novo são canônicos. O legado permanece apenas como ref
 5. Mensagens: templates, snapshots e mídia versionada.
 6. Memória: auditoria, supressões e Base Permanente.
 7. Operação da plataforma: configurações, heartbeats, alertas e recuperação.
+8. Conversas: threads por chip, mensagens, eventos e recibos dos webhooks Evolution.
 
 ## Regras estruturais
 
@@ -23,3 +24,5 @@ O Painel novo e o banco novo são canônicos. O legado permanece apenas como ref
 - Histórico é append-only.
 - Duplicidade e supressão são políticas do backend.
 - Resultados incertos não são reenviados automaticamente.
+- Conversas não reutilizam `sents`: campanhas e atendimento permanecem domínios separados.
+- Mensagens do chat entram por webhook idempotente e saem apenas pelo backend autenticado.

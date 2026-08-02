@@ -972,6 +972,82 @@
       "policies": [
         "recovery_requests_own_select"
       ]
+    },
+    "conversations": {
+      "columns": [
+        "conversations_id",
+        "users_id",
+        "chips_id",
+        "instances_id",
+        "leads_id",
+        "remote_jid",
+        "contact_phone",
+        "contact_name",
+        "contact_avatar_url",
+        "conversation_status",
+        "unread_count",
+        "last_message_at",
+        "last_message_preview",
+        "last_message_direction",
+        "last_read_at",
+        "conversations_created_at",
+        "conversations_updated_at"
+      ]
+    },
+    "conversation_messages": {
+      "columns": [
+        "conversation_messages_id",
+        "users_id",
+        "conversations_id",
+        "chips_id",
+        "instances_id",
+        "leads_id",
+        "external_message_id",
+        "client_idempotency_key",
+        "remote_jid",
+        "direction",
+        "from_me",
+        "message_type",
+        "message_body",
+        "media_url",
+        "media_mime_type",
+        "media_file_name",
+        "quoted_external_message_id",
+        "message_status",
+        "provider_timestamp",
+        "raw_payload",
+        "error_message",
+        "conversation_messages_created_at",
+        "conversation_messages_updated_at"
+      ]
+    },
+    "conversation_message_events": {
+      "columns": [
+        "conversation_message_events_id",
+        "users_id",
+        "conversation_messages_id",
+        "event_type",
+        "previous_status",
+        "target_status",
+        "external_event_id",
+        "payload",
+        "conversation_message_events_created_at"
+      ]
+    },
+    "evolution_webhook_receipts": {
+      "columns": [
+        "evolution_webhook_receipts_id",
+        "users_id",
+        "instances_id",
+        "event_type",
+        "external_event_id",
+        "payload_hash",
+        "raw_payload",
+        "processing_status",
+        "error_message",
+        "received_at",
+        "processed_at"
+      ]
     }
   }
 }

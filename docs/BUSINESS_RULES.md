@@ -23,3 +23,10 @@ Quando o provedor pode ter recebido a mensagem, mas a confirmação não foi per
 ## Base Permanente
 
 A Base é consolidada por identidade canônica e reúne leads relacionados, envios, supressão, desfecho, notas e snapshots históricos.
+
+
+## Conversas
+
+Cada conversa pertence a um chip e a uma instância Evolution. O identificador remoto é único por chip. Mensagens recebidas, enviadas, atualizações de entrega e exclusões são idempotentes pelo identificador externo. Grupos e listas de transmissão não entram no chat operacional.
+
+O envio manual é textual, passa pelo backend e usa uma chave de idempotência gerada no navegador. Timeout ou perda de confirmação gera `reconciliation_required`, sem reenvio automático.
