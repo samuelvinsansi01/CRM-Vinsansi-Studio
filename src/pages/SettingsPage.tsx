@@ -220,7 +220,7 @@ export function SettingsPage() {
       };
       await updateSettings(next);
       setDraft(next);
-      pushToast({ title: 'Configuracoes salvas', description: 'Os parametros foram salvos neste navegador para o usuario autenticado.', tone: 'success' });
+      pushToast({ title: 'Configuracoes salvas', description: 'Os parâmetros foram salvos no Supabase e serão usados pelo painel, Worker e extensão.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Erro ao salvar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }

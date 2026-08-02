@@ -12,7 +12,8 @@ const dispatchApi = read('api/whatsapp/dispatch.ts');
 const batchApi = read('api/whatsapp/batch.ts');
 const manifest = JSON.parse(read('public/tools/manifest.json'));
 const workerZip = path.join(root, 'public/tools/worker-latest.zip');
-const workerSource = execFileSync('unzip', ['-p', workerZip, 'Worker_v3.4.0/src/worker.js'], { encoding: 'utf8' });
+const worker = manifest.tools.find((tool) => tool.id === 'worker');
+const workerSource = execFileSync('unzip', ['-p', workerZip, `Worker_v${worker?.version}/src/worker.js`], { encoding: 'utf8' });
 
 const failures = [];
 const assert = (condition, message) => { if (!condition) failures.push(message); };
@@ -40,8 +41,7 @@ assert(!service.includes('Itens movidos para erro e prontos para reprocessamento
 assert(dispatchApi.includes("payload?.ok===false&&!Array.isArray(payload?.results)"), 'Proxy descarta resultados parciais do Worker.');
 assert(batchApi.includes("'state','status'"), 'Proxy de lote não aceita a ação status usada pelo frontend.');
 
-const worker = manifest.tools.find((tool) => tool.id === 'worker');
-assert(['3.3.0','3.4.0'].includes(worker?.version), 'Manifesto não publica Worker 3.3.0 ou superior.');
+assert(/^3\.(?:[3-9]|[1-9]\d)\.\d+$/.test(String(worker?.version ?? '')), 'Manifesto não publica Worker 3.3.0 ou superior.');
 
 if (failures.length) {
   console.error(`Falhas na persistência/idempotência do Worker (${failures.length}):`);

@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-08-02T05:35:00-03:00",
+  "updatedAt": "2026-08-02T06:20:00-03:00",
   "tools": [
     {
       "id": "worker",
       "name": "Worker de envios",
-      "description": "Worker WhatsApp com credenciais Evolution protegidas no Supabase Vault, lotes persistentes e idempotência por parte.",
-      "version": "3.4.0",
+      "description": "Worker WhatsApp com configurações operacionais centralizadas no Supabase, Vault, lotes persistentes e idempotência por parte.",
+      "version": "3.5.0",
       "path": "/tools/worker-latest.zip",
-      "fileName": "Worker_v3.4.0_credenciais_vault.zip",
-      "size": 6173432
+      "fileName": "Worker_v3.5.0_configuracoes_centralizadas.zip",
+      "size": 6175021
     },
     {
       "id": "instagram-extension",

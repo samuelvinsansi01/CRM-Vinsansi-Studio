@@ -18,7 +18,8 @@ const apifyStart = read('supabase/functions/apify-google-maps-start/index.ts');
 const apifySync = read('supabase/functions/apify-google-maps-sync/index.ts');
 const manifest = JSON.parse(read('public/tools/manifest.json'));
 const workerZip = path.join(root, 'public/tools/worker-latest.zip');
-const workerSource = execFileSync('unzip', ['-p', workerZip, 'Worker_v3.4.0/src/worker.js'], { encoding: 'utf8' });
+const worker = manifest.tools.find((tool) => tool.id === 'worker');
+const workerSource = execFileSync('unzip', ['-p', workerZip, `Worker_v${worker?.version}/src/worker.js`], { encoding: 'utf8' });
 
 for (const token of [
   'CREATE TABLE IF NOT EXISTS public.instance_credentials',
@@ -49,15 +50,14 @@ assert(evolutionSync.includes('service_get_evolution_instances'), 'Sincronizaç�
 assert(!evolutionSync.includes('instances_apikey'), 'Sincronização Evolution ainda seleciona API key pública.');
 assert(evolutionSync.includes('"x-evolution-signature": token'), 'Webhook Evolution não é configurado com assinatura em header.');
 assert(evolutionWebhook.includes('x-evolution-signature'), 'Webhook não valida assinatura no header.');
-assert(workerSource.includes("const VERSION = '3.4.0'"), 'Worker 3.4.0 não foi empacotado.');
+assert(/const VERSION = '3\.(?:[4-9]|[1-9]\d)\.\d+'/.test(workerSource), 'Worker 3.4.0 ou superior não foi empacotado.');
 assert(workerSource.includes("rpc('service_get_evolution_instances'"), 'Worker não lê credenciais pelo RPC protegido.');
 assert(!workerSource.includes('instances_apikey'), 'Worker ainda lê API key pública.');
 assert(workerSource.includes('WORKER_HTTP_TOKEN deve ter no minimo 32 caracteres'), 'Worker não exige token HTTP forte.');
-const worker = manifest.tools.find((tool) => tool.id === 'worker');
-assert(worker?.version === '3.4.0', 'Manifesto não publica Worker 3.4.0.');
+assert(/^3\.(?:[4-9]|[1-9]\d)\.\d+$/.test(String(worker?.version ?? '')), 'Manifesto não publica Worker 3.4.0 ou superior.');
 
 if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log('Credenciais seguras: Vault, RPCs restritas, webhook por header e Worker 3.4.0 validados.');
+console.log('Credenciais seguras: Vault, RPCs restritas, webhook por header e Worker 3.4.0 ou superior validados.');
