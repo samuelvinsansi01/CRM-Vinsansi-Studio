@@ -1,43 +1,59 @@
 const RESERVED_INSTAGRAM_PATHS = new Set([
   'about',
   'accounts',
+  'api',
+  'challenge',
+  'contact',
+  'developer',
+  'direct',
+  'directory',
+  'download',
+  'emails',
   'explore',
+  'graphql',
+  'invites',
+  'legal',
+  'oauth',
   'p',
+  'press',
   'reel',
   'reels',
   'stories',
   'tv',
-  'direct',
-  'developer',
-  'legal',
+  'web',
 ]);
+
+function cleanCandidate(value: string) {
+  const username = value
+    .replace(/^@/, '')
+    .split(/[/?#\s]/)[0]
+    .trim()
+    .toLowerCase();
+
+  if (!username || RESERVED_INSTAGRAM_PATHS.has(username)) return '';
+  if (!/^[a-z0-9._]{1,30}$/.test(username)) return '';
+  return username;
+}
 
 export function normalizeInstagramUsername(value: unknown) {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
 
-  try {
-    const withProtocol = raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw.replace(/^@/, 'instagram.com/')}`;
-    const url = new URL(withProtocol);
-    const host = url.hostname.replace(/^www\./, '').toLowerCase();
-
-    if (host.endsWith('instagram.com')) {
-      return url.pathname.replace(/^\/+/, '').split('/')[0].replace(/^@/, '').trim().toLowerCase();
+  const looksLikeUrl = /^https?:\/\//i.test(raw) || /^(www\.)?instagram\.com(?:\/|$)/i.test(raw);
+  if (looksLikeUrl) {
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+      const host = url.hostname.replace(/^www\./, '').toLowerCase();
+      if (host !== 'instagram.com') return '';
+      return cleanCandidate(url.pathname.replace(/^\/+/, ''));
+    } catch {
+      return '';
     }
-  } catch {
-    // Fall back to text cleanup below.
   }
 
-  return raw
-    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
-    .replace(/^@/, '')
-    .split(/[/?#\s]/)[0]
-    .trim()
-    .toLowerCase();
+  return cleanCandidate(raw);
 }
 
 export function isValidInstagram(value: unknown) {
-  const username = normalizeInstagramUsername(value);
-  if (!username || RESERVED_INSTAGRAM_PATHS.has(username)) return false;
-  return /^[a-z0-9._]{2,30}$/.test(username);
+  return Boolean(normalizeInstagramUsername(value));
 }

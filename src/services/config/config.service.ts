@@ -1,6 +1,7 @@
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { platformConfigService } from '../platform-config/platformConfig.service';
+import { normalizeInstagramUsername as normalizeInstagramHandle } from '../instagram/instagram.utils';
 import { assertAllTemplateMessages } from '../templates/templateContract';
 import { branchSlug, normalizeBranchId } from './branchIdentity';
 import {
@@ -331,12 +332,7 @@ function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordI
 }
 
 function normalizeInstagramUsername(value: unknown) {
-  return String(value ?? '')
-    .trim()
-    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
-    .replace(/^@/, '')
-    .split(/[/?#\s]/)[0]
-    .toLowerCase();
+  return normalizeInstagramHandle(value);
 }
 
 function normalizeInstagramInput(input: CreateConfigRecordInput | UpdateConfigRecordInput, existing?: InstagramConfigRecord): InstagramConfigRecord {
