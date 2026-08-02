@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-02T17:50:45.850Z",
+  "generatedAt": "2026-08-02T17:50:46.106Z",
   "source": "estrutura_banco_novo.sql",
   "baseTables": 27,
   "migrations": [
@@ -14,8 +14,9 @@
     "20260802131000_fix_instagram_identity_normalization.sql",
     "20260802140000_permanent_base_consolidation.sql",
     "20260802150000_instagram_execution_progress.sql",
-    "20260802160000_schema_release_manifest.sql"
+    "20260802160000_schema_release_manifest.sql",
+    "20260802170000_observability_recovery.sql"
   ],
   "baseSha256": "14824eb8aaeccfeab8fd1a480ef8e26662a723f10771e489ccef729a6ef407b4",
-  "bootstrapSha256": "f0be1c7b2657dec97e7b02c1575a29181450dc728e73a9bb387282b50738a208"
+  "bootstrapSha256": "b899cf2304fb7c649fe82508c747aa2dbd051c54befbf86bd552598584ff2c7e"
 }

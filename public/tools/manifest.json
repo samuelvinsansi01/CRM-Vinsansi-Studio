@@ -1,14 +1,14 @@
 {
-  "updatedAt": "2026-08-02T07:10:00-03:00",
+  "updatedAt": "2026-08-02T08:00:00-03:00",
   "tools": [
     {
       "id": "worker",
       "name": "Worker de envios",
-      "description": "Worker WhatsApp com configurações operacionais centralizadas no Supabase, Vault, lotes persistentes e idempotência por parte.",
-      "version": "3.5.0",
+      "description": "Worker WhatsApp com heartbeats, recuperação controlada, configurações centralizadas, Vault e idempotência.",
+      "version": "3.6.0",
       "path": "/tools/worker-latest.zip",
-      "fileName": "Worker_v3.5.0_configuracoes_centralizadas.zip",
-      "size": 6175021
+      "fileName": "Worker_v3.6.0_observabilidade_recuperacao.zip",
+      "size": 6176144
     },
     {
       "id": "instagram-extension",

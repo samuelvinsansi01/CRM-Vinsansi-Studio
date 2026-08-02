@@ -16,6 +16,7 @@ import { LoginPage } from './pages/LoginPage';
 import { QueuePage } from './pages/QueuePage';
 import { ValidationRoutingPage } from './pages/ValidationRoutingPage';
 import { ToolsPage } from './pages/ToolsPage';
+import { MonitoringPage } from './pages/MonitoringPage';
 import { pageTitles, type PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
 import { syncEvolutionInstances } from './services/evolution-instances/evolutionInstances.service';
@@ -122,6 +123,7 @@ export function App() {
 
       {activePage === 'account' ? <AccountPage /> : null}
       {activePage === 'tools' ? <ToolsPage /> : null}
+      {activePage === 'monitoring' ? <MonitoringPage /> : null}
       {activePage === 'audit' ? <AuditPage /> : null}
     </DashboardLayout>
   );

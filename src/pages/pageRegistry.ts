@@ -23,6 +23,7 @@ export type PageId =
   | 'config-template-types'
   | 'account'
   | 'tools'
+  | 'monitoring'
   | 'audit';
 
 export type NavItem = {
@@ -110,6 +111,7 @@ export const navGroups: readonly NavGroup[] = [
         label: 'Sistema',
         items: [
           { id: 'tools', label: 'Ferramentas' },
+          { id: 'monitoring', label: 'Monitoramento' },
         ],
       },
       {
@@ -148,5 +150,6 @@ export const pageTitles: Record<PageId, string> = {
   'config-template-types': 'Tipos de template',
   account: 'Minha conta',
   tools: 'Ferramentas',
+  monitoring: 'Monitoramento',
   audit: 'Auditoria',
 };

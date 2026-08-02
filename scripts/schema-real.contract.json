@@ -839,6 +839,139 @@
       "policies": [
         "permanent_record_snapshots_own_select"
       ]
+    },
+    "instagram_queue_progress": {
+      "primary_key": [
+        "instagram_queue_progress_id"
+      ],
+      "columns": [
+        "instagram_queue_progress_id",
+        "users_id",
+        "queue_items_id",
+        "socials_id",
+        "step",
+        "claim_token",
+        "claimed_by",
+        "attempts",
+        "last_heartbeat_at",
+        "started_at",
+        "finished_at",
+        "error_message",
+        "metadata",
+        "instagram_queue_progress_created_at",
+        "instagram_queue_progress_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "instagram_queue_progress_own_select"
+      ]
+    },
+    "instagram_dispatch_events": {
+      "primary_key": [
+        "instagram_dispatch_events_id"
+      ],
+      "columns": [
+        "instagram_dispatch_events_id",
+        "users_id",
+        "queue_items_id",
+        "socials_id",
+        "from_step",
+        "to_step",
+        "claim_token",
+        "actor",
+        "message",
+        "metadata",
+        "created_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "instagram_dispatch_events_own_select"
+      ]
+    },
+    "platform_schema_releases": {
+      "primary_key": [
+        "platform_schema_releases_id"
+      ],
+      "columns": [
+        "platform_schema_releases_id",
+        "release_key",
+        "application_version",
+        "migration_count",
+        "base_schema_sha256",
+        "notes",
+        "applied_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "platform_schema_releases_read"
+      ]
+    },
+    "worker_heartbeats": {
+      "primary_key": [
+        "worker_heartbeats_id"
+      ],
+      "columns": [
+        "worker_heartbeats_id",
+        "worker_id",
+        "worker_version",
+        "worker_status",
+        "started_at",
+        "last_seen_at",
+        "metrics",
+        "metadata"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "worker_heartbeats_authenticated_read"
+      ]
+    },
+    "operational_alerts": {
+      "primary_key": [
+        "operational_alerts_id"
+      ],
+      "columns": [
+        "operational_alerts_id",
+        "users_id",
+        "alert_key",
+        "source",
+        "severity",
+        "status",
+        "title",
+        "message",
+        "entity_type",
+        "entity_id",
+        "metadata",
+        "first_detected_at",
+        "last_detected_at",
+        "acknowledged_at",
+        "resolved_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "operational_alerts_own_select"
+      ]
+    },
+    "recovery_requests": {
+      "primary_key": [
+        "recovery_requests_id"
+      ],
+      "columns": [
+        "recovery_requests_id",
+        "users_id",
+        "requested_by",
+        "scope",
+        "status",
+        "worker_id",
+        "result",
+        "error_message",
+        "requested_at",
+        "started_at",
+        "finished_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "recovery_requests_own_select"
+      ]
     }
   }
 }

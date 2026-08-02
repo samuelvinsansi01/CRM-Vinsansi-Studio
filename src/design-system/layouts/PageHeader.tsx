@@ -15,6 +15,7 @@ const pageDescriptions: Record<string, string> = {
   'Fila WhatsApp': 'Acompanhe os lotes programados e controle os disparos pelo WhatsApp.',
   'Fila Instagram': 'Gerencie os lotes programados e acompanhe os envios pelo Instagram.',
   'Base Permanente': 'Consulte o historico completo dos leads processados pela plataforma.',
+  Monitoramento: 'Acompanhe Workers, filas, alertas e recuperações operacionais.',
   Auditoria: 'Detecte inconsistencias entre leads e filas e aplique reparos protegidos.',
   Chips: 'Gerencie chips, limites operacionais e status de cada instancia.',
   Ramos: 'Cadastre ramos principais, categorias vinculadas e palavras-chave.',
