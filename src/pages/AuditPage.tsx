@@ -4,6 +4,7 @@ import { Button, MetricCard, Pagination, Panel, RowsPerPageControl, Tag } from '
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useReconciliation } from '../hooks/useReconciliation';
+import { useAuditEvents } from '../hooks/useAuditEvents';
 import { useNotificationContext } from '../providers/NotificationProvider';
 import type { ReconciliationIssue, ReconciliationRepairAction, ReconciliationSeverity } from '../services/reconciliation/types';
 
@@ -44,6 +45,7 @@ function entityLabel(issue: ReconciliationIssue) {
 export function AuditPage() {
   const { push } = useNotificationContext();
   const { scan, loading, refreshing, repairingId, repairingSafe, error, refresh, repair, repairSafe } = useReconciliation();
+  const auditHistory = useAuditEvents(200);
   const [search, setSearch] = useState('');
   const [severity, setSeverity] = useState<'all' | ReconciliationSeverity>('all');
   const [repairability, setRepairability] = useState<'all' | 'repairable' | 'manual'>('all');
@@ -195,6 +197,35 @@ export function AuditPage() {
               <small>Mostrando {pageItems.length} de {visibleIssues.length} inconsistência(s)</small>
             </div>
             <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          </div>
+        ) : null}
+      </Panel>
+
+      <Panel
+        className="audit-panel"
+        title="Histórico persistente"
+        actions={<Button iconLeft={RefreshCcw} variant="secondary" loading={auditHistory.loading} onClick={() => void auditHistory.refresh()}>Atualizar histórico</Button>}
+      >
+        {auditHistory.error ? <div className="audit-state audit-state--error">{auditHistory.error}</div> : null}
+        {auditHistory.loading && !auditHistory.events.length ? <div className="audit-state">Carregando eventos persistentes...</div> : null}
+        {!auditHistory.loading && !auditHistory.events.length ? <div className="audit-state">Nenhum evento persistente registrado.</div> : null}
+        {auditHistory.events.length ? (
+          <div className="audit-table-wrap">
+            <table className="audit-table">
+              <thead><tr><th>Data</th><th>Origem</th><th>Ação</th><th>Entidade</th><th>Transição</th><th>Detalhes</th></tr></thead>
+              <tbody>
+                {auditHistory.events.map((event) => (
+                  <tr key={event.id}>
+                    <td>{formatDateTime(event.created_at)}</td>
+                    <td><Tag tone="neutral">{event.source}</Tag></td>
+                    <td><strong>{event.action}</strong></td>
+                    <td>{event.queueItemId ? `Fila ${event.queueItemId}` : event.leadId ? `Lead ${event.leadId}` : String(event.metadata?.entity_type ?? 'Sistema')}</td>
+                    <td>{event.metadata?.previous_status_id ?? '—'} → {event.metadata?.target_status_id ?? event.status ?? '—'}</td>
+                    <td><span>{event.message || String(event.metadata?.company_name ?? event.metadata?.reason ?? '') || '—'}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : null}
       </Panel>

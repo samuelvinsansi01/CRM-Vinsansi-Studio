@@ -672,6 +672,73 @@
       ],
       "rls_enabled": true,
       "policies": []
+    },
+    "user_operational_settings": {
+      "primary_key": [
+        "user_operational_settings_id"
+      ],
+      "columns": [
+        "user_operational_settings_id",
+        "users_id",
+        "dispatch_settings",
+        "import_settings",
+        "extension_runtime_config",
+        "operational_timezone",
+        "operational_cutoff_hour",
+        "settings_version",
+        "updated_by_auth_user_id",
+        "user_operational_settings_created_at",
+        "user_operational_settings_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "user_operational_settings_own_select"
+      ]
+    },
+    "audit_transition_rules": {
+      "primary_key": [
+        "audit_transition_rules_id"
+      ],
+      "columns": [
+        "audit_transition_rules_id",
+        "entity_type",
+        "from_status_id",
+        "to_status_id",
+        "action_key",
+        "is_active",
+        "created_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "audit_transition_rules_read"
+      ]
+    },
+    "audit_events": {
+      "primary_key": [
+        "audit_events_id"
+      ],
+      "columns": [
+        "audit_events_id",
+        "users_id",
+        "actor_auth_user_id",
+        "source",
+        "action",
+        "entity_type",
+        "entity_id",
+        "lead_id",
+        "queue_item_id",
+        "channel_id",
+        "previous_status_id",
+        "target_status_id",
+        "message",
+        "metadata",
+        "request_id",
+        "created_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "audit_events_own_select"
+      ]
     }
   }
 }
