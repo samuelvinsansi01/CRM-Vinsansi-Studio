@@ -247,7 +247,14 @@
         "leads_origin",
         "leads_created_at",
         "leads_updated_at",
-        "contact_sources_id"
+        "contact_sources_id",
+        "leads_normalized_phone",
+        "leads_normalized_instagram",
+        "leads_normalized_domain",
+        "leads_normalized_maps",
+        "leads_identity_hash",
+        "canonical_lead_id",
+        "duplicate_reason"
       ],
       "rls_enabled": true,
       "policies": [
@@ -738,6 +745,46 @@
       "rls_enabled": true,
       "policies": [
         "audit_events_own_select"
+      ]
+    },
+    "lead_identity_registry": {
+      "primary_key": [
+        "lead_identity_registry_id"
+      ],
+      "columns": [
+        "lead_identity_registry_id",
+        "users_id",
+        "identity_type",
+        "identity_value",
+        "canonical_lead_id",
+        "first_seen_at",
+        "last_seen_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "lead_identity_registry_own_select"
+      ]
+    },
+    "contact_suppressions": {
+      "primary_key": [
+        "contact_suppressions_id"
+      ],
+      "columns": [
+        "contact_suppressions_id",
+        "users_id",
+        "identity_type",
+        "identity_value",
+        "reason",
+        "source_lead_id",
+        "source_sent_id",
+        "is_active",
+        "expires_at",
+        "created_at",
+        "updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "contact_suppressions_own_select"
       ]
     }
   }

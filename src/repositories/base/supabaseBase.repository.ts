@@ -160,14 +160,14 @@ export const supabaseBaseRepository: BaseRepository = {
   },
 
   async listFinalIdentities(): Promise<FinalLeadIdentities> {
-    const records = await listAll();
-    const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
-    return {
-      phones: unique(records.map((lead) => lead.normalizedPhone ?? '')),
-      sites: unique(records.map((lead) => lead.normalizedSite ?? '')),
-      instagrams: unique(records.map((lead) => lead.normalizedInstagram ?? '')),
-      mapsUrls: unique(records.map((lead) => lead.mapsUrl ?? '')),
-    };
+    const response = await getSupabaseClient()
+      .from('contact_suppressions')
+      .select('identity_type,identity_value,expires_at')
+      .eq('is_active', true);
+    if (response.error) throw new Error(`Não foi possível carregar as supressões de contato: ${response.error.message}`);
+    const active = (response.data ?? []).filter((row) => !row.expires_at || new Date(String(row.expires_at)).getTime() > Date.now());
+    const values = (type: string) => Array.from(new Set(active.filter((row) => row.identity_type === type).map((row) => String(row.identity_value)).filter(Boolean)));
+    return { phones: values('phone'), sites: values('domain'), instagrams: values('instagram'), mapsUrls: values('maps') };
   },
 
   listByIds,

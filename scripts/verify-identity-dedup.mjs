@@ -1,0 +1,10 @@
+import { readFileSync } from 'node:fs';
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const assert = (v,m) => { if(!v) throw new Error(m); };
+const sql=read('supabase/migrations/20260802130000_identity_dedup_suppression.sql');
+const base=read('src/repositories/base/supabaseBase.repository.ts');
+for(const token of ['lead_identity_registry','contact_suppressions','prepare_lead_identity','register_lead_identity','check_lead_identity','suppress_after_lead_sent']) assert(sql.includes(token),`Ausente: ${token}`);
+assert(sql.includes('canonical_lead_id'), 'Vínculo canônico ausente.');
+assert(sql.includes("NEW.lead_status_id:=7"), 'Duplicata futura não é classificada no backend.');
+assert(base.includes("from('contact_suppressions')"), 'Importação ainda depende apenas da lista final de leads.');
+console.log('Etapa 7: identidade, deduplicação e supressão verificadas.');
