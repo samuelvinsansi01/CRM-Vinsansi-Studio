@@ -621,9 +621,9 @@ function applyRejection(draft: ImportLeadInput, rejection: Rejection, settings: 
 }
 
 function approveDraft(draft: ImportLeadInput, destination: ImportLeadDestination, reason: string) {
-  // Apenas WhatsApp segue aprovado automaticamente. Instagram, site proprio
-  // e agregadores exigem revisao manual no Inicio antes de avançar.
-  draft.status = destination === 'WhatsApp' ? 'approved' : 'pending';
+  // WhatsApp aguarda a confirmação persistida da Evolution; os demais destinos
+  // preservam a revisão operacional existente.
+  draft.status = destination === 'WhatsApp' ? 'review' : 'pending';
   draft.destino = destination;
   draft.original_destination = draft.original_destination && draft.original_destination !== 'Recusado' ? draft.original_destination : destination;
   draft.destination = draft.send_instagram ? 'Instagram' : destination;

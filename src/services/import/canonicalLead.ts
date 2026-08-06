@@ -94,7 +94,7 @@ function validateLead(lead: ImportLead, lookup: CanonicalLeadLookup, allowFinalS
   }
 
   const statusId = canonicalStatusId(lead.status);
-  if (!allowFinalStatus && statusId !== LEAD_STATUS.IMPORTED && statusId !== LEAD_STATUS.VALIDATED) {
+  if (!allowFinalStatus && statusId !== LEAD_STATUS.IMPORTED && statusId !== LEAD_STATUS.PRE_SEND && statusId !== LEAD_STATUS.VALIDATED) {
     throw new Error(`Status de importação não persistível: ${String(lead.status ?? '') || 'vazio'}.`);
   }
 }

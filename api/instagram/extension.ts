@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { normalizeInstagramProfile, verifyInstagramExtensionToken } from './token';
+import { normalizeInstagramUsername } from './identity';
+import { verifyInstagramExtensionToken } from './token';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void; end(): void };
@@ -49,7 +50,7 @@ async function tokenScope(req: ApiRequest): Promise<TokenScope> {
   const token = bearer(req);
   if (!token) throw new Error('extension_token_required');
   const payload = await verifyInstagramExtensionToken(token);
-  return { userId: String(payload.sub), profile: normalizeInstagramProfile(payload.profile) };
+  return { userId: String(payload.sub), profile: normalizeInstagramUsername(payload.profile) };
 }
 
 async function catalog(client: SupabaseClient) {
@@ -78,7 +79,7 @@ async function instagramChannelId(client: SupabaseClient) {
 async function socialForScope(client: SupabaseClient, scope: TokenScope) {
   const response = await client.from('socials').select('*').eq('users_id', Number(scope.userId));
   if (response.error) throw new Error(response.error.message);
-  const row = ((response.data ?? []) as RecordValue[]).find((item) => normalizeInstagramProfile(item.socials_username) === scope.profile);
+  const row = ((response.data ?? []) as RecordValue[]).find((item) => normalizeInstagramUsername(item.socials_username) === scope.profile);
   if (!row) throw new Error('instagram_profile_not_available_for_token');
   return row;
 }
@@ -127,7 +128,8 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
     const blockSize = 15;
     const progress = progressMap.get(String(item.queue_items_id)) ?? {};
     const status = text(progress.step) || semanticStatus(statusMap.get(String(item.status_id)) ?? item.status_id);
-    const instagramUrl = text(snapshotRecipient.instagram ?? snapshotLead.instagram ?? lead.leads_instagram);
+    const instagramRecipient = text(snapshotRecipient.instagram ?? snapshotLead.instagram ?? lead.leads_instagram);
+    const instagramUsername = normalizeInstagramUsername(instagramRecipient);
     const website = text(snapshotLead.site ?? lead.leads_website);
     return {
       id: String(item.queue_items_id),
@@ -147,8 +149,8 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
       phone: text(snapshotLead.phone ?? lead.leads_phone),
       parent_category: text(snapshotLead.branch_name ?? branch.branches_name),
       lead_type: website ? 'Com site' : 'Instagram',
-      instagram_url: instagramUrl,
-      instagram_username: normalizeInstagramProfile(instagramUrl),
+      instagram_username: instagramUsername,
+      recipient_error: instagramUsername ? '' : 'invalid_instagram_recipient_contract',
       message_1: text(snapshotMessages.message_1 ?? template.templates_message_1),
       message_2: text(snapshotMessages.message_2 ?? template.templates_message_2),
       message_3: text(snapshotMessages.message_3 ?? template.templates_message_3),
@@ -168,6 +170,9 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
 }
 
 async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, consumerId: string) {
+  const itemBeforeClaim = (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
+  if (!itemBeforeClaim) return null;
+  if (!itemBeforeClaim.instagram_username) throw new Error('invalid_instagram_recipient_contract');
   const social = await socialForScope(client, scope);
   const response = await client.rpc('instagram_claim_queue_item', {
     p_users_id: Number(scope.userId),
@@ -209,7 +214,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const body = bodyRecord(req.body);
     const action = text(body.action);
     const requestId = text(body.request_id);
-    if (normalizeInstagramProfile(body.profile_username) !== scope.profile) throw new Error('profile_scope_mismatch');
+    if (normalizeInstagramUsername(body.profile_username) !== scope.profile) throw new Error('profile_scope_mismatch');
     const client = serviceClient();
     const consumerId = text(body.consumer_id) || text(body.browser_id) || 'instagram-extension';
     if (action === 'queue') await client.rpc('instagram_recover_stale_items', { p_stale_before: new Date(Date.now() - 15 * 60 * 1000).toISOString() });
@@ -217,15 +222,40 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (action === 'claim_next') {
       const items = await loadItems(client, scope, text(body.scheduled_date));
       const block = Number(body.block_number ?? 0);
-      const candidate = items.find((item) => item.status === 'queued' && (!block || item.block_number === block));
-      return send(req, res, 200, { ok: true, request_id: requestId, item: candidate ? await claimItem(client, scope, candidate.id, consumerId) : null });
+      const candidates = items.filter((item) => item.status === 'queued' && (!block || item.block_number === block));
+      const skippedInvalidRecipient = candidates
+        .filter((item) => !item.instagram_username)
+        .map((item) => ({
+          id: item.id,
+          queue_item_id: item.queue_item_id,
+          lead_id: item.lead_id,
+          position: item.position,
+          block_number: item.block_number,
+          error: 'invalid_instagram_recipient_contract',
+        }));
+      const candidate = items.find((item) => item.status === 'queued' && (!block || item.block_number === block) && Boolean(item.instagram_username));
+      const claimedItem = candidate ? await claimItem(client, scope, candidate.id, consumerId) : null;
+      const iterationStatus = claimedItem
+        ? (skippedInvalidRecipient.length ? 'claimed_with_skipped_invalid_recipient' : 'claimed')
+        : candidate
+          ? 'claim_unavailable'
+          : skippedInvalidRecipient.length
+            ? 'invalid_instagram_recipients_only'
+            : 'empty';
+      return send(req, res, 200, {
+        ok: true,
+        request_id: requestId,
+        item: claimedItem,
+        iteration_status: iterationStatus,
+        skipped_invalid_recipient: skippedInvalidRecipient,
+      });
     }
     if (action === 'claim_item') return send(req, res, 200, { ok: true, request_id: requestId, item: await claimItem(client, scope, text(body.id), consumerId) });
     if (action === 'transition') return send(req, res, 200, { ok: true, request_id: requestId, item: await transition(client, scope, body) });
     return send(req, res, 400, { ok: false, request_id: requestId, error: 'action_invalid' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'instagram_extension_error';
-    const status = message.includes('token') ? 401 : message.includes('scope') || message.includes('not_available') ? 403 : message.includes('conflict') ? 409 : message.includes('not_configured') ? 503 : 500;
+    const status = message === 'invalid_instagram_recipient_contract' ? 422 : message.includes('token') ? 401 : message.includes('scope') || message.includes('not_available') ? 403 : message.includes('conflict') ? 409 : message.includes('not_configured') ? 503 : 500;
     return send(req, res, status, { ok: false, error: message, message });
   }
 }

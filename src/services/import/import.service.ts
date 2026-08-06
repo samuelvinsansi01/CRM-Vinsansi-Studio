@@ -5,7 +5,16 @@ import { isValidInstagram } from '../instagram/instagram.utils';
 import { normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
-import type { ImportExecutionOptions, ImportLead, ImportLeadInput, ImportListFilters } from './types';
+import { guardImportPersistence } from './importPersistence.guard';
+import type {
+  ImportActionResult,
+  ImportExecutionOptions,
+  ImportLead,
+  ImportLeadInput,
+  ImportListFilters,
+  ImportMutationResult,
+  ImportPersistenceResult,
+} from './types';
 
 type BulkImportAction = 'approve' | 'reject' | 'unapprove' | 'invalidate' | 'archive';
 
@@ -14,7 +23,7 @@ function compactStrings(values: Array<string | undefined>) {
 }
 
 async function listOperationalLeads() {
-  const statuses: ImportListFilters['status'][] = ['pending', 'approved', 'rejected', 'invalid', 'archived'];
+  const statuses: ImportListFilters['status'][] = ['pending', 'review', 'approved', 'rejected', 'invalid', 'archived'];
   const groups = await Promise.all(statuses.map((status) => repositories.import.list({ status })));
   const byId = new Map<string, ImportLead>();
   groups.flat().forEach((lead) => byId.set(lead.id, lead));
@@ -89,8 +98,10 @@ export const importService = {
 
   async importFromJson(jsonText: string, options?: ImportExecutionOptions) {
     const finalIdentities = await repositories.base.listFinalIdentities();
+    const persistence = await guardImportPersistence(options?.simulate === true);
     const result = await repositories.import.importFromJson(jsonText, {
       ...options,
+      simulate: persistence.simulation,
       context: {
         ...(options?.context ?? {}),
         baseLeadIds: [],
@@ -104,20 +115,78 @@ export const importService = {
     return result;
   },
 
-  async persistLeads(leads: ImportLead[], options?: ImportExecutionOptions) {
+  async persistLeads(leads: ImportLead[], options?: ImportExecutionOptions): Promise<ImportPersistenceResult> {
+    const persistence = await guardImportPersistence();
+    if (!persistence.allowed) {
+      return {
+        created: [],
+        duplicateClientIds: [],
+        simulation: true,
+        persisted: false,
+        eligible: leads.length,
+        reason: 'simulation_mode',
+      };
+    }
     const result = await repositories.import.persist(leads, options);
     if (result.created.length) eventBus.emit('import:changed', { source: 'json' });
-    return result;
+    return {
+      ...result,
+      simulation: false,
+      persisted: true,
+      eligible: leads.length,
+      reason: null,
+    };
   },
 
-  async create(input: ImportLeadInput) {
+  async createFromImport(input: ImportLeadInput): Promise<ImportMutationResult> {
+    const persistence = await guardImportPersistence();
+    if (!persistence.allowed) {
+      return { simulation: true, persisted: false, lead: null, reason: 'simulation_mode' };
+    }
     const lead = await repositories.import.create(input);
     eventBus.emit('import:changed', { source: 'manual' });
-    return lead;
+    return { simulation: false, persisted: true, lead, reason: null };
+  },
+
+  async updateFromImport(id: string, input: Partial<ImportLeadInput>): Promise<ImportMutationResult> {
+    const persistence = await guardImportPersistence();
+    if (!persistence.allowed) {
+      return { simulation: true, persisted: false, lead: null, reason: 'simulation_mode' };
+    }
+    const lead = await this.update(id, input);
+    return { simulation: false, persisted: true, lead, reason: null };
+  },
+
+  async removeFromImport(id: string): Promise<ImportActionResult> {
+    const persistence = await guardImportPersistence();
+    if (!persistence.allowed) {
+      return { simulation: true, persisted: false, reason: 'simulation_mode' };
+    }
+    await this.remove(id);
+    return { simulation: false, persisted: true, reason: null };
+  },
+
+  async moveFromImport(id: string, status: 'approved' | 'rejected'): Promise<ImportMutationResult> {
+    const persistence = await guardImportPersistence();
+    if (!persistence.allowed) {
+      return { simulation: true, persisted: false, lead: null, reason: 'simulation_mode' };
+    }
+    const lead = await this.move(id, status);
+    return { simulation: false, persisted: true, lead, reason: null };
+  },
+
+  async moveManyFromImport(ids: string[], status: 'approved' | 'rejected'): Promise<ImportActionResult> {
+    const persistence = await guardImportPersistence();
+    if (!persistence.allowed) {
+      return { simulation: true, persisted: false, reason: 'simulation_mode' };
+    }
+    await bulkUpdate(ids, status === 'approved' ? 'approve' : 'reject');
+    return { simulation: false, persisted: true, reason: null };
   },
 
   async update(id: string, input: Partial<ImportLeadInput>) {
     const current = (await repositories.import.list({ status: 'approved' })).find((lead) => lead.id === id)
+      ?? (await repositories.import.list({ status: 'review' })).find((lead) => lead.id === id)
       ?? (await repositories.import.list({ status: 'pending' })).find((lead) => lead.id === id)
       ?? (await repositories.import.list({ status: 'rejected' })).find((lead) => lead.id === id);
     if (current) {

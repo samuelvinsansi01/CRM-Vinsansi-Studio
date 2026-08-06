@@ -1,3 +1,6 @@
+import { normalizeInstagramUsername } from './identity';
+export { normalizeInstagramUsername as normalizeInstagramProfile } from './identity';
+
 type ExtensionTokenPayload = {
   v: 1;
   iss: 'painel-crm';
@@ -56,16 +59,6 @@ async function hmac(value: string) {
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value)));
 }
 
-export function normalizeInstagramProfile(value: unknown) {
-  return String(value ?? '')
-    .trim()
-    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
-    .replace(/^@+/, '')
-    .split(/[/?#\s]/)[0]
-    .replace(/[^a-zA-Z0-9._]/g, '')
-    .toLowerCase();
-}
-
 export async function issueInstagramExtensionToken(input: { userId: string; profile: string; ttlSeconds?: number }) {
   const now = Math.floor(Date.now() / 1000);
   const ttl = Math.min(12 * 60 * 60, Math.max(15 * 60, Number(input.ttlSeconds ?? 6 * 60 * 60)));
@@ -74,7 +67,7 @@ export async function issueInstagramExtensionToken(input: { userId: string; prof
     iss: 'painel-crm',
     aud: 'instagram-extension',
     sub: String(input.userId),
-    profile: normalizeInstagramProfile(input.profile),
+    profile: normalizeInstagramUsername(input.profile),
     iat: now,
     exp: now + ttl,
     jti: crypto.randomUUID(),
@@ -105,7 +98,7 @@ export async function verifyInstagramExtensionToken(token: string): Promise<Exte
   if (payload.v !== 1 || payload.iss !== 'painel-crm' || payload.aud !== 'instagram-extension' || !payload.sub || !payload.profile || !payload.jti) throw new Error('instagram_extension_token_invalid');
   if (!Number.isFinite(payload.exp) || payload.exp <= now) throw new Error('instagram_extension_token_expired');
   if (!Number.isFinite(payload.iat) || payload.iat > now + 60 || payload.exp - payload.iat > 12 * 60 * 60) throw new Error('instagram_extension_token_invalid');
-  payload.profile = normalizeInstagramProfile(payload.profile);
+  payload.profile = normalizeInstagramUsername(payload.profile);
   if (!payload.profile) throw new Error('instagram_extension_token_invalid');
   return payload;
 }

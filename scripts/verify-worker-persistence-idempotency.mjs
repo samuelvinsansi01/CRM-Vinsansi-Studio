@@ -38,7 +38,7 @@ assert(!workerSource.includes('const controls = new Map()'), 'Lote ainda depende
 
 assert(service.includes('O Worker persiste qualquer item que chegou a reivindicar'), 'Painel ainda pode sobrescrever o estado canônico do Worker.');
 assert(!service.includes('Itens movidos para erro e prontos para reprocessamento'), 'Fluxo antigo de erro forçado pelo frontend permanece ativo.');
-assert(dispatchApi.includes("payload?.ok===false&&!Array.isArray(payload?.results)"), 'Proxy descarta resultados parciais do Worker.');
+assert(dispatchApi.includes('send(res,410') && !dispatchApi.includes('callWorker'), 'Endpoint direto do WhatsApp não foi descontinuado de forma fail-closed.');
 assert(batchApi.includes("'state','status'"), 'Proxy de lote não aceita a ação status usada pelo frontend.');
 
 assert(/^3\.(?:[3-9]|[1-9]\d)\.\d+$/.test(String(worker?.version ?? '')), 'Manifesto não publica Worker 3.3.0 ou superior.');

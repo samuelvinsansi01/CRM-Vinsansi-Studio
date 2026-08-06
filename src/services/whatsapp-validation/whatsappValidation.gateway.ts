@@ -14,6 +14,9 @@ export type WhatsAppValidationResult = {
   status: 'valid' | 'invalid' | 'error';
   valid: boolean;
   errorMessage?: string;
+  outcome?: 'approved' | 'revalidated' | 'redirected' | 'invalidated' | 'error';
+  persisted?: boolean;
+  proofValid?: boolean;
 };
 
 export interface WhatsAppValidationGateway {
@@ -35,11 +38,11 @@ export class WhatsAppValidationUnavailableError extends Error {
 }
 
 function initialValidationEndpoint() {
-  return String(import.meta.env.VITE_WHATSAPP_WORKER_VALIDATE_ENDPOINT ?? '/api/whatsapp/validate').trim();
+  return '/api/whatsapp/validate';
 }
 
 function revalidationEndpoint() {
-  return String(import.meta.env.VITE_WHATSAPP_WORKER_REVALIDATE_ENDPOINT ?? '/api/whatsapp/revalidate').trim();
+  return '/api/whatsapp/revalidate';
 }
 
 function resultLeadId(result: Record<string, unknown>) {
@@ -63,24 +66,32 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
   if (!result || typeof result !== 'object') return null;
   const record = result as Record<string, unknown>;
   const leadId = resultLeadId(record);
-  if (!leadId) return null;
+  const outcome = String(record.outcome ?? '') as WhatsAppValidationResult['outcome'];
+  const allowedOutcomes = new Set(['approved', 'revalidated', 'redirected', 'invalidated', 'error']);
+  if (!leadId || record.persisted !== true || !allowedOutcomes.has(String(outcome))) return null;
 
   const explicit = booleanLike(record.valid ?? record.exists ?? record.hasWhatsapp ?? record.has_whatsapp ?? record.isWhatsapp ?? record.is_whatsapp);
   const status = String(record.status ?? record.result ?? '').toLowerCase();
   const invalidStatus = ['invalid', 'whatsapp_invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
 
   if (explicit === false || invalidStatus) {
-    return { leadId, status: 'invalid', valid: false, errorMessage: resultError(record) };
+    if (outcome !== 'redirected' && outcome !== 'invalidated') return null;
+    return { leadId, status: 'invalid', valid: false, errorMessage: resultError(record), outcome, persisted: true, proofValid: false };
   }
 
   if (explicit === true) {
-    return { leadId, status: 'valid', valid: true };
+    if ((outcome !== 'approved' && outcome !== 'revalidated') || record.proofValid !== true) return null;
+    return { leadId, status: 'valid', valid: true, outcome, persisted: true, proofValid: true };
   }
 
+  if (outcome !== 'error') return null;
   return {
     leadId,
     status: 'error',
     valid: false,
+    outcome: 'error',
+    persisted: true,
+    proofValid: false,
     errorMessage: resultError(record) ?? 'Worker nao retornou confirmação explícita de WhatsApp para este lead.',
   };
 }

@@ -8,8 +8,7 @@ import { SettingsOverviewPage } from './pages/ConfigurationPages';
 import { CatalogCrudPage } from './pages/CatalogCrudPage';
 import { ChannelsPage } from './pages/ChannelsPage';
 import { ConversationsPage } from './pages/ConversationsPage';
-import { ImportRulesPage } from './pages/ImportRulesPage';
-import { ValidationRulesSettingsPage } from './pages/ValidationRulesSettingsPage';
+import { ImportSettingsPage } from './pages/ImportSettingsPage';
 import { ConfigTablePage } from './pages/ConfigTablePage';
 import { HomePage } from './pages/HomePage';
 import { ImportPage } from './pages/ImportPage';
@@ -31,7 +30,11 @@ const legacyPageMap: Record<string, PageId> = {
   'instagram-settings': 'sender-instagram',
   branches: 'message-branches',
   templates: 'message-templates',
-  'import-settings': 'config-import-apify',
+  'import-settings': 'config-import-rules',
+  'config-validation-rules': 'validation-routing',
+  'validation-rules': 'validation-routing',
+  'validation-settings': 'validation-routing',
+  'validation-rules-settings': 'validation-routing',
 };
 
 function initialPage(): PageId {
@@ -115,8 +118,7 @@ export function App() {
       {activePage === 'settings' ? <SettingsOverviewPage onNavigate={setActivePage} /> : null}
       {activePage === 'config-import-apify' ? <ApifyAccountsPage /> : null}
       {activePage === 'config-contact-sources' ? <CatalogCrudPage kind="contact_sources" /> : null}
-      {activePage === 'config-import-rules' ? <ImportRulesPage /> : null}
-      {activePage === 'config-validation-rules' ? <ValidationRulesSettingsPage /> : null}
+      {activePage === 'config-import-rules' ? <ImportSettingsPage /> : null}
       {activePage === 'config-channels' ? <ChannelsPage /> : null}
       {activePage === 'config-levels' ? <CatalogCrudPage kind="levels" /> : null}
       {activePage === 'config-instances' ? <CatalogCrudPage kind="instances" /> : null}

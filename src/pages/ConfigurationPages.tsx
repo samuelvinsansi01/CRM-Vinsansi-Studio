@@ -1,4 +1,4 @@
-import { ArrowRight, Database, MessageSquareText, Route, Settings2 } from 'lucide-react';
+import { ArrowRight, Database, MessageSquareText, Settings2 } from 'lucide-react';
 import { Button, Panel, Tag } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import type { PageId } from './pageRegistry';
@@ -23,14 +23,6 @@ const sections: SettingsSection[] = [
       { label: 'Contas Apify', page: 'config-import-apify', ready: true },
       { label: 'Fontes de contato', page: 'config-contact-sources', ready: true },
       { label: 'Critérios de importação', page: 'config-import-rules', ready: true },
-    ],
-  },
-  {
-    title: 'Validação e roteamento',
-    description: 'Origem elegível, canal validado e fallback operacional.',
-    icon: Route,
-    items: [
-      { label: 'Regras de validação', page: 'config-validation-rules', ready: true },
     ],
   },
   {

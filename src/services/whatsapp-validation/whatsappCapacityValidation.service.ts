@@ -77,7 +77,7 @@ async function moveImportedCandidate(row: LeadDatabaseRow, whatsappChannelId: nu
 function addValidationResult(target: WhatsAppCapacityValidationResult, batch: WhatsAppValidationBatchResult) {
   target.candidatesChecked += batch.requested;
   target.providerChecked += batch.providerChecked;
-  target.approved += batch.approved;
+  target.approved += batch.approved + batch.revalidated;
   target.redirectedToInstagram += batch.redirectedToInstagram;
   target.invalidated += batch.invalidated;
   target.errors += batch.errors;
@@ -158,11 +158,16 @@ export const whatsappCapacityValidationService = {
       }
 
       const whatsappChannelId = Number(await channelId('WhatsApp'));
-      const [preSend, imported] = await Promise.all([
+      const missingProofIds = new Set(initialSnapshot.leads
+        .filter((lead) => lead.requiresWhatsAppValidation)
+        .map((lead) => lead.id));
+      const [validated, preSend, imported] = await Promise.all([
+        supabaseLeadCycleRepository.listByStatuses([LEAD_STATUS.VALIDATED], whatsappChannelId),
         supabaseLeadCycleRepository.listByStatuses([LEAD_STATUS.PRE_SEND], whatsappChannelId),
         supabaseLeadCycleRepository.listByStatuses([LEAD_STATUS.IMPORTED], whatsappChannelId),
       ]);
-      const candidates = [...preSend, ...imported].sort(candidateOrder);
+      const legacyWithoutProof = validated.filter((row) => missingProofIds.has(String(row.leads_id)));
+      const candidates = [...legacyWithoutProof, ...preSend, ...imported].sort(candidateOrder);
       let cursor = 0;
 
       while (validationSlots > 0 && cursor < candidates.length) {
@@ -173,11 +178,17 @@ export const whatsappCapacityValidationService = {
 
         const targetBatchSize = Math.max(1, Math.min(validationSlots, currentResource.available, currentResource.batchSize));
         const batchIds: string[] = [];
+        const batchMode = candidates[cursor]?.lead_status_id === LEAD_STATUS.VALIDATED ? 'revalidation' : 'initial';
 
         while (batchIds.length < targetBatchSize && cursor < candidates.length) {
-          const candidate = candidates[cursor++];
+          const candidate = candidates[cursor];
+          const candidateMode = candidate.lead_status_id === LEAD_STATUS.VALIDATED ? 'revalidation' : 'initial';
+          if (candidateMode !== batchMode) break;
+          cursor += 1;
           try {
-            const ready = await moveImportedCandidate(candidate, whatsappChannelId, result.auditWarnings);
+            const ready = batchMode === 'revalidation'
+              ? true
+              : await moveImportedCandidate(candidate, whatsappChannelId, result.auditWarnings);
             if (!ready) {
               result.conflicts += 1;
               result.failures.push({
@@ -198,13 +209,16 @@ export const whatsappCapacityValidationService = {
         }
 
         if (!batchIds.length) continue;
-        const validation = await whatsappValidationService.validateInitialWithChip(batchIds, resource.id);
+        const validation = batchMode === 'revalidation'
+          ? await whatsappValidationService.revalidateApprovedWithChip(batchIds, resource.id)
+          : await whatsappValidationService.validateInitialWithChip(batchIds, resource.id);
         addValidationResult(result, validation);
 
         // Apenas confirmações válidas consomem o orçamento de validação do chip.
         // Inválidos, redirecionados e erros liberam a vaga para o próximo candidato.
-        validationSlots = Math.max(0, validationSlots - validation.approved);
-        await enqueueReadyValidated(validation.approvedIds, requestedDate, resource.id, result, false);
+        const confirmedIds = [...validation.approvedIds, ...validation.revalidatedIds];
+        validationSlots = Math.max(0, validationSlots - confirmedIds.length);
+        await enqueueReadyValidated(confirmedIds, requestedDate, resource.id, result, false);
       }
 
       const finalSnapshot = await queuePreparationService.snapshot('WhatsApp', requestedDate, resource.id);

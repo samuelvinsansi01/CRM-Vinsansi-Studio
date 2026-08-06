@@ -98,7 +98,16 @@ function formatRejectionReasons(result: ImportParseResult) {
   return ` Motivos das recusas: ${reasons.map((reason) => `${reason.label}: ${reason.count}`).join('; ')}.`;
 }
 
+function eligibleCount(result: ImportParseResult) {
+  return result.leads.filter((lead) => isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending') || isStatusGroup(lead.status, 'review')).length;
+}
+
+function formatSimulationSummary(result: ImportParseResult) {
+  return `${eligibleCount(result)} elegível(is), ${result.report.rejected} recusado(s), ${result.report.duplicates} duplicado(s) e 0 lead(s) persistido(s) por causa da simulação.`;
+}
+
 function formatApifyImportSummary(result: ImportParseResult) {
+  if (result.report.simulation) return formatSimulationSummary(result);
   return `${result.report.processed} processado(s): ${result.report.created} criado(s), ${result.report.duplicates} duplicado(s) e ${result.report.rejected} recusado(s).${formatRejectionReasons(result)}`;
 }
 
@@ -146,7 +155,8 @@ function DestinationTextBadge({ value }: { value?: string | null }) {
   return <Tag tone={destinationTone(value)}>{label}</Tag>;
 }
 
-function apifyStatusLabel(job: ApifyImportJob) {
+function apifyStatusLabel(job: ApifyImportJob, simulated = false) {
+  if (simulated) return 'Simulado';
   if (job.importedAt) return 'Importado';
   if (job.status === 'starting') return 'Iniciando';
   if (job.status === 'ready') return 'Pronto';
@@ -315,6 +325,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const [jobDetailsLoading, setJobDetailsLoading] = useState(false);
   const [importTab, setImportTab] = useState<'Apify' | 'Manual'>('Apify');
   const [startingApify, setStartingApify] = useState(false);
+  const [simulatedApifyJobIds, setSimulatedApifyJobIds] = useState<Set<number>>(() => new Set());
 
   const { settings: importSettings } = useImportSettings();
   const { activeAccounts: apifyAccounts, loading: loadingApifyAccounts, error: apifyAccountsError } = useApifyAccounts();
@@ -331,7 +342,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const apifyJobById = useMemo(() => new Map(apifyJobs.map((job) => [job.jobId, job])), [apifyJobs]);
   const apifyRunRows = useMemo<ApifyRunRow[]>(() => pagedApifyJobs.map((job) => ({
     jobId: job.jobId,
-    status: apifyStatusLabel(job),
+    status: apifyStatusLabel(job, simulatedApifyJobIds.has(job.jobId)),
     account: job.accountName,
     branch: job.branchName,
     location: job.location,
@@ -340,7 +351,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     duplicates: job.totalDuplicates,
     rejected: job.totalRejected,
     date: job.createdAt ? new Date(job.createdAt).toLocaleString('pt-BR') : '—',
-  })), [pagedApifyJobs]);
+  })), [pagedApifyJobs, simulatedApifyJobIds]);
   const apifyRunColumns: TableColumn<ApifyRunRow>[] = useMemo(() => [
     { key: 'status', label: 'Status', width: '11%', render: (row) => {
       const job = apifyJobById.get(row.jobId);
@@ -519,10 +530,12 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
     try {
       const importedResult = await importJson(JSON.stringify(claim.items), {
-        simulate: false,
         apifyImportJobId: jobId,
         origin: 'apify',
       });
+      if (importedResult.report.simulation) {
+        setSimulatedApifyJobIds((current) => new Set(current).add(jobId));
+      }
       setLastImport(importedResult);
       setSearch('');
       setPage(1);
@@ -571,7 +584,11 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       const result = await processApifyJob(job.jobId, false);
       await loadApifyJobs();
       if (result) {
-        pushToast({ title: 'Dataset importado', description: formatApifyImportSummary(result), tone: result.report.rejected > 0 ? 'warning' : 'success' });
+        pushToast({
+          title: result.report.simulation ? 'Simulação do dataset concluída' : 'Dataset importado',
+          description: formatApifyImportSummary(result),
+          tone: result.report.simulation ? 'info' : result.report.rejected > 0 ? 'warning' : 'success',
+        });
       } else {
         pushToast({ title: 'Run sincronizado', description: 'O job foi atualizado. Se já estava importado, nenhuma duplicação foi executada.', tone: 'success' });
       }
@@ -609,9 +626,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         const importedResult = await processApifyJob(pendingJob.jobId);
         if (!importedResult) return;
         pushToast({
-          title: 'Coleta anterior recuperada',
+          title: importedResult.report.simulation ? 'Coleta anterior recuperada em simulação' : 'Coleta anterior recuperada',
           description: formatApifyImportSummary(importedResult),
-          tone: importedResult.report.rejected > 0 ? 'warning' : 'success',
+          tone: importedResult.report.simulation ? 'info' : importedResult.report.rejected > 0 ? 'warning' : 'success',
         });
       } catch (err) {
         pushToast({ title: 'Não foi possível recuperar a coleta', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
@@ -642,7 +659,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       });
       pushToast({
         title: 'Coleta iniciada',
-        description: `A conta ${result.account?.name ?? result.accountName} iniciou o Google Maps Extractor. Execução: ${result.runId}.`,
+        description: `A conta ${result.account?.name ?? result.accountName} iniciou o Google Maps Extractor. Execução: ${result.runId}.${simulateImport ? ' A coleta pode consumir créditos do Apify, mas nenhum lead será persistido.' : ''}`,
         tone: 'success',
       });
 
@@ -653,9 +670,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       }
       await loadApifyJobs();
       pushToast({
-        title: 'Coleta validada e importada',
+        title: importedResult.report.simulation ? 'Coleta validada em simulação' : 'Coleta validada e importada',
         description: formatApifyImportSummary(importedResult),
-        tone: importedResult.report.rejected > 0 ? 'warning' : 'success',
+        tone: importedResult.report.simulation ? 'info' : importedResult.report.rejected > 0 ? 'warning' : 'success',
       });
     } catch (err) {
       pushToast({ title: 'Não foi possível concluir a coleta', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
@@ -680,7 +697,11 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         return;
       }
 
-      await updateLead(editingLead.id, formToInput(leadForm, editingLead.status, editingLead));
+      const updateResult = await updateLead(editingLead.id, formToInput(leadForm, editingLead.status, editingLead));
+      if (updateResult?.simulation) {
+        pushToast({ title: 'Simulação ativa', description: 'A alteração foi bloqueada e nenhum lead foi atualizado.', tone: 'info' });
+        return;
+      }
       closeDrawer();
       pushToast({
         title: 'Lead atualizado',
@@ -698,7 +719,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     if (!manualLead.empresa.trim()) return;
 
     try {
-      await createLead({
+      const createResult = await createLead({
         empresa: manualLead.empresa,
         ramo: importSettings?.branchRules[0]?.branch ?? '',
         destino: manualLead.instagram && !manualLead.whatsapp ? 'Instagram' : 'WhatsApp',
@@ -707,7 +728,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         destination_override: undefined,
         send_instagram: false,
         instagram_url: manualLead.instagram,
-        status: 'approved',
+        status: manualLead.instagram && !manualLead.whatsapp ? 'pending' : 'review',
         whatsapp: manualLead.whatsapp,
         instagram: manualLead.instagram,
         site: '',
@@ -715,33 +736,48 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         estado: '',
         motivo: '',
       });
+      if (createResult.simulation) {
+        pushToast({ title: 'Simulação ativa', description: 'O cadastro foi bloqueado e nenhum lead foi persistido.', tone: 'info' });
+        return;
+      }
       setManualLead({ empresa: '', whatsapp: '', instagram: '' });
       setPage(1);
       setSelectedRows([]);
-      pushToast({ title: 'Lead adicionado', description: 'Lead salvo no banco e incluído na lista de aprovados.', tone: 'success' });
+      pushToast({ title: 'Lead adicionado', description: createResult.lead?.destination === 'WhatsApp' ? 'Lead salvo aguardando validação WhatsApp.' : 'Lead salvo para revisão do Instagram.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Não foi possível adicionar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
   };
 
   const approveLeads = async () => {
+    setIsImporting(true);
     try {
       const result = await importJson(jsonText, { simulate: true });
-      const created = await sendApprovedToInicio(result.leads);
+      const persistence = await sendApprovedToInicio(result.leads);
       setLastImport(result);
       setPage(1);
       setSelectedRows([]);
-      if (!created.length) {
+      if (persistence.simulation) {
+        pushToast({
+          title: 'Simulação concluída',
+          description: formatSimulationSummary(result),
+          tone: result.report.rejected > 0 ? 'warning' : 'info',
+        });
+        return;
+      }
+      if (!persistence.created.length) {
         pushToast({ title: 'Nenhum lead elegível', description: 'Nao ha aprovados ou leads em aguarde novos para mandar ao Inicio.', tone: 'warning' });
         return;
       }
       pushToast({
         title: 'Leads enviados ao Início',
-        description: `${created.length} lead(s) aprovado(s) ou em aguarde enviado(s) ao Início.`,
+        description: `${persistence.created.length} lead(s) aprovado(s) ou em aguarde enviado(s) ao Início.`,
         tone: 'success',
       });
     } catch (err) {
       pushToast({ title: 'Erro ao aprovar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -750,7 +786,15 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     const persisted = /^\d+$/.test(deleteLead.id);
 
     try {
-      await removeLead(deleteLead.id);
+      const result = await removeLead(deleteLead.id);
+      if (result?.simulation) {
+        pushToast({
+          title: 'Ação bloqueada pela simulação',
+          description: 'O lead persistido não foi alterado.',
+          tone: 'info',
+        });
+        return;
+      }
       setDeleteLead(null);
       pushToast({
         title: persisted ? 'Lead arquivado' : 'Item removido da prévia',
@@ -780,7 +824,15 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
   const runBulkMove = async (nextStatus: 'approved' | 'rejected') => {
     try {
-      await moveMany(selectedIds, nextStatus);
+      const result = await moveMany(selectedIds, nextStatus);
+      if (result?.simulation) {
+        pushToast({
+          title: 'Ação bloqueada pela simulação',
+          description: 'Nenhum lead persistido foi alterado.',
+          tone: 'info',
+        });
+        return;
+      }
       setSelectedRows([]);
       pushToast({
         title: nextStatus === 'approved' ? 'Leads aprovados' : 'Leads recusados',
@@ -815,6 +867,12 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   return (
     <div className="import-page">
       <PageHeader title="Importar" />
+      {simulateImport ? (
+        <div className="import-simulation-banner" role="status">
+          <strong>Modo de simulação ativo.</strong>
+          <span>Os leads serão analisados, mas não serão gravados.</span>
+        </div>
+      ) : null}
       <section className="import-metrics">
         <div className="metric-grid metric-grid--4">
           <MetricCard icon={Users} value={String(summary.total)} label="Total" />
@@ -839,6 +897,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         <>
         <Panel title="Google Maps Extractor" className="import-extractor-panel">
           <p>Escolha manualmente a conta que será usada nesta coleta. A plataforma não troca a conta automaticamente.</p>
+          {simulateImport ? <p className="import-simulation-note">A coleta pode consumir créditos do Apify, mas nenhum lead será persistido.</p> : null}
           <div className="import-extractor-fields">
             <label className="field import-select-field">
               <span className="field__label">Conta Apify</span>
@@ -947,7 +1006,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             />
             <div className="import-json__actions">
               <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
-              <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>Aprovar leads</Button>
+              <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>{simulateImport ? 'Executar simulação' : 'Aprovar leads'}</Button>
             </div>
           </Panel>
 
@@ -959,7 +1018,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             </div>
             <div className="manual-validation__actions">
               <Button variant="secondary" disabled={!manualLead.empresa} onClick={() => setManualLead({ empresa: '', whatsapp: '', instagram: '' })}>Limpar</Button>
-              <Button disabled={!manualLead.empresa} onClick={addManualLead}>Adicionar lead</Button>
+              <Button disabled={!manualLead.empresa || simulateImport} onClick={addManualLead}>Adicionar lead</Button>
             </div>
           </Panel>
         </section>
@@ -1026,6 +1085,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               <span>{selectedJob.location} · {selectedJob.status}</span>
               <span>Run ID: {selectedJob.runId ?? '—'} · Dataset ID: {selectedJob.datasetId ?? '—'}</span>
               <span>Ramo pesquisado: {selectedJob.branchName} · Limite: {selectedJob.requestedLimit || '—'}</span>
+              {simulatedApifyJobIds.has(selectedJob.jobId) ? <span>Processado em modo de simulação nesta sessão; nenhum lead foi persistido.</span> : null}
               {selectedJob.errorMessage ? <span className="table-message">{selectedJob.errorMessage}</span> : null}
             </div>
             {jobDetailsLoading ? <div className="table-message">Carregando JSON e resultados...</div> : null}
@@ -1050,7 +1110,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           drawerMode === 'edit' ? (
             <>
               <Button variant="secondary" onClick={() => editingLead ? openLeadDrawer(editingLead, 'view') : closeDrawer()}>Cancelar</Button>
-              <Button loading={saving} onClick={saveEditedLead}>Salvar</Button>
+              <Button loading={saving} disabled={simulateImport && Boolean(editingLead && /^\d+$/.test(editingLead.id))} onClick={saveEditedLead}>Salvar</Button>
             </>
           ) : (
             <>

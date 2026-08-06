@@ -12,7 +12,7 @@ const validationRules = read('src/pages/ValidationRulesSettingsPage.tsx');
 
 assert(!css.includes('var(--space-18)'), 'Menu ainda usa token inexistente --space-18.');
 assert(css.includes('.nav-link {') && css.includes('gap: var(--space-20)'), 'Espaçamento visível do menu não foi fixado.');
-for (const route of ['message-variables','config-contact-sources','config-import-rules','config-validation-rules','config-channels','config-levels','config-instances','config-template-channels','config-template-types']) {
+for (const route of ['message-variables','config-contact-sources','config-import-rules','config-channels','config-levels','config-instances','config-template-channels','config-template-types']) {
   assert(app.includes(`activePage === '${route}'`), `Rota funcional ausente: ${route}`);
 }
 assert(!app.includes('ConfigurationPlaceholderPage'), 'App ainda renderiza páginas placeholder.');
@@ -23,9 +23,11 @@ assert(!repo.includes("select('instances_id,status_id,instances_name,instances_u
 assert(catalogPage.includes('create(form)') && catalogPage.includes('update(editing.id, form)') && catalogPage.includes('remove(deleting.id)'), 'CRUD de catálogos incompleto.');
 assert(importRules.includes('saveImportRules'), 'Formulário import_rules não salva.');
 assert(validationRules.includes('saveValidationRules'), 'Formulário validation_rules não salva.');
+assert(!app.includes("activePage === 'config-validation-rules'"), 'App ainda monta a configuração validation_rules descontinuada.');
+assert(app.includes("'config-validation-rules': 'validation-routing'"), 'ID legado de validation_rules não redireciona para validation-routing.');
 
 if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log('Configurações funcionais aprovadas: menu espaçado, 9 rotas reais, CRUDs e formulários globais.');
+console.log('Configurações funcionais aprovadas: menu espaçado, rotas ativas e código legado preservado.');

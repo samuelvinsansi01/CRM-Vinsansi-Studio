@@ -1,7 +1,7 @@
 import type { StatusGroup } from '../status/status.mapper';
 import type { LeadOrigin } from '../../types/lead.types';
 
-export type ImportLeadStatus = 'pending' | 'approved' | 'rejected' | 'queued' | 'sent';
+export type ImportLeadStatus = 'pending' | 'review' | 'approved' | 'rejected' | 'queued' | 'sent';
 
 export type ImportLeadDestination = 'WhatsApp' | 'Com site' | 'Agregadores' | 'Instagram' | 'Recusado' | 'Já no banco';
 
@@ -121,4 +121,24 @@ export type ImportExecutionOptions = {
 export type ImportPersistResult = {
   created: ImportLead[];
   duplicateClientIds: string[];
+};
+
+export type ImportPersistenceResult = ImportPersistResult & {
+  simulation: boolean;
+  persisted: boolean;
+  eligible: number;
+  reason: 'simulation_mode' | null;
+};
+
+export type ImportMutationResult = {
+  simulation: boolean;
+  persisted: boolean;
+  lead: ImportLead | null;
+  reason: 'simulation_mode' | null;
+};
+
+export type ImportActionResult = {
+  simulation: boolean;
+  persisted: boolean;
+  reason: 'simulation_mode' | null;
 };

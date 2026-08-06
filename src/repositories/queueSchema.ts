@@ -51,6 +51,18 @@ export type AtomicQueuePreparationRow = {
   position: number | null;
 };
 
+export async function loadCurrentWhatsAppValidationProofs(leadIds: string[]): Promise<Set<string>> {
+  const numeric = Array.from(new Set(leadIds.map(Number).filter((value) => Number.isSafeInteger(value) && value > 0)));
+  if (!numeric.length) return new Set();
+  const { data, error } = await getSupabaseClient().rpc('current_user_whatsapp_validation_proofs', {
+    p_lead_ids: numeric,
+  });
+  if (error) throw new Error(`Não foi possível conferir as provas de validação WhatsApp: ${error.message}`);
+  return new Set(((data ?? []) as Row[])
+    .filter((row) => row.has_valid_proof === true)
+    .map((row) => String(row.lead_id)));
+}
+
 function positiveInteger(value: unknown, label: string) {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${label} inválido.`);

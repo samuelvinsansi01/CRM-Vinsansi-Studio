@@ -1,25 +1,18 @@
 import { eventBus } from '../../lib/events';
-import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
+import { channelId } from '../../repositories/schemaCatalog';
 import type { LeadDatabaseRow } from '../../types/lead.types';
 import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperational';
 import { configService } from '../config/config.service';
 import type { ChipConfigRecord } from '../config/types';
 import { normalizePhone } from '../import/importValidation';
-import { channelId } from '../../repositories/schemaCatalog';
 import {
   whatsappValidationGateway,
   WhatsAppValidationUnavailableError,
   type WhatsAppValidationRequest,
   type WhatsAppValidationResult,
 } from './whatsappValidation.gateway';
-import {
-  expectedStatusForValidation,
-  invalidWhatsAppTarget,
-  isLikelyValidWhatsApp,
-  validWhatsAppTarget,
-  validationSelectionError,
-} from './whatsappValidation.rules';
+import { validationSelectionError } from './whatsappValidation.rules';
 import type {
   WhatsAppValidationBatchResult,
   WhatsAppValidationFailure,
@@ -87,7 +80,6 @@ async function operationalChips(selectedResourceId?: string) {
     .filter((record): record is ChipConfigRecord => record.kind === 'chips')
     .filter(isOperationalWhatsAppChip)
     .sort((left, right) => Number(left.priority ?? 0) - Number(right.priority ?? 0) || left.name.localeCompare(right.name));
-
   if (!selectedResourceId) return chips;
   return chips.filter((chip) => chip.id === selectedResourceId || chipInstance(chip) === selectedResourceId);
 }
@@ -103,32 +95,7 @@ function requestsForRows(rows: LeadDatabaseRow[], chips: ChipConfigRecord[]): Wh
   }));
 }
 
-async function appendAudit(input: {
-  action: string;
-  row: LeadDatabaseRow;
-  status: string;
-  message?: string;
-  metadata?: Record<string, unknown>;
-}) {
-  await repositories.events.append({
-    source: 'whatsapp-validation',
-    action: input.action,
-    channel: 'whatsapp',
-    leadId: String(input.row.leads_id),
-    status: input.status,
-    message: input.message,
-    metadata: {
-      flow: 'F05',
-      company_name: input.row.leads_name,
-      normalized_phone: normalizePhone(input.row.leads_phone),
-      previous_status_id: input.row.lead_status_id,
-      previous_channel_id: input.row.channels_id,
-      ...input.metadata,
-    },
-  });
-}
-
-function addOutcome(result: WhatsAppValidationBatchResult, id: string, outcome: 'approved' | 'revalidated' | 'redirected' | 'invalidated') {
+function addOutcome(result: WhatsAppValidationBatchResult, id: string, outcome: NonNullable<WhatsAppValidationResult['outcome']>) {
   if (outcome === 'approved') {
     result.approved += 1;
     result.approvedIds.push(id);
@@ -138,88 +105,28 @@ function addOutcome(result: WhatsAppValidationBatchResult, id: string, outcome: 
   } else if (outcome === 'redirected') {
     result.redirectedToInstagram += 1;
     result.redirectedIds.push(id);
-  } else {
+  } else if (outcome === 'invalidated') {
     result.invalidated += 1;
     result.invalidatedIds.push(id);
+  } else {
+    result.errors += 1;
+    result.errorIds.push(id);
   }
 }
 
-async function applyConfirmedResult(
-  batch: WhatsAppValidationBatchResult,
-  row: LeadDatabaseRow,
-  mode: WhatsAppValidationMode,
-  providerResult: WhatsAppValidationResult | null,
-  localReason: string | undefined,
-  whatsappChannelId: number,
-  instagramChannelId: number,
-) {
+function applyPersistedResult(batch: WhatsAppValidationBatchResult, row: LeadDatabaseRow, providerResult: WhatsAppValidationResult) {
   const id = String(row.leads_id);
-  if (providerResult?.status === 'error') {
-    batch.errors += 1;
-    batch.errorIds.push(id);
-    const reason = providerResult.errorMessage || 'O provedor não retornou confirmação explícita para este número.';
-    try {
-      await appendAudit({
-        action: mode === 'initial' ? 'whatsapp_validation_error' : 'whatsapp_revalidation_error',
-        row,
-        status: String(row.lead_status_id),
-        message: reason,
-        metadata: { unchanged: true, provider_status: 'error' },
-      });
-    } catch (error) {
-      batch.auditWarnings.push(`Lead ${id}: ${error instanceof Error ? error.message : 'falha ao registrar auditoria.'}`);
-    }
+  if (providerResult.persisted !== true || !providerResult.outcome) {
+    addFailure(batch, { id, company: row.leads_name, reason: 'A API não confirmou a persistência do resultado.' });
     return;
   }
-
-  const valid = providerResult?.valid === true;
-  const target = valid ? validWhatsAppTarget(mode, whatsappChannelId) : invalidWhatsAppTarget(row, whatsappChannelId, instagramChannelId);
-  const after = await supabaseLeadCycleRepository.compareAndSet(id, expectedStatusForValidation(mode), {
-    lead_status_id: target.statusId,
-    channels_id: target.channelId,
-  });
-
-  if (!after) {
-    batch.conflicts += 1;
-    batch.conflictIds.push(id);
-    addFailure(batch, {
-      id,
-      company: row.leads_name,
-      reason: 'O lead foi alterado por outra operação durante a validação. Atualize a tela antes de tentar novamente.',
-    });
-    return;
-  }
-
-  addOutcome(batch, id, target.outcome);
-  const invalidReason = localReason || providerResult?.errorMessage || 'Número não confirmado como WhatsApp.';
-  const action = valid
-    ? mode === 'initial' ? 'whatsapp_validation_approved' : 'whatsapp_revalidation_approved'
-    : target.outcome === 'redirected' ? 'whatsapp_invalid_redirected_to_instagram' : 'whatsapp_invalid_without_instagram';
-
-  try {
-    await appendAudit({
-      action,
-      row,
-      status: String(target.statusId),
-      message: valid ? 'WhatsApp confirmado pelo provedor.' : invalidReason,
-      metadata: {
-        target_status_id: target.statusId,
-        target_channel_id: target.channelId,
-        validation_mode: mode,
-        provider_status: providerResult?.status ?? 'local_invalid_format',
-        instagram_fallback: target.outcome === 'redirected',
-        unchanged: false,
-      },
-    });
-  } catch (error) {
-    batch.auditWarnings.push(`Lead ${id}: ${error instanceof Error ? error.message : 'falha ao registrar auditoria.'}`);
-  }
+  addOutcome(batch, id, providerResult.outcome);
 }
 
 async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[], selectedResourceId?: string) {
   const ids = numericIds(rawIds);
   const result = emptyResult(mode, ids.length);
-  const [whatsappChannelId, instagramChannelId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]).then(([wa, ig]) => [Number(wa), Number(ig)] as const);
+  const whatsappChannelId = Number(await channelId('WhatsApp'));
   const rows = await supabaseLeadCycleRepository.listByIds(ids);
   const byId = rowsById(rows);
   const selectionFailures = validateSelection(ids, byId, mode, whatsappChannelId);
@@ -236,44 +143,27 @@ async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[],
   }
 
   const selected = ids.map((id) => byId.get(id)!);
-  const malformed = selected.filter((row) => !isLikelyValidWhatsApp(row.leads_phone));
-  const remoteCandidates = selected.filter((row) => isLikelyValidWhatsApp(row.leads_phone));
-
-  let providerById = new Map<string, WhatsAppValidationResult>();
-  if (remoteCandidates.length) {
-    const chips = await operationalChips(selectedResourceId);
-    if (!chips.length) {
-      throw new WhatsAppValidationUnavailableError(selectedResourceId
-        ? 'O chip selecionado não está ativo e conectado. Nenhum lead do lote foi alterado.'
-        : 'Nenhum chip WhatsApp ativo e conectado está disponível para validação. Nenhum lead do lote foi alterado.');
-    }
-
-    // O provider é consultado antes da primeira mutação. Se o Worker/Evolution
-    // estiver indisponível ou devolver um contrato inválido, o lote inteiro
-    // permanece exatamente no estado anterior.
-    const requests = requestsForRows(remoteCandidates, chips);
-    const providerResults = mode === 'initial'
-      ? await whatsappValidationGateway.validateInitial(requests)
-      : await whatsappValidationGateway.revalidateApproved(requests);
-    result.providerChecked = providerResults.length;
-    providerById = new Map(providerResults.map((item) => [item.leadId, item]));
+  const chips = await operationalChips(selectedResourceId);
+  if (!chips.length) {
+    throw new WhatsAppValidationUnavailableError(selectedResourceId
+      ? 'O chip selecionado não está ativo e conectado. Nenhum lead do lote foi alterado.'
+      : 'Nenhum chip WhatsApp ativo e conectado está disponível para validação. Nenhum lead do lote foi alterado.');
   }
 
-  // Formato inequivocamente inválido é tratado localmente somente depois que o
-  // preflight remoto do mesmo lote foi concluído com sucesso.
-  for (const row of malformed) {
-    await applyConfirmedResult(result, row, mode, null, 'Telefone fora do formato brasileiro esperado para WhatsApp.', whatsappChannelId, instagramChannelId);
-  }
+  const requests = requestsForRows(selected, chips);
+  const providerResults = mode === 'initial'
+    ? await whatsappValidationGateway.validateInitial(requests)
+    : await whatsappValidationGateway.revalidateApproved(requests);
+  result.providerChecked = providerResults.length;
+  const providerById = new Map(providerResults.map((item) => [item.leadId, item]));
 
-  for (const row of remoteCandidates) {
+  for (const row of selected) {
     const providerResult = providerById.get(String(row.leads_id));
     if (!providerResult) {
-      // O gateway já protege a cardinalidade. Este fallback mantém o serviço fail-closed.
-      result.errors += 1;
-      result.errorIds.push(String(row.leads_id));
+      addFailure(result, { id: String(row.leads_id), company: row.leads_name, reason: 'A API não retornou o resultado persistido deste lead.' });
       continue;
     }
-    await applyConfirmedResult(result, row, mode, providerResult, undefined, whatsappChannelId, instagramChannelId);
+    applyPersistedResult(result, row, providerResult);
   }
 
   if (result.approved || result.revalidated || result.redirectedToInstagram || result.invalidated) {
@@ -292,5 +182,8 @@ export const whatsappValidationService = {
   },
   revalidateApproved(ids: string[]) {
     return executeValidation('revalidation', ids);
+  },
+  revalidateApprovedWithChip(ids: string[], selectedResourceId: string) {
+    return executeValidation('revalidation', ids, selectedResourceId);
   },
 };

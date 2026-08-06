@@ -16,7 +16,6 @@ export type PageId =
   | 'config-import-apify'
   | 'config-contact-sources'
   | 'config-import-rules'
-  | 'config-validation-rules'
   | 'config-channels'
   | 'config-levels'
   | 'config-instances'
@@ -96,12 +95,6 @@ export const navGroups: readonly NavGroup[] = [
         ],
       },
       {
-        label: 'Validação e roteamento',
-        items: [
-          { id: 'config-validation-rules', label: 'Regras de validação' },
-        ],
-      },
-      {
         label: 'Disparos',
         items: [
           { id: 'config-channels', label: 'Canais do sistema' },
@@ -145,7 +138,6 @@ export const pageTitles: Record<PageId, string> = {
   'config-import-apify': 'Contas Apify',
   'config-contact-sources': 'Fontes de contato',
   'config-import-rules': 'Critérios de importação',
-  'config-validation-rules': 'Regras de validação e roteamento',
   'config-channels': 'Canais do sistema',
   'config-levels': 'Níveis',
   'config-instances': 'Instâncias',

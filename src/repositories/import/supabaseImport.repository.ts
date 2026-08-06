@@ -147,7 +147,8 @@ function applyFilters(records: ImportLead[], filters: ImportListFilters) {
 function calculateSummary(records: ImportLead[]): ImportSummary {
   const approved = records.filter((lead) => isStatusGroup(lead.status, 'approved'));
   const pending = records.filter((lead) => isStatusGroup(lead.status, 'pending'));
-  const operational = [...approved, ...pending];
+  const review = records.filter((lead) => isStatusGroup(lead.status, 'review'));
+  const operational = [...approved, ...pending, ...review];
   const rejected = records.filter((lead) => isStatusGroup(lead.status, 'rejected') || isStatusGroup(lead.status, 'invalid'));
   const finalDestination = (lead: ImportLead) => (lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino);
 
@@ -156,7 +157,7 @@ function calculateSummary(records: ImportLead[]): ImportSummary {
     approved: approved.length,
     pending: pending.length,
     rejected: rejected.length,
-    whatsapp: approved.filter((lead) => finalDestination(lead) === 'WhatsApp').length,
+    whatsapp: operational.filter((lead) => finalDestination(lead) === 'WhatsApp').length,
     ownSite: operational.filter((lead) => finalDestination(lead) === 'Com site').length,
     aggregators: operational.filter((lead) => finalDestination(lead) === 'Agregadores').length,
     instagram: operational.filter((lead) => finalDestination(lead) === 'Instagram').length,
@@ -498,7 +499,7 @@ export const supabaseImportRepository: ImportRepository = {
       .map((item) => item.lead);
     const duplicateAuditItems = preparedItems.filter((item) => !item.ignored && duplicateCodes.has(String(item.code)));
     const operationalLeads = sessionLeads.filter((lead) =>
-      isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending'));
+      isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending') || isStatusGroup(lead.status, 'review'));
     const simulation = Boolean(options.simulate);
 
     let persisted: ImportPersistResult = { created: [], duplicateClientIds: [] };
@@ -553,7 +554,7 @@ export const supabaseImportRepository: ImportRepository = {
   async persist(leads, options = {}) {
     const operational = leads.filter((lead) =>
       !/^\d+$/.test(lead.id)
-      && (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')));
+      && (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending') || isStatusGroup(lead.status, 'review')));
     return persistExistingSchemaLeads(operational, options);
   },
 
@@ -569,6 +570,8 @@ export const supabaseImportRepository: ImportRepository = {
     const currentRow = await getLeadRow(id);
     const current = rowToImportLead(currentRow);
     const updated = { id, ...normalizeLeadInput({ ...current, ...input }) } as ImportLead;
+    const whatsappDestination = !updated.send_instagram && (updated.destination ?? updated.destino) !== 'Instagram';
+    if (whatsappDestination && isStatusGroup(updated.status, 'approved')) updated.status = 'review';
 
     const otherLeads = (await allLeads(ALL_LEAD_STATUS_IDS))
       .filter((lead) => lead.id !== id && isOperationalStoredLead(lead));
@@ -613,7 +616,11 @@ export const supabaseImportRepository: ImportRepository = {
 
   async move(id, status: 'approved' | 'rejected') {
     const userId = await getCurrentUserId();
-    const statusId: LeadStatusId = status === 'approved' ? LEAD_STATUS.VALIDATED : LEAD_STATUS.INVALID;
+    const current = rowToImportLead(await getLeadRow(id));
+    const whatsappDestination = !current.send_instagram && (current.destination ?? current.destino) !== 'Instagram';
+    const statusId: LeadStatusId = status === 'approved'
+      ? whatsappDestination ? LEAD_STATUS.PRE_SEND : LEAD_STATUS.VALIDATED
+      : LEAD_STATUS.INVALID;
     const { data, error } = await getSupabaseClient()
       .from('leads')
       .update({ lead_status_id: statusId, leads_updated_at: new Date().toISOString() })

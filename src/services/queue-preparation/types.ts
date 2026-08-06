@@ -25,6 +25,7 @@ export type QueuePreparationLead = {
   templateType: 'sem-site' | 'com-site';
   ready: boolean;
   blockReason?: string;
+  requiresWhatsAppValidation?: boolean;
 };
 
 export type QueuePreparationSnapshot = {

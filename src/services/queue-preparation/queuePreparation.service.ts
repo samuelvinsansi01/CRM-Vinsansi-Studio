@@ -19,7 +19,7 @@ import { renderLeadMessages } from '../templates/templateVariables';
 import { missingTemplateMessageNumbers } from '../templates/templateContract';
 import { settingsService } from '../settings/settings.service';
 import { selectTemplateForLead, templateTypeForLead } from '../templates/templateSelector';
-import { prepareQueueItems } from '../../repositories/queueSchema';
+import { loadCurrentWhatsAppValidationProofs, prepareQueueItems } from '../../repositories/queueSchema';
 import { effectiveScheduleDate } from './queuePreparation.rules';
 import type {
   QueuePreparationChannel,
@@ -195,9 +195,11 @@ function preparationReason(
   expectedChannelId: number,
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
+  hasWhatsAppProof = true,
 ) {
   if (row.lead_status_id !== LEAD_STATUS.VALIDATED) return 'O lead não está mais no status Validado.';
   if (Number(row.channels_id) !== expectedChannelId) return 'O canal do lead foi alterado.';
+  if (channel === 'WhatsApp' && !hasWhatsAppProof) return 'Prova de validação WhatsApp ausente para o telefone atual.';
   if (channel === 'WhatsApp' && normalizePhone(row.leads_phone).length < 10) return 'Telefone inválido para WhatsApp.';
   if (channel === 'Instagram' && !isValidInstagram(row.leads_instagram)) return 'Instagram inválido ou ausente.';
 
@@ -221,8 +223,9 @@ function mapPreparationLead(
   expectedChannelId: number,
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
+  hasWhatsAppProof = true,
 ): QueuePreparationLead {
-  const reason = preparationReason(row, channel, expectedChannelId, branches, templates);
+  const reason = preparationReason(row, channel, expectedChannelId, branches, templates, hasWhatsAppProof);
   const context = leadContext(row, channel);
   return {
     id: String(row.leads_id),
@@ -236,6 +239,7 @@ function mapPreparationLead(
     templateType: templateTypeForLead(context),
     ready: !reason,
     blockReason: reason || undefined,
+    requiresWhatsAppValidation: channel === 'WhatsApp' && !hasWhatsAppProof,
   };
 }
 
@@ -296,8 +300,11 @@ async function snapshot(
   ]);
   const resources = buildResources(channel, usage, config.chips, config.profiles, config.settings.instagram);
   const selectedResource = resources.find((resource) => resource.id === resourceId) ?? resources[0];
+  const proofs = channel === 'WhatsApp'
+    ? await loadCurrentWhatsAppValidationProofs(rows.map((row) => String(row.leads_id)))
+    : new Set(rows.map((row) => String(row.leads_id)));
   const leads = rows
-    .map((row) => mapPreparationLead(row, channel, resolvedChannelId, config.branches, config.templates))
+    .map((row) => mapPreparationLead(row, channel, resolvedChannelId, config.branches, config.templates, proofs.has(String(row.leads_id))))
     .sort((a, b) => Number(b.ready) - Number(a.ready) || b.score - a.score || a.company.localeCompare(b.company));
 
   return {
@@ -345,6 +352,7 @@ async function enqueueValidated(
   const expectedChannelId = Number(await channelId(channel));
   const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
   const byId = new Map(rows.map((row) => [String(row.leads_id), row]));
+  const proofs = channel === 'WhatsApp' ? await loadCurrentWhatsAppValidationProofs(uniqueIds) : new Set(uniqueIds);
   const rpcItems: Array<{ leadId: string; templateId: string }> = [];
 
   for (const id of uniqueIds) {
@@ -359,7 +367,7 @@ async function enqueueValidated(
       continue;
     }
 
-    const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates);
+    const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates, proofs.has(id));
     if (reason) {
       addFailure(result, { id, company: row.leads_name, reason });
       continue;

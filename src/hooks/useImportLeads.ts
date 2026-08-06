@@ -9,7 +9,8 @@ import { isStatusGroup } from '../services/status/status.mapper';
 function calculateSummary(records: ImportLead[]): ImportSummary {
   const approved = records.filter((lead) => isStatusGroup(lead.status, 'approved'));
   const pending = records.filter((lead) => isStatusGroup(lead.status, 'pending'));
-  const operational = [...approved, ...pending];
+  const review = records.filter((lead) => isStatusGroup(lead.status, 'review'));
+  const operational = [...approved, ...pending, ...review];
   const rejected = records.filter((lead) => isStatusGroup(lead.status, 'rejected'));
   const finalDestination = (lead: ImportLead) => (lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino);
 
@@ -18,7 +19,7 @@ function calculateSummary(records: ImportLead[]): ImportSummary {
     approved: approved.length,
     pending: pending.length,
     rejected: rejected.length,
-    whatsapp: approved.filter((lead) => finalDestination(lead) === 'WhatsApp').length,
+    whatsapp: operational.filter((lead) => finalDestination(lead) === 'WhatsApp').length,
     ownSite: operational.filter((lead) => finalDestination(lead) === 'Com site').length,
     aggregators: operational.filter((lead) => finalDestination(lead) === 'Agregadores').length,
     instagram: operational.filter((lead) => finalDestination(lead) === 'Instagram').length,
@@ -30,7 +31,7 @@ function applySessionFilters(records: ImportLead[], status: ImportLeadStatus, se
 
   return records.filter((lead) => {
     const matchesStatus = status === 'approved'
-      ? isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending')
+      ? isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending') || isStatusGroup(lead.status, 'review')
       : isStatusGroup(lead.status, status);
     const matchesQuery = !query || Object.values(lead).some((item) => String(item ?? '').toLowerCase().includes(query));
     return matchesStatus && matchesQuery;
@@ -75,9 +76,9 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
   }, []);
 
   const createLead = useCallback(async (input: ImportLeadInput) => {
-    const lead = await importService.create(input);
-    setSessionLeads((current) => [lead, ...current]);
-    return lead;
+    const result = await importService.createFromImport(input);
+    if (result.lead) setSessionLeads((current) => [result.lead as ImportLead, ...current]);
+    return result;
   }, []);
 
   const updateLead = useCallback(async (id: string, input: Partial<ImportLeadInput>) => {
@@ -90,19 +91,26 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
       return;
     }
 
-    const updated = await importService.update(id, input);
-    setSessionLeads((current) => current.map((lead) => (lead.id === id ? updated : lead)));
+    const result = await importService.updateFromImport(id, input);
+    if (result.lead) setSessionLeads((current) => current.map((lead) => (lead.id === id ? result.lead as ImportLead : lead)));
+    return result;
   }, []);
 
   const removeLead = useCallback(async (id: string) => {
-    if (isPersistedLeadId(id)) await importService.remove(id);
+    if (isPersistedLeadId(id)) {
+      const result = await importService.removeFromImport(id);
+      if (result.simulation) return result;
+    }
     setSessionLeads((current) => current.filter((lead) => lead.id !== id));
+    return { simulation: false, persisted: isPersistedLeadId(id), reason: null };
   }, []);
 
   const moveLead = useCallback(async (id: string, nextStatus: 'approved' | 'rejected') => {
-    const movedFromRepository = isPersistedLeadId(id)
-      ? await importService.move(id, nextStatus)
+    const moveResult = isPersistedLeadId(id)
+      ? await importService.moveFromImport(id, nextStatus)
       : null;
+    if (moveResult?.simulation) return moveResult;
+    const movedFromRepository = moveResult?.lead ?? null;
 
     setSessionLeads((current) =>
       current.map((lead) =>
@@ -110,7 +118,7 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
           ? {
               ...lead,
               ...(movedFromRepository ?? {}),
-              status: nextStatus,
+              status: movedFromRepository?.status ?? (nextStatus === 'approved' && !(lead.send_instagram || (lead.destination ?? lead.destino) === 'Instagram') ? 'review' : nextStatus),
               destino: movedFromRepository?.destino ?? (nextStatus === 'approved' ? (lead.destination ?? lead.destino) : 'Recusado'),
               destination: movedFromRepository?.destination ?? (nextStatus === 'approved' ? (lead.destination ?? lead.destino) : 'Recusado'),
               destination_override: movedFromRepository?.destination_override ?? lead.destination_override,
@@ -120,6 +128,7 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
           : lead,
       ),
     );
+    return { simulation: false, persisted: isPersistedLeadId(id), lead: movedFromRepository, reason: null };
   }, []);
 
   const moveMany = useCallback(async (ids: string[], nextStatus: 'approved' | 'rejected') => {
@@ -136,11 +145,8 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
 
     const persistedIds = ids.filter(isPersistedLeadId);
     if (persistedIds.length) {
-      if (nextStatus === 'approved') {
-        await importService.approveMany(persistedIds);
-      } else {
-        await importService.rejectMany(persistedIds);
-      }
+      const result = await importService.moveManyFromImport(persistedIds, nextStatus);
+      if (result.simulation) return result;
     }
 
     setSessionLeads((current) =>
@@ -148,7 +154,7 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
         ids.includes(lead.id)
           ? {
               ...lead,
-              status: nextStatus,
+              status: nextStatus === 'approved' && !(lead.send_instagram || (lead.destination ?? lead.destino) === 'Instagram') ? 'review' : nextStatus,
               destino: nextStatus === 'approved' ? (lead.destination ?? lead.destino) : 'Recusado',
               destination: nextStatus === 'approved' ? (lead.destination ?? lead.destino) : 'Recusado',
               motivo: nextStatus === 'rejected' ? lead.motivo || 'Movido manualmente para recusados.' : '',
@@ -156,6 +162,7 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
           : lead,
       ),
     );
+    return { simulation: false, persisted: persistedIds.length > 0, reason: null };
   }, [sessionLeads]);
 
   const clearSession = useCallback(() => {
@@ -166,7 +173,7 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
   const sendApprovedToInicio = useCallback(async (sourceLeads: ImportLead[] = sessionLeads) => {
     const operational = sourceLeads.filter((lead) =>
       !isPersistedLeadId(lead.id)
-      && (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending'))
+      && (isStatusGroup(lead.status, 'approved') || isStatusGroup(lead.status, 'pending') || isStatusGroup(lead.status, 'review'))
     );
     const result = await importService.persistLeads(operational);
     const duplicateIds = new Set(result.duplicateClientIds);
@@ -193,7 +200,7 @@ export function useImportLeads(status: ImportLeadStatus, search: string) {
       return persisted ?? lead;
     }));
 
-    return result.created;
+    return result;
   }, [sessionLeads]);
 
   return {

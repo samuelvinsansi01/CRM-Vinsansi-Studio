@@ -35,6 +35,9 @@ export type ValidationResult = {
   status: 'valid' | 'invalid' | 'error';
   valid: boolean;
   errorMessage?: string;
+  outcome?: 'approved' | 'revalidated' | 'redirected' | 'invalidated' | 'error';
+  persisted?: boolean;
+  proofValid?: boolean;
 };
 
 type AuthContext = {
@@ -72,6 +75,17 @@ function supabaseConfig() {
       env('SUPABASE_PUBLISHABLE_KEY') ||
       env('VITE_SUPABASE_PUBLISHABLE_KEY'),
   };
+}
+
+function serviceClient() {
+  const config = supabaseConfig();
+  const serviceRoleKey = env('SUPABASE_SERVICE_ROLE_KEY');
+  if (!config.url || !serviceRoleKey) {
+    throw new Error('SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são obrigatórios para persistir a validação.');
+  }
+  return createClient(config.url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 function header(req: ApiRequest, name: string) {
@@ -263,6 +277,57 @@ export async function runStrictValidation(
   }
 }
 
+function persistedOutcome(result: ValidationResult) {
+  if (result.status === 'valid' && result.valid === true) return 'valid';
+  if (result.status === 'invalid' && result.valid === false) return 'invalid';
+  return 'technical_error';
+}
+
+async function persistValidationResults(
+  client: SupabaseClient,
+  leads: ValidationLead[],
+  results: ValidationResult[],
+  mode: ValidationMode,
+  publicUserId: string,
+): Promise<ValidationResult[]> {
+  const leadById = new Map(leads.map((lead) => [String(lead.id || lead.lead_id), lead]));
+  const persisted: ValidationResult[] = [];
+
+  for (const result of results) {
+    const leadId = String(result.leadId || result.lead_id || '');
+    const lead = leadById.get(leadId);
+    if (!lead) throw new Error(`Resultado sem lead confiável correspondente: ${leadId}.`);
+    const { data, error } = await client.rpc('record_whatsapp_validation_result', {
+      p_users_id: Number(publicUserId),
+      p_lead_id: Number(leadId),
+      p_validated_phone: String(lead.normalized_phone || lead.phone || ''),
+      p_mode: mode,
+      p_outcome: persistedOutcome(result),
+      p_provider: 'evolution',
+      p_provider_reference: String(lead.chip_instance || ''),
+      p_http_status: 200,
+      p_error_code: result.status === 'error' ? 'provider_result_error' : null,
+      p_error_message: result.errorMessage ?? null,
+      p_response_metadata: {
+        source: 'whatsapp_validation_api',
+        worker_status: result.status,
+        worker_valid: result.valid,
+      },
+    });
+    if (error) throw new Error(`Falha ao persistir a validação do lead ${leadId}: ${error.message}`);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row?.outcome) throw new Error(`A persistência do lead ${leadId} não retornou confirmação.`);
+    persisted.push({
+      ...result,
+      leadId,
+      outcome: row.outcome,
+      persisted: true,
+      proofValid: row.proof_valid === true,
+    });
+  }
+  return persisted;
+}
+
 export async function handleValidationRequest(req: ApiRequest, res: ApiResponse, expectedMode: ValidationMode) {
   const expectedOperation = operationForMode(expectedMode);
   res.setHeader('Content-Type', 'application/json');
@@ -290,7 +355,22 @@ export async function handleValidationRequest(req: ApiRequest, res: ApiResponse,
   try {
     const auth = await authenticate(req);
     const leads = await resolveOwnedLeads(auth, requested, expectedMode);
-    const results = await runStrictValidation(leads, expectedOperation, expectedMode, auth.publicUserId);
+    const trustedClient = serviceClient();
+    let providerResults: ValidationResult[];
+    try {
+      providerResults = await runStrictValidation(leads, expectedOperation, expectedMode, auth.publicUserId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Falha técnica na validação WhatsApp.';
+      const technicalResults = leads.map((lead) => ({
+        leadId: String(lead.id || lead.lead_id),
+        status: 'error' as const,
+        valid: false,
+        errorMessage: message,
+      }));
+      await persistValidationResults(trustedClient, leads, technicalResults, expectedMode, auth.publicUserId);
+      throw error;
+    }
+    const results = await persistValidationResults(trustedClient, leads, providerResults, expectedMode, auth.publicUserId);
     const summary = results.reduce((acc, result) => {
       acc[result.status] += 1;
       return acc;
