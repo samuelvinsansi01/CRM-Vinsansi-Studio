@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+const read=(p)=>fs.readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
+const sql=read('supabase/migrations/20260802180000_chip_conversations_chat.sql');
+const webhook=read('supabase/functions/evolution-connection-webhook/index.ts');
+const sync=read('supabase/functions/evolution-instance-sync/index.ts');
+const api=read('api/chat/send.ts');
+const page=read('src/pages/ConversationsPage.tsx');
+const repo=read('src/repositories/conversations/conversations.repository.ts');
+const registry=read('src/pages/pageRegistry.ts');
+const app=read('src/App.tsx');
+for(const token of ['conversations','conversation_messages','conversation_message_events','evolution_webhook_receipts','service_ingest_evolution_message','service_prepare_outgoing_chat_message','service_complete_outgoing_chat_message','mark_conversation_read']) if(!sql.includes(token)) throw new Error(`chat_sql_missing:${token}`);
+for(const token of ['MESSAGES_UPSERT','MESSAGES_UPDATE','MESSAGES_DELETE','SEND_MESSAGE','CHATS_UPSERT','CHATS_UPDATE','CONTACTS_UPSERT','CONTACTS_UPDATE']) if(!sync.includes(token)) throw new Error(`chat_webhook_event_missing:${token}`);
+for(const token of ['service_ingest_evolution_message','service_update_evolution_message_status','service_upsert_evolution_chat','evolution_webhook_receipts']) if(!webhook.includes(token)) throw new Error(`chat_webhook_ingestion_missing:${token}`);
+for(const token of ['service_prepare_outgoing_chat_message','service_complete_outgoing_chat_message','/message/sendText/','textMessage']) if(!api.includes(token)) throw new Error(`chat_send_api_missing:${token}`);
+for(const token of ['listChatChips','listConversations','listConversationMessages','markConversationRead']) if(!repo.includes(token)||!page.includes(token)) throw new Error(`chat_ui_contract_missing:${token}`);
+if(!registry.includes("id: 'conversations'")||!app.includes("activePage === 'conversations'")) throw new Error('chat_navigation_missing');
+if(api.includes('VITE_SUPABASE_SERVICE_ROLE_KEY')) throw new Error('service_role_must_not_use_vite_prefix');
+console.log('Etapa 13: chat por chip, webhook e envio seguro verificados.');
