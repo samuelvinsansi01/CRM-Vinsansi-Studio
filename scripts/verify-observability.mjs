@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+const read=(p)=>fs.readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
+const sql=read('supabase/migrations/20260802170000_observability_recovery.sql');
+const page=read('src/pages/MonitoringPage.tsx');
+const repo=read('src/repositories/monitoring/operationalHealth.repository.ts');
+const app=read('src/App.tsx');
+const manifest=JSON.parse(read('public/tools/manifest.json'));
+for(const token of ['worker_heartbeats','operational_alerts','recovery_requests','service_worker_heartbeat','request_operational_recovery','service_claim_recovery_request','get_operational_health']) if(!sql.includes(token)) throw new Error(`observability_sql_missing:${token}`);
+for(const token of ['getOperationalHealth','requestOperationalRecovery']) if(!page.includes(token)||!repo.includes(token)) throw new Error(`monitoring_ui_missing:${token}`);
+if(!app.includes("activePage === 'monitoring'")) throw new Error('monitoring_route_missing');
+const worker=manifest.tools.find((tool)=>tool.id==='worker'); if(worker?.version!=='3.6.0') throw new Error('worker_3_6_not_published');
+console.log('Etapa 11: observabilidade e recuperação verificadas.');

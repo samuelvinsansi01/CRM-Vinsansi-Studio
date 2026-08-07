@@ -1,0 +1,217 @@
+.metric-grid {
+  margin-bottom: var(--space-16);
+}
+
+.filters-row {
+  margin-bottom: var(--space-16);
+}
+
+.lead-list-page .page-header {
+  align-items: flex-start;
+  min-height: 58px;
+  margin-bottom: var(--space-20);
+}
+
+.lead-list-page .page-header__copy p {
+  margin-top: var(--space-08);
+}
+
+.lead-list-page .page-header .button--md {
+  height: var(--space-40);
+  padding: 0 var(--space-20);
+  border-radius: var(--radius-12);
+}
+
+.lead-list-page .metric-grid {
+  margin-bottom: var(--space-16);
+}
+
+.lead-list-page .metric-card {
+  height: 82px;
+  min-height: 82px;
+  gap: var(--space-16);
+  padding: var(--space-16) var(--space-20);
+  border-radius: var(--radius-08);
+}
+
+.lead-list-page .metric-card__icon {
+  width: var(--space-40);
+  height: var(--space-40);
+}
+
+.lead-list-page .metric-card__text strong {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.lead-list-page .metric-card__text small {
+  font-size: 12px;
+  line-height: 14px;
+}
+
+.lead-list-page .filters-row {
+  min-height: 42px;
+  flex-wrap: nowrap;
+  gap: var(--space-16);
+  margin-bottom: var(--space-16);
+}
+
+.lead-list-page .filters-row__left {
+  flex: 0 0 auto;
+}
+
+.lead-list-page .filters-row__controls {
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: var(--space-16);
+}
+
+.lead-list-page .select-field,
+.lead-list-page .field__control {
+  height: var(--space-40);
+  padding: 0 var(--space-16);
+  border-radius: var(--radius-12);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.lead-list-page .select-field {
+  gap: var(--space-12);
+}
+
+.lead-list-page .field--search {
+  width: var(--space-176);
+  flex: 0 0 var(--space-176);
+}
+
+.lead-list-page .segmented {
+  height: var(--space-40);
+}
+
+.lead-list-page .segmented__item {
+  height: var(--space-32);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.lead-list-page .table-card {
+  min-height: 320px;
+  padding: var(--space-20) 0;
+  border-radius: var(--radius-12);
+}
+
+.lead-list-page .panel__header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.lead-list-page .data-table {
+  padding: 0 var(--space-20);
+}
+
+.lead-list-page .data-table table {
+  min-width: 100%;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.lead-list-page .data-table thead th {
+  height: 46px;
+  padding: 0 var(--space-12);
+  border-radius: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.lead-list-page .data-table thead th:first-child {
+  border-top-left-radius: var(--radius-12);
+  border-bottom-left-radius: var(--radius-12);
+}
+
+.lead-list-page .data-table thead th:last-child {
+  border-top-right-radius: var(--radius-12);
+  border-bottom-right-radius: var(--radius-12);
+}
+
+.lead-list-page .data-table tbody td {
+  height: var(--space-56);
+  padding: 0 var(--space-12);
+}
+
+.lead-list-page .data-table__check {
+  width: var(--space-48);
+  padding-left: var(--space-20);
+}
+
+.lead-list-page--home .data-table__actions {
+  width: 152px;
+}
+
+.lead-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-08);
+  padding: 0 var(--space-20) var(--space-12);
+  color: var(--app-muted);
+}
+
+.lead-bulk-actions span,
+.lead-bulk-actions small {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.lead-list-page .table-card__footer {
+  padding: var(--space-20) var(--space-20) 0;
+}
+
+.rows-per-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-08);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 9%, transparent);
+  border-radius: var(--radius-08);
+  background: var(--surface-raised);
+  color: var(--app-muted);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.validation-routing__header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-08);
+  min-width: 0;
+}
+
+.validation-routing__header-actions .button,
+.validation-routing__header-actions .select-field {
+  margin-bottom: 0;
+}
+
+.validation-routing__chip-select {
+  width: 328px;
+  min-width: 280px;
+}
+
+.validation-routing__chip-select .select-field {
+  width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .validation-routing-page .page-header {
+    flex-direction: column;
+    gap: var(--space-16);
+  }
+
+  .validation-routing__header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}

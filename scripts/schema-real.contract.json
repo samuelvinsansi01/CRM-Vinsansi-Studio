@@ -1,0 +1,1053 @@
+{
+  "schema": "public",
+  "tables": {
+    "apify_accounts": {
+      "primary_key": [
+        "apify_accounts_id"
+      ],
+      "columns": [
+        "apify_accounts_id",
+        "users_id",
+        "account_name",
+        "token_secret",
+        "is_active",
+        "connection_status",
+        "external_username",
+        "last_checked_at",
+        "last_used_at",
+        "last_error",
+        "created_at",
+        "updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "apify_accounts_select_own"
+      ]
+    },
+    "apify_import_jobs": {
+      "primary_key": [
+        "apify_import_jobs_id"
+      ],
+      "columns": [
+        "apify_import_jobs_id",
+        "users_id",
+        "apify_accounts_id",
+        "apify_job_status_id",
+        "apify_actor_id",
+        "apify_run_id",
+        "apify_dataset_id",
+        "apify_search_query",
+        "apify_search_location",
+        "apify_quantity_total",
+        "apify_quantity_created",
+        "apify_quantity_duplicate",
+        "apify_quantity_blocked",
+        "apify_quantity_invalid",
+        "apify_error_message",
+        "apify_started_at",
+        "apify_finished_at",
+        "apify_import_jobs_created_at",
+        "apify_import_jobs_updated_at",
+        "actor_id",
+        "external_run_id",
+        "external_dataset_id",
+        "search_query",
+        "location_query",
+        "requested_limit",
+        "status",
+        "total_received",
+        "error_message",
+        "started_at",
+        "finished_at",
+        "created_at",
+        "updated_at",
+        "search_terms",
+        "total_imported",
+        "total_duplicates",
+        "total_rejected",
+        "imported_at",
+        "branches_id",
+        "branch_name"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "apify_import_jobs_select_own"
+      ]
+    },
+    "backfill_user_map": {
+      "primary_key": [
+        "old_user_id"
+      ],
+      "columns": [
+        "old_user_id",
+        "new_users_id"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "branches": {
+      "primary_key": [
+        "branches_id"
+      ],
+      "columns": [
+        "branches_id",
+        "users_id",
+        "status_id",
+        "branches_name",
+        "branches_categories",
+        "branches_created_at",
+        "branches_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read branches"
+      ]
+    },
+    "channels": {
+      "primary_key": [
+        "channels_id"
+      ],
+      "columns": [
+        "channels_id",
+        "channels_name",
+        "channels_created_at",
+        "channels_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read channels"
+      ]
+    },
+    "chips": {
+      "primary_key": [
+        "chips_id"
+      ],
+      "columns": [
+        "chips_id",
+        "users_id",
+        "instances_id",
+        "levels_id",
+        "status_id",
+        "chips_name",
+        "chips_phone",
+        "chips_created_at",
+        "chips_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "cities": {
+      "primary_key": [
+        "cities_id"
+      ],
+      "columns": [
+        "cities_id",
+        "states_id",
+        "cities_name",
+        "cities_created_at",
+        "cities_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read cities"
+      ]
+    },
+    "contact_sources": {
+      "primary_key": [
+        "contact_sources_id"
+      ],
+      "columns": [
+        "contact_sources_id",
+        "users_id",
+        "status_id",
+        "contact_sources_name",
+        "contact_sources_key",
+        "contact_sources_requires_review",
+        "contact_sources_default_channel_id",
+        "contact_sources_created_at",
+        "contact_sources_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read contact sources"
+      ]
+    },
+    "countries": {
+      "primary_key": [
+        "countries_id"
+      ],
+      "columns": [
+        "countries_id",
+        "countries_name",
+        "countries_code",
+        "countries_created_at",
+        "countries_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read countries"
+      ]
+    },
+    "instances": {
+      "primary_key": [
+        "instances_id"
+      ],
+      "columns": [
+        "instances_id",
+        "users_id",
+        "status_id",
+        "instances_name",
+        "instances_url",
+        "instances_apikey",
+        "instances_created_at",
+        "instances_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "lead_status": {
+      "primary_key": [
+        "lead_status_id"
+      ],
+      "columns": [
+        "lead_status_id",
+        "lead_status_name",
+        "lead_status_created_at",
+        "lead_status_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read lead status"
+      ]
+    },
+    "leads": {
+      "primary_key": [
+        "leads_id"
+      ],
+      "columns": [
+        "leads_id",
+        "users_id",
+        "branches_id",
+        "countries_id",
+        "states_id",
+        "cities_id",
+        "channels_id",
+        "lead_status_id",
+        "apify_import_jobs_id",
+        "leads_name",
+        "leads_phone",
+        "leads_instagram",
+        "leads_website",
+        "leads_maps",
+        "leads_street",
+        "leads_postal_code",
+        "leads_categories",
+        "leads_score",
+        "leads_reviews_count",
+        "leads_origin",
+        "leads_created_at",
+        "leads_updated_at",
+        "contact_sources_id",
+        "leads_normalized_phone",
+        "leads_normalized_instagram",
+        "leads_normalized_domain",
+        "leads_normalized_maps",
+        "leads_identity_hash",
+        "canonical_lead_id",
+        "duplicate_reason"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "users can insert own leads",
+        "users can select own leads",
+        "users can update own leads"
+      ]
+    },
+    "leads_backfill_stage": {
+      "primary_key": [],
+      "columns": [
+        "user_id",
+        "branch_id",
+        "branch_name",
+        "branch_slug",
+        "company_name",
+        "title",
+        "company",
+        "normalized_phone",
+        "phone",
+        "instagram_username",
+        "instagram_url",
+        "instagram",
+        "website",
+        "street",
+        "postal_code",
+        "city",
+        "state",
+        "categories",
+        "category_name",
+        "category",
+        "rating",
+        "total_score",
+        "reviews_count",
+        "status",
+        "channel",
+        "last_channel",
+        "origin",
+        "raw_payload",
+        "data",
+        "created_at",
+        "updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "leads_migration_stage": {
+      "primary_key": [],
+      "columns": [
+        "company_name",
+        "phone",
+        "instagram",
+        "website",
+        "maps_url",
+        "street",
+        "city",
+        "state",
+        "branch_name",
+        "lead_score",
+        "reviews_count",
+        "categories_pipe",
+        "lead_status_name",
+        "contact_source_name",
+        "created_at",
+        "updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "levels": {
+      "primary_key": [
+        "levels_id"
+      ],
+      "columns": [
+        "levels_id",
+        "users_id",
+        "channels_id",
+        "status_id",
+        "levels_name",
+        "levels_daily_limit",
+        "levels_created_at",
+        "levels_updated_at",
+        "levels_queues"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "queue_items": {
+      "primary_key": [
+        "queue_items_id"
+      ],
+      "columns": [
+        "queue_items_id",
+        "users_id",
+        "queues_id",
+        "leads_id",
+        "chips_id",
+        "socials_id",
+        "templates_id",
+        "status_id",
+        "queue_items_position",
+        "queue_items_attempts",
+        "queue_items_scheduled_at",
+        "queue_items_started_at",
+        "queue_items_finished_at",
+        "queue_items_error_message",
+        "queue_items_created_at",
+        "queue_items_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "queues": {
+      "primary_key": [
+        "queues_id"
+      ],
+      "columns": [
+        "queues_id",
+        "users_id",
+        "channels_id",
+        "status_id",
+        "queues_name",
+        "queues_scheduled_at",
+        "queues_started_at",
+        "queues_finished_at",
+        "queues_created_at",
+        "queues_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "sents": {
+      "primary_key": [
+        "sents_id"
+      ],
+      "columns": [
+        "sents_id",
+        "users_id",
+        "queue_items_id",
+        "leads_id",
+        "channels_id",
+        "chips_id",
+        "socials_id",
+        "templates_id",
+        "status_id",
+        "sents_recipient",
+        "sents_body",
+        "sents_external_id",
+        "sents_attempt",
+        "sents_error_message",
+        "sents_sent_at",
+        "sents_created_at",
+        "sents_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "socials": {
+      "primary_key": [
+        "socials_id"
+      ],
+      "columns": [
+        "socials_id",
+        "users_id",
+        "status_id",
+        "levels_id",
+        "socials_name",
+        "socials_username",
+        "socials_created_at",
+        "socials_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "states": {
+      "primary_key": [
+        "states_id"
+      ],
+      "columns": [
+        "states_id",
+        "countries_id",
+        "states_name",
+        "states_code",
+        "states_created_at",
+        "states_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "authenticated can read states"
+      ]
+    },
+    "status": {
+      "primary_key": [
+        "status_id"
+      ],
+      "columns": [
+        "status_id",
+        "status_name",
+        "status_created_at",
+        "status_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "template_channels": {
+      "primary_key": [
+        "template_channels_id"
+      ],
+      "columns": [
+        "template_channels_id",
+        "template_channels_name",
+        "template_channels_created_at",
+        "template_channels_updated_at",
+        "users_id",
+        "status_id",
+        "template_channels_blocked_channels"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "template_types": {
+      "primary_key": [
+        "template_types_id"
+      ],
+      "columns": [
+        "template_types_id",
+        "users_id",
+        "status_id",
+        "template_types_name",
+        "template_types_created_at",
+        "template_types_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "template_variables": {
+      "primary_key": [
+        "template_variables_id"
+      ],
+      "columns": [
+        "template_variables_id",
+        "users_id",
+        "status_id",
+        "template_variables_name",
+        "template_variables_key",
+        "template_variables_source",
+        "template_variables_default_value",
+        "template_variables_created_at",
+        "template_variables_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "templates": {
+      "primary_key": [
+        "templates_id"
+      ],
+      "columns": [
+        "templates_id",
+        "users_id",
+        "branches_id",
+        "status_id",
+        "templates_name",
+        "templates_message_1",
+        "templates_message_2",
+        "templates_message_3",
+        "templates_message_4",
+        "templates_created_at",
+        "templates_updated_at",
+        "template_channels_id",
+        "template_types_id"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "users": {
+      "primary_key": [
+        "users_id"
+      ],
+      "columns": [
+        "users_id",
+        "auth_user_id",
+        "status_id",
+        "users_created_at",
+        "users_updated_at",
+        "users_name",
+        "users_avatar_path"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "users can select own profile",
+        "users_select_own"
+      ]
+    },
+    "import_rules": {
+      "primary_key": [
+        "import_rules_id"
+      ],
+      "columns": [
+        "import_rules_id",
+        "users_id",
+        "status_id",
+        "import_rules_min_rating",
+        "import_rules_min_reviews",
+        "import_rules_require_name",
+        "import_rules_require_phone",
+        "import_rules_require_instagram",
+        "import_rules_require_website",
+        "import_rules_require_any_contact",
+        "import_rules_deduplicate_phone",
+        "import_rules_deduplicate_instagram",
+        "import_rules_deduplicate_website",
+        "import_rules_deduplicate_maps",
+        "import_rules_created_at",
+        "import_rules_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "import_rules_select_own",
+        "import_rules_insert_own",
+        "import_rules_update_own",
+        "import_rules_delete_own"
+      ]
+    },
+    "validation_rules": {
+      "primary_key": [
+        "validation_rules_id"
+      ],
+      "columns": [
+        "validation_rules_id",
+        "users_id",
+        "status_id",
+        "validation_rules_source_id",
+        "validation_rules_channel_id",
+        "validation_rules_fallback_channel_id",
+        "validation_rules_instagram_requires_approval",
+        "validation_rules_max_technical_attempts",
+        "validation_rules_created_at",
+        "validation_rules_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "validation_rules_select_own",
+        "validation_rules_insert_own",
+        "validation_rules_update_own",
+        "validation_rules_delete_own"
+      ]
+    },
+    "lead_validation_results": {
+      "primary_key": [
+        "lead_validation_results_id"
+      ],
+      "columns": [
+        "lead_validation_results_id",
+        "lead_validation_results_key",
+        "lead_validation_results_name",
+        "status_id",
+        "lead_validation_results_created_at",
+        "lead_validation_results_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "lead_validation_results_authenticated_read"
+      ]
+    },
+    "lead_validation_attempts": {
+      "primary_key": [
+        "lead_validation_attempts_id"
+      ],
+      "columns": [
+        "lead_validation_attempts_id",
+        "users_id",
+        "leads_id",
+        "channels_id",
+        "chips_id",
+        "queue_items_id",
+        "validation_rules_id",
+        "lead_validation_results_id",
+        "status_id",
+        "lead_validation_attempts_input_value",
+        "lead_validation_attempts_provider",
+        "lead_validation_attempts_provider_reference",
+        "lead_validation_attempts_http_status",
+        "lead_validation_attempts_error_code",
+        "lead_validation_attempts_error_message",
+        "lead_validation_attempts_response_metadata",
+        "lead_validation_attempts_rules_snapshot",
+        "lead_validation_attempts_started_at",
+        "lead_validation_attempts_finished_at",
+        "lead_validation_attempts_created_at",
+        "lead_validation_attempts_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "lead_validation_attempts_select_own"
+      ]
+    },
+    "instance_credentials": {
+      "primary_key": [
+        "instances_id"
+      ],
+      "columns": [
+        "instances_id",
+        "users_id",
+        "vault_secret_id",
+        "instance_credentials_created_at",
+        "instance_credentials_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "apify_account_credentials": {
+      "primary_key": [
+        "apify_accounts_id"
+      ],
+      "columns": [
+        "apify_accounts_id",
+        "users_id",
+        "vault_secret_id",
+        "apify_account_credentials_created_at",
+        "apify_account_credentials_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": []
+    },
+    "user_operational_settings": {
+      "primary_key": [
+        "user_operational_settings_id"
+      ],
+      "columns": [
+        "user_operational_settings_id",
+        "users_id",
+        "dispatch_settings",
+        "import_settings",
+        "extension_runtime_config",
+        "operational_timezone",
+        "operational_cutoff_hour",
+        "settings_version",
+        "updated_by_auth_user_id",
+        "user_operational_settings_created_at",
+        "user_operational_settings_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "user_operational_settings_own_select"
+      ]
+    },
+    "audit_transition_rules": {
+      "primary_key": [
+        "audit_transition_rules_id"
+      ],
+      "columns": [
+        "audit_transition_rules_id",
+        "entity_type",
+        "from_status_id",
+        "to_status_id",
+        "action_key",
+        "is_active",
+        "created_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "audit_transition_rules_read"
+      ]
+    },
+    "audit_events": {
+      "primary_key": [
+        "audit_events_id"
+      ],
+      "columns": [
+        "audit_events_id",
+        "users_id",
+        "actor_auth_user_id",
+        "source",
+        "action",
+        "entity_type",
+        "entity_id",
+        "lead_id",
+        "queue_item_id",
+        "channel_id",
+        "previous_status_id",
+        "target_status_id",
+        "message",
+        "metadata",
+        "request_id",
+        "created_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "audit_events_own_select"
+      ]
+    },
+    "lead_identity_registry": {
+      "primary_key": [
+        "lead_identity_registry_id"
+      ],
+      "columns": [
+        "lead_identity_registry_id",
+        "users_id",
+        "identity_type",
+        "identity_value",
+        "canonical_lead_id",
+        "first_seen_at",
+        "last_seen_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "lead_identity_registry_own_select"
+      ]
+    },
+    "contact_suppressions": {
+      "primary_key": [
+        "contact_suppressions_id"
+      ],
+      "columns": [
+        "contact_suppressions_id",
+        "users_id",
+        "identity_type",
+        "identity_value",
+        "reason",
+        "source_lead_id",
+        "source_sent_id",
+        "is_active",
+        "expires_at",
+        "created_at",
+        "updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "contact_suppressions_own_select"
+      ]
+    },
+    "permanent_records": {
+      "primary_key": [
+        "permanent_records_id"
+      ],
+      "columns": [
+        "permanent_records_id",
+        "users_id",
+        "canonical_lead_id",
+        "branches_id",
+        "states_id",
+        "cities_id",
+        "channels_id",
+        "last_lead_status_id",
+        "company_name",
+        "normalized_phone",
+        "normalized_instagram",
+        "normalized_domain",
+        "normalized_maps",
+        "total_leads",
+        "total_dispatches",
+        "first_seen_at",
+        "last_activity_at",
+        "last_sent_at",
+        "is_suppressed",
+        "commercial_outcome",
+        "operator_notes",
+        "record_status",
+        "archived_at",
+        "permanent_records_created_at",
+        "permanent_records_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "permanent_records_own_select"
+      ]
+    },
+    "permanent_record_snapshots": {
+      "primary_key": [
+        "permanent_record_snapshots_id"
+      ],
+      "columns": [
+        "permanent_record_snapshots_id",
+        "users_id",
+        "permanent_records_id",
+        "reason",
+        "snapshot",
+        "created_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "permanent_record_snapshots_own_select"
+      ]
+    },
+    "instagram_queue_progress": {
+      "primary_key": [
+        "instagram_queue_progress_id"
+      ],
+      "columns": [
+        "instagram_queue_progress_id",
+        "users_id",
+        "queue_items_id",
+        "socials_id",
+        "step",
+        "claim_token",
+        "claimed_by",
+        "attempts",
+        "last_heartbeat_at",
+        "started_at",
+        "finished_at",
+        "error_message",
+        "metadata",
+        "instagram_queue_progress_created_at",
+        "instagram_queue_progress_updated_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "instagram_queue_progress_own_select"
+      ]
+    },
+    "instagram_dispatch_events": {
+      "primary_key": [
+        "instagram_dispatch_events_id"
+      ],
+      "columns": [
+        "instagram_dispatch_events_id",
+        "users_id",
+        "queue_items_id",
+        "socials_id",
+        "from_step",
+        "to_step",
+        "claim_token",
+        "actor",
+        "message",
+        "metadata",
+        "created_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "instagram_dispatch_events_own_select"
+      ]
+    },
+    "platform_schema_releases": {
+      "primary_key": [
+        "platform_schema_releases_id"
+      ],
+      "columns": [
+        "platform_schema_releases_id",
+        "release_key",
+        "application_version",
+        "migration_count",
+        "base_schema_sha256",
+        "notes",
+        "applied_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "platform_schema_releases_read"
+      ]
+    },
+    "worker_heartbeats": {
+      "primary_key": [
+        "worker_heartbeats_id"
+      ],
+      "columns": [
+        "worker_heartbeats_id",
+        "worker_id",
+        "worker_version",
+        "worker_status",
+        "started_at",
+        "last_seen_at",
+        "metrics",
+        "metadata"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "worker_heartbeats_authenticated_read"
+      ]
+    },
+    "operational_alerts": {
+      "primary_key": [
+        "operational_alerts_id"
+      ],
+      "columns": [
+        "operational_alerts_id",
+        "users_id",
+        "alert_key",
+        "source",
+        "severity",
+        "status",
+        "title",
+        "message",
+        "entity_type",
+        "entity_id",
+        "metadata",
+        "first_detected_at",
+        "last_detected_at",
+        "acknowledged_at",
+        "resolved_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "operational_alerts_own_select"
+      ]
+    },
+    "recovery_requests": {
+      "primary_key": [
+        "recovery_requests_id"
+      ],
+      "columns": [
+        "recovery_requests_id",
+        "users_id",
+        "requested_by",
+        "scope",
+        "status",
+        "worker_id",
+        "result",
+        "error_message",
+        "requested_at",
+        "started_at",
+        "finished_at"
+      ],
+      "rls_enabled": true,
+      "policies": [
+        "recovery_requests_own_select"
+      ]
+    },
+    "conversations": {
+      "columns": [
+        "conversations_id",
+        "users_id",
+        "chips_id",
+        "instances_id",
+        "leads_id",
+        "remote_jid",
+        "contact_phone",
+        "contact_name",
+        "contact_avatar_url",
+        "conversation_status",
+        "unread_count",
+        "last_message_at",
+        "last_message_preview",
+        "last_message_direction",
+        "last_read_at",
+        "conversations_created_at",
+        "conversations_updated_at"
+      ]
+    },
+    "conversation_messages": {
+      "columns": [
+        "conversation_messages_id",
+        "users_id",
+        "conversations_id",
+        "chips_id",
+        "instances_id",
+        "leads_id",
+        "external_message_id",
+        "client_idempotency_key",
+        "remote_jid",
+        "direction",
+        "from_me",
+        "message_type",
+        "message_body",
+        "media_url",
+        "media_mime_type",
+        "media_file_name",
+        "quoted_external_message_id",
+        "message_status",
+        "provider_timestamp",
+        "raw_payload",
+        "error_message",
+        "conversation_messages_created_at",
+        "conversation_messages_updated_at"
+      ]
+    },
+    "conversation_message_events": {
+      "columns": [
+        "conversation_message_events_id",
+        "users_id",
+        "conversation_messages_id",
+        "event_type",
+        "previous_status",
+        "target_status",
+        "external_event_id",
+        "payload",
+        "conversation_message_events_created_at"
+      ]
+    },
+    "evolution_webhook_receipts": {
+      "columns": [
+        "evolution_webhook_receipts_id",
+        "users_id",
+        "instances_id",
+        "event_type",
+        "external_event_id",
+        "payload_hash",
+        "raw_payload",
+        "processing_status",
+        "error_message",
+        "received_at",
+        "processed_at"
+      ]
+    }
+  }
+}
