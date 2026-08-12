@@ -6,7 +6,7 @@ O Painel novo e o banco novo são canônicos. O legado permanece apenas como ref
 
 ## Domínios
 
-1. Aquisição: contas Apify, jobs e importação.
+1. Aquisição: cadastro manual e dados fornecidos pela extensão Google Maps. Componentes Apify são legado não montado.
 2. Leads: identidade, qualificação, canal e status.
 3. Operação: filas, itens, lotes e partes de envio.
 4. Remetentes: chips, instâncias Evolution e perfis Instagram.

@@ -164,7 +164,7 @@ export function ImportSettingsPage() {
           <Field label="Reviews mínimos global" value={String(draft.minReviews)} onChange={(value) => updateNumber('minReviews', value)} />
           <BooleanSetting
             label="Modo simulação"
-            description="Executa validações e relatório sem gravar leads no banco. A coleta Apify e seu histórico operacional continuam ativos."
+            description="Executa validações e relatório sem gravar leads no banco. Nenhuma fonte ativa persiste leads enquanto a simulação estiver habilitada."
             value={getBoolean(draft, 'safeMode.simulationMode')}
             onChange={(value) => updateBoolean('safeMode.simulationMode', value)}
           />

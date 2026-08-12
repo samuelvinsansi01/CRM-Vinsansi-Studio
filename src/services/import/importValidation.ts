@@ -314,20 +314,30 @@ function exactNormalizedMatch(a: string, b: string) {
 function getCategoryCandidates(raw: Record<string, unknown>, lead: NormalizedRawLead) {
   const values = [
     lead.subcategory,
-    readFirst(raw, ['categoryName', 'category_name', 'subcategoria', 'subcategory', 'sub_category', 'category_subtitle', 'tipo', 'categories', 'additionalCategories']),
+    readFirst(raw, ['categoryName', 'category', 'category_name', 'subcategoria', 'subcategory', 'sub_category', 'category_subtitle', 'tipo', 'categories', 'additionalCategories']),
   ];
 
   return values.flatMap((value) => splitCandidateText(value));
 }
 
 function matchBranch(lead: NormalizedRawLead, settings: ImportSettings) {
-  // A Apify entrega a categoria oficial em categoryName. A entrada somente e
+  // Fontes estruturadas do Google Maps entregam a categoria oficial em categoryName ou category. A entrada somente e
   // aceita quando esse valor bate exatamente (apos normalizacao tecnica) com
   // uma categoria/subramo cadastrado no banco para um ramo ativo.
-  const categoryName = normalizeComparable(readFirst(lead.raw, ['categoryName']));
+  const categoryName = normalizeComparable(readFirst(lead.raw, ['categoryName', 'category']));
   if (!categoryName) return null;
 
   const enabledRules = settings.branchRules.filter((rule) => rule.enabled);
+  const explicitBranchId = normalizeText(readFirst(lead.raw, ['branchesId', 'branches_id', 'crmContext.branchesId']));
+  if (explicitBranchId) {
+    const explicitRule = enabledRules.find((rule) => normalizeText(rule.branchId ?? rule.id) === explicitBranchId);
+    if (!explicitRule) return null;
+    const accepted = splitCandidateText([
+      ...(explicitRule.associatedCategories ?? []),
+      ...(explicitRule.subcategories ?? []),
+    ]);
+    return accepted.some((item) => exactNormalizedMatch(categoryName, item)) ? explicitRule : null;
+  }
   for (const rule of enabledRules) {
     const accepted = splitCandidateText([
       ...(rule.associatedCategories ?? []),
@@ -386,7 +396,7 @@ function reject(code: ImportRejectionCode, detail?: string, duplicate = false): 
 function normalizeRawLead(raw: Record<string, unknown>): NormalizedRawLead {
   const empresa = readFirst(raw, ['empresa', 'name', 'title', 'nome', 'company', 'businessName', 'company_name', 'business_name', 'placeName', 'place_name', 'localizedName']);
   const category = readFirst(raw, ['ramo', 'category', 'categoria', 'segmento', 'type', 'types']);
-  const subcategory = readFirst(raw, ['categoryName', 'category_name', 'subcategoria', 'subcategory', 'sub_category', 'category_subtitle', 'tipo', 'categories', 'additionalCategories']);
+  const subcategory = readFirst(raw, ['categoryName', 'category', 'category_name', 'subcategoria', 'subcategory', 'sub_category', 'category_subtitle', 'tipo', 'categories', 'additionalCategories']);
   const whatsapp = readFirst(raw, ['whatsapp', 'telefone', 'phone', 'phoneNumber', 'phone_number', 'internationalPhoneNumber', 'international_phone_number', 'phoneUnformatted', 'contactPhone', 'numero', 'normalized_phone']);
   const instagram = readFirst(raw, ['instagram', 'instagramUrl', 'instagram_url', 'instagramUsername', 'instagram_username', 'ig', 'social.instagram']);
   const site = readFirst(raw, ['site', 'website', 'websiteUrl', 'website_url', 'domain', 'webpage', 'link']);

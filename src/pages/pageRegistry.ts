@@ -13,7 +13,6 @@ export type PageId =
   | 'message-templates'
   | 'message-variables'
   | 'settings'
-  | 'config-import-apify'
   | 'config-contact-sources'
   | 'config-import-rules'
   | 'config-channels'
@@ -89,7 +88,6 @@ export const navGroups: readonly NavGroup[] = [
       {
         label: 'Importação',
         items: [
-          { id: 'config-import-apify', label: 'Contas Apify' },
           { id: 'config-contact-sources', label: 'Fontes de contato' },
           { id: 'config-import-rules', label: 'Critérios de importação' },
         ],
@@ -135,7 +133,6 @@ export const pageTitles: Record<PageId, string> = {
   'message-templates': 'Templates de mensagens',
   'message-variables': 'Variáveis',
   settings: 'Configurações',
-  'config-import-apify': 'Contas Apify',
   'config-contact-sources': 'Fontes de contato',
   'config-import-rules': 'Critérios de importação',
   'config-channels': 'Canais do sistema',

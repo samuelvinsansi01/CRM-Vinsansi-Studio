@@ -24,7 +24,6 @@ const requiredLabels = [
   'Templates de mensagens',
   'Variáveis',
   'Configurações',
-  'Contas Apify',
   'Fontes de contato',
   'Critérios de importação',
   'Canais do sistema',
@@ -38,6 +37,13 @@ const requiredLabels = [
 
 const missing = requiredLabels.filter((label) => !registry.includes(label));
 if (missing.length) throw new Error(`Menu incompleto: ${missing.join(', ')}`);
+if (/Apify/i.test(registry)) throw new Error('Apify não pode permanecer na navegação ativa.');
+if (app.includes('ApifyAccountsPage') || app.includes("activePage === 'config-import-apify'")) {
+  throw new Error('Página legada de contas Apify ainda está montada no App.');
+}
+if (!app.includes("'config-import-apify': 'config-import-rules'")) {
+  throw new Error('ID legado de contas Apify não redireciona para a configuração canônica.');
+}
 if (registry.includes("label: 'Pré-Envio'") || registry.includes("label: 'Válidos'")) {
   throw new Error('Pré-Envio/Válidos não podem permanecer no menu novo.');
 }

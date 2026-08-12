@@ -54,13 +54,13 @@ assert(hook.includes('importService.persistLeads') && hook.includes('importServi
 assert(hook.includes('importService.removeFromImport') && hook.includes('importService.moveFromImport') && hook.includes('importService.moveManyFromImport'), 'Mutações de leads persistidos contornam a barreira central.');
 assert(importPage.includes("title: 'Ação bloqueada pela simulação'") && importPage.includes('Nenhum lead persistido foi alterado.'), 'Interface pode anunciar alteração bloqueada como sucesso.');
 
-assert(!importPage.includes('simulate: false'), 'Apify ainda força simulate:false.');
-assert(importPage.includes("origin: 'apify'") && importPage.includes('processApifyJob(pendingJob.jobId)'), 'Fluxos Apify ativo e recuperado não compartilham o processamento protegido.');
+assert(!importPage.includes('simulate: false'), 'Fluxo ativo ainda força simulate:false.');
+assert(importPage.includes("useState<'Manual' | 'Google Maps Extension'>('Manual')"), 'Fontes ativas de importação não estão limitadas a Manual e Google Maps Extension.');
+assert(importPage.includes('await importJson(jsonText, { simulate: true })') && importPage.includes('await sendApprovedToInicio(result.leads)'), 'Aprovação dos dados da extensão não passa pela prévia e pela barreira central.');
 assert(importPage.includes('Modo de simulação ativo.') && importPage.includes('Os leads serão analisados, mas não serão gravados.'), 'Banner operacional de simulação está ausente.');
-assert(importPage.includes('A coleta pode consumir créditos do Apify, mas nenhum lead será persistido.'), 'Aviso de créditos Apify está ausente.');
 assert(importPage.includes('0 lead(s) persistido(s) por causa da simulação'), 'Resultado de simulação não informa zero persistências.');
-assert(importPage.includes("title: 'Simulação concluída'") && importPage.includes("importedResult.report.simulation ? 'Coleta validada em simulação'"), 'Interface ainda pode anunciar importação durante simulação.');
-assert(importPage.includes('disabled={!manualLead.empresa || simulateImport}'), 'Cadastro direto não está visualmente bloqueado em simulação.');
+assert(importPage.includes("title: 'Simulação concluída'"), 'Interface ainda pode anunciar persistência durante simulação.');
+assert(importPage.includes('|| simulateImport} onClick={addManualLead}'), 'Cadastro direto não está visualmente bloqueado em simulação.');
 
 const activeRuntime = [app, importPage, hook, service, guard, settingsPage].join('\n');
 assert(!activeRuntime.includes('import_rules'), 'Runtime ativo consulta import_rules.');

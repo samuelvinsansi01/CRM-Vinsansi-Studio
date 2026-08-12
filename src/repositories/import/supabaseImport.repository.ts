@@ -274,18 +274,18 @@ async function resolveLookups(leads: ImportLead[]): Promise<Map<string, Canonica
 
   const contactSourceFor = (lead: ImportLead) => {
     const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-    const candidates = destination === 'Instagram'
-      ? ['instagram']
+    const expectedKey = destination === 'Instagram'
+      ? 'instagram'
       : destination === 'Agregadores'
-        ? ['agregador', 'agregadores']
+        ? 'agregador'
         : destination === 'Com site'
-          ? ['com site', 'site proprio', 'site']
-          : ['whatsapp'];
-    const row = contactSources.find((source) => {
-      const values = [source.contact_sources_name, source.contact_sources_key].map(normalizeComparable);
-      return candidates.some((candidate) => values.some((value) => value === candidate || value.includes(candidate)));
-    }) ?? (contactSources.length === 1 ? contactSources[0] : undefined);
-    if (!row) throw new Error(`A origem/destino “${destination}” não foi encontrada na tabela contact_sources.`);
+          ? 'dominio_proprio'
+          : 'sem_site';
+    const normalizedExpectedKey = normalizeComparable(expectedKey);
+    const row = contactSources.find((source) => (
+      normalizeComparable(source.contact_sources_key) === normalizedExpectedKey
+    ));
+    if (!row) throw new Error(`A origem “${expectedKey}” do destino “${destination}” não foi encontrada na tabela contact_sources.`);
     return Number(row.contact_sources_id);
   };
 

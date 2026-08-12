@@ -12,3 +12,5 @@ dist/
 
 !docs/
 !docs/*.md
+!scripts/production-deploy-checklist.md
+!scripts/production-smoke-test-plan.md

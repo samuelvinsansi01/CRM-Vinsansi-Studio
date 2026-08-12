@@ -17,10 +17,9 @@ type SettingsSection = {
 const sections: SettingsSection[] = [
   {
     title: 'Importação',
-    description: 'Contas, fontes e critérios aplicados na entrada dos leads.',
+    description: 'Fontes e critérios aplicados na entrada dos leads.',
     icon: Database,
     items: [
-      { label: 'Contas Apify', page: 'config-import-apify', ready: true },
       { label: 'Fontes de contato', page: 'config-contact-sources', ready: true },
       { label: 'Critérios de importação', page: 'config-import-rules', ready: true },
     ],

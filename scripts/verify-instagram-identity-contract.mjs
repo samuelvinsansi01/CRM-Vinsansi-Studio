@@ -7,6 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspace = path.resolve(root, '..');
 const read = (relative) => fs.readFileSync(path.join(workspace, relative), 'utf8').replace(/\r\n/g, '\n');
 const identity = read('crm-novo/api/instagram/identity.ts');
+const frontendIdentity = read('crm-novo/src/services/instagram/instagram.utils.ts');
 const token = read('crm-novo/api/instagram/token.ts');
 const api = read('crm-novo/api/instagram/extension.ts');
 const popup = read('instagram-extension/popup.js');
@@ -22,6 +23,9 @@ const sliceBetween = (source, start, end) => {
 const executableIdentity = identity.replace(/value: (?:string|unknown)/g, 'value');
 const identityModule = await import(`data:text/javascript;base64,${Buffer.from(executableIdentity).toString('base64')}`);
 const apiNormalizer = identityModule.normalizeInstagramUsername;
+const executableFrontendIdentity = frontendIdentity.replace(/value: (?:string|unknown)/g, 'value');
+const frontendIdentityModule = await import(`data:text/javascript;base64,${Buffer.from(executableFrontendIdentity).toString('base64')}`);
+const frontendNormalizer = frontendIdentityModule.normalizeInstagramUsername;
 const extensionNormalizer = (source) => {
   const snippet = sliceBetween(source, 'const RESERVED_INSTAGRAM_PATHS', 'function invalidInstagramRecipientResult');
   assert(Boolean(snippet), 'Normalizador estrito não foi localizado na extensão.');
@@ -62,12 +66,12 @@ const invalidCases = [
 ];
 
 for (const [input, expected] of validCases) {
-  for (const [layer, normalize] of [['API', apiNormalizer], ['popup', popupNormalizer], ['content', contentNormalizer]]) {
+  for (const [layer, normalize] of [['API', apiNormalizer], ['frontend', frontendNormalizer], ['popup', popupNormalizer], ['content', contentNormalizer]]) {
     assert(normalize(input) === expected, `${layer} não normalizou ${String(input)} para ${expected}.`);
   }
 }
 for (const input of invalidCases) {
-  for (const [layer, normalize] of [['API', apiNormalizer], ['popup', popupNormalizer], ['content', contentNormalizer]]) {
+  for (const [layer, normalize] of [['API', apiNormalizer], ['frontend', frontendNormalizer], ['popup', popupNormalizer], ['content', contentNormalizer]]) {
     assert(normalize(input) === '', `${layer} aceitou destinatário inválido: ${String(input)}.`);
   }
 }

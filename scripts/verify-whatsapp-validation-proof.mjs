@@ -30,12 +30,14 @@ function sourceFiles(directory) {
 }
 
 assert(importValidation.includes("draft.status = destination === 'WhatsApp' ? 'review' : 'pending'"), 'Importação WhatsApp ainda pode nascer como Validado.');
-assert(importPage.includes("status: manualLead.instagram && !manualLead.whatsapp ? 'pending' : 'review'"), 'Cadastro manual WhatsApp ainda pode nascer como Validado.');
+assert(importPage.includes("status: destination === 'Instagram' ? 'pending' : 'review'"), 'Cadastro manual WhatsApp ainda pode nascer como Validado.');
+assert(importPage.indexOf('await createLead({') < importPage.indexOf('whatsappValidationService.validateInitial([createResult.lead.id])'), 'Cadastro manual não valida o WhatsApp somente depois da persistência inicial.');
 assert(canonicalLead.includes('statusId !== LEAD_STATUS.PRE_SEND'), 'Persistência canônica não aceita PRE_SEND sem usar ID espalhado.');
 assert(importRepository.includes("whatsappDestination && isStatusGroup(updated.status, 'approved')") && importRepository.includes("updated.status = 'review'"), 'Edição da importação ainda pode aprovar WhatsApp sem Evolution.');
 assert(/status === 'approved'[\s\S]*whatsappDestination \? LEAD_STATUS\.PRE_SEND : LEAD_STATUS\.VALIDATED/.test(importRepository), 'Ação Aprovar ainda pode promover WhatsApp diretamente a Validado.');
 
 assert(migration.includes('CREATE OR REPLACE FUNCTION public.record_whatsapp_validation_result'), 'RPC controlada de persistência ausente.');
+assert(/INSERT INTO public\.lead_validation_results\s*\([\s\S]*?\)\s*OVERRIDING SYSTEM VALUE\s*VALUES\s*\(/i.test(migration), 'Catálogo de resultados não é compatível com PK GENERATED ALWAYS AS IDENTITY.');
 assert(validationApi.includes("client.rpc('record_whatsapp_validation_result'"), 'API confiável não persiste o resultado por RPC.');
 assert(validationApi.includes("env('SUPABASE_SERVICE_ROLE_KEY')"), 'API não exige credencial service_role para persistir a prova.');
 assert(/REVOKE ALL ON FUNCTION public\.record_whatsapp_validation_result[\s\S]*FROM PUBLIC, anon, authenticated;/.test(migration), 'RPC ainda é executável por papel não confiável.');

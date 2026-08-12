@@ -37,7 +37,7 @@ BEGIN
       status_id,
       lead_validation_results_created_at,
       lead_validation_results_updated_at
-    ) VALUES (
+    ) OVERRIDING SYSTEM VALUE VALUES (
       v_expected.result_id,
       v_expected.result_key,
       v_expected.result_name,

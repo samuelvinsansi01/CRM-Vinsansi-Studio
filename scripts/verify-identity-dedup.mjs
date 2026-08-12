@@ -11,5 +11,6 @@ assert(sql.includes("NEW.lead_status_id:=7"), 'Duplicata futura não é classifi
 assert(base.includes("from('contact_suppressions')"), 'Importação ainda depende apenas da lista final de leads.');
 assert(instagramFix.includes("'invites'"), 'Caminhos reservados do Instagram não são rejeitados no banco.');
 assert(instagramUtils.includes("'invites'"), 'Caminhos reservados do Instagram não são rejeitados no frontend.');
-assert(instagramUtils.includes("host !== 'instagram.com'"), 'URLs externas ainda podem virar username do Instagram.');
+assert(instagramUtils.includes("INSTAGRAM_PROFILE_HOSTS = new Set(['instagram.com', 'www.instagram.com'])"), 'Hosts canônicos do Instagram não estão explícitos.');
+assert(instagramUtils.includes('INSTAGRAM_PROFILE_HOSTS.has(url.hostname.toLowerCase())'), 'URLs externas ainda podem virar username do Instagram.');
 console.log('Etapa 7: identidade, deduplicação e supressão verificadas.');

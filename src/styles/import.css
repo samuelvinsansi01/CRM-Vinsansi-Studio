@@ -453,6 +453,25 @@
   margin-top: var(--space-20);
 }
 
+.maps-operational-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+  gap: var(--space-16);
+  margin-top: var(--space-16);
+}
+
+.maps-operational-options strong,
+.maps-operational-options > div > span {
+  display: block;
+  margin-bottom: var(--space-08);
+  font-size: 13px;
+}
+
+.maps-operational-options > div > span { color: var(--app-muted); }
+.maps-operational-categories { display: flex; flex-wrap: wrap; gap: var(--space-08); }
+.maps-operational-categories label { display: inline-flex; align-items: center; gap: var(--space-08); padding: var(--space-08) var(--space-12); border: 1px solid var(--app-border); border-radius: var(--radius-08); }
+.maps-operational-categories input { margin: 0; }
+
 .import-grid--manual .import-json,
 .import-grid--manual .manual-validation {
   min-height: 0;
@@ -486,6 +505,7 @@
   .import-extractor-fields {
     grid-template-columns: 1fr;
   }
+  .maps-operational-options { grid-template-columns: 1fr; }
 }
 
 /* Fluxo Apify: selects seguem exatamente a altura, borda e raio dos campos de texto. */

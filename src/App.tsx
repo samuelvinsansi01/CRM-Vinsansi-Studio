@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DashboardLayout } from './design-system/layouts/DashboardLayout';
 import { AccountPage } from './pages/AccountPage';
-import { ApifyAccountsPage } from './pages/ApifyAccountsPage';
 import { AuditPage } from './pages/AuditPage';
 import { BasePage } from './pages/BasePage';
 import { SettingsOverviewPage } from './pages/ConfigurationPages';
@@ -20,6 +19,7 @@ import { MonitoringPage } from './pages/MonitoringPage';
 import { pageTitles, type PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
 import { syncEvolutionInstances } from './services/evolution-instances/evolutionInstances.service';
+import { googleMapsExtensionService } from './services/google-maps-extension/googleMapsExtension.service';
 
 const ACTIVE_PAGE_STORAGE_KEY = 'painel:active-page';
 const validPageIds = new Set<PageId>(Object.keys(pageTitles) as PageId[]);
@@ -31,6 +31,7 @@ const legacyPageMap: Record<string, PageId> = {
   branches: 'message-branches',
   templates: 'message-templates',
   'import-settings': 'config-import-rules',
+  'config-import-apify': 'config-import-rules',
   'config-validation-rules': 'validation-routing',
   'validation-rules': 'validation-routing',
   'validation-settings': 'validation-routing',
@@ -52,6 +53,11 @@ export function App() {
   useEffect(() => {
     window.sessionStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, activePage);
   }, [activePage]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    return googleMapsExtensionService.installSyncListener();
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -116,7 +122,6 @@ export function App() {
       {activePage === 'message-variables' ? <CatalogCrudPage kind="template_variables" /> : null}
 
       {activePage === 'settings' ? <SettingsOverviewPage onNavigate={setActivePage} /> : null}
-      {activePage === 'config-import-apify' ? <ApifyAccountsPage /> : null}
       {activePage === 'config-contact-sources' ? <CatalogCrudPage kind="contact_sources" /> : null}
       {activePage === 'config-import-rules' ? <ImportSettingsPage /> : null}
       {activePage === 'config-channels' ? <ChannelsPage /> : null}

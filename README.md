@@ -4,7 +4,9 @@ Plataforma de prospecção B2B local, qualificação, deduplicação, roteamento
 
 ## Fluxo canônico
 
-Apify/Google Maps → importação → normalização → qualificação → deduplicação → roteamento → validação → fila → execução → histórico → Base Permanente.
+Cadastro manual ou extensão Google Maps → importação → normalização → qualificação → deduplicação → roteamento → validação → fila → execução → histórico → Base Permanente.
+
+Os componentes Apify permanecem apenas para compatibilidade histórica e não fazem parte do fluxo ativo.
 
 ## Componentes
 

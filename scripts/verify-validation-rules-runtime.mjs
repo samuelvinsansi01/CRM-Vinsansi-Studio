@@ -42,7 +42,7 @@ assert(read('supabase/baseline/00000000000000_base_public_schema.sql').includes(
 assert.equal(sha256('src/pages/ValidationRulesSettingsPage.tsx'), 'bca1f1c337a84300a206584ebd60f8f945442126655f3231389de1bd64a2d0aa', 'ValidationRulesSettingsPage.tsx foi alterada.');
 assert.equal(sha256('src/repositories/configuration/configuration.repository.ts'), 'c382b9aaf5c0482815cd568bd67e618a1b929f8ada9174ae5ce51906b0867bbb', 'configuration.repository.ts foi alterado.');
 assert.equal(sha256('supabase/baseline/00000000000000_base_public_schema.sql'), '14824eb8aaeccfeab8fd1a480ef8e26662a723f10771e489ccef729a6ef407b4', 'Schema da tabela validation_rules foi alterado.');
-assert.equal(sha256('supabase/migrations/20260806190000_whatsapp_validation_proof.sql'), 'dac25ab8c66f94452dd0c88e336780f7f65968c6f62b2e7f0bf0e5ac4e1b5d0d', 'Migration da prova WhatsApp foi alterada.');
+assert.equal(sha256('supabase/migrations/20260806190000_whatsapp_validation_proof.sql'), '8e4ce1856ac39e352ffe0d4b5581c68ae9b702d084860c96f1b9a1116d74076e', 'Migration da prova WhatsApp foi alterada.');
 
 const excluded = new Set([
   'src/pages/ValidationRulesSettingsPage.tsx',

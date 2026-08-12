@@ -23,15 +23,13 @@ const RESERVED_INSTAGRAM_PATHS = new Set([
   'web',
 ]);
 
-function cleanCandidate(value: string) {
-  const username = value
-    .replace(/^@/, '')
-    .split(/[/?#\s]/)[0]
-    .trim()
-    .toLowerCase();
+const INSTAGRAM_USERNAME_PATTERN = /^[a-z0-9._]{1,30}$/;
+const INSTAGRAM_PROFILE_HOSTS = new Set(['instagram.com', 'www.instagram.com']);
 
-  if (!username || RESERVED_INSTAGRAM_PATHS.has(username)) return '';
-  if (!/^[a-z0-9._]{1,30}$/.test(username)) return '';
+function validCandidate(value: string) {
+  const username = value.toLowerCase();
+  if (!INSTAGRAM_USERNAME_PATTERN.test(username)) return '';
+  if (RESERVED_INSTAGRAM_PATHS.has(username)) return '';
   return username;
 }
 
@@ -39,19 +37,22 @@ export function normalizeInstagramUsername(value: unknown) {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
 
-  const looksLikeUrl = /^https?:\/\//i.test(raw) || /^(www\.)?instagram\.com(?:\/|$)/i.test(raw);
-  if (looksLikeUrl) {
+  const looksLikeInstagramUrl = /^https?:\/\//i.test(raw) || /^(www\.)?instagram\.com(?:\/|$)/i.test(raw);
+  if (looksLikeInstagramUrl) {
     try {
       const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
-      const host = url.hostname.replace(/^www\./, '').toLowerCase();
-      if (host !== 'instagram.com') return '';
-      return cleanCandidate(url.pathname.replace(/^\/+/, ''));
+      if (!INSTAGRAM_PROFILE_HOSTS.has(url.hostname.toLowerCase())) return '';
+      if (url.port || url.username || url.password) return '';
+      const segments = url.pathname.split('/').filter(Boolean);
+      if (segments.length !== 1) return '';
+      return validCandidate(segments[0]);
     } catch {
       return '';
     }
   }
 
-  return cleanCandidate(raw);
+  const candidate = raw.startsWith('@') ? raw.slice(1) : raw;
+  return validCandidate(candidate);
 }
 
 export function isValidInstagram(value: unknown) {
