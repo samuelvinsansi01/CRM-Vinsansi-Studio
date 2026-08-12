@@ -40,7 +40,7 @@ assert(operational.includes("ready: 'Configurada'") && operational.includes("com
 assert(operational.includes('confirmedBatches') && operational.includes('pendingBatches') && operational.includes('crmStateLabel'), 'Snapshot não expõe o contrato visual de sincronização.');
 assert(css.includes('.operational-group') && css.includes('.sync-reason') && css.includes('.configuration-preview'), 'Estilos operacionais não cobrem configuração, métricas e motivo de sync.');
 assert(bridge.includes('chrome.runtime.sendMessage(message.payload)') && bridge.includes("message.type !== 'request'"), 'Bridge CRM → extensão não encaminha a configuração operacional recebida.');
-assert(manifest.name === 'Captação Google Maps' && manifest.version === '0.12.0', 'Manifest carregável ainda expõe identificação de POC ou versão anterior.');
+assert(manifest.name === 'Captação Google Maps' && manifest.version === '0.12.1', 'Manifest carregável ainda expõe identificação de POC ou versão anterior.');
 
 const finalUx = `${html}\n${manifestText}`;
 assert(!/POC INDEPENDENTE|Google Maps Extractor POC/i.test(finalUx), 'Linguagem de POC permanece na UX final.');

@@ -449,9 +449,27 @@
 
 .import-extractor-actions {
   display: flex;
+  gap: var(--space-08);
   justify-content: flex-end;
   margin-top: var(--space-20);
 }
+
+.maps-extension-diagnostic {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-08);
+  margin-top: var(--space-16);
+  padding: var(--space-12);
+  border: 1px solid var(--app-border);
+  border-radius: var(--radius-12);
+  background: var(--app-surface-soft);
+}
+
+.maps-extension-diagnostic div { min-width: 0; }
+.maps-extension-diagnostic span { display: block; margin-bottom: 2px; color: var(--app-muted); font-size: 11px; }
+.maps-extension-diagnostic strong { display: block; overflow: hidden; color: var(--app-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.maps-extension-diagnostic__error { grid-column: 1 / -1; }
+.maps-extension-diagnostic__error strong { white-space: normal; overflow-wrap: anywhere; }
 
 .maps-operational-options {
   display: grid;
@@ -530,7 +548,8 @@
 .apify-run-summary { display: grid; gap: 6px; }
 .apify-json-viewer { max-height: 62vh; overflow: auto; padding: 16px; border-radius: 12px; background: color-mix(in srgb, var(--surface-card) 78%, black); font-size: 12px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 960px) { .import-extractor-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .import-extractor-fields { grid-template-columns: 1fr; } }
+@media (max-width: 960px) { .maps-extension-diagnostic { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .import-extractor-fields, .maps-extension-diagnostic { grid-template-columns: 1fr; } }
 
 .apify-run-summary .table-message { margin-top: 8px; white-space: normal; }
 

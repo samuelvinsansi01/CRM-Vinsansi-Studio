@@ -42,7 +42,7 @@ const importHook = read('src/hooks/useImportLeads.ts');
 const importRepository = read('src/repositories/import/supabaseImport.repository.ts');
 
 assert(fixture && !Array.isArray(fixture) && Array.isArray(fixture.items), 'Fixture não preserva o envelope metadata/items/errors/diagnostic exportado pela extensão.');
-assert(fixture.metadata?.extensionVersion === '0.12.0', 'Fixture não identifica a versão real auditada da extensão.');
+assert(fixture.metadata?.extensionVersion === '0.12.1', 'Fixture não identifica a versão real auditada da extensão.');
 assert(fixture.items.length >= 4, 'Fixture não cobre WhatsApp sem site, site próprio, agregador e Instagram.');
 for (const key of ['name', 'category', 'phone', 'website', 'instagram', 'googleMapsUrl', 'address', 'rating', 'reviewCount']) {
   assert(Object.hasOwn(fixture.items[0], key), `Fixture perdeu o campo real da extensão: ${key}.`);
@@ -131,4 +131,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('OK: export v0.12.0 da extensão atravessa preview/simulação do CRM, preserva contatos e Maps, resolve ramo canônico e mantém CRM como autoridade operacional.');
+console.log('OK: export v0.12.1 da extensão atravessa preview/simulação do CRM, preserva contatos e Maps, resolve ramo canônico e mantém CRM como autoridade operacional.');

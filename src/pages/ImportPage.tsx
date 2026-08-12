@@ -28,7 +28,7 @@ import { isValidInstagram, normalizeInstagramUsername } from '../services/instag
 import { permissionsFor } from '../services/permissions';
 import { isStatusGroup } from '../services/status/status.mapper';
 import { whatsappValidationService } from '../services/whatsapp-validation/whatsappValidation.service';
-import { googleMapsExtensionService } from '../services/google-maps-extension/googleMapsExtension.service';
+import { googleMapsExtensionService, type GoogleMapsExtensionDiagnostic } from '../services/google-maps-extension/googleMapsExtension.service';
 import type { ImportLead, ImportLeadDestination, ImportLeadInput, ImportLeadStatus, ImportParseResult } from '../services/import/types';
 
 type ImportPageProps = {
@@ -219,6 +219,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const [googleInstagramTarget, setGoogleInstagramTarget] = useState('5');
   const [googleMode, setGoogleMode] = useState<'quick' | 'complete'>('complete');
   const [configuringGoogleMaps, setConfiguringGoogleMaps] = useState(false);
+  const [checkingGoogleMaps, setCheckingGoogleMaps] = useState(false);
+  const [googleMapsDiagnostic, setGoogleMapsDiagnostic] = useState<GoogleMapsExtensionDiagnostic>(() => googleMapsExtensionService.getDiagnostic());
 
   const uniqueBranches = useMemo(() => {
     const byName = new Map<string, BranchConfigRecord>();
@@ -255,6 +257,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => googleMapsExtensionService.subscribeDiagnostic(setGoogleMapsDiagnostic), []);
 
   const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
@@ -516,9 +520,23 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         tone: 'success',
       });
     } catch (err) {
-      pushToast({ title: 'Extensão indisponível', description: err instanceof Error ? err.message : 'Não foi possível enviar a execução.', tone: 'danger' });
+      const detail = googleMapsExtensionService.describeError(err);
+      pushToast({ title: detail.title, description: detail.message, tone: 'danger' });
     } finally {
       setConfiguringGoogleMaps(false);
+    }
+  };
+
+  const checkGoogleMapsExtension = async () => {
+    setCheckingGoogleMaps(true);
+    try {
+      const response = await googleMapsExtensionService.ping();
+      pushToast({ title: 'Extensão Google Maps detectada', description: `Bridge e protocolo operacional ativos na versão ${response.extensionVersion}.`, tone: 'success' });
+    } catch (err) {
+      const detail = googleMapsExtensionService.describeError(err);
+      pushToast({ title: detail.title, description: detail.message, tone: 'danger' });
+    } finally {
+      setCheckingGoogleMaps(false);
     }
   };
 
@@ -709,7 +727,16 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                 />
               </label>
             </div>
+            <div className="maps-extension-diagnostic" aria-live="polite">
+              <div><span>Extensão detectada</span><strong>{googleMapsDiagnostic.checked ? (googleMapsDiagnostic.extensionDetected ? 'Sim' : 'Não') : 'Não verificada'}</strong></div>
+              <div><span>Versão</span><strong>{googleMapsDiagnostic.extensionVersion || '—'}</strong></div>
+              <div><span>Bridge ativa</span><strong>{googleMapsDiagnostic.bridgeActive ? 'Sim' : 'Não'}</strong></div>
+              <div><span>Execução configurada</span><strong>{googleMapsDiagnostic.configured ? 'Sim' : 'Não'}</strong></div>
+              <div><span>Último ping</span><strong>{googleMapsDiagnostic.lastPingAt ? new Date(googleMapsDiagnostic.lastPingAt).toLocaleTimeString('pt-BR') : '—'}</strong></div>
+              <div className="maps-extension-diagnostic__error"><span>Último erro</span><strong>{googleMapsDiagnostic.lastError ? `${googleMapsDiagnostic.lastError.code}: ${googleMapsDiagnostic.lastError.message}` : 'Nenhum'}</strong></div>
+            </div>
             <div className="import-extractor-actions">
+              <Button variant="secondary" loading={checkingGoogleMaps} onClick={checkGoogleMapsExtension}>Verificar extensão</Button>
               <Button loading={configuringGoogleMaps} onClick={configureGoogleMapsExecution}>Enviar execução para extensão</Button>
             </div>
           </Panel>

@@ -74,8 +74,16 @@ const manualState = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 assert(manualState.configured === false && manualState.uiMode === 'manual', 'Snapshot sem checkpoint não identifica o modo manual.');
 assert(manualState.statusLabel === 'Sem execução do CRM' && manualState.sync.canSync === false, 'Estado sem execução CRM não é explícito ou habilita sync indevidamente.');
 
+const pong = await dispatch({ type: 'GMAPS_EXTENSION_PING' });
+assert(pong.ok && pong.type === 'GMAPS_EXTENSION_PONG', 'Background não responde ao handshake PING/PONG.');
+assert(pong.extensionVersion === '0.12.1' && pong.operationalAvailable === true && pong.configured === false, 'PONG não informa versão, disponibilidade operacional e estado configurado.');
+
+const invalidConfigure = await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: {} });
+assert(invalidConfigure.ok === false && invalidConfigure.code === 'invalid_execution_identity' && invalidConfigure.message, 'Payload inválido não retorna erro explícito e codificado.');
+
 const configured = await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: fixture });
 assert(configured.ok && configured.state.combinationsTotal === 4, 'Fila cartesiana ramo/subramo/local não gerou quatro combinações.');
+assert(configured.type === 'GMAPS_OPERATIONAL_CONFIGURE_ACK' && configured.configured === true && configured.executionId === fixture.executionId, 'Configure não retorna ACK explícito e correlacionado à execução.');
 assert(configured.state.combinations.every((item) => item.status === 'pending'), 'Combinações novas não começam pending.');
 assert(configured.state.uiMode === 'operational' && configured.state.statusLabel === 'Configurada', 'Snapshot não expõe a execução CRM configurada antes do start.');
 assert(configured.state.current.position === 1 && configured.state.current.subcategory === 'Cozinhas Planejadas' && configured.state.current.location === 'Campinas/SP', 'Snapshot pré-start não expõe a primeira combinação.');
@@ -84,6 +92,8 @@ assert(configured.state.controls.canStart && !configured.state.controls.canPause
 await dispatch({ type: 'GMAPS_OPERATIONAL_START' });
 let state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 assert(state.status === 'running' && state.current.status === 'running', 'Start não inicia a combinação atual.');
+const activeConfigure = await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: { ...fixture, executionId: 'blocked-active-fixture' } });
+assert(activeConfigure.ok === false && activeConfigure.code === 'operational_execution_in_progress_or_unsynced', 'Execução já ativa não retorna causa explícita.');
 
 const firstContext = {
   executionId: fixture.executionId,
