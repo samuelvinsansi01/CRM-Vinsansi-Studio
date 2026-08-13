@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { leadCycleService } from '../services/lead-cycle/leadCycle.service';
 import type {
+  LeadCycleDetailsInput,
   LeadCycleLead,
   LeadRoutingCommand,
   LeadRoutingResult,
@@ -74,6 +75,16 @@ export function useLeadCycle(view: LeadCycleView) {
     }
   }, [refresh]);
 
+
+  const updateDetails = useCallback(async (lead: LeadCycleLead, input: LeadCycleDetailsInput) => {
+    setSaving(true);
+    try {
+      const result = await leadCycleService.updateDetails(lead, input);
+      await refresh();
+      return result;
+    } finally { setSaving(false); }
+  }, [refresh]);
+
   const updateImportedInstagram = useCallback(async (id: string, value: string) => {
     setSaving(true);
     try {
@@ -84,5 +95,5 @@ export function useLeadCycle(view: LeadCycleView) {
   }, [refresh]);
 
 
-  return { records, loading, saving, error, refresh, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp, updateImportedInstagram };
+  return { records, loading, saving, error, refresh, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp, updateDetails, updateImportedInstagram };
 }

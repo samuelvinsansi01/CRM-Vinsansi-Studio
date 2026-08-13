@@ -21,7 +21,7 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useLeadCycle } from '../hooks/useLeadCycle';
 import { useQueuePreparation } from '../hooks/useQueuePreparation';
-import type { LeadCycleLead } from '../services/lead-cycle/types';
+import type { LeadCycleDetailsInput, LeadCycleLead } from '../services/lead-cycle/types';
 import { whatsappCapacityValidationService } from '../services/whatsapp-validation/whatsappCapacityValidation.service';
 import type { WhatsAppCapacityValidationResult } from '../services/whatsapp-validation/whatsappCapacityValidation.service';
 import { toLocalDateInputValue } from '../utils/date';
@@ -50,14 +50,14 @@ const sourceDefinitions: SourceDefinition[] = [
 ];
 
 const columns: TableColumn<Row>[] = [
-  { key: 'company', label: 'Empresa', width: '21%' },
-  { key: 'source', label: 'Origem', width: '14%' },
-  { key: 'status', label: 'Status', width: '11%' },
-  { key: 'branch', label: 'Ramo', width: '14%' },
-  { key: 'location', label: 'Localização', width: '14%' },
-  { key: 'phone', label: 'WhatsApp', width: '9%' },
-  { key: 'instagram', label: 'Instagram', width: '9%' },
-  { key: 'channel', label: 'Destino', width: '10%' },
+  { key: 'company', label: 'Empresa', width: '22%' },
+  { key: 'source', label: 'Origem', width: '11%' },
+  { key: 'branch', label: 'Ramo', width: '15%' },
+  { key: 'location', label: 'Localização', width: '17%' },
+  { key: 'phone', label: 'WhatsApp', width: '8%' },
+  { key: 'instagram', label: 'Instagram', width: '10%' },
+  { key: 'status', label: 'Status', width: '9%' },
+  { key: 'channel', label: 'Destino', width: '8%' },
 ];
 
 function sourceName(lead: LeadCycleLead): Exclude<SourceFilter, 'Todos'> {
@@ -79,6 +79,26 @@ function channelTag(lead: LeadCycleLead) {
 
 function contactValue(value: string) {
   return value.trim() ? 'Sim' : 'Não';
+}
+
+const emptyLeadDetails: LeadCycleDetailsInput = {
+  company: '',
+  rawPhone: '',
+  whatsapp: '',
+  instagram: '',
+  website: '',
+  mapsUrl: '',
+};
+
+function detailsFromLead(lead: LeadCycleLead): LeadCycleDetailsInput {
+  return {
+    company: lead.company,
+    rawPhone: lead.rawPhone,
+    whatsapp: lead.whatsapp,
+    instagram: lead.instagram,
+    website: lead.website,
+    mapsUrl: lead.mapsUrl,
+  };
 }
 
 function capacityValidationDescription(result: WhatsAppCapacityValidationResult) {
@@ -109,8 +129,8 @@ export function ValidationRoutingPage() {
   const [selectedChip, setSelectedChip] = useState('');
   const [validatingCapacity, setValidatingCapacity] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const [editingInstagramLead, setEditingInstagramLead] = useState<LeadCycleLead | null>(null);
-  const [instagramDraft, setInstagramDraft] = useState('');
+  const [editingLead, setEditingLead] = useState<LeadCycleLead | null>(null);
+  const [leadDraft, setLeadDraft] = useState<LeadCycleDetailsInput>(emptyLeadDetails);
   const operationalDate = toLocalDateInputValue();
   const chipCapacity = useQueuePreparation('WhatsApp', operationalDate, selectedChip);
 
@@ -210,34 +230,51 @@ export function ValidationRoutingPage() {
 
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
 
-  const rowActions = (row: Row): TableAction[] => {
-    const lead = allRecords.find((item) => item.id === row.id);
-    if (!lead || lead.statusId !== 1 || lead.channel !== 'Instagram') return [];
-    return isValidInstagram(normalizeInstagramUsername(lead.instagram)) ? ['edit', 'approve'] : ['edit'];
-  };
-
-  const handleRowAction = async (action: TableAction, row: Row) => {
+  const handleRowAction = (action: TableAction, row: Row) => {
+    if (action !== 'edit') return;
     const lead = allRecords.find((item) => item.id === row.id);
     if (!lead) return;
-    if (action === 'edit') {
-      setEditingInstagramLead(lead);
-      setInstagramDraft(lead.instagram);
-      return;
-    }
-    if (action === 'approve') {
-      const result = await imported.executeRoutingCommand('route-imported-to-instagram', [lead.id]);
-      if (result.succeeded === 1) toast('Lead aprovado', 'Instagram confirmado manualmente; o status avançou para Validado.');
-      else toast('Aprovação não concluída', result.failures[0]?.reason || 'Atualize a página e tente novamente.', 'warning');
+    setEditingLead(lead);
+    setLeadDraft(detailsFromLead(lead));
+  };
+
+  const updateLeadDraft = (field: keyof LeadCycleDetailsInput, value: string) => {
+    setLeadDraft((current) => ({ ...current, [field]: value }));
+  };
+
+  const cycleForLead = (lead: LeadCycleLead) => {
+    if (lead.statusId === 1) return imported;
+    if (lead.statusId === 2) return valid;
+    return preSend;
+  };
+
+  const saveLeadDetails = async () => {
+    if (!editingLead) return;
+    try {
+      await cycleForLead(editingLead).updateDetails(editingLead, leadDraft);
+      setEditingLead(null);
+      setLeadDraft(emptyLeadDetails);
+      toast('Lead atualizado', 'Os dados do lead foram salvos sem alterar o status ou o destino.');
+    } catch (err) {
+      toast('Não foi possível atualizar', err instanceof Error ? err.message : 'Revise os dados informados.', 'danger');
     }
   };
 
-  const saveInstagram = async () => {
-    if (!editingInstagramLead) return;
+  const approveEditingInstagram = async () => {
+    if (!editingLead || editingLead.statusId !== 1 || editingLead.channel !== 'Instagram') return;
     try {
-      await imported.updateImportedInstagram(editingInstagramLead.id, instagramDraft);
-      setEditingInstagramLead(null);
-      toast('Instagram atualizado', 'O formato foi validado. Use Aprovar para avançar o status.');
-    } catch (err) { toast('Instagram inválido', err instanceof Error ? err.message : 'Revise o perfil informado.', 'danger'); }
+      const updated = await imported.updateDetails(editingLead, leadDraft);
+      const result = await imported.executeRoutingCommand('route-imported-to-instagram', [updated.id]);
+      if (result.succeeded === 1 || result.unchanged === 1) {
+        setEditingLead(null);
+        setLeadDraft(emptyLeadDetails);
+        toast('Lead aprovado', 'Instagram confirmado manualmente; o status avançou para Validado.');
+      } else {
+        toast('Aprovação não concluída', result.failures[0]?.reason || 'Atualize a página e tente novamente.', 'warning');
+      }
+    } catch (err) {
+      toast('Aprovação não concluída', err instanceof Error ? err.message : 'Revise os dados e tente novamente.', 'warning');
+    }
   };
 
   return (
@@ -305,11 +342,43 @@ export function ValidationRoutingPage() {
         {!error && loading ? <div className="table-message">Carregando leads...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead encontrado para os filtros selecionados.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable columns={columns} rows={pageItems} actions={[]} getRowActions={rowActions} onAction={(action, row) => void handleRowAction(action, row)} selectable={false} />
+          <DataTable columns={columns} rows={pageItems} actions={['edit']} actionsLabel="Ações" onAction={(action, row) => handleRowAction(action, row)} selectable={false} />
         ) : null}
       </TableCard>
-      <Drawer open={Boolean(editingInstagramLead)} title="Corrigir Instagram" description="O status permanece Importado até a aprovação manual." onClose={() => setEditingInstagramLead(null)} footer={<Button loading={imported.saving} onClick={() => void saveInstagram()}>Salvar Instagram</Button>}>
-        <Field label="Instagram" placeholder="@empresa ou https://instagram.com/empresa" value={instagramDraft} onChange={setInstagramDraft} />
+      <Drawer
+        open={Boolean(editingLead)}
+        title="Editar lead"
+        description="Consulte e corrija os dados do lead sem alterar automaticamente o status ou o destino."
+        onClose={() => { setEditingLead(null); setLeadDraft(emptyLeadDetails); }}
+        footer={(
+          <>
+            <Button variant="secondary" onClick={() => { setEditingLead(null); setLeadDraft(emptyLeadDetails); }}>Cancelar</Button>
+            {editingLead?.statusId === 1
+              && editingLead.channel === 'Instagram'
+              && isValidInstagram(normalizeInstagramUsername(leadDraft.instagram)) ? (
+                <Button variant="secondary" loading={imported.saving} onClick={() => void approveEditingInstagram()}>
+                  Salvar e aprovar Instagram
+                </Button>
+              ) : null}
+            <Button loading={imported.saving || valid.saving || preSend.saving} onClick={() => void saveLeadDetails()}>Salvar</Button>
+          </>
+        )}
+      >
+        {editingLead ? (
+          <div className="drawer-form validation-routing__edit-form">
+            <Field label="Empresa" value={leadDraft.company} onChange={(value) => updateLeadDraft('company', value)} />
+            <Field label="Origem" value={sourceName(editingLead)} readOnly />
+            <Field label="Ramo" value={editingLead.branch || '-'} readOnly />
+            <Field label="Localização" value={[editingLead.city, editingLead.state].filter(Boolean).join(' / ') || '-'} readOnly />
+            <Field label="Telefone" value={leadDraft.rawPhone} onChange={(value) => updateLeadDraft('rawPhone', value)} />
+            <Field label="WhatsApp" value={leadDraft.whatsapp} onChange={(value) => updateLeadDraft('whatsapp', value)} />
+            <Field label="Instagram" placeholder="@empresa ou https://instagram.com/empresa" value={leadDraft.instagram} onChange={(value) => updateLeadDraft('instagram', value)} />
+            <Field label="Site" value={leadDraft.website} onChange={(value) => updateLeadDraft('website', value)} />
+            <Field label="Google Maps" value={leadDraft.mapsUrl} onChange={(value) => updateLeadDraft('mapsUrl', value)} />
+            <Field label="Status" value={editingLead.status} readOnly />
+            <Field label="Destino" value={editingLead.channel} readOnly />
+          </div>
+        ) : null}
       </Drawer>
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>

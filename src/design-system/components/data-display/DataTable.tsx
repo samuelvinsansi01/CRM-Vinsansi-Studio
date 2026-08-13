@@ -21,6 +21,7 @@ type DataTableProps<T> = {
   onSelectedRowsChange?: (selectedRows: number[]) => void;
   onAction?: (action: TableAction, row: T, index: number) => void;
   getRowActions?: (row: T, index: number) => TableAction[];
+  actionsLabel?: string;
 };
 
 const actionIcon = {
@@ -92,6 +93,7 @@ export function DataTable<T extends Record<string, ReactNode>>({
   onSelectedRowsChange,
   onAction,
   getRowActions,
+  actionsLabel,
 }: DataTableProps<T>) {
   const [internalSelectedRows, setInternalSelectedRows] = useState<number[]>([]);
   const currentSelectedRows = selectedRows ?? internalSelectedRows;
@@ -141,7 +143,7 @@ export function DataTable<T extends Record<string, ReactNode>>({
                 {column.label}
               </th>
             ))}
-            {actions.length ? <th className="data-table__actions" /> : null}
+            {actions.length ? <th className="data-table__actions">{actionsLabel}</th> : null}
           </tr>
         </thead>
         <tbody>

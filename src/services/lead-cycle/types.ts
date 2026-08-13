@@ -9,6 +9,8 @@ export type LeadCycleLead = {
   state: string;
   city: string;
   phone: string;
+  rawPhone: string;
+  whatsapp: string;
   instagram: string;
   website: string;
   mapsUrl: string;
@@ -22,6 +24,14 @@ export type LeadCycleLead = {
   updatedAt: string;
 };
 
+export type LeadCycleDetailsInput = {
+  company: string;
+  rawPhone: string;
+  whatsapp: string;
+  instagram: string;
+  website: string;
+  mapsUrl: string;
+};
 
 export type LeadRoutingCommand =
   | 'route-imported-to-whatsapp'
