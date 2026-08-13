@@ -1,5 +1,5 @@
-import { issueMapsExtensionToken, MAPS_EXTENSION_SCOPES, sha256 } from '../../server/maps/token';
-import { authenticatedUser, body, send, serviceClient, setCors, statusForError, text, type ApiRequest, type ApiResponse } from '../../server/maps/shared';
+import { issueMapsExtensionToken, MAPS_EXTENSION_SCOPES, sha256 } from '../../server/maps/token.js';
+import { authenticatedUser, body, send, serviceClient, setCors, statusForError, text, type ApiRequest, type ApiResponse } from '../../server/maps/shared.js';
 
 declare const process: { env: Record<string, string | undefined> };
 

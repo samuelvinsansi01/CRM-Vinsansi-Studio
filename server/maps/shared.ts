@@ -1,6 +1,6 @@
 // Server-only Maps infrastructure shared by the two public route entrypoints.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { verifyMapsExtensionToken, type MapsExtensionScope } from './token';
+import { verifyMapsExtensionToken, type MapsExtensionScope } from './token.js';
 
 export type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 export type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void; end(): void };
