@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../server/maps/shared.js';
 import { issueMapsExtensionToken, sha256, type MapsExtensionScope } from '../../server/maps/token.js';
 
-const EXTENSION_VERSION = '0.14.0';
+const EXTENSION_VERSION = '0.16.0';
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const ACTIVE_LEAD_STATUS_IDS = [1, 2, 3];
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -86,7 +86,7 @@ function normalizeWebsite(value: unknown) {
   } catch { return ''; }
 }
 function websiteClassification(value: string) { return !value ? 'sem_site' : AGGREGATORS.test(value) ? 'agregador' : 'dominio_proprio'; }
-function itemKey(item: Row) { return text(item.placeId || item.mapsDataId || item.cid || item.googleMapsUrl || item.mapsUrl) || [item.name, item.address, item.phone].map(normalize).join('|'); }
+function itemKey(item: Row) { return text((item._operational as Row | undefined)?.key || item.operationalDedupeKey || item.placeId || item.mapsDataId || item.cid || item.googleMapsUrl || item.mapsUrl) || [item.name, item.address, item.phone].map(normalize).join('|'); }
 function jsonByteLength(value: unknown) { return new TextEncoder().encode(JSON.stringify(value)).byteLength; }
 
 function effectiveCandidate(raw: Row) {
@@ -525,8 +525,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     if (action === 'leads_promote') {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
-      const selected = Array.isArray(input.candidateIds) ? new Set(input.candidateIds.map(text)) : null;
-      const candidates = await client.from('maps_search_candidates').select('*').eq('users_id', usersId).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('excluded_by_user', false).eq('eligibility_status', 'ready_to_save');
+      const selectedIds = Array.isArray(input.candidateIds) ? [...new Set(input.candidateIds.map(text).filter(Boolean))] : [];
+      if (selectedIds.length > 25) throw new Error('maps_leads_promote_batch_too_large');
+      const selected = selectedIds.length ? new Set(selectedIds) : null;
+      let candidatesQuery = client
+        .from('maps_search_candidates')
+        .select('*')
+        .eq('users_id', usersId)
+        .eq('maps_search_executions_id', execution.maps_search_executions_id)
+        .eq('excluded_by_user', false)
+        .eq('eligibility_status', 'ready_to_save');
+      if (selectedIds.length) candidatesQuery = candidatesQuery.in('maps_search_candidates_id', selectedIds);
+      const candidates = await candidatesQuery;
       if (candidates.error) throw new Error(candidates.error.message);
       const channels = await channelIds(client);
       const sources = await client.from('contact_sources').select('contact_sources_id,contact_sources_key').eq('users_id', usersId).eq('status_id', 1);
@@ -574,7 +584,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         await client.from('maps_search_candidates').update({ promoted_leads_id: inserted.data.leads_id, promoted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_candidates_id', candidateId);
         promoted += 1;
       }
-      await executionSummary(client, execution);
+      if (input.summarizeExecution !== false) await executionSummary(client, execution);
       return send(req, res, failures.length ? 207 : 200, { ok: failures.length === 0, promoted, alreadyPromoted, failures });
     }
     if (action === 'history') {
