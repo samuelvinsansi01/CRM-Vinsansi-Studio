@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { normalizeInstagramUsername } from './identity';
-import { verifyInstagramExtensionToken } from './token';
+import { normalizeInstagramUsername } from '../../server/instagram/identity';
+import { verifyInstagramExtensionToken } from '../../server/instagram/token';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void; end(): void };

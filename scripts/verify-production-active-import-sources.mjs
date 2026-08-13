@@ -18,8 +18,8 @@ const importRepository = read('src/repositories/import/supabaseImport.repository
 const legacyPage = read('src/pages/ApifyAccountsPage.tsx');
 const legacyService = read('src/services/apify-import/apifyImport.service.ts');
 
-assert(importPage.includes("useState<'Manual' | 'Google Maps Extension'>('Manual')"), 'As fontes ativas não são exatamente Manual e Google Maps Extension, com Manual como padrão.');
-assert(importPage.includes('>Manual</button>') && importPage.includes('>Google Maps Extension</button>'), 'Uma fonte ativa esperada não está visível na página Importar.');
+assert(!importPage.includes("useState<'Manual' | 'Google Maps Extension'>"), 'O seletor operacional legado Maps voltou à página Importar.');
+assert(importPage.includes('Panel title="Adicionar lead"') && importPage.includes('Importar backup JSON (diagnóstico)'), 'Cadastro manual ou fallback diagnóstico deixou de estar disponível.');
 assert(!/apify/i.test(importPage), 'ImportPage ainda contém chamada, estado, CTA ou texto Apify.');
 assert(!/apify/i.test(registry), 'A navegação ativa ainda contém Apify.');
 assert(!/apify/i.test(settingsOverview), 'A visão de configurações ainda apresenta Apify como disponível.');
@@ -47,4 +47,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('OK: importação ativa limitada a Manual e Google Maps Extension; Apify permanece apenas como legado não montado.');
+console.log('OK: importação ativa mantém cadastro manual e backup Maps apenas diagnóstico; operação Maps segue independente e Apify permanece legado.');

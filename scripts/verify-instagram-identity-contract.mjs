@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspace = path.resolve(root, '..');
 const read = (relative) => fs.readFileSync(path.join(workspace, relative), 'utf8').replace(/\r\n/g, '\n');
-const identity = read('crm-novo/api/instagram/identity.ts');
+const identity = read('crm-novo/server/instagram/identity.ts');
 const frontendIdentity = read('crm-novo/src/services/instagram/instagram.utils.ts');
-const token = read('crm-novo/api/instagram/token.ts');
+const token = read('crm-novo/server/instagram/token.ts');
 const api = read('crm-novo/api/instagram/extension.ts');
 const popup = read('instagram-extension/popup.js');
 const content = read('instagram-extension/content.js');
@@ -77,7 +77,7 @@ for (const input of invalidCases) {
 }
 assert(identityModule.isValidInstagramUsername('@Empresa') === true && identityModule.isValidInstagramUsername('instagram.com/p/ABC') === false, 'isValidInstagramUsername diverge do normalizador canônico.');
 
-assert(token.includes("from './identity'") && api.includes("from './identity'"), 'Token e API da extensão não usam o mesmo helper canônico.');
+assert(token.includes("from './identity'") && api.includes("from '../../server/instagram/identity'"), 'Token e API da extensão não usam o mesmo helper canônico.');
 assert(!token.includes('function normalizeInstagramProfile') && !api.includes('function normalizeInstagramProfile'), 'Permaneceu normalizador independente nas APIs Instagram.');
 assert(!api.includes('instagram_url:'), 'API ainda libera valor bruto como destino alternativo.');
 assert(api.includes('instagram_username: instagramUsername'), 'API não libera exclusivamente o username canônico.');

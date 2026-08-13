@@ -1,5 +1,5 @@
-import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from './shared';
-import { issueMapsExtensionToken, sha256, type MapsExtensionScope } from './token';
+import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../server/maps/shared';
+import { issueMapsExtensionToken, sha256, type MapsExtensionScope } from '../../server/maps/token';
 
 const EXTENSION_VERSION = '0.13.0';
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
@@ -79,7 +79,7 @@ function effectiveCandidate(raw: Row) {
   };
 }
 
-async function channelIds(client: ReturnType<typeof import('./shared').serviceClient>) {
+async function channelIds(client: ReturnType<typeof import('../../server/maps/shared').serviceClient>) {
   const result = await client.from('channels').select('channels_id,channels_name');
   if (result.error) throw new Error(`channels_query_failed:${result.error.message}`);
   const find = (name: string) => Number((result.data ?? []).find((row) => normalize(row.channels_name) === name)?.channels_id);
@@ -89,7 +89,7 @@ async function channelIds(client: ReturnType<typeof import('./shared').serviceCl
   return { whatsapp, instagram };
 }
 
-async function calculateTargets(client: ReturnType<typeof import('./shared').serviceClient>, usersId: number, branchesId: number, days: number) {
+async function calculateTargets(client: ReturnType<typeof import('../../server/maps/shared').serviceClient>, usersId: number, branchesId: number, days: number) {
   const channels = await channelIds(client);
   const [chips, socials, levels, leads] = await Promise.all([
     client.from('chips').select('chips_id,levels_id,status_id').eq('users_id', usersId).eq('status_id', 1),
@@ -116,19 +116,19 @@ async function calculateTargets(client: ReturnType<typeof import('./shared').ser
   };
 }
 
-async function ownedExecution(client: ReturnType<typeof import('./shared').serviceClient>, usersId: number, executionId: string) {
+async function ownedExecution(client: ReturnType<typeof import('../../server/maps/shared').serviceClient>, usersId: number, executionId: string) {
   const result = await client.from('maps_search_executions').select('*').eq('maps_search_executions_id', executionId).eq('users_id', usersId).maybeSingle();
   if (result.error || !result.data) throw new Error('maps_execution_not_found');
   return result.data as Row;
 }
 
-async function branchTerms(client: ReturnType<typeof import('./shared').serviceClient>, usersId: number, branchesId: number) {
+async function branchTerms(client: ReturnType<typeof import('../../server/maps/shared').serviceClient>, usersId: number, branchesId: number) {
   const result = await client.from('branches').select('branches_id,branches_name,branches_categories,status_id').eq('branches_id', branchesId).eq('users_id', usersId).eq('status_id', 1).maybeSingle();
   if (result.error || !result.data) throw new Error('maps_branch_not_available');
   return { branch: result.data as Row, terms: strings([result.data.branches_name, result.data.branches_categories]) };
 }
 
-async function createCoverageForCity(client: ReturnType<typeof import('./shared').serviceClient>, execution: Row, city: Row, terms: string[]) {
+async function createCoverageForCity(client: ReturnType<typeof import('../../server/maps/shared').serviceClient>, execution: Row, city: Row, terms: string[]) {
   const existing = await client.from('maps_search_coverage').select('normalized_search_term').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('cities_id', city.cities_id);
   if (existing.error) throw new Error(`maps_coverage_query_failed:${existing.error.message}`);
   const present = new Set((existing.data ?? []).map((row) => text(row.normalized_search_term)));
@@ -154,7 +154,7 @@ async function createCoverageForCity(client: ReturnType<typeof import('./shared'
   }
 }
 
-async function nextCoverage(client: ReturnType<typeof import('./shared').serviceClient>, execution: Row) {
+async function nextCoverage(client: ReturnType<typeof import('../../server/maps/shared').serviceClient>, execution: Row) {
   const errorCoverage = await client.from('maps_search_coverage').select('*').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('status', 'error').limit(1);
   if (errorCoverage.error) throw new Error(errorCoverage.error.message);
   if (errorCoverage.data?.length) return { blocked: true, reason: 'coverage_error_requires_operator', coverage: errorCoverage.data[0] };
@@ -181,7 +181,7 @@ async function nextCoverage(client: ReturnType<typeof import('./shared').service
   return { blocked: false, coverage: null };
 }
 
-async function executionSummary(client: ReturnType<typeof import('./shared').serviceClient>, execution: Row) {
+async function executionSummary(client: ReturnType<typeof import('../../server/maps/shared').serviceClient>, execution: Row) {
   const [candidates, coverage] = await Promise.all([
     client.from('maps_search_candidates').select('eligibility_status,effective_phone,effective_whatsapp,effective_instagram,excluded_by_user,promoted_leads_id').eq('maps_search_executions_id', execution.maps_search_executions_id),
     client.from('maps_search_coverage').select('status,found_count,rejected_count,duplicate_count').eq('maps_search_executions_id', execution.maps_search_executions_id),

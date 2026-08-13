@@ -27,10 +27,13 @@ const importService = read(crmRoot, 'src/services/import/import.service.ts');
 const importRepository = read(crmRoot, 'src/repositories/import/supabaseImport.repository.ts');
 const dispatchApi = read(crmRoot, 'api/whatsapp/dispatch.ts');
 const batchApi = read(crmRoot, 'api/whatsapp/batch.ts');
-const validationApi = read(crmRoot, 'api/whatsapp/validation.handler.ts');
+const validationApi = read(crmRoot, 'server/whatsapp/validation.handler.ts');
 const apiSources = fs.readdirSync(path.join(crmRoot, 'api'), { recursive: true, withFileTypes: true })
   .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
   .map((entry) => read(crmRoot, path.relative(crmRoot, path.join(entry.parentPath ?? entry.path, entry.name))))
+  .concat(fs.readdirSync(path.join(crmRoot, 'server'), { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+    .map((entry) => read(crmRoot, path.relative(crmRoot, path.join(entry.parentPath ?? entry.path, entry.name)))))
   .join('\n');
 const migrationPlan = read(crmRoot, 'scripts/production-manual-migration-plan.sql');
 const forwardIdentity = read(crmRoot, 'supabase/migrations/20260812130000_install_forward_only_identity_contract.sql');
@@ -91,7 +94,7 @@ for (const variable of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY', 'S
 }
 
 const activeImport = [importPage, registry, settingsOverview, importSettings].join('\n');
-assert(importPage.includes("useState<'Manual' | 'Google Maps Extension'>('Manual')"), 'Fontes ativas de importação divergiram.');
+assert(!importPage.includes("useState<'Manual' | 'Google Maps Extension'>") && importPage.includes('Importar backup JSON (diagnóstico)'), 'Importação divergiu do contrato API-first: Maps independente e JSON apenas diagnóstico.');
 assert(!/apify/i.test(activeImport), 'Apify reapareceu no UX ativo.');
 assert(!app.includes('ApifyAccountsPage') && app.includes("'config-import-apify': 'config-import-rules'"), 'Página Apify está montada ou ID legado não redireciona.');
 assert(importService.includes('guardImportPersistence') && importPage.includes('await sendApprovedToInicio(result.leads)'), 'Simulation/persistência não protege o fluxo Google Maps JSON.');

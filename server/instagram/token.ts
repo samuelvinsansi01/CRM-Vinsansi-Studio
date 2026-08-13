@@ -1,3 +1,4 @@
+// Server-only token contract; secrets never cross into an API entrypoint bundle as data.
 import { normalizeInstagramUsername } from './identity';
 export { normalizeInstagramUsername as normalizeInstagramProfile } from './identity';
 

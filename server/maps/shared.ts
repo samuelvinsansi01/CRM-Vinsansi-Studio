@@ -1,3 +1,4 @@
+// Server-only Maps infrastructure shared by the two public route entrypoints.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { verifyMapsExtensionToken, type MapsExtensionScope } from './token';
 

@@ -1,3 +1,4 @@
+// Server-only token contract; GMAPS_EXTENSION_SIGNING_SECRET is never client code.
 export const MAPS_EXTENSION_SCOPES = [
   'maps:catalogs:read',
   'maps:targets:read',

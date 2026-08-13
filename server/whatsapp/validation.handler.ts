@@ -1,3 +1,4 @@
+// Shared server-side implementation for the validate and revalidate entrypoints.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export type ApiRequest = {

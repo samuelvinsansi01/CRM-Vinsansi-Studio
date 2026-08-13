@@ -18,7 +18,7 @@ const routingRules = read('src/services/lead-cycle/leadRouting.rules.ts');
 const leadCycleService = read('src/services/lead-cycle/leadCycle.service.ts');
 const queueRepository = read('src/repositories/whatsapp-queue/canonicalWhatsAppQueue.repository.ts');
 const validationService = read('src/services/whatsapp-validation/whatsappValidation.service.ts');
-const validationApi = read('api/whatsapp/validation.handler.ts');
+const validationApi = read('server/whatsapp/validation.handler.ts');
 const mapsApi = read('api/maps/extension.ts');
 const mapsOperational = readExtension('src/operational.js');
 

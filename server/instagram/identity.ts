@@ -1,3 +1,4 @@
+// Server-only helper; kept outside api/ so Vercel does not expose it as a Function.
 const RESERVED_INSTAGRAM_PATHS = new Set([
   'about',
   'accounts',

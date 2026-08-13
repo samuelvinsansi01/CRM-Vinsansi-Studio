@@ -55,7 +55,7 @@ assert(hook.includes('importService.removeFromImport') && hook.includes('importS
 assert(importPage.includes("title: 'Ação bloqueada pela simulação'") && importPage.includes('Nenhum lead persistido foi alterado.'), 'Interface pode anunciar alteração bloqueada como sucesso.');
 
 assert(!importPage.includes('simulate: false'), 'Fluxo ativo ainda força simulate:false.');
-assert(importPage.includes("useState<'Manual' | 'Google Maps Extension'>('Manual')"), 'Fontes ativas de importação não estão limitadas a Manual e Google Maps Extension.');
+assert(!importPage.includes("useState<'Manual' | 'Google Maps Extension'>") && importPage.includes('Importar backup JSON (diagnóstico)'), 'Fluxo Maps operacional voltou ao CRM ou o fallback diagnóstico foi removido.');
 assert(importPage.includes('await importJson(jsonText, { simulate: true })') && importPage.includes('await sendApprovedToInicio(result.leads)'), 'Aprovação dos dados da extensão não passa pela prévia e pela barreira central.');
 assert(importPage.includes('Modo de simulação ativo.') && importPage.includes('Os leads serão analisados, mas não serão gravados.'), 'Banner operacional de simulação está ausente.');
 assert(importPage.includes('0 lead(s) persistido(s) por causa da simulação'), 'Resultado de simulação não informa zero persistências.');
