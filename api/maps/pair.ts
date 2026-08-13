@@ -11,7 +11,7 @@ function randomSecret() {
 }
 
 function panelUrl() {
-  return text(process.env.PUBLIC_APP_URL ?? process.env.VITE_PUBLIC_APP_URL) || 'https://painel.samuelvinsansi.com.br';
+  return text(process.env.PUBLIC_APP_URL ?? process.env.VITE_PUBLIC_APP_URL) || 'https://crm-vinsansi-studio.vercel.app';
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
