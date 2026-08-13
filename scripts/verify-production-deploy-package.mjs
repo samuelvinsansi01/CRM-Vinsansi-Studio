@@ -111,9 +111,9 @@ assert(!/\b(?:UPDATE|DELETE FROM|INSERT INTO)\s+public\.leads\b/i.test(forwardId
 const runtimeCode = [app, importPage, importService, apiSources, worker, popup, content].join('\n');
 assert(!runtimeCode.includes('leads_identity_contract_version'), 'Runtime força leads_identity_contract_version.');
 
-assert(manifest.manifest_version === 3 && manifest.version === '1.5.0', 'Manifest Instagram inválido ou versão inesperada.');
-assert(manifest.host_permissions?.includes('https://painel.samuelvinsansi.com.br/*'), 'Extensão não autoriza a API de produção.');
-assert(popup.includes("const CRM_API_BASE = 'https://painel.samuelvinsansi.com.br/api'"), 'Extensão não aponta para a API de produção.');
+assert(manifest.manifest_version === 3 && manifest.version === '1.6.0', 'Manifest Instagram inválido ou versão inesperada.');
+assert(manifest.host_permissions?.includes('https://crm-vinsansi-studio.vercel.app/*'), 'Extensão não autoriza a API operacional atual.');
+assert(popup.includes("const CRM_API_BASE = 'https://crm-vinsansi-studio.vercel.app/api'"), 'Extensão não aponta para a API operacional atual.');
 assert(popup.includes('chrome.storage.session.set') && popup.includes('delete persisted.extensionToken'), 'Token temporário não está restrito à sessão.');
 assert(popup.includes('skipped_invalid_recipient') && popup.includes('uncertainMediaTransportResult'), 'Extensão perdeu tratamento de inválidos ou transporte incerto.');
 assert(content.includes('uncertainImageUploadResult') && content.includes('O evento de upload foi disparado, mas o preview não pôde ser confirmado.'), 'Upload incerto não exige reconciliação.');

@@ -24,7 +24,7 @@ import { useCatalogRecords } from '../hooks/useCatalogRecords';
 import { useConfigRecords } from '../hooks/useConfigRecords';
 import { DEFAULT_TEMPLATE_MESSAGE_1, DEFAULT_TEMPLATE_MESSAGE_2 } from '../services/config/config.seed';
 import { chipStatusLabel, isOperationalWhatsAppChip } from '../services/config/chipOperational';
-import { categoriesFormValue, formatCategoriesJson, mergeCategoriesJson, parseCategoriesJson } from '../utils/branchCategories';
+import { categoriesFormValue, formatCategoriesJson, mergeBranchAcquisitionTargets, mergeBranchAcquisitionTargetsJson, mergeCategoriesJson, parseCategoriesJson } from '../utils/branchCategories';
 import type { InstanceRecord, LevelRecord, TemplateChannelRecord, TemplateTypeRecord } from '../repositories/configuration';
 import type {
   BranchConfigRecord,
@@ -177,8 +177,9 @@ function makeScreen(kind: ConfigKind, options: ConfigModalOptions): ScreenDefini
       ],
       columns: [
         { key: 'name', label: 'Ramo', width: '34%' },
-        { key: 'categories', label: 'Categorias (JSONB)', width: '48%' },
-        { key: 'status', label: 'Status', width: '14%' },
+        { key: 'categories', label: 'Categorias (JSONB)', width: '34%' },
+        { key: 'stockTargets', label: 'Estoque alvo', width: '16%' },
+        { key: 'status', label: 'Status', width: '12%' },
       ],
       fields: [
         { key: 'name', label: 'Nome', placeholder: 'Ex.: Móveis Planejados', description: 'Mapeia diretamente para branches.branches_name.' },
@@ -189,6 +190,8 @@ function makeScreen(kind: ConfigKind, options: ConfigModalOptions): ScreenDefini
           placeholder: 'contabilidade, escritório contábil, contador, serviços contábeis',
           description: 'Digite as categorias separadas por vírgula, ponto e vírgula ou quebra de linha. Espaços, duplicidades e capitalização são normalizados automaticamente.',
         },
+        { key: 'stockTargetWhatsapp', label: 'Estoque alvo WhatsApp/telefone', type: 'input', inputType: 'number', placeholder: '1000', description: 'Meta mínima de candidatos únicos alocados ao estoque WhatsApp/telefone deste ramo.' },
+        { key: 'stockTargetInstagram', label: 'Estoque alvo Instagram', type: 'input', inputType: 'number', placeholder: '500', description: 'Meta mínima de candidatos únicos alocados ao estoque Instagram deste ramo.' },
         {
           key: 'categoriesJson',
           label: 'Estrutura JSON gerada',
@@ -299,7 +302,9 @@ function createEmptyForm(kind: ConfigKind, options: ConfigModalOptions): Record<
     return {
       name: '',
       categoriesText: '',
-      categoriesJson: formatCategoriesJson({ associatedCategories: [] }),
+      categoriesJson: formatCategoriesJson({ associatedCategories: [], stockTargetWhatsapp: 1000, stockTargetInstagram: 500 }),
+      stockTargetWhatsapp: '1000',
+      stockTargetInstagram: '500',
       active: 'Ativo',
     };
   }
@@ -341,6 +346,8 @@ function formFromRecord(record: ConfigRecord): Record<string, string> {
     return {
       name: record.name,
       ...categoriesFormValue(record.categories),
+      stockTargetWhatsapp: String(record.stockTargetWhatsapp ?? 1000),
+      stockTargetInstagram: String(record.stockTargetInstagram ?? 500),
       active: record.active ? 'Ativo' : 'Inativo',
     };
   }
@@ -385,7 +392,7 @@ function toInputPayload(kind: ConfigKind, form: Record<string, string>, options:
   };
 
   if (kind === 'branches') {
-    payload.categories = parseCategoriesJson(form.categoriesJson ?? '');
+    payload.categories = mergeBranchAcquisitionTargets(parseCategoriesJson(form.categoriesJson ?? ''), form.stockTargetWhatsapp, form.stockTargetInstagram);
     delete payload.categoriesJson;
     return payload;
   }
@@ -417,7 +424,8 @@ function toTableRows(kind: ConfigKind, records: ConfigRecord[], branches: Branch
     return records.filter(isBranch).map((record) => ({
       id: record.id,
       name: record.name,
-      categories: formatCategoriesJson(record.categories).replace(/\s+/g, ' ').slice(0, 180) || '—',
+      categories: formatCategoriesJson(record.categories).replace(/\s+/g, ' ').slice(0, 140) || '—',
+      stockTargets: `${record.stockTargetWhatsapp ?? 1000} WA + ${record.stockTargetInstagram ?? 500} IG`,
       status: statusTag(record),
     }));
   }
@@ -593,6 +601,13 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
           ...current,
           categoriesText: value,
           categoriesJson: mergeCategoriesJson(current.categoriesJson ?? '', value),
+        };
+      }
+      if (kind === 'branches' && (key === 'stockTargetWhatsapp' || key === 'stockTargetInstagram')) {
+        const next = { ...current, [key]: value };
+        return {
+          ...next,
+          categoriesJson: mergeBranchAcquisitionTargetsJson(next.categoriesJson ?? '', next.stockTargetWhatsapp, next.stockTargetInstagram),
         };
       }
 

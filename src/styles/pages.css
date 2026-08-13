@@ -30,3 +30,12 @@
 .maps-history-json { max-height: 60vh; overflow: auto; margin-top: 16px; white-space: pre-wrap; font-size: 11px; }
 .import-json-fallback { margin-bottom: 20px; }
 .import-json-fallback > summary { cursor: pointer; color: var(--text-muted); font-size: 12px; }
+.maps-history-city { display: grid; gap: 8px; }
+.maps-history-city h3 { margin: 8px 0 0; font-size: 13px; color: var(--text-primary); }
+.maps-history-coverage-button {
+  width: 100%; border: 1px solid var(--border-subtle); background: var(--surface-primary);
+  border-radius: 10px; padding: 12px; text-align: left; cursor: pointer; display: grid; gap: 5px;
+}
+.maps-history-coverage-button:hover { border-color: var(--border-strong); background: var(--surface-secondary); }
+.maps-history-coverage-button span { color: var(--text-muted); font-size: 12px; }
+.maps-history-back { margin: 0 0 12px; border: 0; background: transparent; color: var(--text-link); cursor: pointer; font-weight: 600; padding: 4px 0; }

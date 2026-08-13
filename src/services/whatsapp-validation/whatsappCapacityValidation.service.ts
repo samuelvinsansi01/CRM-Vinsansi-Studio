@@ -5,6 +5,7 @@ import type { LeadDatabaseRow } from '../../types/lead.types';
 import { queuePreparationService } from '../queue-preparation';
 import { LEAD_STATUS } from '../status/leadStatus';
 import { whatsappValidationService } from './whatsappValidation.service';
+import { calculatePersistedLeadPriorityScore } from '../lead-score/leadScore.service';
 import type { WhatsAppValidationBatchResult, WhatsAppValidationFailure } from './types';
 
 const activeRuns = new Set<string>();
@@ -35,7 +36,7 @@ export type WhatsAppCapacityValidationResult = {
 function candidateOrder(left: LeadDatabaseRow, right: LeadDatabaseRow) {
   const statusPriority = Number(left.lead_status_id === LEAD_STATUS.PRE_SEND) - Number(right.lead_status_id === LEAD_STATUS.PRE_SEND);
   if (statusPriority) return -statusPriority;
-  const score = Number(right.leads_score ?? 0) - Number(left.leads_score ?? 0);
+  const score = calculatePersistedLeadPriorityScore(right as unknown as Record<string, unknown>) - calculatePersistedLeadPriorityScore(left as unknown as Record<string, unknown>);
   if (score) return score;
   const created = String(left.leads_created_at ?? '').localeCompare(String(right.leads_created_at ?? ''));
   if (created) return created;
