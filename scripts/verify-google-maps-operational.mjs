@@ -60,7 +60,7 @@ const chrome = {
         return { ok: true, confirmed: true, accepted: message.payload.items.length, rejected: 0, duplicates: 0 };
       }
       if (message.type === 'GMAPS_CRM_EXECUTION_EVENT') return { ok: true, confirmed: true, eventId: message.payload.eventId };
-      if (message.type === 'GMAPS_POC_PING') return { ok: true, mapsReady: true, state: { phase: 'idle', operationalContext: null } };
+      if (message.type === 'GMAPS_POC_PING') return { ok: true, mapsReady: true, pageQuery: new URL(activeMapUrl).searchParams.get('query') || '', mapsLayout: { kind: 'feed', noResults: false, detailDetected: false }, state: { phase: 'idle', operationalContext: null } };
       return { ok: true, state: { phase: 'running' } };
     },
   },
@@ -85,7 +85,7 @@ assert(manualState.statusLabel === 'Sem pesquisa ativa' && manualState.sync.canS
 
 const pong = await dispatch({ type: 'GMAPS_EXTENSION_PING' });
 assert(pong.ok && pong.type === 'GMAPS_EXTENSION_PONG', 'Background não responde ao handshake PING/PONG.');
-assert(pong.extensionVersion === '0.13.0' && pong.operationalAvailable === true && pong.configured === false, 'PONG não informa versão, disponibilidade operacional e estado configurado.');
+assert(pong.extensionVersion === '0.13.1' && pong.operationalAvailable === true && pong.configured === false, 'PONG não informa versão, disponibilidade operacional e estado configurado.');
 
 const invalidConfigure = await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: {} });
 assert(invalidConfigure.ok === false && invalidConfigure.code === 'invalid_execution_identity' && invalidConfigure.message, 'Payload inválido não retorna erro explícito e codificado.');

@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../server/maps/shared.js';
 import { issueMapsExtensionToken, sha256, type MapsExtensionScope } from '../../server/maps/token.js';
 
-const EXTENSION_VERSION = '0.13.0';
+const EXTENSION_VERSION = '0.13.1';
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const ACTIVE_LEAD_STATUS_IDS = [1, 2, 3];
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -26,40 +26,27 @@ function strings(value: unknown): string[] {
 }
 
 function branchSubcategories(value: unknown): string[] {
-  const collect = (input: unknown): string[] => {
-    if (Array.isArray(input)) return input.flatMap(collect);
-    if (typeof input === 'string') {
-      const raw = text(input);
-      if (!raw) return [];
-      if ((raw.startsWith('[') && raw.endsWith(']')) || (raw.startsWith('{') && raw.endsWith('}'))) {
-        try { return collect(JSON.parse(raw)); } catch {}
-      }
-      return raw.split(/[,;\n]/).map(text).filter(Boolean);
-    }
-    if (input && typeof input === 'object') {
-      const row = input as Row;
-      const explicit = row.subcategories ?? row.subCategories ?? row.sub_categories;
-      return explicit == null ? [] : collect(explicit);
-    }
-    return [];
-  };
-  const seen = new Set<string>();
-  return collect(value).filter((item) => {
-    const key = normalize(item);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  if (Array.isArray(value) || typeof value === 'string') return strings(value);
+  if (!value || typeof value !== 'object') return [];
+  const metadata = value as Row;
+  // A tela de Configurações grava os termos operacionais em associatedCategories.
+  // Também aceitamos os aliases históricos para preservar compatibilidade.
+  return strings([
+    metadata.subcategories,
+    metadata.subramos,
+    metadata.keywords,
+    metadata.associatedCategories,
+    metadata.associated_categories,
+    metadata.categories,
+    metadata.categorias,
+  ]);
 }
 
 function branchSearchTerms(branchName: unknown, categories: unknown): string[] {
-  const seen = new Set<string>();
-  return [text(branchName), ...branchSubcategories(categories)].filter((item) => {
-    const key = normalize(item);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const main = text(branchName);
+  const mainKey = normalize(main);
+  const subcategories = branchSubcategories(categories).filter((item) => normalize(item) !== mainKey);
+  return strings([main, subcategories]);
 }
 
 function digits(value: unknown) { return text(value).replace(/\D/g, ''); }
@@ -93,10 +80,7 @@ function normalizeWebsite(value: unknown) {
   try {
     const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
     const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
-    const socialOrMessenger = hostname === 'facebook.com' || hostname.endsWith('.facebook.com')
-      || hostname === 'instagram.com' || hostname.endsWith('.instagram.com')
-      || hostname === 'wa.me' || hostname === 'whatsapp.com' || hostname.endsWith('.whatsapp.com');
-    if (socialOrMessenger) return '';
+    if (hostname === 'facebook.com' || hostname.endsWith('.facebook.com')) return '';
     return ['http:', 'https:'].includes(url.protocol) && url.hostname.includes('.') ? url.toString() : '';
   } catch { return ''; }
 }
@@ -167,7 +151,8 @@ async function ownedExecution(client: ReturnType<typeof import('../../server/map
 async function branchTerms(client: ReturnType<typeof import('../../server/maps/shared.js').serviceClient>, usersId: number, branchesId: number) {
   const result = await client.from('branches').select('branches_id,branches_name,branches_categories,status_id').eq('branches_id', branchesId).eq('users_id', usersId).eq('status_id', 1).maybeSingle();
   if (result.error || !result.data) throw new Error('maps_branch_not_available');
-  return { branch: result.data as Row, terms: branchSearchTerms(result.data.branches_name, result.data.branches_categories) };
+  const branch = result.data as Row;
+  return { branch, terms: branchSearchTerms(branch.branches_name, branch.branches_categories) };
 }
 
 async function createCoverageForCity(client: ReturnType<typeof import('../../server/maps/shared.js').serviceClient>, execution: Row, city: Row, terms: string[]) {
@@ -279,7 +264,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         client.from('states').select('states_id,states_name,states_code').order('states_name'),
       ]);
       if (branches.error || states.error) throw new Error('maps_catalogs_query_failed');
-      return send(req, res, 200, { ok: true, branches: (branches.data ?? []).map((row) => ({ id: row.branches_id, name: row.branches_name, subcategories: branchSubcategories(row.branches_categories) })), states: states.data ?? [] });
+      return send(req, res, 200, {
+        ok: true,
+        branches: (branches.data ?? []).map((row) => ({
+          id: row.branches_id,
+          name: row.branches_name,
+          subcategories: branchSubcategories(row.branches_categories).filter((item) => normalize(item) !== normalize(row.branches_name)),
+        })),
+        states: states.data ?? [],
+      });
     }
     if (action === 'cities') {
       const statesId = integer(input.statesId, 1);
@@ -409,20 +402,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
       const coverageId = text(input.coverageId);
       const status = text(input.status);
-      const currentCoverage = await client.from('maps_search_coverage').select('*')
-        .eq('maps_search_coverage_id', coverageId)
-        .eq('maps_search_executions_id', execution.maps_search_executions_id)
-        .eq('users_id', usersId)
-        .maybeSingle();
-      if (currentCoverage.error || !currentCoverage.data) throw new Error('maps_coverage_not_found');
-      const currentCoverageStatus = text(currentCoverage.data.status);
-      if (TERMINAL_COVERAGE.has(currentCoverageStatus)) {
-        if (status !== currentCoverageStatus) throw new Error('maps_coverage_terminal_transition_rejected');
-        const counts = await executionSummary(client, execution);
-        const targetsReached = (Number(execution.target_phone_whatsapp) <= 0 || counts.phone_whatsapp_candidate_count >= Number(execution.target_phone_whatsapp)) && (Number(execution.target_instagram) <= 0 || counts.instagram_candidate_count >= Number(execution.target_instagram));
-        const next = targetsReached ? null : await nextCoverage(client, execution);
-        return send(req, res, 200, { ok: true, coverage: currentCoverage.data, counts, targetsReached, next, idempotent: true });
-      }
       const snapshotPayload = input.snapshot && typeof input.snapshot === 'object' ? input.snapshot : null;
       if (snapshotPayload) {
         const snapshotBytes = jsonByteLength(snapshotPayload);

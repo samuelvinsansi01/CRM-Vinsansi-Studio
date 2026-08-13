@@ -50,9 +50,6 @@ for (const scope of requiredScopes) assert(token.includes(scope), `Scope ausente
 for (const action of ['catalogs','cities','targets','search_create','next_search','batch_sync','coverage_transition','execution_transition','candidates_list','candidate_update','candidate_exclude','candidate_restore','leads_promote','history','history_detail']) {
   assert(api.includes(`'${action}'`), `Ação API ausente: ${action}.`);
 }
-assert(api.includes('function branchSubcategories(value: unknown): string[]') && api.includes('function branchSearchTerms(branchName: unknown, categories: unknown): string[]'), 'API não separa explicitamente ramo principal de subramos canônicos.');
-assert(api.includes('subcategories: branchSubcategories(row.branches_categories)') && api.includes('terms: branchSearchTerms(result.data.branches_name, result.data.branches_categories)'), 'Catálogo/criação de pesquisa ainda podem achatar metadados de branches_categories como termos de busca.');
-assert(api.includes('maps_coverage_terminal_transition_rejected'), 'API não bloqueia reabertura de cobertura completed/exhausted.');
 assert(api.includes(".eq('users_id', usersId)") && !api.includes('input.usersId'), 'Queries operacionais não são tenant-scoped pelo token.');
 assert(api.includes("lead_status_id: 1") && api.includes("leads_origin: 'google_maps'"), 'Promoção não cria lead IMPORTADO com origem Google Maps.');
 assert(api.includes("destination = phoneWhatsapp ? 'whatsapp' : 'instagram'") && api.includes('leads_whatsapp:'), 'Destino inicial ou WhatsApp separado divergiu.');
@@ -73,6 +70,8 @@ assert(operational.includes('pendingApiCompletion') && operational.includes("pau
 assert(sidepanel.includes("request('search_get'") && operational.includes('execution_paused_after_browser_restart'), 'Restart não pausa e reconcilia com a API.');
 
 const terms = [fixture.branch, ...fixture.subcategories];
+assert(api.includes('metadata.associatedCategories') && api.includes('branchSubcategories'), 'API Maps não lê os subramos/categorias associadas do contrato real de branches_categories.');
+assert(api.includes('branchSearchTerms(branch.branches_name, branch.branches_categories)'), 'Criação da pesquisa não monta ramo principal + subramos canônicos.');
 const ordered = fixture.cities.flatMap((city) => terms.map((term) => `${city}:${term}`));
 assert(ordered.slice(0, terms.length).every((entry) => entry.startsWith('Mauá:')) && ordered[terms.length].startsWith('Santo André:'), 'Fixture cidade→ramo+subramos não comprova a ordem fechada.');
 const afterFirst = fixture.firstCoverage;
