@@ -1,0 +1,9 @@
+{
+  "branch": "Contabilidade",
+  "subcategories": ["Assessoria contábil", "Consultoria fiscal", "Consultoria tributária", "Contador", "Escritório contábil"],
+  "cities": ["Mauá", "Santo André"],
+  "targets": { "phoneWhatsapp": 10, "instagram": 5 },
+  "firstCoverage": { "phoneWhatsapp": 10, "instagram": 4 },
+  "secondCoverage": { "phoneWhatsapp": 8, "instagram": 1 },
+  "expectedFinal": { "phoneWhatsapp": 18, "instagram": 5 }
+}

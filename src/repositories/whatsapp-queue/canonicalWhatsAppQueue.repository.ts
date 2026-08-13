@@ -7,6 +7,7 @@ import type {
   WhatsAppQueueLead,
 } from '../../services/whatsapp-queue/types';
 import { normalizePhone } from '../../services/import/importValidation';
+import { getEffectiveWhatsAppPhone } from '../../services/leads/leadContact';
 import { currentUserIdNumber, queueStatusId } from '../schemaCatalog';
 import { canonicalQueueStatus, dateOnly, loadCanonicalQueue, prepareQueueItems, queuePayloadSnapshot, queueSnapshotMessage, queueSnapshotPart, updateQueueItemStatus } from '../queueSchema';
 import { nowIso } from '../supabase.helpers';
@@ -30,7 +31,12 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): W
   const scheduled = dateOnly(item.queue_items_scheduled_at ?? row.queue.queues_scheduled_at);
   const dailyLimit = 60;
   const batchNumber = Math.floor((position - 1) / dailyLimit) + 1;
-  const phone = String(snapshotRecipient.phone ?? snapshotLead.phone ?? lead.leads_phone ?? '');
+  const phone = String(
+    snapshotRecipient.phone
+    ?? snapshotLead.whatsapp
+    ?? snapshotLead.phone
+    ?? getEffectiveWhatsAppPhone(lead),
+  );
   const website = String(snapshotLead.site ?? lead.leads_website ?? '');
   const company = String(snapshotLead.company_name ?? lead.leads_name ?? '');
   const branchName = String(snapshotLead.branch_name ?? branch.branches_name ?? '');

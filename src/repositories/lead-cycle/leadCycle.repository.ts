@@ -3,6 +3,7 @@ import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
 export type LeadCycleTransitionPatch = Partial<{
   channels_id: number;
   lead_status_id: LeadStatusId;
+  leads_instagram: string | null;
 }>;
 
 export interface LeadCycleRepository {
@@ -12,5 +13,6 @@ export interface LeadCycleRepository {
     id: string,
     expectedStatus: LeadStatusId,
     patch: LeadCycleTransitionPatch,
+    expectedChannelId?: number,
   ): Promise<LeadDatabaseRow | null>;
 }

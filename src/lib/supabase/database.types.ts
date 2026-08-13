@@ -22,6 +22,7 @@ export type LeadRow = {
   contact_sources_id: string;
   leads_name: string;
   leads_phone: string | null;
+  leads_whatsapp: string | null;
   leads_instagram: string | null;
   leads_website: string | null;
   leads_maps: string | null;
@@ -31,6 +32,7 @@ export type LeadRow = {
   leads_score: number | null;
   leads_reviews_count: number | null;
   leads_origin: string;
+  maps_search_candidates_id: string | null;
   leads_created_at: string;
   leads_updated_at: string;
 };

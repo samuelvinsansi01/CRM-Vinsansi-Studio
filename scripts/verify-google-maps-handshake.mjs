@@ -11,6 +11,9 @@ const bridge = readExtension('src/crm-bridge.js');
 const operational = readExtension('src/operational.js');
 const service = read('src/services/google-maps-extension/googleMapsExtension.service.ts');
 const importPage = read('src/pages/ImportPage.tsx');
+const app = read('src/App.tsx');
+const pairApi = read('api/maps/pair.ts');
+const platformApi = readExtension('src/platform-api.js');
 const failures = [];
 const assert = (condition, message) => { if (!condition) failures.push(message); };
 
@@ -22,7 +25,7 @@ for (const match of [
   'https://localhost/*',
   'https://127.0.0.1/*',
 ]) assert(crmMatches.includes(match), `crm-bridge.js não é injetado em ${match}.`);
-assert(manifest.background?.service_worker === 'background.js' && readExtension('background.js').includes("importScripts('src/operational.js')"), 'Service worker não carrega o protocolo operacional.');
+assert(manifest.background?.service_worker === 'background.js' && readExtension('background.js').includes("'src/operational.js'"), 'Service worker não carrega o protocolo operacional.');
 assert(!manifest.externally_connectable, 'Handshake sem ID passou a depender de externally_connectable sem necessidade.');
 assert(!/extensionId|extension_id|[a-p]{32}/i.test(service + bridge), 'CRM/bridge contém extensionId local hardcoded.');
 
@@ -36,7 +39,8 @@ assert(bridge.includes("type: 'bridge_ready'") && bridge.includes('announceBridg
 assert(bridge.includes('chrome.runtime.sendMessage(message.payload)') && bridge.includes("code: 'extension_runtime_unavailable'"), 'Bridge não encaminha mensagens ou não diferencia falha do runtime.');
 assert(service.includes("'bridge_unavailable'") && service.includes("'extension_version_incompatible'") && service.includes('operational_execution_in_progress_or_unsynced'), 'CRM não diferencia timeout, versão e execução ativa.');
 assert(service.includes('PING_TIMEOUT_MS') && service.includes('REQUEST_TIMEOUT_MS') && service.includes('window.removeEventListener'), 'Timeout do handshake/configure não é explícito ou não limpa listener.');
-assert(importPage.includes('maps-extension-diagnostic') && importPage.includes('Extensão detectada') && importPage.includes('Bridge ativa') && importPage.includes('Último ping') && importPage.includes('Último erro'), 'CRM não apresenta o diagnóstico local do handshake.');
+assert(!importPage.includes('maps-extension-diagnostic') && !importPage.includes('Enviar execução para extensão'), 'Bridge legado ainda aparece como requisito operacional da Importação.');
+assert(app.includes('MapsExtensionAuthorizePage') && pairApi.includes("action === 'authorize'") && platformApi.includes('beginPairing') && platformApi.includes('exchangePairing'), 'Pairing API-first não substituiu o handshake contínuo na experiência ativa.');
 
 const sensitive = `${manifestText}\n${bridge}\n${operational}\n${service}`;
 for (const forbidden of ['SUPABASE_SERVICE_ROLE', 'WORKER_INTERNAL_TOKEN', 'EVOLUTION_API_KEY', 'INSTAGRAM_EXTENSION_SIGNING_SECRET']) {
@@ -49,4 +53,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('OK: bridge CRM, PING/PONG, versão, configure ACK, diagnósticos e erros explícitos foram validados sem extensionId fixo.');
+console.log('OK: pairing API-first está ativo e bridge/PING/PONG permanecem apenas como compatibilidade sem extensionId fixo.');

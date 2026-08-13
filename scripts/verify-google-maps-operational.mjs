@@ -72,11 +72,11 @@ function dispatch(message, sender = { tab: { id: 9 } }) {
 
 const manualState = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 assert(manualState.configured === false && manualState.uiMode === 'manual', 'Snapshot sem checkpoint não identifica o modo manual.');
-assert(manualState.statusLabel === 'Sem execução do CRM' && manualState.sync.canSync === false, 'Estado sem execução CRM não é explícito ou habilita sync indevidamente.');
+assert(manualState.statusLabel === 'Sem pesquisa ativa' && manualState.sync.canSync === false, 'Estado sem pesquisa ativa não é explícito ou habilita sync indevidamente.');
 
 const pong = await dispatch({ type: 'GMAPS_EXTENSION_PING' });
 assert(pong.ok && pong.type === 'GMAPS_EXTENSION_PONG', 'Background não responde ao handshake PING/PONG.');
-assert(pong.extensionVersion === '0.12.1' && pong.operationalAvailable === true && pong.configured === false, 'PONG não informa versão, disponibilidade operacional e estado configurado.');
+assert(pong.extensionVersion === '0.13.0' && pong.operationalAvailable === true && pong.configured === false, 'PONG não informa versão, disponibilidade operacional e estado configurado.');
 
 const invalidConfigure = await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: {} });
 assert(invalidConfigure.ok === false && invalidConfigure.code === 'invalid_execution_identity' && invalidConfigure.message, 'Payload inválido não retorna erro explícito e codificado.');
@@ -216,7 +216,7 @@ assert(crmService.includes('processExecutionEvent') && crmService.includes("goog
 assert(crmService.includes('whatsappValidationService.validateInitial') && !crmService.includes('SUPABASE_SERVICE_ROLE'), 'CRM não encaminha novos candidatos WhatsApp à validação existente ou expõe service role.');
 assert(crmService.includes('confirmed: false') && crmService.includes("error: 'crm_simulation_mode'"), 'SimulationMode pode confirmar falsamente um lote não persistido.');
 assert(validation.includes("['branchesId', 'branches_id', 'crmContext.branchesId']"), 'Parser ignora branchesId canônico fornecido pela execução.');
-assert(importPage.includes('googleMapsExtensionService.configure') && importPage.includes('googleCategoryOptions.map'), 'CRM não fornece execução e subramos canônicos à extensão.');
+assert(!importPage.includes('googleMapsExtensionService.configure') && !importPage.includes('Enviar execução para extensão'), 'CRM ainda mantém o configurador Maps como fluxo operacional ativo.');
 
 const sensitive = [operationalSource, bridge, sidepanel].join('\n');
 for (const forbidden of ['SUPABASE_SERVICE_ROLE', 'WORKER_INTERNAL_TOKEN', 'EVOLUTION_API_KEY', 'INSTAGRAM_EXTENSION_SIGNING_SECRET']) {
@@ -224,10 +224,10 @@ for (const forbidden of ['SUPABASE_SERVICE_ROLE', 'WORKER_INTERNAL_TOKEN', 'EVOL
 }
 assert(!/apify/i.test([operationalSource, bridge, sidepanel, crmService, importPage].join('\n')), 'Caminho operacional Google Maps possui dependência/fallback Apify.');
 assert(!/evolution/i.test(operationalSource + bridge), 'Extensão tenta validar WhatsApp diretamente na Evolution.');
-assert(!/fetch\s*\(/.test(operationalSource + bridge), 'Extensão faz chamada externa direta em vez da ponte autenticada do CRM.');
+assert(operationalSource.includes("GMAPS_PLATFORM_API.request('batch_sync'") && operationalSource.includes('state.apiFirst'), 'Execução API-first não sincroniza diretamente com a plataforma.');
 
 if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log('OK: fila 2x2, cobertura, checkpoint, metas, dedupe, sync em lote, pausa/retomada/stop e ponte autenticada CRM foram validados localmente.');
+console.log('OK: scraper legado, checkpoint, metas, dedupe, sync em lote e caminho API-first foram validados localmente.');

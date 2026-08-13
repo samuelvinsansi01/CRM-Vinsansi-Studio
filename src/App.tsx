@@ -16,10 +16,11 @@ import { QueuePage } from './pages/QueuePage';
 import { ValidationRoutingPage } from './pages/ValidationRoutingPage';
 import { ToolsPage } from './pages/ToolsPage';
 import { MonitoringPage } from './pages/MonitoringPage';
+import { MapsExtensionAuthorizePage } from './pages/MapsExtensionAuthorizePage';
+import { MapsSearchesPage } from './pages/MapsSearchesPage';
 import { pageTitles, type PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
 import { syncEvolutionInstances } from './services/evolution-instances/evolutionInstances.service';
-import { googleMapsExtensionService } from './services/google-maps-extension/googleMapsExtension.service';
 
 const ACTIVE_PAGE_STORAGE_KEY = 'painel:active-page';
 const validPageIds = new Set<PageId>(Object.keys(pageTitles) as PageId[]);
@@ -53,11 +54,6 @@ export function App() {
   useEffect(() => {
     window.sessionStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, activePage);
   }, [activePage]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return undefined;
-    return googleMapsExtensionService.installSyncListener();
-  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return undefined;
@@ -100,6 +96,9 @@ export function App() {
 
   if (!isAuthenticated) return <LoginPage />;
 
+  const mapsPairingId = new URLSearchParams(window.location.search).get('maps_pairing');
+  if (mapsPairingId) return <MapsExtensionAuthorizePage pairingId={mapsPairingId} />;
+
   return (
     <DashboardLayout activePage={activePage} onNavigate={setActivePage}>
       {activePage === 'home' ? <HomePage /> : null}
@@ -109,6 +108,7 @@ export function App() {
           onStatusChange={(isRejected) => setActivePage(isRejected ? 'import-rejected' : 'import-approved')}
         />
       ) : null}
+      {activePage === 'maps-searches' ? <MapsSearchesPage /> : null}
       {activePage === 'validation-routing' ? <ValidationRoutingPage /> : null}
       {activePage === 'base' ? <BasePage /> : null}
       {activePage === 'whatsapp' ? <QueuePage channel="whatsapp" /> : null}

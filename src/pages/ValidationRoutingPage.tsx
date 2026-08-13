@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
   DataTable,
+  Drawer,
+  Field,
   FiltersBar,
   MetricCard,
   SearchInput,
@@ -12,6 +14,7 @@ import {
   Tag,
   ToastViewport,
   type TableColumn,
+  type TableAction,
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
@@ -22,6 +25,7 @@ import type { LeadCycleLead } from '../services/lead-cycle/types';
 import { whatsappCapacityValidationService } from '../services/whatsapp-validation/whatsappCapacityValidation.service';
 import type { WhatsAppCapacityValidationResult } from '../services/whatsapp-validation/whatsappCapacityValidation.service';
 import { toLocalDateInputValue } from '../utils/date';
+import { isValidInstagram, normalizeInstagramUsername } from '../services/instagram/instagram.utils';
 
 const SOURCE_NO_SITE = 1;
 const SOURCE_OWN_SITE = 2;
@@ -105,6 +109,8 @@ export function ValidationRoutingPage() {
   const [selectedChip, setSelectedChip] = useState('');
   const [validatingCapacity, setValidatingCapacity] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [editingInstagramLead, setEditingInstagramLead] = useState<LeadCycleLead | null>(null);
+  const [instagramDraft, setInstagramDraft] = useState('');
   const operationalDate = toLocalDateInputValue();
   const chipCapacity = useQueuePreparation('WhatsApp', operationalDate, selectedChip);
 
@@ -196,11 +202,43 @@ export function ValidationRoutingPage() {
     branch: lead.branch || '-',
     location: [lead.city, lead.state].filter(Boolean).join(' / ') || '-',
     phone: contactValue(lead.phone),
-    instagram: contactValue(lead.instagram),
+    instagram: lead.channel === 'Instagram' && lead.statusId === 1
+      ? (isValidInstagram(normalizeInstagramUsername(lead.instagram)) ? 'Pronto para aprovar' : lead.instagram.trim() ? 'Corrigir Instagram' : 'Adicionar Instagram')
+      : contactValue(lead.instagram),
     channel: channelTag(lead),
   })), [visible]);
 
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
+
+  const rowActions = (row: Row): TableAction[] => {
+    const lead = allRecords.find((item) => item.id === row.id);
+    if (!lead || lead.statusId !== 1 || lead.channel !== 'Instagram') return [];
+    return isValidInstagram(normalizeInstagramUsername(lead.instagram)) ? ['edit', 'approve'] : ['edit'];
+  };
+
+  const handleRowAction = async (action: TableAction, row: Row) => {
+    const lead = allRecords.find((item) => item.id === row.id);
+    if (!lead) return;
+    if (action === 'edit') {
+      setEditingInstagramLead(lead);
+      setInstagramDraft(lead.instagram);
+      return;
+    }
+    if (action === 'approve') {
+      const result = await imported.executeRoutingCommand('route-imported-to-instagram', [lead.id]);
+      if (result.succeeded === 1) toast('Lead aprovado', 'Instagram confirmado manualmente; o status avançou para Validado.');
+      else toast('Aprovação não concluída', result.failures[0]?.reason || 'Atualize a página e tente novamente.', 'warning');
+    }
+  };
+
+  const saveInstagram = async () => {
+    if (!editingInstagramLead) return;
+    try {
+      await imported.updateImportedInstagram(editingInstagramLead.id, instagramDraft);
+      setEditingInstagramLead(null);
+      toast('Instagram atualizado', 'O formato foi validado. Use Aprovar para avançar o status.');
+    } catch (err) { toast('Instagram inválido', err instanceof Error ? err.message : 'Revise o perfil informado.', 'danger'); }
+  };
 
   return (
     <div className="dashboard-table-page lead-list-page validation-routing-page">
@@ -267,9 +305,12 @@ export function ValidationRoutingPage() {
         {!error && loading ? <div className="table-message">Carregando leads...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead encontrado para os filtros selecionados.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable columns={columns} rows={pageItems} actions={[]} selectable={false} />
+          <DataTable columns={columns} rows={pageItems} actions={[]} getRowActions={rowActions} onAction={(action, row) => void handleRowAction(action, row)} selectable={false} />
         ) : null}
       </TableCard>
+      <Drawer open={Boolean(editingInstagramLead)} title="Corrigir Instagram" description="O status permanece Importado até a aprovação manual." onClose={() => setEditingInstagramLead(null)} footer={<Button loading={imported.saving} onClick={() => void saveInstagram()}>Salvar Instagram</Button>}>
+        <Field label="Instagram" placeholder="@empresa ou https://instagram.com/empresa" value={instagramDraft} onChange={setInstagramDraft} />
+      </Drawer>
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>
   );

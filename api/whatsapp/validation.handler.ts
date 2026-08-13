@@ -35,7 +35,7 @@ export type ValidationResult = {
   status: 'valid' | 'invalid' | 'error';
   valid: boolean;
   errorMessage?: string;
-  outcome?: 'approved' | 'revalidated' | 'redirected' | 'invalidated' | 'error';
+  outcome?: 'approved' | 'revalidated' | 'instagram_review_required' | 'error';
   persisted?: boolean;
   proofValid?: boolean;
 };
@@ -51,6 +51,7 @@ type ValidationLeadRow = {
   users_id?: number | string | null;
   leads_name?: string | null;
   leads_phone?: string | null;
+  leads_whatsapp?: string | null;
   lead_status_id?: number | string | null;
   channels_id?: number | string | null;
 };
@@ -173,7 +174,7 @@ async function resolveOwnedLeads(
   const expectedStatus = mode === 'initial' ? 3 : 2;
   const { data, error } = await auth.client
     .from('leads')
-    .select('leads_id,users_id,leads_name,leads_phone,lead_status_id,channels_id')
+    .select('leads_id,users_id,leads_name,leads_phone,leads_whatsapp,lead_status_id,channels_id')
     .eq('users_id', auth.publicUserId)
     .in('leads_id', ids.map(Number));
   if (error) throw new Error(`Falha ao conferir os leads no banco: ${error.message}`);
@@ -202,7 +203,7 @@ async function resolveOwnedLeads(
     if (Number(row.lead_status_id) !== expectedStatus || Number(row.channels_id) !== whatsappChannelId) {
       throw new Error(`Lead ${id} não está no status/canal permitido para esta operação.`);
     }
-    const phone = phoneDigits(row.leads_phone);
+    const phone = phoneDigits(row.leads_whatsapp || row.leads_phone);
     const chipInstance = String(lead.chip_instance ?? '').trim();
     if (!phone) throw new Error(`Lead ${id} está sem telefone válido no banco.`);
     if (!chipInstance) throw new Error(`Lead ${id} está sem instância de chip.`);

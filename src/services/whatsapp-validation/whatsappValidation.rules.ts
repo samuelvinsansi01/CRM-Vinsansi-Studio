@@ -1,13 +1,12 @@
 import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
 import { normalizePhone } from '../import/importValidation';
-import { isValidInstagram } from '../instagram/instagram.utils';
 import { LEAD_STATUS } from '../status/leadStatus';
 import type { WhatsAppValidationMode } from './types';
 
 export type WhatsAppValidationTarget = {
   statusId: LeadStatusId;
   channelId: number;
-  outcome: 'approved' | 'revalidated' | 'redirected' | 'invalidated';
+  outcome: 'approved' | 'revalidated' | 'instagram_review_required';
 };
 
 export function expectedStatusForValidation(mode: WhatsAppValidationMode): LeadStatusId {
@@ -44,12 +43,9 @@ export function validWhatsAppTarget(
 }
 
 export function invalidWhatsAppTarget(
-  row: LeadDatabaseRow,
-  whatsappChannelId: number,
+  _row: LeadDatabaseRow,
+  _whatsappChannelId: number,
   instagramChannelId: number,
 ): WhatsAppValidationTarget {
-  if (isValidInstagram(row.leads_instagram)) {
-    return { statusId: LEAD_STATUS.VALIDATED, channelId: instagramChannelId, outcome: 'redirected' };
-  }
-  return { statusId: LEAD_STATUS.INVALID, channelId: whatsappChannelId, outcome: 'invalidated' };
+  return { statusId: LEAD_STATUS.IMPORTED, channelId: instagramChannelId, outcome: 'instagram_review_required' };
 }

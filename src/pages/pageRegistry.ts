@@ -2,6 +2,7 @@ export type PageId =
   | 'home'
   | 'import-approved'
   | 'import-rejected'
+  | 'maps-searches'
   | 'validation-routing'
   | 'base'
   | 'whatsapp'
@@ -50,6 +51,7 @@ export const navGroups: readonly NavGroup[] = [
     label: 'Leads',
     items: [
       { id: 'import-approved', label: 'Importação' },
+      { id: 'maps-searches', label: 'Pesquisas Google Maps' },
       { id: 'validation-routing', label: 'Validação e roteamento' },
       { id: 'base', label: 'Base Permanente' },
     ],
@@ -122,6 +124,7 @@ export const pageTitles: Record<PageId, string> = {
   home: 'Início',
   'import-approved': 'Importação',
   'import-rejected': 'Importação',
+  'maps-searches': 'Pesquisas Google Maps',
   'validation-routing': 'Validação e roteamento',
   base: 'Base Permanente',
   whatsapp: 'Fila WhatsApp',

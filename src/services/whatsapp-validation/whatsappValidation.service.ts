@@ -89,8 +89,8 @@ function requestsForRows(rows: LeadDatabaseRow[], chips: ChipConfigRecord[]): Wh
     id: String(row.leads_id),
     sourceImportId: String(row.leads_id),
     company: row.leads_name,
-    phone: row.leads_phone ?? '',
-    normalizedPhone: normalizePhone(row.leads_phone),
+    phone: row.leads_whatsapp || row.leads_phone || '',
+    normalizedPhone: normalizePhone(row.leads_whatsapp || row.leads_phone),
     chipInstance: chipInstance(chips[index % chips.length]),
   }));
 }
@@ -102,12 +102,9 @@ function addOutcome(result: WhatsAppValidationBatchResult, id: string, outcome: 
   } else if (outcome === 'revalidated') {
     result.revalidated += 1;
     result.revalidatedIds.push(id);
-  } else if (outcome === 'redirected') {
+  } else if (outcome === 'instagram_review_required') {
     result.redirectedToInstagram += 1;
     result.redirectedIds.push(id);
-  } else if (outcome === 'invalidated') {
-    result.invalidated += 1;
-    result.invalidatedIds.push(id);
   } else {
     result.errors += 1;
     result.errorIds.push(id);

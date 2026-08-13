@@ -6,7 +6,7 @@ import type { LeadCycleRepository, LeadCycleTransitionPatch } from './leadCycle.
 export const LEAD_CYCLE_SELECT = `
   leads_id, users_id, branches_id, countries_id, states_id, cities_id,
   channels_id, lead_status_id, contact_sources_id, apify_import_jobs_id,
-  leads_name, leads_phone, leads_instagram, leads_website, leads_maps,
+  leads_name, leads_phone, leads_whatsapp, leads_instagram, leads_website, leads_maps,
   leads_street, leads_postal_code, leads_categories, leads_score,
   leads_reviews_count, leads_origin, leads_created_at, leads_updated_at,
   branches:branches_id ( branches_id, branches_name ),
@@ -65,17 +65,17 @@ async function listByIds(ids: string[]) {
   return (data ?? []) as unknown as LeadDatabaseRow[];
 }
 
-async function compareAndSet(id: string, expectedStatus: LeadStatusId, patch: LeadCycleTransitionPatch) {
+async function compareAndSet(id: string, expectedStatus: LeadStatusId, patch: LeadCycleTransitionPatch, expectedChannelId?: number) {
   const userId = await getCurrentUserId();
   const [numericId] = numericLeadIds([id]);
-  const { data, error } = await getSupabaseClient()
+  let query = getSupabaseClient()
     .from('leads')
     .update({ ...patch, leads_updated_at: new Date().toISOString() })
     .eq('leads_id', numericId)
     .eq('users_id', userId)
-    .eq('lead_status_id', expectedStatus)
-    .select(LEAD_CYCLE_SELECT)
-    .maybeSingle();
+    .eq('lead_status_id', expectedStatus);
+  if (expectedChannelId) query = query.eq('channels_id', expectedChannelId);
+  const { data, error } = await query.select(LEAD_CYCLE_SELECT).maybeSingle();
 
   if (error) throw new Error(error.message);
   return data ? data as unknown as LeadDatabaseRow : null;

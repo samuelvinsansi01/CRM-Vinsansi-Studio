@@ -3,6 +3,7 @@ import { normalizePhone } from '../import/importValidation';
 import { LEAD_STATUS } from '../status/leadStatus';
 import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
 import type { LeadRoutingCommand, LeadCycleChannel } from './types';
+import { getEffectiveWhatsAppPhone } from '../leads/leadContact';
 
 export type LeadRoutingDecision = {
   expectedStatus: LeadStatusId;
@@ -32,7 +33,7 @@ function validPhone(value: unknown) {
 
 function contactValidationError(row: LeadDatabaseRow, command: LeadRoutingCommand) {
   if (command === 'route-imported-to-whatsapp' || command === 'set-valid-channel-whatsapp') {
-    if (!validPhone(row.leads_phone)) return 'O lead não possui telefone válido para o canal WhatsApp.';
+    if (!validPhone(getEffectiveWhatsAppPhone(row))) return 'O lead não possui telefone válido para o canal WhatsApp.';
   }
 
   if (command === 'route-imported-to-instagram' || command === 'set-valid-channel-instagram') {

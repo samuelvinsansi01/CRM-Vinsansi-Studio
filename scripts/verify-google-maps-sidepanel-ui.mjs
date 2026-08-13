@@ -26,9 +26,9 @@ for (const id of requiredIds) {
   assert(panel.includes(`$('${id}')`) || ['manualPanel', 'operationalPanel'].includes(id), `Side Panel não renderiza/controla #${id}.`);
 }
 
-assert(html.includes('Sem execução do CRM') && html.includes('Modo manual'), 'Estado sem execução CRM não está visível.');
-assert(html.includes('Execução CRM') && html.includes('Busca atual') && html.includes('Sincronização'), 'Modo operacional não possui suas seções explícitas.');
-assert(panel.includes("configured ? 'EXECUÇÃO CRM' : 'MODO MANUAL'") && panel.includes("$('manualPanel').hidden = configured"), 'UI não alterna deterministicamente entre manual e operacional.');
+assert(html.includes('Sem pesquisa ativa') && html.includes('API DA PLATAFORMA'), 'Estado independente sem pesquisa não está visível.');
+assert(html.includes('Execução da plataforma') && html.includes('Busca atual') && html.includes('Sincronização API'), 'Modo operacional não possui suas seções explícitas.');
+assert(panel.includes("configured ? 'EXECUÇÃO DA PLATAFORMA' : 'API DA PLATAFORMA'") && panel.includes("$('manualPanel').hidden = configured"), 'UI não alterna deterministicamente entre configuração e execução.');
 assert(panel.includes("chrome.runtime.sendMessage({ type: 'GMAPS_OPERATIONAL_STATE' })"), 'Side Panel não solicita o snapshot operacional central.');
 assert(/GMAPS_POC_PING'[\s\S]{0,300}render\(r\.state\)/.test(panel), 'Ping do scraper não atualiza métricas manuais separadamente.');
 assert(!/GMAPS_POC_PING'[\s\S]{0,300}renderActionState\(r\.state\)/.test(panel), 'Estado genérico do scraper pode sobrescrever e ocultar o snapshot CRM.');
@@ -40,7 +40,7 @@ assert(operational.includes("ready: 'Configurada'") && operational.includes("com
 assert(operational.includes('confirmedBatches') && operational.includes('pendingBatches') && operational.includes('crmStateLabel'), 'Snapshot não expõe o contrato visual de sincronização.');
 assert(css.includes('.operational-group') && css.includes('.sync-reason') && css.includes('.configuration-preview'), 'Estilos operacionais não cobrem configuração, métricas e motivo de sync.');
 assert(bridge.includes('chrome.runtime.sendMessage(message.payload)') && bridge.includes("message.type !== 'request'"), 'Bridge CRM → extensão não encaminha a configuração operacional recebida.');
-assert(manifest.name === 'Captação Google Maps' && manifest.version === '0.12.1', 'Manifest carregável ainda expõe identificação de POC ou versão anterior.');
+assert(manifest.name === 'Captação Google Maps' && manifest.version === '0.13.0', 'Manifest carregável ainda expõe identificação de POC ou versão anterior.');
 
 const finalUx = `${html}\n${manifestText}`;
 assert(!/POC INDEPENDENTE|Google Maps Extractor POC/i.test(finalUx), 'Linguagem de POC permanece na UX final.');
@@ -54,4 +54,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('OK: Side Panel distingue modo manual/CRM, renderiza a operação completa e acompanha o checkpoint por evento de storage.');
+console.log('OK: Side Panel API-first possui Pesquisa/Leads, operação completa e checkpoint por evento de storage.');

@@ -12,7 +12,7 @@ export type LeadStatusName =
   | 'invalido'
   | 'duplicado'
   | 'arquivado';
-export type LeadOrigin = 'manual' | 'apify' | 'csv' | 'api';
+export type LeadOrigin = 'manual' | 'apify' | 'csv' | 'api' | 'google_maps';
 
 export type LeadRelation<T> = T | T[] | null;
 
@@ -29,6 +29,7 @@ export type LeadDatabaseRow = {
   apify_import_jobs_id: number | null;
   leads_name: string;
   leads_phone: string | null;
+  leads_whatsapp?: string | null;
   leads_instagram: string | null;
   leads_website: string | null;
   leads_maps: string | null;
@@ -38,6 +39,7 @@ export type LeadDatabaseRow = {
   leads_score: number | null;
   leads_reviews_count: number | null;
   leads_origin: LeadOrigin;
+  maps_search_candidates_id?: string | null;
   leads_created_at: string;
   leads_updated_at: string | null;
   branches: LeadRelation<{ branches_id: number; branches_name: string }>;

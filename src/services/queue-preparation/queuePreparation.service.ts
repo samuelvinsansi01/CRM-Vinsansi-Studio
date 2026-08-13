@@ -15,6 +15,7 @@ import type {
 } from '../config/types';
 import { normalizePhone } from '../import/importValidation';
 import { isValidInstagram, normalizeInstagramUsername } from '../instagram/instagram.utils';
+import { getEffectiveWhatsAppPhone } from '../leads/leadContact';
 import { renderLeadMessages } from '../templates/templateVariables';
 import { missingTemplateMessageNumbers } from '../templates/templateContract';
 import { settingsService } from '../settings/settings.service';
@@ -83,7 +84,7 @@ function leadContext(row: LeadDatabaseRow, channel: QueuePreparationChannel) {
     branch_id: String(row.branches_id),
     city: rowCity(row),
     state: rowState(row),
-    phone: row.leads_phone ?? '',
+    phone: getEffectiveWhatsAppPhone(row),
     instagram: row.leads_instagram ?? '',
     site: website,
     mapsUrl: row.leads_maps ?? '',
@@ -200,7 +201,7 @@ function preparationReason(
   if (row.lead_status_id !== LEAD_STATUS.VALIDATED) return 'O lead não está mais no status Validado.';
   if (Number(row.channels_id) !== expectedChannelId) return 'O canal do lead foi alterado.';
   if (channel === 'WhatsApp' && !hasWhatsAppProof) return 'Prova de validação WhatsApp ausente para o telefone atual.';
-  if (channel === 'WhatsApp' && normalizePhone(row.leads_phone).length < 10) return 'Telefone inválido para WhatsApp.';
+  if (channel === 'WhatsApp' && normalizePhone(getEffectiveWhatsAppPhone(row)).length < 10) return 'Telefone inválido para WhatsApp.';
   if (channel === 'Instagram' && !isValidInstagram(row.leads_instagram)) return 'Instagram inválido ou ausente.';
 
   const context = leadContext(row, channel);
@@ -233,7 +234,7 @@ function mapPreparationLead(
     branch: context.branch,
     city: context.city,
     state: context.state,
-    contact: channel === 'WhatsApp' ? normalizePhone(row.leads_phone) : normalizeInstagramUsername(row.leads_instagram),
+    contact: channel === 'WhatsApp' ? normalizePhone(getEffectiveWhatsAppPhone(row)) : normalizeInstagramUsername(row.leads_instagram),
     channel,
     score: Number(row.leads_score ?? 0),
     templateType: templateTypeForLead(context),

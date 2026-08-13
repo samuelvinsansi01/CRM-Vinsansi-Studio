@@ -74,6 +74,15 @@ export function useLeadCycle(view: LeadCycleView) {
     }
   }, [refresh]);
 
+  const updateImportedInstagram = useCallback(async (id: string, value: string) => {
+    setSaving(true);
+    try {
+      const result = await leadCycleService.updateImportedInstagram(id, value);
+      await refresh();
+      return result;
+    } finally { setSaving(false); }
+  }, [refresh]);
 
-  return { records, loading, saving, error, refresh, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp };
+
+  return { records, loading, saving, error, refresh, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp, updateImportedInstagram };
 }

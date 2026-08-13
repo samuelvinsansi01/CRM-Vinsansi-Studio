@@ -28,7 +28,6 @@ import { isValidInstagram, normalizeInstagramUsername } from '../services/instag
 import { permissionsFor } from '../services/permissions';
 import { isStatusGroup } from '../services/status/status.mapper';
 import { whatsappValidationService } from '../services/whatsapp-validation/whatsappValidation.service';
-import { googleMapsExtensionService, type GoogleMapsExtensionDiagnostic } from '../services/google-maps-extension/googleMapsExtension.service';
 import type { ImportLead, ImportLeadDestination, ImportLeadInput, ImportLeadStatus, ImportParseResult } from '../services/import/types';
 
 type ImportPageProps = {
@@ -212,15 +211,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [lastImport, setLastImport] = useState<ImportParseResult | null>(null);
   const [branches, setBranches] = useState<BranchConfigRecord[]>([]);
-  const [googleBranchId, setGoogleBranchId] = useState('');
-  const [googleSubcategories, setGoogleSubcategories] = useState<string[]>([]);
-  const [googleLocations, setGoogleLocations] = useState('');
-  const [googleWhatsappTarget, setGoogleWhatsappTarget] = useState('10');
-  const [googleInstagramTarget, setGoogleInstagramTarget] = useState('5');
-  const [googleMode, setGoogleMode] = useState<'quick' | 'complete'>('complete');
-  const [configuringGoogleMaps, setConfiguringGoogleMaps] = useState(false);
-  const [checkingGoogleMaps, setCheckingGoogleMaps] = useState(false);
-  const [googleMapsDiagnostic, setGoogleMapsDiagnostic] = useState<GoogleMapsExtensionDiagnostic>(() => googleMapsExtensionService.getDiagnostic());
 
   const uniqueBranches = useMemo(() => {
     const byName = new Map<string, BranchConfigRecord>();
@@ -236,14 +226,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     );
   }, [branches]);
 
-  const [importTab, setImportTab] = useState<'Manual' | 'Google Maps Extension'>('Manual');
-  const googleBranch = uniqueBranches.find((branch) => branch.id === googleBranchId) ?? null;
-  const googleCategoryOptions = useMemo(() => {
-    if (!googleBranch) return [];
-    return Array.from(new Set([...googleBranch.subcategories, ...googleBranch.associatedCategories].map((item) => item.trim()).filter(Boolean)))
-      .sort((left, right) => left.localeCompare(right, 'pt-BR', { sensitivity: 'base' }));
-  }, [googleBranch]);
-
   const { settings: importSettings } = useImportSettings();
   const simulateImport = importSettings?.safeMode.simulationMode ?? true;
   const { leads, summary, loading, error, importJson, createLead, updateLead, removeLead, moveLead, moveMany, clearSession, sendApprovedToInicio } = useImportLeads(activeStatus, search);
@@ -257,8 +239,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => googleMapsExtensionService.subscribeDiagnostic(setGoogleMapsDiagnostic), []);
 
   const totalPages = Math.max(1, Math.ceil(leads.length / rowsPerPage));
   const currentPage = Math.min(page, totalPages);
@@ -424,7 +404,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           if (validation.approved > 0) {
             pushToast({ title: 'Lead adicionado', description: 'WhatsApp confirmado pela Evolution e resultado persistido.', tone: 'success' });
           } else if (validation.redirectedToInstagram > 0) {
-            pushToast({ title: 'Lead adicionado', description: 'WhatsApp não confirmado; o lead foi redirecionado para o Instagram informado.', tone: 'warning' });
+            pushToast({ title: 'Lead adicionado', description: 'WhatsApp não encontrado; o lead voltou para Importado no destino Instagram e exige revisão/aprovação manual.', tone: 'warning' });
           } else if (validation.invalidated > 0) {
             pushToast({ title: 'Lead adicionado', description: 'A Evolution não confirmou o WhatsApp e o resultado inválido foi persistido.', tone: 'warning' });
           } else {
@@ -479,64 +459,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       pushToast({ title: 'Erro ao aprovar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
       setIsImporting(false);
-    }
-  };
-
-  const configureGoogleMapsExecution = async () => {
-    const branch = googleBranch;
-    const locations = Array.from(new Set(googleLocations.split(/[\n;,]+/).map((item) => item.trim()).filter(Boolean)));
-    const whatsappCandidates = Math.max(0, Math.trunc(Number(googleWhatsappTarget) || 0));
-    const instagramCandidates = Math.max(0, Math.trunc(Number(googleInstagramTarget) || 0));
-    if (!branch) {
-      pushToast({ title: 'Ramo obrigatório', description: 'Selecione um ramo ativo existente.', tone: 'danger' });
-      return;
-    }
-    if (!googleSubcategories.length) {
-      pushToast({ title: 'Subramo obrigatório', description: 'Selecione ao menos uma categoria cadastrada do ramo.', tone: 'danger' });
-      return;
-    }
-    if (!locations.length) {
-      pushToast({ title: 'Local obrigatório', description: 'Informe ao menos um local para a cobertura.', tone: 'danger' });
-      return;
-    }
-    if (whatsappCandidates <= 0 && instagramCandidates <= 0) {
-      pushToast({ title: 'Meta obrigatória', description: 'Defina ao menos uma meta de candidatos.', tone: 'danger' });
-      return;
-    }
-    setConfiguringGoogleMaps(true);
-    try {
-      await googleMapsExtensionService.configure({
-        executionId: crypto.randomUUID(),
-        branchesId: Number(branch.id),
-        branchName: branch.name,
-        subcategories: googleSubcategories,
-        locations,
-        targets: { whatsappCandidates, instagramCandidates },
-        mode: googleMode,
-      });
-      pushToast({
-        title: 'Execução enviada à extensão',
-        description: 'Abra o Google Maps e clique em Iniciar no Side Panel. A fila e o checkpoint ficam na extensão.',
-        tone: 'success',
-      });
-    } catch (err) {
-      const detail = googleMapsExtensionService.describeError(err);
-      pushToast({ title: detail.title, description: detail.message, tone: 'danger' });
-    } finally {
-      setConfiguringGoogleMaps(false);
-    }
-  };
-
-  const checkGoogleMapsExtension = async () => {
-    setCheckingGoogleMaps(true);
-    try {
-      const response = await googleMapsExtensionService.ping();
-      pushToast({ title: 'Extensão Google Maps detectada', description: `Bridge e protocolo operacional ativos na versão ${response.extensionVersion}.`, tone: 'success' });
-    } catch (err) {
-      const detail = googleMapsExtensionService.describeError(err);
-      pushToast({ title: detail.title, description: detail.message, tone: 'danger' });
-    } finally {
-      setCheckingGoogleMaps(false);
     }
   };
 
@@ -647,13 +569,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         </div>
       </section>
 
-      <div className="import-source-tabs" role="tablist" aria-label="Tipo de importação">
-        <button type="button" role="tab" aria-selected={importTab === 'Manual'} className={importTab === 'Manual' ? 'is-active' : ''} onClick={() => setImportTab('Manual')}>Manual</button>
-        <button type="button" role="tab" aria-selected={importTab === 'Google Maps Extension'} className={importTab === 'Google Maps Extension' ? 'is-active' : ''} onClick={() => setImportTab('Google Maps Extension')}>Google Maps Extension</button>
-      </div>
-
-      {importTab === 'Manual' ? (
-        <section className="import-grid import-grid--manual">
+      <section className="import-grid import-grid--manual">
           <Panel title="Adicionar lead" className="manual-validation">
             <p>Cadastre um lead usando um ramo ativo e pelo menos um contato. O WhatsApp será validado pela Evolution após a criação; o Instagram é validado somente por formato.</p>
             <div className="manual-validation__fields manual-validation__fields--stacked">
@@ -678,70 +594,11 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               <Button disabled={!manualLead.empresa.trim() || !manualLead.branchId || (!manualLead.whatsapp.trim() && !manualLead.instagram.trim()) || simulateImport} onClick={addManualLead}>Adicionar lead</Button>
             </div>
           </Panel>
-        </section>
-      ) : (
-        <>
-          <Panel title="Execução operacional Google Maps" className="import-extractor-panel">
-            <p>O CRM define ramo, categorias, locais e metas. A extensão percorre as combinações e devolve lotes ao pipeline autenticado; WhatsApp continua dependendo da Evolution.</p>
-            <div className="import-extractor-fields">
-              <label className="field import-select-field">
-                <span className="field__label">Ramo</span>
-                <SelectField
-                  className="import-select-control"
-                  value={googleBranchId}
-                  placeholder="Selecione um ramo ativo"
-                  searchable
-                  options={uniqueBranches.map((branch) => ({ label: branch.name, value: branch.id }))}
-                  onChange={(value) => { setGoogleBranchId(value); setGoogleSubcategories([]); }}
-                />
-              </label>
-              <Field as="textarea" label="Locais" placeholder={'Campinas/SP\nValinhos/SP'} value={googleLocations} onChange={setGoogleLocations} />
-              <Field label="Meta WhatsApp" value={googleWhatsappTarget} onChange={setGoogleWhatsappTarget} />
-              <Field label="Meta Instagram" value={googleInstagramTarget} onChange={setGoogleInstagramTarget} />
-            </div>
-            <div className="maps-operational-options">
-              <div>
-                <strong>Subramos/categorias cadastradas</strong>
-                {!googleCategoryOptions.length ? <span>Selecione um ramo que possua categorias cadastradas.</span> : null}
-                <div className="maps-operational-categories">
-                  {googleCategoryOptions.map((category) => (
-                    <label key={category}>
-                      <input
-                        type="checkbox"
-                        checked={googleSubcategories.includes(category)}
-                        onChange={(event) => setGoogleSubcategories((current) => event.target.checked
-                          ? [...current, category]
-                          : current.filter((item) => item !== category))}
-                      />
-                      <span>{category}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <label className="field import-select-field">
-                <span className="field__label">Modo</span>
-                <SelectField
-                  value={googleMode}
-                  options={[{ label: 'Completo', value: 'complete' }, { label: 'Rápido', value: 'quick' }]}
-                  onChange={(value) => setGoogleMode(value === 'quick' ? 'quick' : 'complete')}
-                />
-              </label>
-            </div>
-            <div className="maps-extension-diagnostic" aria-live="polite">
-              <div><span>Extensão detectada</span><strong>{googleMapsDiagnostic.checked ? (googleMapsDiagnostic.extensionDetected ? 'Sim' : 'Não') : 'Não verificada'}</strong></div>
-              <div><span>Versão</span><strong>{googleMapsDiagnostic.extensionVersion || '—'}</strong></div>
-              <div><span>Bridge ativa</span><strong>{googleMapsDiagnostic.bridgeActive ? 'Sim' : 'Não'}</strong></div>
-              <div><span>Execução configurada</span><strong>{googleMapsDiagnostic.configured ? 'Sim' : 'Não'}</strong></div>
-              <div><span>Último ping</span><strong>{googleMapsDiagnostic.lastPingAt ? new Date(googleMapsDiagnostic.lastPingAt).toLocaleTimeString('pt-BR') : '—'}</strong></div>
-              <div className="maps-extension-diagnostic__error"><span>Último erro</span><strong>{googleMapsDiagnostic.lastError ? `${googleMapsDiagnostic.lastError.code}: ${googleMapsDiagnostic.lastError.message}` : 'Nenhum'}</strong></div>
-            </div>
-            <div className="import-extractor-actions">
-              <Button variant="secondary" loading={checkingGoogleMaps} onClick={checkGoogleMapsExtension}>Verificar extensão</Button>
-              <Button loading={configuringGoogleMaps} onClick={configureGoogleMapsExecution}>Enviar execução para extensão</Button>
-            </div>
-          </Panel>
+      </section>
 
-          <section className="import-grid import-grid--manual">
+      <details className="import-json-fallback">
+        <summary>Importar backup JSON (diagnóstico)</summary>
+        <section className="import-grid import-grid--manual">
           <Panel title="JSON de backup/diagnóstico" className="import-json">
             <p>Cole o JSON exportado pela extensão Google Maps. A extensão fornece candidatos; as regras canônicas, a barreira de simulação e a validação posterior de WhatsApp continuam sob responsabilidade da plataforma.</p>
             <Field
@@ -756,9 +613,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>{simulateImport ? 'Executar simulação' : 'Aprovar leads'}</Button>
             </div>
           </Panel>
-          </section>
-        </>
-      )}
+        </section>
+      </details>
 
       <section className="import-grid">
         <TableCard

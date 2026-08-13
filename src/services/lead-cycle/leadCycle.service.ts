@@ -5,6 +5,8 @@ import type { LeadDatabaseRow, LeadStatusId, LeadStatusName } from '../../types/
 import { LEAD_STATUS } from '../status/leadStatus';
 import { channelId } from '../../repositories/schemaCatalog';
 import { isRoutingNoop, routingDecision, validateRoutingCommand } from './leadRouting.rules';
+import { isValidInstagram, normalizeInstagramUsername } from '../instagram/instagram.utils';
+import { getEffectiveWhatsAppPhone } from '../leads/leadContact';
 import type {
   LeadCycleLead,
   LeadRoutingCommand,
@@ -30,7 +32,7 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
     branch: branch?.branches_name ?? row.leads_categories?.[0] ?? '',
     state: state?.states_code ?? state?.states_name ?? '',
     city: city?.cities_name ?? '',
-    phone: row.leads_phone ?? '',
+    phone: getEffectiveWhatsAppPhone(row),
     instagram: row.leads_instagram ?? '',
     website: row.leads_website ?? '',
     mapsUrl: row.leads_maps ?? '',
@@ -196,9 +198,20 @@ async function executeRoutingCommand(command: LeadRoutingCommand, ids: string[])
   return result;
 }
 
+async function updateImportedInstagram(id: string, value: string) {
+  const username = normalizeInstagramUsername(value);
+  if (!username || !isValidInstagram(username)) throw new Error('Informe um username ou URL canônica de perfil do Instagram.');
+  const instagramId = Number(await channelId('Instagram'));
+  const updated = await supabaseLeadCycleRepository.compareAndSet(id, LEAD_STATUS.IMPORTED, { leads_instagram: username }, instagramId);
+  if (!updated) throw new Error('O lead mudou de status ou destino. Atualize a página e tente novamente.');
+  eventBus.emit('import:changed', { source: 'move' });
+  return mapRow(updated, Number(await channelId('WhatsApp')), instagramId);
+}
+
 export const leadCycleService = {
   listImported: () => listByStatuses([LEAD_STATUS.IMPORTED]),
   listValid: () => listByStatuses([LEAD_STATUS.VALIDATED]),
   listPreSend: async () => listByStatuses([LEAD_STATUS.PRE_SEND], Number(await channelId('WhatsApp'))),
   executeRoutingCommand,
+  updateImportedInstagram,
 };
