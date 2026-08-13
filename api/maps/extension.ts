@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../server/maps/shared.js';
 import { issueMapsExtensionToken, sha256, type MapsExtensionScope } from '../../server/maps/token.js';
 
-const EXTENSION_VERSION = '0.13.1';
+const EXTENSION_VERSION = '0.13.2';
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const ACTIVE_LEAD_STATUS_IDS = [1, 2, 3];
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -423,11 +423,32 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const counts = await executionSummary(client, execution);
       const targetsReached = (Number(execution.target_phone_whatsapp) <= 0 || counts.phone_whatsapp_candidate_count >= Number(execution.target_phone_whatsapp)) && (Number(execution.target_instagram) <= 0 || counts.instagram_candidate_count >= Number(execution.target_instagram));
       let next = null;
-      if (status === 'error') await client.from('maps_search_executions').update({ status: 'error', last_error: patch.last_error, updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
-      else if (targetsReached) await client.from('maps_search_executions').update({ status: 'completed', termination_reason: 'candidate_targets_reached', finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
-      else if (TERMINAL_COVERAGE.has(status)) {
-        next = await nextCoverage(client, execution);
-        if (!next.coverage) await client.from('maps_search_executions').update({ status: 'exhausted', termination_reason: 'available_coverage_exhausted', finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
+      if (status === 'error') {
+        await client.from('maps_search_executions').update({ status: 'error', last_error: patch.last_error, updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
+      } else if (TERMINAL_COVERAGE.has(status)) {
+        // Regra de produto: uma cidade iniciada precisa ser limpa pelo ramo
+        // principal + todos os subramos antes de a meta poder encerrar a execução.
+        // Assim, atingir a meta no primeiro termo nunca pula os demais termos da
+        // cidade atual; apenas impede avançar para uma nova cidade.
+        const sameCityPending = await client.from('maps_search_coverage')
+          .select('*')
+          .eq('maps_search_executions_id', execution.maps_search_executions_id)
+          .eq('users_id', usersId)
+          .eq('cities_id', Number(updated.data.cities_id))
+          .eq('status', 'pending')
+          .order('term_position')
+          .order('created_at')
+          .limit(1);
+        if (sameCityPending.error) throw new Error(sameCityPending.error.message);
+
+        if (sameCityPending.data?.[0]) {
+          next = { blocked: false, coverage: sameCityPending.data[0] };
+        } else if (targetsReached) {
+          await client.from('maps_search_executions').update({ status: 'completed', termination_reason: 'candidate_targets_reached', finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
+        } else {
+          next = await nextCoverage(client, execution);
+          if (!next.coverage) await client.from('maps_search_executions').update({ status: 'exhausted', termination_reason: 'available_coverage_exhausted', finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
+        }
       }
       return send(req, res, 200, { ok: true, coverage: updated.data, counts, targetsReached, next });
     }
