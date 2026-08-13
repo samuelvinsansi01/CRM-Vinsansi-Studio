@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../server/maps/shared.js';
 import { issueMapsExtensionToken, sha256, type MapsExtensionScope } from '../../server/maps/token.js';
 
-const EXTENSION_VERSION = '0.13.2';
+const EXTENSION_VERSION = '0.14.0';
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const ACTIVE_LEAD_STATUS_IDS = [1, 2, 3];
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -80,7 +80,8 @@ function normalizeWebsite(value: unknown) {
   try {
     const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
     const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
-    if (hostname === 'facebook.com' || hostname.endsWith('.facebook.com')) return '';
+    const socialHosts = new Set(['facebook.com', 'instagram.com', 'wa.me', 'whatsapp.com', 'api.whatsapp.com', 'web.whatsapp.com']);
+    if ([...socialHosts].some((host) => hostname === host || hostname.endsWith(`.${host}`))) return '';
     return ['http:', 'https:'].includes(url.protocol) && url.hostname.includes('.') ? url.toString() : '';
   } catch { return ''; }
 }
@@ -155,11 +156,24 @@ async function branchTerms(client: ReturnType<typeof import('../../server/maps/s
   return { branch, terms: branchSearchTerms(branch.branches_name, branch.branches_categories) };
 }
 
-async function createCoverageForCity(client: ReturnType<typeof import('../../server/maps/shared.js').serviceClient>, execution: Row, city: Row, terms: string[]) {
-  const existing = await client.from('maps_search_coverage').select('normalized_search_term').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('cities_id', city.cities_id);
-  if (existing.error) throw new Error(`maps_coverage_query_failed:${existing.error.message}`);
-  const present = new Set((existing.data ?? []).map((row) => text(row.normalized_search_term)));
-  const rows = terms.map((term, index) => ({ term, position: index + 1 })).filter(({ term }) => !present.has(normalize(term))).map(({ term, position }) => ({
+async function cityWithState(client: ReturnType<typeof import('../../server/maps/shared.js').serviceClient>, cityId: number, stateId: number) {
+  const [city, state] = await Promise.all([
+    client.from('cities').select('cities_id,cities_name,states_id').eq('cities_id', cityId).eq('states_id', stateId).maybeSingle(),
+    client.from('states').select('states_id,states_name,states_code').eq('states_id', stateId).maybeSingle(),
+  ]);
+  if (city.error || !city.data) throw new Error('maps_city_state_mismatch');
+  if (state.error || !state.data) throw new Error('maps_state_not_found');
+  return { ...city.data, ...state.data } as Row;
+}
+
+async function createCoverageTerm(
+  client: ReturnType<typeof import('../../server/maps/shared.js').serviceClient>,
+  execution: Row,
+  city: Row,
+  term: string,
+  position: number,
+) {
+  const inserted = await client.from('maps_search_coverage').insert({
     users_id: execution.users_id,
     maps_search_executions_id: execution.maps_search_executions_id,
     branches_id: execution.branches_id,
@@ -174,36 +188,74 @@ async function createCoverageForCity(client: ReturnType<typeof import('../../ser
     term_position: position,
     search_query: `${term} em ${text(city.cities_name)} ${text(city.states_code)}`,
     status: 'pending',
-  }));
-  if (rows.length) {
-    const inserted = await client.from('maps_search_coverage').insert(rows);
-    if (inserted.error) throw new Error(`maps_coverage_create_failed:${inserted.error.message}`);
+  }).select('*').single();
+  if (inserted.error) throw new Error(`maps_coverage_create_failed:${inserted.error.message}`);
+  return inserted.data as Row;
+}
+
+async function nextCoverageForCity(
+  client: ReturnType<typeof import('../../server/maps/shared.js').serviceClient>,
+  execution: Row,
+  city: Row,
+  terms: string[],
+  skipHistorical: boolean,
+) {
+  const currentRows = await client.from('maps_search_coverage')
+    .select('*')
+    .eq('maps_search_executions_id', execution.maps_search_executions_id)
+    .eq('cities_id', Number(city.cities_id));
+  if (currentRows.error) throw new Error(`maps_coverage_query_failed:${currentRows.error.message}`);
+  const currentByTerm = new Map((currentRows.data ?? []).map((row) => [text(row.normalized_search_term), row as Row]));
+
+  let historical = new Set<string>();
+  if (skipHistorical) {
+    const previous = await client.from('maps_search_coverage')
+      .select('normalized_search_term,status')
+      .eq('users_id', Number(execution.users_id))
+      .eq('branches_id', Number(execution.branches_id))
+      .eq('cities_id', Number(city.cities_id))
+      .in('status', ['completed','exhausted']);
+    if (previous.error) throw new Error(previous.error.message);
+    historical = new Set((previous.data ?? []).map((row) => text(row.normalized_search_term)));
   }
+
+  for (let index = 0; index < terms.length; index += 1) {
+    const term = text(terms[index]);
+    const key = normalize(term);
+    if (!key) continue;
+    const current = currentByTerm.get(key);
+    if (current) {
+      if (current.status === 'error') return { blocked: true, reason: 'coverage_error_requires_operator', coverage: current };
+      if (!TERMINAL_COVERAGE.has(text(current.status))) return { blocked: false, coverage: current };
+      continue;
+    }
+    if (skipHistorical && historical.has(key)) continue;
+    const created = await createCoverageTerm(client, execution, city, term, index + 1);
+    return { blocked: false, coverage: created };
+  }
+  return { blocked: false, coverage: null };
 }
 
 async function nextCoverage(client: ReturnType<typeof import('../../server/maps/shared.js').serviceClient>, execution: Row) {
-  const errorCoverage = await client.from('maps_search_coverage').select('*').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('status', 'error').limit(1);
-  if (errorCoverage.error) throw new Error(errorCoverage.error.message);
-  if (errorCoverage.data?.length) return { blocked: true, reason: 'coverage_error_requires_operator', coverage: errorCoverage.data[0] };
-  const pending = await client.from('maps_search_coverage').select('*').eq('maps_search_executions_id', execution.maps_search_executions_id).in('status', ['pending','paused','stopped']).order('cities_id').order('term_position').order('created_at').limit(1);
-  if (pending.error) throw new Error(pending.error.message);
-  if (pending.data?.[0]) return { blocked: false, coverage: pending.data[0] };
-  if (execution.city_mode === 'manual') return { blocked: false, coverage: null };
   const terms = strings(execution.search_terms_snapshot);
+  if (!terms.length) throw new Error('maps_search_terms_required');
+
+  // A fila é propositalmente lazy: existe somente o termo atual da cidade.
+  // Terminou o termo? Criamos/retornamos o próximo. Terminou todos? Só então
+  // mudamos de cidade. Isso espelha exatamente o uso humano do campo de busca.
+  if (execution.city_mode === 'manual') {
+    const city = await cityWithState(client, Number(execution.requested_cities_id), Number(execution.states_id));
+    return nextCoverageForCity(client, execution, city, terms, false);
+  }
+
   const cities = await client.from('cities').select('cities_id,cities_name,states_id').eq('states_id', Number(execution.states_id)).order('cities_name');
   if (cities.error) throw new Error(cities.error.message);
-  const state = await client.from('states').select('states_name,states_code').eq('states_id', Number(execution.states_id)).single();
-  if (state.error) throw new Error(state.error.message);
-  for (const city of cities.data ?? []) {
-    const historical = await client.from('maps_search_coverage').select('normalized_search_term,status').eq('users_id', Number(execution.users_id)).eq('branches_id', Number(execution.branches_id)).eq('cities_id', Number(city.cities_id)).in('status', ['completed','exhausted']);
-    if (historical.error) throw new Error(historical.error.message);
-    const covered = new Set((historical.data ?? []).map((row) => text(row.normalized_search_term)));
-    const missing = terms.filter((term) => !covered.has(normalize(term)));
-    if (!missing.length) continue;
-    await createCoverageForCity(client, execution, { ...city, ...state.data }, missing);
-    const created = await client.from('maps_search_coverage').select('*').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('cities_id', city.cities_id).eq('status', 'pending').order('term_position').order('created_at').limit(1).single();
-    if (created.error) throw new Error(created.error.message);
-    return { blocked: false, coverage: created.data };
+  const state = await client.from('states').select('states_id,states_name,states_code').eq('states_id', Number(execution.states_id)).maybeSingle();
+  if (state.error || !state.data) throw new Error('maps_state_not_found');
+
+  for (const cityRow of cities.data ?? []) {
+    const next = await nextCoverageForCity(client, execution, { ...cityRow, ...state.data }, terms, true);
+    if (next.blocked || next.coverage) return next;
   }
   return { blocked: false, coverage: null };
 }
@@ -320,15 +372,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         status: 'pending',
         extension_version: text(input.extensionVersion) || EXTENSION_VERSION,
         search_terms_snapshot: terms,
-        runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageExpiration: null },
+        runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null },
       }).select('*').single();
       if (inserted.error) throw new Error(`maps_execution_create_failed:${inserted.error.message}`);
       const execution = { ...(inserted.data as Row), branch_name: branch.branches_name };
-      if (cityMode === 'manual') {
-        const city = await client.from('cities').select('cities_id,cities_name,states_id').eq('cities_id', requestedCitiesId).single();
-        if (city.error) throw new Error(city.error.message);
-        await createCoverageForCity(client, execution, { ...city.data, ...state.data }, terms);
-      }
+      // Cobertura é criada um termo por vez. Nenhuma cidade recebe todos os
+      // subramos antecipadamente; o próximo termo só nasce quando o anterior acaba.
       const next = await nextCoverage(client, execution);
       return send(req, res, 200, { ok: true, execution: { ...execution, targets }, next });
     }
@@ -430,19 +479,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         // principal + todos os subramos antes de a meta poder encerrar a execução.
         // Assim, atingir a meta no primeiro termo nunca pula os demais termos da
         // cidade atual; apenas impede avançar para uma nova cidade.
-        const sameCityPending = await client.from('maps_search_coverage')
-          .select('*')
-          .eq('maps_search_executions_id', execution.maps_search_executions_id)
-          .eq('users_id', usersId)
-          .eq('cities_id', Number(updated.data.cities_id))
-          .eq('status', 'pending')
-          .order('term_position')
-          .order('created_at')
-          .limit(1);
-        if (sameCityPending.error) throw new Error(sameCityPending.error.message);
-
-        if (sameCityPending.data?.[0]) {
-          next = { blocked: false, coverage: sameCityPending.data[0] };
+        const terms = strings(execution.search_terms_snapshot);
+        const city = await cityWithState(client, Number(updated.data.cities_id), Number(execution.states_id));
+        const sameCityNext = await nextCoverageForCity(client, execution, city, terms, execution.city_mode !== 'manual');
+        if (sameCityNext.blocked) {
+          next = sameCityNext;
+        } else if (sameCityNext.coverage) {
+          next = sameCityNext;
         } else if (targetsReached) {
           await client.from('maps_search_executions').update({ status: 'completed', termination_reason: 'candidate_targets_reached', finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
         } else {

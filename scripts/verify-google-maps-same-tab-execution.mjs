@@ -62,7 +62,12 @@ async function runScenario(name, coverages, cityMode) {
       },
       async sendMessage(id, message) {
         assert(id === 77, `${name}: comando foi enviado para outra aba.`);
-        if (message.type === 'GMAPS_POC_PING') return { ok: true, mapsReady: true, pageQuery: new URL(currentUrl).searchParams.get('query') || '', mapsLayout: { kind: 'feed', noResults: false, detailDetected: false }, state: { phase: 'idle', operationalContext: null } };
+        if (message.type === 'GMAPS_POC_SEARCH') {
+          currentUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(message.query)}`;
+          navigations.push({ id, query: message.query, url: currentUrl, token: message.navigationToken });
+          return { ok: true, committed: true, navigationToken: message.navigationToken, requestedQuery: message.query, pageUrl: currentUrl, pageQuery: message.query };
+        }
+        if (message.type === 'GMAPS_POC_PING') return { ok: true, mapsReady: true, pageQuery: new URL(currentUrl).searchParams.get('query') || '', mapsLayout: { kind: 'feed', noResults: false, detailDetected: false }, lastOperationalSearch: { token: navigations.at(-1)?.token, committed: true }, state: { phase: 'idle', operationalContext: null } };
         if (message.type === 'GMAPS_POC_START' || message.type === 'GMAPS_POC_RESUME') {
           runnerCommands.push(structuredClone(message));
           return { ok: true, state: { phase: 'running', operationalContext: message.operationalContext } };
@@ -133,7 +138,7 @@ async function runScenario(name, coverages, cityMode) {
   }
   await waitUntil(() => storage.gmapsOperationalExecutionV1?.status === 'completed', 'execução não chegou a completed.');
 
-  const queries = navigations.map(({ url }) => new URL(url).searchParams.get('query'));
+  const queries = navigations.map(({ query }) => query);
   assert(JSON.stringify(queries) === JSON.stringify(coverages.map((item) => item.search_query)), `${name}: ordem/query divergente: ${JSON.stringify(queries)}.`);
   assert(navigations.every(({ id }) => id === 77) && runnerCommands.length === coverages.length, `${name}: nem todas as combinações usaram a mesma aba/runner.`);
   assert(storage.gmapsOperationalExecutionV1.activeMapsTabId === 77, `${name}: mapsTabId não permaneceu persistido.`);
@@ -179,8 +184,8 @@ await runScenario('automatic', [
 
 assert(!sidepanelSource.includes('chrome.windows.create') && !sidepanelSource.includes('chrome.tabs.create'), 'Start do Side Panel ainda cria aba/janela.');
 assert(sidepanelSource.includes('tabId: currentMapsTab.id'), 'Side Panel não envia a aba Maps atual ao orquestrador.');
-assert(operationalSource.includes('await waitForMapsReady(tabId, combo.searchQuery)') && contentSource.includes('pageQuery') && contentSource.includes('mapsReady: layout.ready'), 'Start não aguarda a query correta e o contexto semântico real.');
-assert(!operationalSource.includes('chrome.tabs.onUpdated.addListener'), 'Orquestrador ainda depende de tabs.onUpdated e pode relançar a mesma combinação em navegações internas do Maps.');
+assert(operationalSource.includes("type: 'GMAPS_POC_SEARCH'") && contentSource.includes('waitForSearchInput') && contentSource.includes('mapsReady: layout.ready'), 'Start não altera a caixa de pesquisa e aguarda o contexto semântico real.');
+assert(!operationalSource.includes('chrome.tabs.onUpdated.addListener') && !operationalSource.includes('chrome.tabs.update('), 'Orquestrador ainda depende de navegação de aba em vez da busca sequencial no campo do Maps.');
 assert(operationalSource.includes('await launchCurrent(state, tab.id, false)'), 'Navegação não é dona do start determinístico da combinação.');
 assert(contentSource.includes('await restorePromise'), 'Mensagem pode disputar com a restauração do checkpoint do runner.');
 assert(runnerSource.includes('incomingCombinationId === currentCombinationId'), 'Runner ainda bloqueia silenciosamente uma nova combinação por checkpoint anterior.');

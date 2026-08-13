@@ -85,7 +85,7 @@ assert(manualState.statusLabel === 'Sem pesquisa ativa' && manualState.sync.canS
 
 const pong = await dispatch({ type: 'GMAPS_EXTENSION_PING' });
 assert(pong.ok && pong.type === 'GMAPS_EXTENSION_PONG', 'Background não responde ao handshake PING/PONG.');
-assert(pong.extensionVersion === '0.13.1' && pong.operationalAvailable === true && pong.configured === false, 'PONG não informa versão, disponibilidade operacional e estado configurado.');
+assert(pong.extensionVersion === '0.14.0' && pong.operationalAvailable === true && pong.configured === false, 'PONG não informa versão, disponibilidade operacional e estado configurado.');
 
 const invalidConfigure = await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: {} });
 assert(invalidConfigure.ok === false && invalidConfigure.code === 'invalid_execution_identity' && invalidConfigure.message, 'Payload inválido não retorna erro explícito e codificado.');
@@ -244,7 +244,7 @@ assert(operationalSource.includes("new Set(['about', 'accounts', 'direct', 'expl
 assert(runner.includes("type: 'GMAPS_POC_RUN_FINISHED'") && content.includes('message.operationalContext'), 'Scraper não entrega conclusão/contexto ao orquestrador sem ser reescrito.');
 assert(diagnostics.includes('function detectLayout()') && diagnostics.includes("'feed_with_detail'") && diagnostics.includes("'detail_only'") && diagnostics.includes("'no_results'"), 'Readiness não diferencia feed, detalhe, carregamento e ausência de resultados.');
 assert(diagnostics.includes('placeLinks(el).length >= 1') && !/innerWidth|clientWidth\s*[<>]/.test(diagnostics), 'Feed depende de múltiplos cards ou largura visual.');
-assert(config.includes('noResultsPhrases') && runner.includes('ns.diagnostics.detectNoResults()'), 'Estado sem resultados não conclui imediatamente como busca vazia.');
+assert(config.includes('noResultsPhrases') && runner.includes('layout.noResults'), 'Estado sem resultados não conclui imediatamente como busca vazia.');
 assert(runner.includes('history.back()') && runner.includes('waitForFeed') && runner.includes('waitUntilClosed'), 'Modo completo perdeu o retorno semântico do detalhe para o feed.');
 assert(sidepanel.includes('async function exportPayload()') && sidepanel.includes("send('GMAPS_POC_GET_DATA')") && sidepanel.includes('toCsv(data.items || [])') && sidepanel.includes('JSON.stringify(data, null, 2)'), 'JSON/CSV de backup foram removidos.');
 assert(bridge.includes('event.origin !== location.origin') && bridge.includes('chrome.runtime.sendMessage'), 'Ponte CRM não valida origem local antes de falar com a extensão.');
