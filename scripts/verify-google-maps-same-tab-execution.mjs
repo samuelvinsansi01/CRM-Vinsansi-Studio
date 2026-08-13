@@ -90,6 +90,7 @@ async function runScenario(name, coverages, cityMode) {
   });
   context.globalThis = context;
   vm.runInContext(operationalSource, context, { filename: 'src/operational.js' });
+  assert(updatedListeners.length === 0, `${name}: operational.js ainda registra tabs.onUpdated capaz de relançar a combinação após navegação/detalhes.`);
 
   const dispatch = (message) => new Promise((resolve, reject) => {
     const handled = runtimeListeners[0]?.(message, {}, resolve);
@@ -179,7 +180,7 @@ await runScenario('automatic', [
 
 assert(!sidepanelSource.includes('chrome.windows.create') && !sidepanelSource.includes('chrome.tabs.create'), 'Start do Side Panel ainda cria aba/janela.');
 assert(sidepanelSource.includes('tabId: currentMapsTab.id'), 'Side Panel não envia a aba Maps atual ao orquestrador.');
-assert(operationalSource.includes('await waitForMapsReady(tabId)') && contentSource.includes('mapsReady: layout.ready'), 'Start não aguarda content script/contexto semântico real.');
+assert(operationalSource.includes('await waitForMapsReady(tabId') && contentSource.includes('mapsReady: layout.ready'), 'Start não aguarda content script/contexto semântico real.');
 assert(contentSource.includes('await restorePromise'), 'Mensagem pode disputar com a restauração do checkpoint do runner.');
 assert(runnerSource.includes('incomingCombinationId === currentCombinationId'), 'Runner ainda bloqueia silenciosamente uma nova combinação por checkpoint anterior.');
 for (const state of ['idle', 'starting', 'navigating', 'waiting_maps_ready', 'scraping', 'finishing_search', 'syncing', 'next_search', 'paused', 'completed', 'error', 'stopped']) {

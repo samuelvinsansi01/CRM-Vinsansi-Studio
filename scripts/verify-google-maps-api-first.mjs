@@ -50,6 +50,9 @@ for (const scope of requiredScopes) assert(token.includes(scope), `Scope ausente
 for (const action of ['catalogs','cities','targets','search_create','next_search','batch_sync','coverage_transition','execution_transition','candidates_list','candidate_update','candidate_exclude','candidate_restore','leads_promote','history','history_detail']) {
   assert(api.includes(`'${action}'`), `Ação API ausente: ${action}.`);
 }
+assert(api.includes('function branchSubcategories(value: unknown): string[]') && api.includes('function branchSearchTerms(branchName: unknown, categories: unknown): string[]'), 'API não separa explicitamente ramo principal de subramos canônicos.');
+assert(api.includes('subcategories: branchSubcategories(row.branches_categories)') && api.includes('terms: branchSearchTerms(result.data.branches_name, result.data.branches_categories)'), 'Catálogo/criação de pesquisa ainda podem achatar metadados de branches_categories como termos de busca.');
+assert(api.includes('maps_coverage_terminal_transition_rejected'), 'API não bloqueia reabertura de cobertura completed/exhausted.');
 assert(api.includes(".eq('users_id', usersId)") && !api.includes('input.usersId'), 'Queries operacionais não são tenant-scoped pelo token.');
 assert(api.includes("lead_status_id: 1") && api.includes("leads_origin: 'google_maps'"), 'Promoção não cria lead IMPORTADO com origem Google Maps.');
 assert(api.includes("destination = phoneWhatsapp ? 'whatsapp' : 'instagram'") && api.includes('leads_whatsapp:'), 'Destino inicial ou WhatsApp separado divergiu.');
