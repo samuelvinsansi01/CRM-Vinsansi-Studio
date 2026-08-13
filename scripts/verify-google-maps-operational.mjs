@@ -12,6 +12,8 @@ const fixture = JSON.parse(read('scripts/fixtures/google-maps-operational-execut
 const operationalSource = readExtension('src/operational.js');
 const runner = readExtension('src/runner.js');
 const content = readExtension('src/content.js');
+const diagnostics = readExtension('src/diagnostics.js');
+const config = readExtension('src/config.js');
 const bridge = readExtension('src/crm-bridge.js');
 const sidepanel = readExtension('sidepanel.js');
 const manifest = JSON.parse(readExtension('manifest.json'));
@@ -27,6 +29,7 @@ assert(fixture.targets.whatsappCandidates === 10 && fixture.targets.instagramCan
 const storage = {};
 const runtimeListeners = [];
 const tabListeners = [];
+const tabRemovedListeners = [];
 const syncRequests = [];
 const tabCommands = [];
 let activeMapUrl = 'https://www.google.com/maps/';
@@ -34,15 +37,21 @@ const chrome = {
   storage: { local: {
     async get(key) { return { [key]: storage[key] }; },
     async set(value) { Object.assign(storage, structuredClone(value)); },
+    async remove(key) { delete storage[key]; },
   } },
   runtime: { onMessage: { addListener(listener) { runtimeListeners.push(listener); } } },
   tabs: {
     onUpdated: { addListener(listener) { tabListeners.push(listener); } },
+    onRemoved: { addListener(listener) { tabRemovedListeners.push(listener); } },
     async query(query) {
       if (query.url) return [{ id: 9, url: 'https://painel.samuelvinsansi.com.br/' }];
       return [{ id: 7, url: activeMapUrl, active: true }];
     },
-    async get(id) { return id === 9 ? { id, url: 'https://painel.samuelvinsansi.com.br/' } : null; },
+    async get(id) {
+      if (id === 9) return { id, url: 'https://painel.samuelvinsansi.com.br/' };
+      if (id === 7) return { id, url: activeMapUrl };
+      return null;
+    },
     async update(id, update) { activeMapUrl = update.url; return { id, url: activeMapUrl }; },
     async sendMessage(id, message) {
       tabCommands.push({ id, message });
@@ -51,7 +60,7 @@ const chrome = {
         return { ok: true, confirmed: true, accepted: message.payload.items.length, rejected: 0, duplicates: 0 };
       }
       if (message.type === 'GMAPS_CRM_EXECUTION_EVENT') return { ok: true, confirmed: true, eventId: message.payload.eventId };
-      if (message.type === 'GMAPS_POC_PING') return { ok: true, state: { phase: 'idle', operationalContext: null } };
+      if (message.type === 'GMAPS_POC_PING') return { ok: true, mapsReady: true, state: { phase: 'idle', operationalContext: null } };
       return { ok: true, state: { phase: 'running' } };
     },
   },
@@ -89,7 +98,7 @@ assert(configured.state.uiMode === 'operational' && configured.state.statusLabel
 assert(configured.state.current.position === 1 && configured.state.current.subcategory === 'Cozinhas Planejadas' && configured.state.current.location === 'Campinas/SP', 'Snapshot pré-start não expõe a primeira combinação.');
 assert(configured.state.whatsappCandidates === 0 && configured.state.instagramCandidates === 0, 'Snapshot pré-start não começa as metas em zero.');
 assert(configured.state.controls.canStart && !configured.state.controls.canPause, 'Controles do snapshot configurado estão incoerentes.');
-await dispatch({ type: 'GMAPS_OPERATIONAL_START' });
+await dispatch({ type: 'GMAPS_OPERATIONAL_START', tabId: 7 });
 let state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 assert(state.status === 'running' && state.current.status === 'running', 'Start não inicia a combinação atual.');
 const activeConfigure = await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: { ...fixture, executionId: 'blocked-active-fixture' } });
@@ -140,9 +149,11 @@ state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 assert(state.status === 'completed' && state.combinationsCompleted === 4, 'Execução somente exaurida não chega ao estado terminal.');
 assert(state.statusLabel === 'Concluída' && state.combinationsExhausted === 4, 'Resumo concluído não expõe status e cobertura exaurida.');
 await dispatch({ type: 'GMAPS_OPERATIONAL_SYNC' });
+const reset = await dispatch({ type: 'GMAPS_OPERATIONAL_RESET' });
+assert(reset.ok && reset.state.configured === false && !storage.gmapsOperationalExecutionV1, 'Nova pesquisa não limpa somente o checkpoint terminal local.');
 
 await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: { ...fixture, executionId: 'pause-fixture' } });
-await dispatch({ type: 'GMAPS_OPERATIONAL_START' });
+await dispatch({ type: 'GMAPS_OPERATIONAL_START', tabId: 7 });
 await dispatch({ type: 'GMAPS_OPERATIONAL_PAUSE' });
 state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 assert(state.status === 'paused' && state.current.status === 'paused', 'Pause não preserva fila/combinação como pausada.');
@@ -165,12 +176,36 @@ state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 assert(state.current.status === 'paused' && state.combinationsCompleted === 0, 'Stop marcou incorretamente uma busca parcial como exaurida/concluída.');
 await dispatch({ type: 'GMAPS_OPERATIONAL_SYNC' });
 
+await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: { ...fixture, executionId: 'resumable-error-fixture' } });
+await dispatch({ type: 'GMAPS_OPERATIONAL_START', tabId: 7 });
+state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
+await dispatch({
+  type: 'GMAPS_POC_RUN_FINISHED',
+  data: { metadata: { phase: 'error', mode: 'complete', operationalContext: {
+    executionId: 'resumable-error-fixture', combinationId: state.current.combinationId,
+    branchesId: fixture.branchesId, branchName: fixture.branchName,
+    subcategory: state.current.subcategory, location: state.current.location,
+  } }, items: [
+    { ...duplicate, mapsDataId: '0x10:0x1', name: 'Empresa A', detailProcessed: true },
+    { ...duplicate, mapsDataId: '0x10:0x2', name: 'Empresa B', detailProcessed: true },
+    { ...duplicate, mapsDataId: '0x10:0x3', name: 'Empresa C', detailProcessed: false },
+    { ...duplicate, mapsDataId: '0x10:0x4', name: 'Empresa D', detailProcessed: false },
+  ], errors: [{ message: 'fixture_dom_interrupted_before_c' }] },
+}, { tab: { id: 7 } });
+await new Promise((resolve) => setTimeout(resolve, 20));
+state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
+assert(state.status === 'paused' && state.current.status === 'paused' && state.totalCollected === 2, 'Erro retomável não pausa preservando A/B coletados.');
+assert(state.controls.canResume && state.current.lastError === 'fixture_dom_interrupted_before_c', 'Erro retomável não habilita Continuar com diagnóstico preservado.');
+await dispatch({ type: 'GMAPS_OPERATIONAL_STOP' });
+await dispatch({ type: 'GMAPS_OPERATIONAL_SYNC' });
+await dispatch({ type: 'GMAPS_OPERATIONAL_RESET' });
+
 await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: {
   ...fixture,
   executionId: 'target-fixture',
   targets: { whatsappCandidates: 1, instagramCandidates: 0 },
 } });
-await dispatch({ type: 'GMAPS_OPERATIONAL_START' });
+await dispatch({ type: 'GMAPS_OPERATIONAL_START', tabId: 7 });
 state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 await dispatch({
   type: 'GMAPS_POC_RUN_FINISHED',
@@ -186,7 +221,7 @@ assert(state.status === 'completed' && state.current.terminationReason === 'cand
 await dispatch({ type: 'GMAPS_OPERATIONAL_SYNC' });
 
 await dispatch({ type: 'GMAPS_OPERATIONAL_CONFIGURE', execution: { ...fixture, executionId: 'restart-fixture' } });
-await dispatch({ type: 'GMAPS_OPERATIONAL_START' });
+await dispatch({ type: 'GMAPS_OPERATIONAL_START', tabId: 7 });
 await context.GMAPS_OPERATIONAL.pauseAfterBrowserRestart();
 state = (await dispatch({ type: 'GMAPS_OPERATIONAL_STATE' })).state;
 assert(state.status === 'paused', 'Reinício do navegador não converte execução ativa em pausada.');
@@ -207,6 +242,10 @@ assert(operationalSource.includes('function getOperationalUiSnapshot(state)') &&
 assert(operationalSource.includes('MAX_BATCH_SIZE = 25') && operationalSource.includes('pendingBatch'), 'Sync não mantém lote pequeno/idempotente para retry.');
 assert(operationalSource.includes("new Set(['about', 'accounts', 'direct', 'explore', 'p', 'reel', 'reels', 'stories', 'tv'])") && operationalSource.includes("parts.length !== 1"), 'Meta Instagram aceita path não canônico ou host/perfil inválido.');
 assert(runner.includes("type: 'GMAPS_POC_RUN_FINISHED'") && content.includes('message.operationalContext'), 'Scraper não entrega conclusão/contexto ao orquestrador sem ser reescrito.');
+assert(diagnostics.includes('function detectLayout()') && diagnostics.includes("'feed_with_detail'") && diagnostics.includes("'detail_only'") && diagnostics.includes("'no_results'"), 'Readiness não diferencia feed, detalhe, carregamento e ausência de resultados.');
+assert(diagnostics.includes('placeLinks(el).length >= 1') && !/innerWidth|clientWidth\s*[<>]/.test(diagnostics), 'Feed depende de múltiplos cards ou largura visual.');
+assert(config.includes('noResultsPhrases') && runner.includes('ns.diagnostics.detectNoResults()'), 'Estado sem resultados não conclui imediatamente como busca vazia.');
+assert(runner.includes('history.back()') && runner.includes('waitForFeed') && runner.includes('waitUntilClosed'), 'Modo completo perdeu o retorno semântico do detalhe para o feed.');
 assert(sidepanel.includes('async function exportPayload()') && sidepanel.includes("send('GMAPS_POC_GET_DATA')") && sidepanel.includes('toCsv(data.items || [])') && sidepanel.includes('JSON.stringify(data, null, 2)'), 'JSON/CSV de backup foram removidos.');
 assert(bridge.includes('event.origin !== location.origin') && bridge.includes('chrome.runtime.sendMessage'), 'Ponte CRM não valida origem local antes de falar com a extensão.');
 assert(manifest.permissions.includes('tabs') && manifest.host_permissions.every((host) => !host.includes('<all_urls>')), 'Manifest não possui navegação mínima ou abriu host global.');
@@ -225,6 +264,38 @@ for (const forbidden of ['SUPABASE_SERVICE_ROLE', 'WORKER_INTERNAL_TOKEN', 'EVOL
 assert(!/apify/i.test([operationalSource, bridge, sidepanel, crmService, importPage].join('\n')), 'Caminho operacional Google Maps possui dependência/fallback Apify.');
 assert(!/evolution/i.test(operationalSource + bridge), 'Extensão tenta validar WhatsApp diretamente na Evolution.');
 assert(operationalSource.includes("GMAPS_PLATFORM_API.request('batch_sync'") && operationalSource.includes('state.apiFirst'), 'Execução API-first não sincroniza diretamente com a plataforma.');
+
+class FixtureElement {}
+const noResultsContext = vm.createContext({
+  document: {
+    body: { innerText: 'Nenhum resultado encontrado' },
+    querySelector(selector) {
+      return selector === '[role="main"]' ? { innerText: 'Nenhum resultado encontrado' } : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+  },
+  location: { pathname: '/maps/search/' },
+  Element: FixtureElement,
+  Date,
+  GMAPS_POC: {
+    CONFIG: {
+      version: 'fixture',
+      selectors: { feed: [], placeLinks: [] },
+      noResultsPhrases: ['nenhum resultado encontrado'],
+    },
+    utils: {
+      cleanText: (value) => String(value || '').trim(),
+      visible: () => true,
+      findScrollableAncestor: () => null,
+    },
+    detailExtractor: { diagnostic: () => null },
+  },
+});
+vm.runInContext(diagnostics, noResultsContext, { filename: 'src/diagnostics.js' });
+const noResultsLayout = noResultsContext.GMAPS_POC.diagnostics.detectLayout();
+assert(noResultsLayout.ready && noResultsLayout.kind === 'no_results' && noResultsLayout.noResults, 'Fixture sem resultados não fica pronta imediatamente, sem aguardar timeout.');
 
 if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));

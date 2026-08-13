@@ -55,6 +55,8 @@ function normalizeWebsite(value: unknown) {
   if (!raw) return '';
   try {
     const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (hostname === 'facebook.com' || hostname.endsWith('.facebook.com')) return '';
     return ['http:', 'https:'].includes(url.protocol) && url.hostname.includes('.') ? url.toString() : '';
   } catch { return ''; }
 }

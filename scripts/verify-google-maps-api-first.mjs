@@ -59,9 +59,10 @@ assert(!/apify/i.test(api + extensionFiles + importPage), 'Fluxo Maps reintroduz
 
 assert(sidepanelHtml.includes('>Pesquisa<') && sidepanelHtml.includes('>Leads '), 'Side Panel não possui as duas abas internas.');
 for (const id of ['branchSelect','stateSelect','citySelect','daysSelect','candidateList','detailPhone','detailWhatsapp','detailInstagram','detailWebsite','saveSelectedBtn']) assert(sidepanelHtml.includes(`id="${id}"`), `UI da extensão perdeu #${id}.`);
-assert(sidepanel.includes('beginPairing') && sidepanel.includes("request('search_create'") && sidepanel.includes('chrome.windows.create') && sidepanel.includes('chrome.sidePanel.open'), 'Extensão não conecta/cria pesquisa/inicia janela dedicada diretamente.');
+assert(sidepanel.includes('beginPairing') && sidepanel.includes("request('search_create'") && sidepanel.includes("chrome.runtime.sendMessage({ type: 'GMAPS_OPERATIONAL_START', tabId: currentMapsTab.id })"), 'Extensão não conecta/cria pesquisa/inicia na aba Maps atual.');
+assert(!sidepanel.includes('chrome.windows.create') && !sidepanel.includes('chrome.tabs.create'), 'Start operacional ainda abre uma nova janela/aba.');
 assert(!sidepanel.includes("$('startBtn').disabled = !operationalState?.configured || !connected"), 'Iniciar pesquisa API-first ainda exige uma aba Maps previamente conectada e não consegue criar a janela dedicada.');
-assert(sidepanel.includes('tabId: dedicatedTabId') && operational.includes('mapsTab(preferredTabId)'), 'Janela dedicada depende de currentWindow e pode iniciar na aba errada.');
+assert(sidepanel.includes('tabId: currentMapsTab.id') && operational.includes('state.activeMapsTabId ||= tab.id'), 'Execução não fixa a aba Maps atual durante todo o ciclo.');
 assert(sidepanel.includes("request('candidate_update'") && sidepanel.includes("request('leads_promote'"), 'Revisão e salvamento não usam a API direta.');
 assert(operational.includes("GMAPS_PLATFORM_API.request('batch_sync'") && operational.includes('pendingBatch') && operational.includes('MAX_PENDING_ITEMS = 500'), 'Sync idempotente/backlog seguro não está no checkpoint.');
 assert(operational.includes("state.status = 'paused'") && operational.includes("pauseReason = 'platform_sync_backlog_limit'"), 'Backlog indisponível não pausa automaticamente.');

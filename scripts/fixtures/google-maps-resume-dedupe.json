@@ -1,0 +1,18 @@
+{
+  "branch": "Móveis Planejados",
+  "state": "MG",
+  "city": "Abadia dos Dourados",
+  "terms": ["Móveis Planejados", "Marcenaria Planejada", "Cozinhas Planejadas", "Armários Planejados", "MÓVEIS   PLANEJADOS"],
+  "firstCombination": [
+    { "name": "A", "cid": "A", "phone": "34999990001", "instagram": "empresa.a" },
+    { "name": "B", "cid": "B", "phone": "34999990002", "instagram": "empresa.b" },
+    { "name": "C", "cid": "C", "phone": "34999990003", "instagram": "empresa.c" },
+    { "name": "D", "cid": "D", "phone": "34999990004", "instagram": "empresa.d" }
+  ],
+  "secondCombination": [
+    { "name": "B", "cid": "B", "phone": "34999990002", "instagram": "empresa.b" },
+    { "name": "C", "cid": "C", "phone": "34999990003", "instagram": "empresa.c" },
+    { "name": "E", "cid": "E", "phone": "34999990005", "instagram": "empresa.e" }
+  ],
+  "facebookLink": "https://www.facebook.com/empresa.a"
+}
