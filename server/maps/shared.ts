@@ -42,6 +42,7 @@ export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope
 }
 
 export function statusForError(message: string) {
+  if (/gmaps_extension_signing_secret_(?:not_configured|invalid)/.test(message)) return 503;
   if (/auth_required|token_required|token_invalid|token_expired/.test(message)) return 401;
   if (/scope_required|revoked|not_available|owner_scope/.test(message)) return 403;
   if (/not_found/.test(message)) return 404;

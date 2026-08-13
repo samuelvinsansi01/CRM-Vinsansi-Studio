@@ -26,8 +26,20 @@ export type MapsExtensionTokenPayload = {
 declare const process: { env: Record<string, string | undefined> };
 
 function secret() {
-  const value = String(process.env.GMAPS_EXTENSION_SIGNING_SECRET ?? '').trim();
-  if (value.length < 32) throw new Error('gmaps_extension_signing_secret_not_configured');
+  const configuredValue = process.env.GMAPS_EXTENSION_SIGNING_SECRET;
+  const exists = typeof configuredValue === 'string';
+  const value = String(configuredValue ?? '').trim();
+  const state = !exists ? 'absent' : !value ? 'empty' : value.length < 32 ? 'too_short' : 'valid';
+
+  console.info('[maps-token-config]', {
+    signingSecretExists: exists,
+    signingSecretNonEmpty: Boolean(value),
+    signingSecretLength: value.length,
+    signingSecretState: state,
+  });
+
+  if (state === 'absent' || state === 'empty') throw new Error('gmaps_extension_signing_secret_not_configured');
+  if (state === 'too_short') throw new Error('gmaps_extension_signing_secret_invalid');
   return value;
 }
 
