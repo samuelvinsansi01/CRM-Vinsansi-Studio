@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-13T18:47:00-03:00",
+  "updatedAt": "2026-08-13T20:36:00-03:00",
   "tools": [
     {
       "id": "worker",
@@ -13,11 +13,11 @@
     {
       "id": "instagram-extension",
       "name": "Extensão Instagram",
-      "description": "Extensão do navegador com progresso persistente por etapa, recuperação segura, mensagens congeladas e validação de mídia.",
-      "version": "1.6.0",
+      "description": "Extensão do navegador com fila persistente, claim seguro, mídia condicional, reconciliação pós-disparo e prevenção de reenvio cego.",
+      "version": "1.6.1",
       "path": "/tools/instagram-extension-latest.zip",
-      "fileName": "Extensao_Instagram_v1.6.0_api_atual.zip",
-      "size": 35587
+      "fileName": "Extensao_Instagram_v1.6.1_operacional.zip",
+      "size": 36506
     }
   ]
 }

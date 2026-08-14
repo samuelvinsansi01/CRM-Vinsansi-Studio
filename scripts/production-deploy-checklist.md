@@ -138,7 +138,7 @@ Pare se Apify reaparecer, cadastro resolver WhatsApp como origem, simulação pe
 ### Ação manual
 
 1. Executar `node --check background.js`, `node --check content.js` e `node --check popup.js`.
-2. Confirmar `manifest_version=3`, versão `1.6.0`, permissões esperadas e host `https://crm-vinsansi-studio.vercel.app/*`.
+2. Confirmar `manifest_version=3`, versão `1.6.1`, permissões esperadas e host `https://crm-vinsansi-studio.vercel.app/*`.
 3. Carregar a pasta descompactada em `chrome://extensions` no modo de desenvolvedor.
 4. No CRM, vincular um perfil Instagram autorizado e copiar o token temporário para a extensão. O token fica somente em `chrome.storage.session`.
 5. Não inserir chave Supabase, service role, senha ou token permanente no pacote.

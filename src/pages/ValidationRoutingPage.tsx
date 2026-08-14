@@ -131,6 +131,8 @@ export function ValidationRoutingPage() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [editingLead, setEditingLead] = useState<LeadCycleLead | null>(null);
   const [leadDraft, setLeadDraft] = useState<LeadCycleDetailsInput>(emptyLeadDetails);
+  const [selectedRows, setSelectedRows] = useState<number[]>([]);
+  const [approvingInstagram, setApprovingInstagram] = useState(false);
   const operationalDate = toLocalDateInputValue();
   const chipCapacity = useQueuePreparation('WhatsApp', operationalDate, selectedChip);
 
@@ -229,6 +231,46 @@ export function ValidationRoutingPage() {
   })), [visible]);
 
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
+
+  useEffect(() => {
+    setSelectedRows([]);
+  }, [page, rowsPerPage, search, status, source, branch, state]);
+
+  const selectedLeadIds = selectedRows.map((index) => pageItems[index]?.id).filter(Boolean);
+  const selectedLeads = selectedLeadIds
+    .map((id) => allRecords.find((lead) => lead.id === id))
+    .filter((lead): lead is LeadCycleLead => Boolean(lead));
+  const selectedInstagramReady = selectedLeads.filter((lead) =>
+    lead.statusId === 1
+    && lead.channel === 'Instagram'
+    && isValidInstagram(normalizeInstagramUsername(lead.instagram))
+  );
+
+  const approveSelectedInstagram = async () => {
+    if (!selectedInstagramReady.length) {
+      toast('Nada para aprovar', 'Selecione leads Importados com destino Instagram e @Instagram válido.', 'warning');
+      return;
+    }
+    setApprovingInstagram(true);
+    try {
+      const result = await imported.executeRoutingCommand('route-imported-to-instagram', selectedInstagramReady.map((lead) => lead.id));
+      setSelectedRows([]);
+      await refresh();
+      const ignored = selectedLeads.length - selectedInstagramReady.length;
+      const parts = [`${result.succeeded + result.unchanged} lead(s) aprovado(s) para Instagram`];
+      if (ignored) parts.push(`${ignored} selecionado(s) incompatível(is) ignorado(s)`);
+      if (result.failed) parts.push(`${result.failed} falha(s)`);
+      toast(
+        result.failed ? 'Aprovação Instagram concluída com pendências' : 'Leads Instagram aprovados',
+        `${parts.join(', ')}.${result.failures[0] ? ` ${result.failures[0].reason}` : ''}`,
+        result.failed ? 'warning' : 'success',
+      );
+    } catch (err) {
+      toast('Não foi possível aprovar Instagram', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
+    } finally {
+      setApprovingInstagram(false);
+    }
+  };
 
   const handleRowAction = (action: TableAction, row: Row) => {
     if (action !== 'edit') return;
@@ -338,11 +380,35 @@ export function ValidationRoutingPage() {
         totalPages={totalPages}
         onPageChange={setPage}
       >
+        {selectedRows.length ? (
+          <div className="lead-bulk-actions">
+            <span>
+              {selectedRows.length} selecionado(s) · {selectedInstagramReady.length} pronto(s) para aprovação Instagram
+            </span>
+            <Button
+              size="sm"
+              iconLeft={Instagram}
+              loading={approvingInstagram}
+              disabled={!selectedInstagramReady.length || approvingInstagram}
+              onClick={() => void approveSelectedInstagram()}
+            >
+              Aprovar Instagram ({selectedInstagramReady.length})
+            </Button>
+          </div>
+        ) : null}
         {error ? <div className="table-message">{error}</div> : null}
         {!error && loading ? <div className="table-message">Carregando leads...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead encontrado para os filtros selecionados.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable columns={columns} rows={pageItems} actions={['edit']} actionsLabel="Ações" onAction={(action, row) => handleRowAction(action, row)} selectable={false} />
+          <DataTable
+            columns={columns}
+            rows={pageItems}
+            actions={['edit']}
+            actionsLabel="Ações"
+            onAction={(action, row) => handleRowAction(action, row)}
+            selectedRows={selectedRows}
+            onSelectedRowsChange={setSelectedRows}
+          />
         ) : null}
       </TableCard>
       <Drawer
