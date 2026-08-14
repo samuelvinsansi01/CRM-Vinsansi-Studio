@@ -1,4 +1,4 @@
-import { CheckCircle2, Globe2, Instagram, MessageCircle, RefreshCcw, Users } from 'lucide-react';
+import { CheckCircle2, Instagram, MessageCircle, RefreshCcw, Users } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -126,6 +126,7 @@ export function ValidationRoutingPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('Importado');
   const [destination, setDestination] = useState<DestinationFilter>('Todos');
+  const [source, setSource] = useState<SourceFilter>('Todos');
   const [branch, setBranch] = useState('Todos');
   const [state, setState] = useState('Todos');
   const [selectedChip, setSelectedChip] = useState('');
@@ -197,6 +198,7 @@ export function ValidationRoutingPage() {
       || (status === 'Aguardando validação' && lead.statusId === 3)
       || (status === 'Validado' && lead.statusId === 2);
     const matchesDestination = destination === 'Todos' || lead.channel === destination;
+    const matchesSource = source === 'Todos' || sourceName(lead) === source;
     const matchesSearch = !query
       || lead.company.toLowerCase().includes(query)
       || lead.phone.toLowerCase().includes(query)
@@ -204,25 +206,15 @@ export function ValidationRoutingPage() {
 
     return matchesStatus
       && matchesDestination
+      && matchesSource
       && matchesSearch
       && (branch === 'Todos' || lead.branch === branch)
       && (state === 'Todos' || lead.state === state);
-  }), [allRecords, branch, destination, search, state, status]);
-
-  const metricFor = (predicate: (lead: LeadCycleLead) => boolean) => {
-    const records = visible.filter(predicate);
-    return {
-      total: records.length,
-      valid: records.filter((lead) => lead.statusId === 2).length,
-    };
-  };
+  }), [allRecords, branch, destination, search, source, state, status]);
 
   const totalRecords = visible.length;
-  const totalValid = visible.filter((lead) => lead.statusId === 2).length;
-  const whatsappMetric = metricFor((lead) => lead.channel === 'WhatsApp');
-  const ownSiteMetric = metricFor((lead) => lead.contactSourceId === SOURCE_OWN_SITE);
-  const aggregatorMetric = metricFor((lead) => lead.contactSourceId === SOURCE_AGGREGATOR);
-  const instagramMetric = metricFor((lead) => lead.channel === 'Instagram');
+  const whatsappTotal = visible.filter((lead) => lead.channel === 'WhatsApp').length;
+  const instagramTotal = visible.filter((lead) => lead.channel === 'Instagram').length;
 
   const rows = useMemo<Row[]>(() => visible.map((lead) => ({
     id: lead.id,
@@ -467,17 +459,16 @@ export function ValidationRoutingPage() {
         )}
       />
 
-      <section className="metric-grid metric-grid--5">
-        <MetricCard icon={Users} value={`${totalValid} / ${totalRecords}`} label="Válidos / Total" tone="neutral" />
-        <MetricCard icon={MessageCircle} value={`${whatsappMetric.valid} / ${whatsappMetric.total}`} label="WhatsApp" tone="success" />
-        <MetricCard icon={Globe2} value={`${ownSiteMetric.valid} / ${ownSiteMetric.total}`} label="Com site" tone="neutral" />
-        <MetricCard value={`${aggregatorMetric.valid} / ${aggregatorMetric.total}`} label="Agregador" tone="neutral" />
-        <MetricCard icon={Instagram} value={`${instagramMetric.valid} / ${instagramMetric.total}`} label="Instagram" tone="primary" />
+      <section className="metric-grid metric-grid--3">
+        <MetricCard icon={Users} value={String(totalRecords)} label="Total" tone="neutral" />
+        <MetricCard icon={MessageCircle} value={String(whatsappTotal)} label="WhatsApp" tone="success" />
+        <MetricCard icon={Instagram} value={String(instagramTotal)} label="Instagram" tone="primary" />
       </section>
 
       <FiltersBar>
         <SelectField value={status} options={['Todos', 'Importado', 'Aguardando validação', 'Validado']} placeholder="Status" onChange={(value) => { setStatus(value as StatusFilter); resetPage(); }} />
         <SelectField value={destination} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Destino" onChange={(value) => { setDestination(value as DestinationFilter); resetPage(); }} />
+        <SelectField value={source} options={['Todos', 'Sem site', 'Domínio próprio', 'Agregador', 'Instagram']} placeholder="Origem" onChange={(value) => { setSource(value as SourceFilter); resetPage(); }} />
         <SelectField value={branch} options={branches} placeholder="Ramo" onChange={(value) => { setBranch(value); resetPage(); }} />
         <SelectField value={state} options={states} placeholder="Estado" onChange={(value) => { setState(value); resetPage(); }} />
         <SearchInput value={search} placeholder="Buscar empresa ou contato" onChange={(value) => { setSearch(value); resetPage(); }} />

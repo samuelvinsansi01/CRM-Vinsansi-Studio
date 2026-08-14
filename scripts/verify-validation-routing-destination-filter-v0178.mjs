@@ -11,7 +11,7 @@ const checks = [
   [page.includes("const matchesDestination = destination === 'Todos' || lead.channel === destination;"), 'Filtro deve comparar com o canal/destino do lead'],
   [page.includes('value={destination}') && page.includes('placeholder="Destino"'), 'Dropdown deve ser identificado como Destino'],
   [page.includes("options={['Todos', 'WhatsApp', 'Instagram']}"), 'Dropdown deve listar apenas destinos operacionais'],
-  [!page.includes('value={source} options='), 'Filtro antigo de origem não deve permanecer no lugar do destino'],
+  [page.includes('value={destination}') && page.includes('value={source}'), 'Destino deve permanecer independente do filtro adicional de origem/contact source'],
 ];
 
 const failed = checks.filter(([ok]) => !ok);
