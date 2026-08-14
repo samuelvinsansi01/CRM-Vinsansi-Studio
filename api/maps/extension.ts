@@ -715,8 +715,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const phoneWhatsapp = text(candidate.effective_phone || candidate.effective_whatsapp);
         const instagram = normalizeInstagram(candidate.effective_instagram);
         if (!phoneWhatsapp && !instagram) { failures.push({ candidateId, code: 'no_supported_contact' }); continue; }
-        const destination = phoneWhatsapp ? 'whatsapp' : 'instagram';
-        const sourceKey = destination === 'instagram' ? 'instagram' : text(candidate.website_classification || 'sem_site');
+        // Instagram válido tem prioridade operacional mesmo quando também existe
+        // telefone/WhatsApp. A origem comercial permanece compatível com a regra
+        // anterior: se havia telefone, conserva sem_site/dominio_proprio/agregador;
+        // Instagram só vira origem quando ele é o único contato suportado.
+        const destination = instagram ? 'instagram' : 'whatsapp';
+        const sourceKey = phoneWhatsapp ? text(candidate.website_classification || 'sem_site') : 'instagram';
         const sourceId = sourceByKey.get(sourceKey);
         if (!sourceId) throw new Error(`maps_contact_source_not_found:${sourceKey}`);
         const rating = candidate.maps_rating == null ? mapsRating((candidate.raw_payload as Row) || {}) : mapsRating({ rating: candidate.maps_rating });

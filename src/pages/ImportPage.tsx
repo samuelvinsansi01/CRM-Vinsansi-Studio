@@ -369,7 +369,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       return;
     }
 
-    const destination = instagram && !whatsapp ? 'Instagram' : 'WhatsApp';
+    const destination = instagram ? 'Instagram' : 'WhatsApp';
 
     try {
       const createResult = await createLead({
@@ -377,7 +377,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         branch_id: branch.id,
         ramo: branch.name,
         destino: destination,
-        original_destination: destination,
+        original_destination: whatsapp ? 'WhatsApp' : 'Instagram',
         destination,
         destination_override: undefined,
         send_instagram: false,
@@ -398,7 +398,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       setPage(1);
       setSelectedRows([]);
 
-      if (whatsapp && createResult.lead) {
+      if (destination === 'WhatsApp' && whatsapp && createResult.lead) {
         try {
           const validation = await whatsappValidationService.validateInitial([createResult.lead.id]);
           if (validation.approved > 0) {

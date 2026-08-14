@@ -105,6 +105,13 @@ function normalizeLeadInput(input: ImportLeadInput): ImportLeadInput {
 function rowToImportLead(row: LeadDatabaseRow): ImportLead {
   const mapped = mapLead(row);
   const destination = mapped.destination === 'Agregador' ? 'Agregadores' : mapped.destination;
+  const originalDestination: ImportLeadDestination = row.contact_sources_id === 4
+    ? 'Instagram'
+    : row.contact_sources_id === 3
+      ? 'Agregadores'
+      : row.contact_sources_id === 2
+        ? 'Com site'
+        : 'WhatsApp';
 
   return {
     id: mapped.id,
@@ -113,7 +120,7 @@ function rowToImportLead(row: LeadDatabaseRow): ImportLead {
     branch_id: mapped.branch_id,
     subcategoria: row.leads_categories?.[1] ?? row.leads_categories?.[0] ?? mapped.branch,
     destino: destination,
-    original_destination: destination,
+    original_destination: originalDestination,
     destination,
     send_instagram: destination === 'Instagram',
     instagram_url: mapped.instagram,
@@ -276,11 +283,12 @@ async function resolveLookups(leads: ImportLead[]): Promise<Map<string, Canonica
 
   const contactSourceFor = (lead: ImportLead) => {
     const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-    const expectedKey = destination === 'Instagram'
+    const sourceDestination = lead.original_destination ?? destination;
+    const expectedKey = sourceDestination === 'Instagram'
       ? 'instagram'
-      : destination === 'Agregadores'
+      : sourceDestination === 'Agregadores'
         ? 'agregador'
-        : destination === 'Com site'
+        : sourceDestination === 'Com site'
           ? 'dominio_proprio'
           : 'sem_site';
     const normalizedExpectedKey = normalizeComparable(expectedKey);
