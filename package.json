@@ -75,7 +75,8 @@
     "verify:google-maps-v0171": "node scripts/verify-google-maps-v0171.mjs",
     "verify:instagram-operational": "node scripts/verify-instagram-operational-v0173.mjs",
     "verify:instagram-priority-routing": "node scripts/verify-instagram-priority-routing-v0176.mjs",
-    "verify:validation-routing-actions": "node scripts/verify-validation-routing-actions-v0177.mjs"
+    "verify:validation-routing-actions": "node scripts/verify-validation-routing-actions-v0177.mjs",
+    "verify:validation-routing-destination-filter": "node scripts/verify-validation-routing-destination-filter-v0178.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

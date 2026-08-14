@@ -34,6 +34,7 @@ const SOURCE_INSTAGRAM = 4;
 
 type StatusFilter = 'Todos' | 'Importado' | 'Aguardando validação' | 'Validado';
 type SourceFilter = 'Todos' | 'Sem site' | 'Domínio próprio' | 'Agregador' | 'Instagram';
+type DestinationFilter = 'Todos' | 'WhatsApp' | 'Instagram';
 type Row = Record<string, ReactNode> & { id: string };
 
 type SourceDefinition = {
@@ -137,7 +138,7 @@ export function ValidationRoutingPage() {
   const preSend = useLeadCycle('pre-send');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('Importado');
-  const [source, setSource] = useState<SourceFilter>('Todos');
+  const [destination, setDestination] = useState<DestinationFilter>('Todos');
   const [branch, setBranch] = useState('Todos');
   const [state, setState] = useState('Todos');
   const [selectedChip, setSelectedChip] = useState('');
@@ -217,18 +218,18 @@ export function ValidationRoutingPage() {
       || (status === 'Importado' && lead.statusId === 1)
       || (status === 'Aguardando validação' && lead.statusId === 3)
       || (status === 'Validado' && lead.statusId === 2);
-    const matchesSource = source === 'Todos' || sourceName(lead) === source;
+    const matchesDestination = destination === 'Todos' || lead.channel === destination;
     const matchesSearch = !query
       || lead.company.toLowerCase().includes(query)
       || lead.phone.toLowerCase().includes(query)
       || lead.instagram.toLowerCase().includes(query);
 
     return matchesStatus
-      && matchesSource
+      && matchesDestination
       && matchesSearch
       && (branch === 'Todos' || lead.branch === branch)
       && (state === 'Todos' || lead.state === state);
-  }), [allRecords, branch, search, source, state, status]);
+  }), [allRecords, branch, destination, search, state, status]);
 
   const rows = useMemo<Row[]>(() => visible.map((lead) => ({
     id: lead.id,
@@ -246,7 +247,7 @@ export function ValidationRoutingPage() {
 
   useEffect(() => {
     setSelectedRows([]);
-  }, [page, rowsPerPage, search, status, source, branch, state]);
+  }, [page, rowsPerPage, search, status, destination, branch, state]);
 
   const selectedLeadIds = selectedRows.map((index) => pageItems[index]?.id).filter(Boolean);
   const selectedLeads = selectedLeadIds
@@ -430,7 +431,7 @@ export function ValidationRoutingPage() {
 
       <FiltersBar>
         <SelectField value={status} options={['Todos', 'Importado', 'Aguardando validação', 'Validado']} placeholder="Status" onChange={(value) => { setStatus(value as StatusFilter); resetPage(); }} />
-        <SelectField value={source} options={['Todos', 'Sem site', 'Domínio próprio', 'Agregador', 'Instagram']} placeholder="Origem" onChange={(value) => { setSource(value as SourceFilter); resetPage(); }} />
+        <SelectField value={destination} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Destino" onChange={(value) => { setDestination(value as DestinationFilter); resetPage(); }} />
         <SelectField value={branch} options={branches} placeholder="Ramo" onChange={(value) => { setBranch(value); resetPage(); }} />
         <SelectField value={state} options={states} placeholder="Estado" onChange={(value) => { setState(value); resetPage(); }} />
         <SearchInput value={search} placeholder="Buscar empresa ou contato" onChange={(value) => { setSearch(value); resetPage(); }} />
