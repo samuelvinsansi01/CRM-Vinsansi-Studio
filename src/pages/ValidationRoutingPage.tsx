@@ -39,14 +39,15 @@ type Row = Record<string, ReactNode> & { id: string };
 type SourceDefinition = {
   id: number;
   label: Exclude<SourceFilter, 'Todos'>;
+  metricLabel: string;
   icon?: typeof Users;
 };
 
 const sourceDefinitions: SourceDefinition[] = [
-  { id: SOURCE_NO_SITE, label: 'Sem site', icon: MessageCircle },
-  { id: SOURCE_OWN_SITE, label: 'Domínio próprio', icon: Globe2 },
-  { id: SOURCE_AGGREGATOR, label: 'Agregador' },
-  { id: SOURCE_INSTAGRAM, label: 'Instagram', icon: Instagram },
+  { id: SOURCE_NO_SITE, label: 'Sem site', metricLabel: 'WhatsApp', icon: MessageCircle },
+  { id: SOURCE_OWN_SITE, label: 'Domínio próprio', metricLabel: 'Com site', icon: Globe2 },
+  { id: SOURCE_AGGREGATOR, label: 'Agregador', metricLabel: 'Agregador' },
+  { id: SOURCE_INSTAGRAM, label: 'Instagram', metricLabel: 'Instagram', icon: Instagram },
 ];
 
 const columns: TableColumn<Row>[] = [
@@ -360,7 +361,7 @@ export function ValidationRoutingPage() {
             icon={metric.icon}
             key={metric.id}
             value={`${metric.valid} / ${metric.total}`}
-            label={`Válidos / Total — ${metric.label}`}
+            label={metric.metricLabel}
             tone={metric.id === SOURCE_INSTAGRAM ? 'primary' : metric.id === SOURCE_NO_SITE ? 'success' : 'neutral'}
           />
         ))}
