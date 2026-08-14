@@ -28,7 +28,7 @@ assert(repository.includes("rpc('instagram_reprocess_queue_items'"), 'CRM não u
 assert(repository.includes("rpc('instagram_invalidate_queue_item'"), 'CRM não usa RPC atômica de invalidação Instagram.');
 assert(queuePage.includes("lead.status === 'error'"), 'Botão Reprocessar erros não está restrito a erro seguro.');
 assert(queuePage.includes('Reconciliação necessária'), 'Fila não identifica reconciliação manual.');
-assert(validation.includes('Aprovar Instagram ('), 'Validação não possui aprovação Instagram em lote explícita.');
+assert(validation.includes('Validar Instagram ('), 'Validação não possui validação Instagram em lote explícita.');
 assert(approved.includes('Adicionar até {capacity} vaga(s)'), 'Drawer de aprovados não possui inclusão rápida até a capacidade.');
 
 console.log('Instagram operacional v0.17.3: OK — base, retry seguro, reconciliação, fila rápida e sents idempotente.');

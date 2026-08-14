@@ -23,6 +23,7 @@ import { useLeadCycle } from '../hooks/useLeadCycle';
 import { useQueuePreparation } from '../hooks/useQueuePreparation';
 import type { LeadCycleDetailsInput, LeadCycleLead } from '../services/lead-cycle/types';
 import { whatsappCapacityValidationService } from '../services/whatsapp-validation/whatsappCapacityValidation.service';
+import { whatsappValidationService } from '../services/whatsapp-validation/whatsappValidation.service';
 import type { WhatsAppCapacityValidationResult } from '../services/whatsapp-validation/whatsappCapacityValidation.service';
 import { toLocalDateInputValue } from '../utils/date';
 import { isValidInstagram, normalizeInstagramUsername } from '../services/instagram/instagram.utils';
@@ -36,20 +37,6 @@ type StatusFilter = 'Todos' | 'Importado' | 'Aguardando validação' | 'Validado
 type SourceFilter = 'Todos' | 'Sem site' | 'Domínio próprio' | 'Agregador' | 'Instagram';
 type DestinationFilter = 'Todos' | 'WhatsApp' | 'Instagram';
 type Row = Record<string, ReactNode> & { id: string };
-
-type SourceDefinition = {
-  id: number;
-  label: Exclude<SourceFilter, 'Todos'>;
-  metricLabel: string;
-  icon?: typeof Users;
-};
-
-const sourceDefinitions: SourceDefinition[] = [
-  { id: SOURCE_NO_SITE, label: 'Sem site', metricLabel: 'WhatsApp', icon: MessageCircle },
-  { id: SOURCE_OWN_SITE, label: 'Domínio próprio', metricLabel: 'Com site', icon: Globe2 },
-  { id: SOURCE_AGGREGATOR, label: 'Agregador', metricLabel: 'Agregador' },
-  { id: SOURCE_INSTAGRAM, label: 'Instagram', metricLabel: 'Instagram', icon: Instagram },
-];
 
 const columns: TableColumn<Row>[] = [
   { key: 'company', label: 'Empresa', width: '22%' },
@@ -203,15 +190,6 @@ export function ValidationRoutingPage() {
     [allRecords],
   );
 
-  const sourceMetrics = useMemo(() => sourceDefinitions.map((definition) => {
-    const sourceRecords = allRecords.filter((lead) => lead.contactSourceId === definition.id);
-    const validCount = sourceRecords.filter((lead) => lead.statusId === 2).length;
-    return { ...definition, total: sourceRecords.length, valid: validCount };
-  }), [allRecords]);
-
-  const totalValid = valid.records.length;
-  const totalRecords = allRecords.length;
-
   const visible = useMemo(() => allRecords.filter((lead) => {
     const query = search.trim().toLowerCase();
     const matchesStatus = status === 'Todos'
@@ -230,6 +208,21 @@ export function ValidationRoutingPage() {
       && (branch === 'Todos' || lead.branch === branch)
       && (state === 'Todos' || lead.state === state);
   }), [allRecords, branch, destination, search, state, status]);
+
+  const metricFor = (predicate: (lead: LeadCycleLead) => boolean) => {
+    const records = visible.filter(predicate);
+    return {
+      total: records.length,
+      valid: records.filter((lead) => lead.statusId === 2).length,
+    };
+  };
+
+  const totalRecords = visible.length;
+  const totalValid = visible.filter((lead) => lead.statusId === 2).length;
+  const whatsappMetric = metricFor((lead) => lead.channel === 'WhatsApp');
+  const ownSiteMetric = metricFor((lead) => lead.contactSourceId === SOURCE_OWN_SITE);
+  const aggregatorMetric = metricFor((lead) => lead.contactSourceId === SOURCE_AGGREGATOR);
+  const instagramMetric = metricFor((lead) => lead.channel === 'Instagram');
 
   const rows = useMemo<Row[]>(() => visible.map((lead) => ({
     id: lead.id,
@@ -270,11 +263,11 @@ export function ValidationRoutingPage() {
       setSelectedRows([]);
       await refresh();
       const ignored = selectedLeads.length - selectedInstagramReady.length;
-      const parts = [`${result.succeeded + result.unchanged} lead(s) aprovado(s) para Instagram`];
+      const parts = [`${result.succeeded + result.unchanged} lead(s) validado(s) para Instagram`];
       if (ignored) parts.push(`${ignored} selecionado(s) incompatível(is) ignorado(s)`);
       if (result.failed) parts.push(`${result.failed} falha(s)`);
       toast(
-        result.failed ? 'Aprovação Instagram concluída com pendências' : 'Leads Instagram aprovados',
+        result.failed ? 'Validação Instagram concluída com pendências' : 'Leads Instagram validados',
         `${parts.join(', ')}.${result.failures[0] ? ` ${result.failures[0].reason}` : ''}`,
         result.failed ? 'warning' : 'success',
       );
@@ -285,22 +278,57 @@ export function ValidationRoutingPage() {
     }
   };
 
-  const approveRow = async (lead: LeadCycleLead) => {
-    if (lead.statusId !== 1 || lead.channel !== 'Instagram') return;
-    if (!isValidInstagram(normalizeInstagramUsername(lead.instagram))) {
-      toast('Instagram inválido', 'Edite o lead e informe um @Instagram válido antes de aprovar.', 'warning');
+  const validateRow = async (lead: LeadCycleLead) => {
+    if (lead.statusId !== 1) return;
+
+    if (lead.channel === 'Instagram') {
+      if (!isValidInstagram(normalizeInstagramUsername(lead.instagram))) {
+        toast('Instagram inválido', 'Edite o lead e informe um @Instagram válido antes de validar.', 'warning');
+        return;
+      }
+      try {
+        const result = await imported.executeRoutingCommand('route-imported-to-instagram', [lead.id]);
+        await refresh();
+        if (result.succeeded === 1 || result.unchanged === 1) {
+          toast('Lead validado', 'O lead atende aos requisitos do destino Instagram e foi movido para Validado.');
+        } else {
+          toast('Validação não concluída', result.failures[0]?.reason || 'Atualize a página e tente novamente.', 'warning');
+        }
+      } catch (err) {
+        toast('Validação não concluída', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
+      }
       return;
     }
+
+    const normalizedPhone = lead.phone.replace(/\D/g, '');
+    if (normalizedPhone.length < 10) {
+      toast('WhatsApp inválido', 'Edite o lead e informe um telefone ou WhatsApp válido antes de validar.', 'warning');
+      return;
+    }
+    if (!selectedChip) {
+      toast('Selecione um chip', 'A validação do destino WhatsApp exige um chip ativo e conectado.', 'warning');
+      return;
+    }
+
     try {
-      const result = await imported.executeRoutingCommand('route-imported-to-instagram', [lead.id]);
+      const routed = await imported.executeRoutingCommand('route-imported-to-whatsapp', [lead.id]);
+      if (routed.succeeded !== 1 && routed.unchanged !== 1) {
+        toast('Validação não iniciada', routed.failures[0]?.reason || 'O lead não pôde entrar na validação WhatsApp.', 'warning');
+        return;
+      }
+
+      const result = await whatsappValidationService.validateInitialWithChip([lead.id], selectedChip);
       await refresh();
-      if (result.succeeded === 1 || result.unchanged === 1) {
-        toast('Lead aprovado', 'O lead foi movido de Importado para Validado no destino Instagram.');
+      if (result.approved === 1) {
+        toast('Lead validado', 'WhatsApp confirmado pela Evolution; o lead foi movido para Validado.');
+      } else if (result.redirectedToInstagram === 1) {
+        toast('WhatsApp não encontrado', 'O lead voltou para Importado com destino Instagram para revisão manual.', 'warning');
       } else {
-        toast('Aprovação não concluída', result.failures[0]?.reason || 'Atualize a página e tente novamente.', 'warning');
+        toast('Validação concluída com pendência', result.failures[0]?.reason || 'A Evolution não confirmou o WhatsApp. Revise o lead antes de tentar novamente.', 'warning');
       }
     } catch (err) {
-      toast('Aprovação não concluída', err instanceof Error ? err.message : 'Tente novamente.', 'warning');
+      await refresh();
+      toast('Validação não concluída', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
     }
   };
 
@@ -319,11 +347,30 @@ export function ValidationRoutingPage() {
     }
   };
 
+  const invalidateRow = async (lead: LeadCycleLead) => {
+    try {
+      const result = lead.statusId === 1
+        ? await imported.executeRoutingCommand('invalidate-imported', [lead.id])
+        : lead.statusId === 2
+          ? await valid.executeRoutingCommand('invalidate-valid', [lead.id])
+          : await preSend.executeRoutingCommand('invalidate-pre-send', [lead.id]);
+      await refresh();
+      if (result.succeeded === 1 || result.unchanged === 1) {
+        toast('Lead invalidado', 'O lead foi movido para o status Inválido (6).');
+      } else {
+        toast('Invalidação não concluída', result.failures[0]?.reason || 'Atualize a página e tente novamente.', 'warning');
+      }
+    } catch (err) {
+      toast('Invalidação não concluída', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
+    }
+  };
+
   const rowActions = (row: Row): TableAction[] => {
     const lead = allRecords.find((item) => item.id === row.id);
     if (!lead) return ['edit'];
-    if (lead.statusId === 1 && lead.channel === 'Instagram') return ['edit', 'approve'];
-    if (lead.statusId === 2) return ['edit', 'return'];
+    if (lead.statusId === 1) return ['validate', 'edit', 'invalidate'];
+    if (lead.statusId === 2) return ['return', 'edit', 'invalidate'];
+    if (lead.statusId === 3) return ['edit', 'invalidate'];
     return ['edit'];
   };
 
@@ -331,12 +378,16 @@ export function ValidationRoutingPage() {
     const lead = allRecords.find((item) => item.id === row.id);
     if (!lead) return;
 
-    if (action === 'approve') {
-      void approveRow(lead);
+    if (action === 'validate') {
+      void validateRow(lead);
       return;
     }
     if (action === 'return') {
       void returnRowToImported(lead);
+      return;
+    }
+    if (action === 'invalidate') {
+      void invalidateRow(lead);
       return;
     }
     if (action !== 'edit') return;
@@ -418,15 +469,10 @@ export function ValidationRoutingPage() {
 
       <section className="metric-grid metric-grid--5">
         <MetricCard icon={Users} value={`${totalValid} / ${totalRecords}`} label="Válidos / Total" tone="neutral" />
-        {sourceMetrics.map((metric) => (
-          <MetricCard
-            icon={metric.icon}
-            key={metric.id}
-            value={`${metric.valid} / ${metric.total}`}
-            label={metric.metricLabel}
-            tone={metric.id === SOURCE_INSTAGRAM ? 'primary' : metric.id === SOURCE_NO_SITE ? 'success' : 'neutral'}
-          />
-        ))}
+        <MetricCard icon={MessageCircle} value={`${whatsappMetric.valid} / ${whatsappMetric.total}`} label="WhatsApp" tone="success" />
+        <MetricCard icon={Globe2} value={`${ownSiteMetric.valid} / ${ownSiteMetric.total}`} label="Com site" tone="neutral" />
+        <MetricCard value={`${aggregatorMetric.valid} / ${aggregatorMetric.total}`} label="Agregador" tone="neutral" />
+        <MetricCard icon={Instagram} value={`${instagramMetric.valid} / ${instagramMetric.total}`} label="Instagram" tone="primary" />
       </section>
 
       <FiltersBar>
@@ -448,7 +494,7 @@ export function ValidationRoutingPage() {
         {selectedRows.length ? (
           <div className="lead-bulk-actions">
             <span>
-              {selectedRows.length} selecionado(s) · {selectedInstagramReady.length} pronto(s) para aprovação Instagram
+              {selectedRows.length} selecionado(s) · {selectedInstagramReady.length} pronto(s) para validação Instagram
             </span>
             <Button
               size="sm"
@@ -457,7 +503,7 @@ export function ValidationRoutingPage() {
               disabled={!selectedInstagramReady.length || approvingInstagram}
               onClick={() => void approveSelectedInstagram()}
             >
-              Aprovar Instagram ({selectedInstagramReady.length})
+              Validar Instagram ({selectedInstagramReady.length})
             </Button>
           </div>
         ) : null}
@@ -468,7 +514,7 @@ export function ValidationRoutingPage() {
           <DataTable
             columns={columns}
             rows={pageItems}
-            actions={['edit']}
+            actions={['validate', 'edit', 'invalidate']}
             getRowActions={(row) => rowActions(row)}
             actionsLabel="Ações"
             onAction={(action, row) => handleRowAction(action, row)}
@@ -489,7 +535,7 @@ export function ValidationRoutingPage() {
               && leadDraft.channel === 'Instagram'
               && isValidInstagram(normalizeInstagramUsername(leadDraft.instagram)) ? (
                 <Button variant="secondary" loading={imported.saving} onClick={() => void approveEditingInstagram()}>
-                  Salvar e aprovar Instagram
+                  Salvar e validar Instagram
                 </Button>
               ) : null}
             <Button loading={imported.saving || valid.saving || preSend.saving} onClick={() => void saveLeadDetails()}>Salvar</Button>

@@ -42,6 +42,7 @@ export type LeadRoutingCommand =
   | 'set-valid-channel-whatsapp'
   | 'set-valid-channel-instagram'
   | 'archive-valid'
+  | 'invalidate-valid'
   | 'return-valid-to-imported'
   | 'invalidate-pre-send'
   | 'archive-pre-send';

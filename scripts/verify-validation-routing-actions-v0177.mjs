@@ -12,8 +12,8 @@ const checks = [
   [page.includes('instagram: instagramCell(lead.instagram)'), 'Instagram deve renderizar apenas pela célula Sim/Não'],
   [page.includes('https://www.instagram.com/${encodeURIComponent(username)}/'), 'Sim do Instagram deve conter link do perfil'],
   [!page.includes('Pronto para aprovar') && !page.includes('Corrigir Instagram') && !page.includes('Adicionar Instagram'), 'Tabela não deve exibir estados textuais no campo Instagram'],
-  [page.includes("if (lead.statusId === 1 && lead.channel === 'Instagram') return ['edit', 'approve'];"), 'Importado Instagram deve exibir ação Aprovar'],
-  [page.includes("if (lead.statusId === 2) return ['edit', 'return'];"), 'Validado deve exibir ação Retornar'],
+  [page.includes("if (lead.statusId === 1) return ['validate', 'edit', 'invalidate'];"), 'Importado deve exibir Validar, Editar e Invalidar'],
+  [page.includes("if (lead.statusId === 2) return ['return', 'edit', 'invalidate'];"), 'Validado deve exibir Retornar, Editar e Invalidar'],
   [types.includes("'return-valid-to-imported'"), 'Comando de retorno deve existir no contrato'],
   [rules.includes("'return-valid-to-imported': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.IMPORTED }"), 'Retorno deve mover Validado para Importado sem trocar canal'],
   [table.includes("return: 'Retornar para Importado'"), 'Tooltip da ação de retorno deve ser claro'],
@@ -24,4 +24,4 @@ if (failed.length) {
   for (const [, message] of failed) console.error(`FAIL: ${message}`);
   process.exit(1);
 }
-console.log('Validação e roteamento v0.17.7: Instagram Sim/Não linkável + Aprovar/Retornar por status OK.');
+console.log('Validação e roteamento: Instagram Sim/Não linkável + ações por status OK.');
