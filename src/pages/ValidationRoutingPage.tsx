@@ -83,6 +83,7 @@ function contactValue(value: string) {
 
 const emptyLeadDetails: LeadCycleDetailsInput = {
   company: '',
+  channel: 'WhatsApp',
   rawPhone: '',
   whatsapp: '',
   instagram: '',
@@ -93,6 +94,7 @@ const emptyLeadDetails: LeadCycleDetailsInput = {
 function detailsFromLead(lead: LeadCycleLead): LeadCycleDetailsInput {
   return {
     company: lead.company,
+    channel: lead.channel,
     rawPhone: lead.rawPhone,
     whatsapp: lead.whatsapp,
     instagram: lead.instagram,
@@ -280,7 +282,7 @@ export function ValidationRoutingPage() {
     setLeadDraft(detailsFromLead(lead));
   };
 
-  const updateLeadDraft = (field: keyof LeadCycleDetailsInput, value: string) => {
+  const updateLeadDraft = <K extends keyof LeadCycleDetailsInput,>(field: K, value: LeadCycleDetailsInput[K]) => {
     setLeadDraft((current) => ({ ...current, [field]: value }));
   };
 
@@ -296,7 +298,7 @@ export function ValidationRoutingPage() {
       await cycleForLead(editingLead).updateDetails(editingLead, leadDraft);
       setEditingLead(null);
       setLeadDraft(emptyLeadDetails);
-      toast('Lead atualizado', 'Os dados do lead foram salvos sem alterar o status ou o destino.');
+      toast('Lead atualizado', 'Os dados e o destino do lead foram salvos sem avançar o status.');
     } catch (err) {
       toast('Não foi possível atualizar', err instanceof Error ? err.message : 'Revise os dados informados.', 'danger');
     }
@@ -414,13 +416,13 @@ export function ValidationRoutingPage() {
       <Drawer
         open={Boolean(editingLead)}
         title="Editar lead"
-        description="Consulte e corrija os dados do lead sem alterar automaticamente o status ou o destino."
+        description="Consulte e corrija os dados do lead. O destino pode ser alterado manualmente sem avançar o status."
         onClose={() => { setEditingLead(null); setLeadDraft(emptyLeadDetails); }}
         footer={(
           <>
             <Button variant="secondary" onClick={() => { setEditingLead(null); setLeadDraft(emptyLeadDetails); }}>Cancelar</Button>
             {editingLead?.statusId === 1
-              && editingLead.channel === 'Instagram'
+              && leadDraft.channel === 'Instagram'
               && isValidInstagram(normalizeInstagramUsername(leadDraft.instagram)) ? (
                 <Button variant="secondary" loading={imported.saving} onClick={() => void approveEditingInstagram()}>
                   Salvar e aprovar Instagram
@@ -442,7 +444,19 @@ export function ValidationRoutingPage() {
             <Field label="Site" value={leadDraft.website} onChange={(value) => updateLeadDraft('website', value)} />
             <Field label="Google Maps" value={leadDraft.mapsUrl} onChange={(value) => updateLeadDraft('mapsUrl', value)} />
             <Field label="Status" value={editingLead.status} readOnly />
-            <Field label="Destino" value={editingLead.channel} readOnly />
+            {editingLead.statusId === 3 ? (
+              <Field label="Destino" value={editingLead.channel} readOnly />
+            ) : (
+              <label className="drawer-field">
+                <span>Destino</span>
+                <SelectField
+                  value={leadDraft.channel}
+                  options={['WhatsApp', 'Instagram']}
+                  placeholder="Destino"
+                  onChange={(value) => updateLeadDraft('channel', value as LeadCycleLead['channel'])}
+                />
+              </label>
+            )}
           </div>
         ) : null}
       </Drawer>

@@ -26,6 +26,7 @@ export type LeadCycleLead = {
 
 export type LeadCycleDetailsInput = {
   company: string;
+  channel: LeadCycleChannel;
   rawPhone: string;
   whatsapp: string;
   instagram: string;

@@ -220,12 +220,24 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
     throw new Error('Mantenha pelo menos um contato: telefone, WhatsApp ou Instagram.');
   }
 
+  if (input.channel === 'Instagram' && (!instagram || !isValidInstagram(instagram))) {
+    throw new Error('Para usar Instagram como destino, informe um Instagram válido.');
+  }
+  if (input.channel === 'WhatsApp' && (whatsapp || rawPhone).length < 10) {
+    throw new Error('Para usar WhatsApp como destino, informe um telefone ou WhatsApp válido.');
+  }
+  if (lead.statusId === LEAD_STATUS.PRE_SEND && input.channel !== lead.channel) {
+    throw new Error('O destino não pode ser alterado enquanto o lead estiver aguardando validação.');
+  }
+
   const before = (await supabaseLeadCycleRepository.listByIds([lead.id]))[0];
   if (!before) throw new Error('Lead não encontrado ou sem permissão de acesso.');
   if (before.lead_status_id !== lead.statusId) {
     throw new Error('O lead mudou de status. Atualize a página e tente novamente.');
   }
 
+  const [whatsappId, instagramId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]);
+  const targetChannelId = input.channel === 'Instagram' ? Number(instagramId) : Number(whatsappId);
   const updated = await supabaseLeadCycleRepository.compareAndSet(lead.id, lead.statusId, {
     leads_name: company,
     leads_phone: rawPhone || null,
@@ -233,14 +245,15 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
     leads_instagram: instagram || null,
     leads_website: input.website.trim() || null,
     leads_maps: input.mapsUrl.trim() || null,
-  });
+    channels_id: targetChannelId,
+  }, Number(before.channels_id));
   if (!updated) throw new Error('O lead foi alterado por outra operação. Atualize a página e tente novamente.');
 
   try {
     await repositories.events.append({
       source: 'lead-routing',
       action: 'edit-details',
-      channel: lead.channel.toLowerCase() as 'whatsapp' | 'instagram',
+      channel: input.channel.toLowerCase() as 'whatsapp' | 'instagram',
       leadId: lead.id,
       status: String(updated.lead_status_id),
       metadata: {
@@ -248,6 +261,8 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
         previous_phone: before.leads_phone,
         previous_whatsapp: before.leads_whatsapp,
         previous_instagram: before.leads_instagram,
+        previous_channel_id: before.channels_id,
+        target_channel_id: targetChannelId,
         flow: 'F04',
       },
     });
@@ -256,7 +271,6 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
   }
 
   eventBus.emit('import:changed', { source: 'update' });
-  const [whatsappId, instagramId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]);
   return mapRow(updated, Number(whatsappId), Number(instagramId));
 }
 
