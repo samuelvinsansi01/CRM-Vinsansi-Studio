@@ -19,6 +19,7 @@ const COMMAND_DECISIONS: Record<LeadRoutingCommand, LeadRoutingDecision> = {
   'set-valid-channel-whatsapp': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 'WhatsApp' },
   'set-valid-channel-instagram': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.VALIDATED, targetChannel: 'Instagram' },
   'archive-valid': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.ARCHIVED },
+  'return-valid-to-imported': { expectedStatus: LEAD_STATUS.VALIDATED, targetStatus: LEAD_STATUS.IMPORTED },
   'invalidate-pre-send': { expectedStatus: LEAD_STATUS.PRE_SEND, targetStatus: LEAD_STATUS.INVALID },
   'archive-pre-send': { expectedStatus: LEAD_STATUS.PRE_SEND, targetStatus: LEAD_STATUS.ARCHIVED },
 };

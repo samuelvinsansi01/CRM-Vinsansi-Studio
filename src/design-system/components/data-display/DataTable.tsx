@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { IconButton } from '../action/IconButton';
 
-export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'activate' | 'deactivate' | 'invalidate' | 'refresh' | 'test' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'approve' | 'unapprove' | 'sent' | 'validate';
+export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'activate' | 'deactivate' | 'invalidate' | 'refresh' | 'test' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'return' | 'approve' | 'unapprove' | 'sent' | 'validate';
 
 export type TableColumn<T> = {
   key: keyof T | string;
@@ -38,6 +38,7 @@ const actionIcon = {
   instagram: Instagram,
   cancel: X,
   restore: RotateCcw,
+  return: RotateCcw,
   approve: Check,
   unapprove: X,
   sent: Send,
@@ -58,6 +59,7 @@ const actionLabel = {
   instagram: 'Enviar para Instagram',
   cancel: 'Cancelar',
   restore: 'Restaurar',
+  return: 'Retornar para Importado',
   approve: 'Aprovar',
   unapprove: 'Desaprovar',
   sent: 'Marcar como enviado',
@@ -78,6 +80,7 @@ const actionTone = {
   instagram: 'primary',
   cancel: 'danger',
   restore: 'neutral',
+  return: 'warning',
   approve: 'success',
   unapprove: 'warning',
   sent: 'success',

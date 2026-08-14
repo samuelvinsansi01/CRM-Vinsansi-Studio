@@ -82,6 +82,17 @@ function contactValue(value: string) {
   return value.trim() ? 'Sim' : 'Não';
 }
 
+function instagramCell(value: string) {
+  const username = normalizeInstagramUsername(value);
+  if (!username || !isValidInstagram(username)) return 'Não';
+  const href = `https://www.instagram.com/${encodeURIComponent(username)}/`;
+  return (
+    <a className="silent-link validation-routing__instagram-link" href={href} target="_blank" rel="noreferrer" title={`Abrir @${username} no Instagram`}>
+      Sim
+    </a>
+  );
+}
+
 const emptyLeadDetails: LeadCycleDetailsInput = {
   company: '',
   channel: 'WhatsApp',
@@ -227,9 +238,7 @@ export function ValidationRoutingPage() {
     branch: lead.branch || '-',
     location: [lead.city, lead.state].filter(Boolean).join(' / ') || '-',
     phone: contactValue(lead.phone),
-    instagram: lead.channel === 'Instagram' && lead.statusId === 1
-      ? (isValidInstagram(normalizeInstagramUsername(lead.instagram)) ? 'Pronto para aprovar' : lead.instagram.trim() ? 'Corrigir Instagram' : 'Adicionar Instagram')
-      : contactValue(lead.instagram),
+    instagram: instagramCell(lead.instagram),
     channel: channelTag(lead),
   })), [visible]);
 
@@ -275,10 +284,62 @@ export function ValidationRoutingPage() {
     }
   };
 
+  const approveRow = async (lead: LeadCycleLead) => {
+    if (lead.statusId !== 1 || lead.channel !== 'Instagram') return;
+    if (!isValidInstagram(normalizeInstagramUsername(lead.instagram))) {
+      toast('Instagram inválido', 'Edite o lead e informe um @Instagram válido antes de aprovar.', 'warning');
+      return;
+    }
+    try {
+      const result = await imported.executeRoutingCommand('route-imported-to-instagram', [lead.id]);
+      await refresh();
+      if (result.succeeded === 1 || result.unchanged === 1) {
+        toast('Lead aprovado', 'O lead foi movido de Importado para Validado no destino Instagram.');
+      } else {
+        toast('Aprovação não concluída', result.failures[0]?.reason || 'Atualize a página e tente novamente.', 'warning');
+      }
+    } catch (err) {
+      toast('Aprovação não concluída', err instanceof Error ? err.message : 'Tente novamente.', 'warning');
+    }
+  };
+
+  const returnRowToImported = async (lead: LeadCycleLead) => {
+    if (lead.statusId !== 2) return;
+    try {
+      const result = await valid.executeRoutingCommand('return-valid-to-imported', [lead.id]);
+      await refresh();
+      if (result.succeeded === 1 || result.unchanged === 1) {
+        toast('Lead retornado', 'O lead voltou para Importado mantendo o destino atual.');
+      } else {
+        toast('Retorno não concluído', result.failures[0]?.reason || 'Atualize a página e tente novamente.', 'warning');
+      }
+    } catch (err) {
+      toast('Retorno não concluído', err instanceof Error ? err.message : 'Tente novamente.', 'warning');
+    }
+  };
+
+  const rowActions = (row: Row): TableAction[] => {
+    const lead = allRecords.find((item) => item.id === row.id);
+    if (!lead) return ['edit'];
+    if (lead.statusId === 1 && lead.channel === 'Instagram') return ['edit', 'approve'];
+    if (lead.statusId === 2) return ['edit', 'return'];
+    return ['edit'];
+  };
+
   const handleRowAction = (action: TableAction, row: Row) => {
-    if (action !== 'edit') return;
     const lead = allRecords.find((item) => item.id === row.id);
     if (!lead) return;
+
+    if (action === 'approve') {
+      void approveRow(lead);
+      return;
+    }
+    if (action === 'return') {
+      void returnRowToImported(lead);
+      return;
+    }
+    if (action !== 'edit') return;
+
     setEditingLead(lead);
     setLeadDraft(detailsFromLead(lead));
   };
@@ -407,6 +468,7 @@ export function ValidationRoutingPage() {
             columns={columns}
             rows={pageItems}
             actions={['edit']}
+            getRowActions={(row) => rowActions(row)}
             actionsLabel="Ações"
             onAction={(action, row) => handleRowAction(action, row)}
             selectedRows={selectedRows}
