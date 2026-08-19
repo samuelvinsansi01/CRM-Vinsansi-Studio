@@ -112,15 +112,20 @@ export function ApprovedLeadsQueueDrawer({
   const selectedResource = snapshot?.resources.find((resource) => resource.id === resourceId) ?? snapshot?.selectedResource;
   const capacity = selectedResource?.available ?? 0;
   const canPrepare = Boolean(selectedReadyIds.length && resourceId && capacity > 0 && !saving);
+  const readyToCapacityIds = (snapshot?.leads ?? [])
+    .filter((lead) => lead.ready)
+    .slice(0, Math.max(0, capacity))
+    .map((lead) => lead.id);
+  const canPrepareToCapacity = Boolean(readyToCapacityIds.length && resourceId && capacity > 0 && !saving);
 
-  const prepare = async () => {
-    if (!selectedReadyIds.length) {
-      onToast('Nada para puxar', 'Selecione pelo menos um lead aprovado marcado como Pronto.', 'warning');
+  const prepareIds = async (ids: string[], closeWhenClean = true) => {
+    if (!ids.length) {
+      onToast('Nada para puxar', 'Não há leads aprovados e prontos dentro da capacidade disponível.', 'warning');
       return;
     }
 
     try {
-      const result = await enqueue(selectedReadyIds);
+      const result = await enqueue(ids);
       setSelectedRows([]);
       onPrepared();
       onToast(
@@ -128,10 +133,23 @@ export function ApprovedLeadsQueueDrawer({
         resultDescription(result),
         result.failed || result.conflicts || result.auditWarnings.length ? 'warning' : 'success',
       );
-      if (result.queued > 0 && !result.failed && !result.conflicts) onClose();
+      if (closeWhenClean && result.queued > 0 && !result.failed && !result.conflicts) onClose();
     } catch (cause) {
       onToast('Não foi possível puxar os aprovados', cause instanceof Error ? cause.message : 'Tente novamente.', 'danger');
     }
+  };
+
+  const prepare = async () => {
+    if (!selectedReadyIds.length) {
+      onToast('Nada para puxar', 'Selecione pelo menos um lead aprovado marcado como Pronto.', 'warning');
+      return;
+    }
+
+    await prepareIds(selectedReadyIds);
+  };
+
+  const prepareToCapacity = async () => {
+    await prepareIds(readyToCapacityIds);
   };
 
   return (
@@ -144,8 +162,11 @@ export function ApprovedLeadsQueueDrawer({
       footer={(
         <>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button variant="secondary" iconLeft={Send} loading={saving} disabled={!canPrepareToCapacity} onClick={() => void prepareToCapacity()}>
+            Adicionar até {capacity} vaga(s)
+          </Button>
           <Button iconLeft={Send} loading={saving} disabled={!canPrepare} onClick={() => void prepare()}>
-            Adicionar à fila
+            Adicionar selecionados
           </Button>
         </>
       )}

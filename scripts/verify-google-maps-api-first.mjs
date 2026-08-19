@@ -70,6 +70,8 @@ assert(operational.includes('pendingApiCompletion') && operational.includes("pau
 assert(sidepanel.includes("request('search_get'") && operational.includes('execution_paused_after_browser_restart'), 'Restart não pausa e reconcilia com a API.');
 
 const terms = [fixture.branch, ...fixture.subcategories];
+assert(api.includes('metadata.associatedCategories') && api.includes('branchSubcategories'), 'API Maps não lê os subramos/categorias associadas do contrato real de branches_categories.');
+assert(api.includes('branchSearchTerms(branch.branches_name, branch.branches_categories)'), 'Criação da pesquisa não monta ramo principal + subramos canônicos.');
 const ordered = fixture.cities.flatMap((city) => terms.map((term) => `${city}:${term}`));
 assert(ordered.slice(0, terms.length).every((entry) => entry.startsWith('Mauá:')) && ordered[terms.length].startsWith('Santo André:'), 'Fixture cidade→ramo+subramos não comprova a ordem fechada.');
 const afterFirst = fixture.firstCoverage;

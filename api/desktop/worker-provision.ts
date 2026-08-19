@@ -31,7 +31,6 @@ function allowedEmails() {
   return new Set(envAny('DESKTOP_WORKER_PROVISIONING_ALLOWED_EMAILS')
     .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean));
 }
-
 async function importRsaPublicKey(pem: string) {
   const base64 = pem.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s+/g, '');
   const binary = atob(base64);
@@ -43,6 +42,10 @@ function arrayBufferToBase64(value: ArrayBuffer) {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
+}
+async function encryptValue(key: CryptoKey, value: string) {
+  const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, key, new TextEncoder().encode(value));
+  return arrayBufferToBase64(encrypted);
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
@@ -56,8 +59,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const supabaseUrl = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
     const publicKey = envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY');
     const serviceRoleKey = envAny('SUPABASE_SERVICE_ROLE_KEY');
+    const cloudflareTunnelToken = envAny('DESKTOP_CLOUDFLARE_TUNNEL_TOKEN');
+    const evolutionPublicUrl = envAny('DESKTOP_EVOLUTION_PUBLIC_URL') || 'https://evolution.samuelvinsansi.com.br';
+    const cloudflareTunnelName = envAny('DESKTOP_CLOUDFLARE_TUNNEL_NAME') || 'evolution';
     if (!token) return send(res, 401, { ok: false, error: 'auth_required' });
-    if (!supabaseUrl || !publicKey || !serviceRoleKey) return send(res, 503, { ok: false, error: 'worker_provisioning_backend_not_configured' });
+    if (!supabaseUrl || !publicKey || !serviceRoleKey || !cloudflareTunnelToken) {
+      return send(res, 503, { ok: false, error: 'worker_provisioning_backend_not_configured' });
+    }
 
     const authClient = createClient(supabaseUrl, publicKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const auth = await authClient.auth.getUser(token);
@@ -77,14 +85,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     try { key = await importRsaPublicKey(pem); }
     catch { return send(res, 400, { ok: false, error: 'worker_provisioning_public_key_invalid' }); }
 
-    const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, key, new TextEncoder().encode(serviceRoleKey));
-    const encryptedServiceRoleKey = arrayBufferToBase64(encrypted);
+    const [encryptedServiceRoleKey, encryptedCloudflareTunnelToken] = await Promise.all([
+      encryptValue(key, serviceRoleKey),
+      encryptValue(key, cloudflareTunnelToken),
+    ]);
 
     return send(res, 200, {
       ok: true,
-      version: 1,
+      version: 2,
       supabaseUrl,
+      evolutionPublicUrl,
+      cloudflareTunnelName,
       encryptedServiceRoleKey,
+      encryptedCloudflareTunnelToken,
     });
   } catch {
     return send(res, 500, { ok: false, error: 'worker_provisioning_failed' });

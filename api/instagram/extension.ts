@@ -127,7 +127,11 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
     const position = Number(item.queue_items_position ?? 1);
     const blockSize = 15;
     const progress = progressMap.get(String(item.queue_items_id)) ?? {};
-    const status = text(progress.step) || semanticStatus(statusMap.get(String(item.status_id)) ?? item.status_id);
+    const queueStatus = semanticStatus(statusMap.get(String(item.status_id)) ?? item.status_id);
+    const progressStep = text(progress.step);
+    // Reprocessamento operacional pode devolver queue_items para pendente antes de uma nova claim.
+    // Nessa situação, o status canônico da fila prevalece sobre um progress.step='error' antigo.
+    const status = queueStatus === 'queued' && progressStep === 'error' ? 'queued' : (progressStep || queueStatus);
     const instagramRecipient = text(snapshotRecipient.instagram ?? snapshotLead.instagram ?? lead.leads_instagram);
     const instagramUsername = normalizeInstagramUsername(instagramRecipient);
     const website = text(snapshotLead.site ?? lead.leads_website);

@@ -8,11 +8,16 @@ import { isRoutingNoop, routingDecision, validateRoutingCommand } from './leadRo
 import { isValidInstagram, normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { getEffectiveWhatsAppPhone } from '../leads/leadContact';
 import type {
+  LeadCycleDetailsInput,
   LeadCycleLead,
   LeadRoutingCommand,
   LeadRoutingFailure,
   LeadRoutingResult,
 } from './types';
+
+function normalizeEditedPhone(value: string) {
+  return value.replace(/\D/g, '');
+}
 
 function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -33,6 +38,8 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
     state: state?.states_code ?? state?.states_name ?? '',
     city: city?.cities_name ?? '',
     phone: getEffectiveWhatsAppPhone(row),
+    rawPhone: row.leads_phone ?? '',
+    whatsapp: row.leads_whatsapp ?? '',
     instagram: row.leads_instagram ?? '',
     website: row.leads_website ?? '',
     mapsUrl: row.leads_maps ?? '',
@@ -198,6 +205,75 @@ async function executeRoutingCommand(command: LeadRoutingCommand, ids: string[])
   return result;
 }
 
+
+async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) {
+  const company = input.company.trim();
+  if (!company) throw new Error('Informe o nome da empresa.');
+
+  const rawPhone = normalizeEditedPhone(input.rawPhone);
+  const whatsapp = normalizeEditedPhone(input.whatsapp);
+  const instagram = normalizeInstagramUsername(input.instagram);
+  if (input.instagram.trim() && (!instagram || !isValidInstagram(instagram))) {
+    throw new Error('Informe um username ou URL canônica de perfil do Instagram.');
+  }
+  if (!rawPhone && !whatsapp && !instagram) {
+    throw new Error('Mantenha pelo menos um contato: telefone, WhatsApp ou Instagram.');
+  }
+
+  if (input.channel === 'Instagram' && (!instagram || !isValidInstagram(instagram))) {
+    throw new Error('Para usar Instagram como destino, informe um Instagram válido.');
+  }
+  if (input.channel === 'WhatsApp' && (whatsapp || rawPhone).length < 10) {
+    throw new Error('Para usar WhatsApp como destino, informe um telefone ou WhatsApp válido.');
+  }
+  if (lead.statusId === LEAD_STATUS.PRE_SEND && input.channel !== lead.channel) {
+    throw new Error('O destino não pode ser alterado enquanto o lead estiver aguardando validação.');
+  }
+
+  const before = (await supabaseLeadCycleRepository.listByIds([lead.id]))[0];
+  if (!before) throw new Error('Lead não encontrado ou sem permissão de acesso.');
+  if (before.lead_status_id !== lead.statusId) {
+    throw new Error('O lead mudou de status. Atualize a página e tente novamente.');
+  }
+
+  const [whatsappId, instagramId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]);
+  const targetChannelId = input.channel === 'Instagram' ? Number(instagramId) : Number(whatsappId);
+  const updated = await supabaseLeadCycleRepository.compareAndSet(lead.id, lead.statusId, {
+    leads_name: company,
+    leads_phone: rawPhone || null,
+    leads_whatsapp: whatsapp || null,
+    leads_instagram: instagram || null,
+    leads_website: input.website.trim() || null,
+    leads_maps: input.mapsUrl.trim() || null,
+    channels_id: targetChannelId,
+  }, Number(before.channels_id));
+  if (!updated) throw new Error('O lead foi alterado por outra operação. Atualize a página e tente novamente.');
+
+  try {
+    await repositories.events.append({
+      source: 'lead-routing',
+      action: 'edit-details',
+      channel: input.channel.toLowerCase() as 'whatsapp' | 'instagram',
+      leadId: lead.id,
+      status: String(updated.lead_status_id),
+      metadata: {
+        company_name: updated.leads_name,
+        previous_phone: before.leads_phone,
+        previous_whatsapp: before.leads_whatsapp,
+        previous_instagram: before.leads_instagram,
+        previous_channel_id: before.channels_id,
+        target_channel_id: targetChannelId,
+        flow: 'F04',
+      },
+    });
+  } catch {
+    // A edição canônica não deve ser revertida por falha secundária de auditoria.
+  }
+
+  eventBus.emit('import:changed', { source: 'update' });
+  return mapRow(updated, Number(whatsappId), Number(instagramId));
+}
+
 async function updateImportedInstagram(id: string, value: string) {
   const username = normalizeInstagramUsername(value);
   if (!username || !isValidInstagram(username)) throw new Error('Informe um username ou URL canônica de perfil do Instagram.');
@@ -213,5 +289,6 @@ export const leadCycleService = {
   listValid: () => listByStatuses([LEAD_STATUS.VALIDATED]),
   listPreSend: async () => listByStatuses([LEAD_STATUS.PRE_SEND], Number(await channelId('WhatsApp'))),
   executeRoutingCommand,
+  updateDetails,
   updateImportedInstagram,
 };

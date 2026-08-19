@@ -1,4 +1,4 @@
-export type InstagramQueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'error' | 'invalid';
+export type InstagramQueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'error' | 'invalid' | 'reconciliation_required';
 
 export type InstagramQueueLead = {
   id: string;

@@ -215,3 +215,30 @@
     flex-wrap: wrap;
   }
 }
+
+.validation-routing-page .data-table table {
+  min-width: 1180px;
+  table-layout: fixed;
+}
+
+.validation-routing-page .data-table__actions {
+  width: 104px;
+  padding-right: var(--space-12);
+  text-align: center;
+}
+
+.validation-routing-page .data-table thead .data-table__actions {
+  text-align: center;
+}
+
+.validation-routing-page .data-table__actions .icon-button {
+  margin-left: 0;
+}
+
+.validation-routing-page .data-table__actions .icon-button + .icon-button {
+  margin-left: var(--space-04);
+}
+
+.validation-routing__instagram-link {
+  font-weight: 500;
+}

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { IconButton } from '../action/IconButton';
 
-export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'activate' | 'deactivate' | 'invalidate' | 'refresh' | 'test' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'approve' | 'unapprove' | 'sent' | 'validate';
+export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'activate' | 'deactivate' | 'invalidate' | 'refresh' | 'test' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'return' | 'approve' | 'unapprove' | 'sent' | 'validate';
 
 export type TableColumn<T> = {
   key: keyof T | string;
@@ -21,6 +21,7 @@ type DataTableProps<T> = {
   onSelectedRowsChange?: (selectedRows: number[]) => void;
   onAction?: (action: TableAction, row: T, index: number) => void;
   getRowActions?: (row: T, index: number) => TableAction[];
+  actionsLabel?: string;
 };
 
 const actionIcon = {
@@ -37,6 +38,7 @@ const actionIcon = {
   instagram: Instagram,
   cancel: X,
   restore: RotateCcw,
+  return: RotateCcw,
   approve: Check,
   unapprove: X,
   sent: Send,
@@ -57,6 +59,7 @@ const actionLabel = {
   instagram: 'Enviar para Instagram',
   cancel: 'Cancelar',
   restore: 'Restaurar',
+  return: 'Retornar para Importado',
   approve: 'Aprovar',
   unapprove: 'Desaprovar',
   sent: 'Marcar como enviado',
@@ -77,6 +80,7 @@ const actionTone = {
   instagram: 'primary',
   cancel: 'danger',
   restore: 'neutral',
+  return: 'warning',
   approve: 'success',
   unapprove: 'warning',
   sent: 'success',
@@ -92,6 +96,7 @@ export function DataTable<T extends Record<string, ReactNode>>({
   onSelectedRowsChange,
   onAction,
   getRowActions,
+  actionsLabel,
 }: DataTableProps<T>) {
   const [internalSelectedRows, setInternalSelectedRows] = useState<number[]>([]);
   const currentSelectedRows = selectedRows ?? internalSelectedRows;
@@ -141,7 +146,7 @@ export function DataTable<T extends Record<string, ReactNode>>({
                 {column.label}
               </th>
             ))}
-            {actions.length ? <th className="data-table__actions" /> : null}
+            {actions.length ? <th className="data-table__actions">{actionsLabel}</th> : null}
           </tr>
         </thead>
         <tbody>

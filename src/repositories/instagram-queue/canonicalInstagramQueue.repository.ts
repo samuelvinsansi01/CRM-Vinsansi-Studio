@@ -14,7 +14,22 @@ import type { InstagramQueueRepository } from './instagramQueue.repository';
 
 type Row = Record<string, unknown>;
 
-function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): InstagramQueueLead {
+function progressAwareStatus(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], progress: Row | undefined): InstagramQueueLead['status'] {
+  const queueStatus = canonicalQueueStatus(row) as InstagramQueueLead['status'];
+  const step = String(progress?.step ?? '').trim();
+  if (!step) return queueStatus;
+  if (queueStatus === 'queued' && step === 'error') return 'queued';
+  if (step === 'reconciliation_required') return 'reconciliation_required';
+  if (step === 'sent') return 'sent';
+  if (step === 'invalid') return 'invalid';
+  if (step === 'error') return 'error';
+  if (['claimed', 'profile_opened', 'following', 'followed'].includes(step)) return 'following';
+  if (['dm_opened', 'messages_sending', 'media_sending'].includes(step)) return 'dm_opened';
+  if (step === 'queued') return 'queued';
+  return queueStatus;
+}
+
+function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], progress?: Row): InstagramQueueLead {
   const item = row.item;
   const lead = row.lead;
   const template = row.template ?? {};
@@ -34,7 +49,7 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): I
   const phone = String(snapshotLead.phone ?? lead.leads_phone ?? '');
   const website = String(snapshotLead.site ?? lead.leads_website ?? '');
   const mapsUrl = String(snapshotLead.maps_url ?? lead.leads_maps ?? '');
-  const status = canonicalQueueStatus(row) as InstagramQueueLead['status'];
+  const status = progressAwareStatus(row, progress);
   const message1 = queueSnapshotMessage(snapshot, 1) || String(template.templates_message_1 ?? '');
   const message2 = queueSnapshotMessage(snapshot, 2) || String(template.templates_message_2 ?? '');
   const message3 = queueSnapshotMessage(snapshot, 3) || String(template.templates_message_3 ?? '');
@@ -81,8 +96,8 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): I
     phone,
     site: website,
     mapsUrl,
-    retry_count: Number(item.queue_items_attempts ?? 0),
-    error_message: String(item.queue_items_error_message ?? ''),
+    retry_count: Number(progress?.attempts ?? item.queue_items_attempts ?? 0),
+    error_message: String(progress?.error_message ?? item.queue_items_error_message ?? ''),
     sent_at: status === 'sent' ? String(item.queue_items_finished_at ?? '') : '',
     created_at: String(item.queue_items_created_at ?? ''),
     updated_at: String(item.queue_items_updated_at ?? ''),
@@ -90,7 +105,15 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): I
 }
 
 async function all(filters: InstagramQueueFilters = {}) {
-  let leads = (await loadCanonicalQueue('Instagram')).map(mapLead);
+  const rows = await loadCanonicalQueue('Instagram');
+  const itemIds = rows.map((row) => Number(row.item.queue_items_id)).filter((id) => Number.isSafeInteger(id) && id > 0);
+  const progressMap = new Map<string, Row>();
+  if (itemIds.length) {
+    const response = await getSupabaseClient().from('instagram_queue_progress').select('*').in('queue_items_id', itemIds);
+    if (response.error) throw new Error(`Não foi possível carregar o progresso Instagram: ${response.error.message}`);
+    for (const progress of (response.data ?? []) as Row[]) progressMap.set(String(progress.queue_items_id), progress);
+  }
+  let leads = rows.map((row) => mapLead(row, progressMap.get(String(row.item.queue_items_id))));
   if (filters.profile) leads = leads.filter((lead) => lead.profile === filters.profile || lead.profile_id === filters.profile);
   if (filters.scheduledDate) leads = leads.filter((lead) => lead.scheduled_date === filters.scheduledDate);
   if (filters.search) {
@@ -138,7 +161,7 @@ export const canonicalInstagramQueueRepository: InstagramQueueRepository = {
       total: leads.length,
       queued: leads.filter((lead) => ['queued', 'paused', 'following', 'dm_opened'].includes(lead.status)).length,
       sent: leads.filter((lead) => lead.status === 'sent').length,
-      errors: leads.filter((lead) => lead.status === 'error').length,
+      errors: leads.filter((lead) => lead.status === 'error' || lead.status === 'reconciliation_required').length,
       invalid: leads.filter((lead) => lead.status === 'invalid').length,
     };
   },
@@ -181,13 +204,18 @@ export const canonicalInstagramQueueRepository: InstagramQueueRepository = {
   async pause(ids) { await updateQueueItemStatus(ids, 'paused'); },
   async resume(ids) { await updateQueueItemStatus(ids, 'queued'); },
   async reprocess(ids) {
-    const userId = await currentUserIdNumber();
-    const response = await getSupabaseClient().from('queue_items').update({
-      status_id: await queueStatusId('queued'),
-      queue_items_error_message: null,
-      queue_items_updated_at: nowIso(),
-    }).eq('users_id', userId).in('queue_items_id', ids.map(Number));
+    const numeric = ids.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0);
+    if (!numeric.length) return;
+    const response = await getSupabaseClient().rpc('instagram_reprocess_queue_items', { p_queue_item_ids: numeric });
     if (response.error) throw new Error(response.error.message);
   },
-  async invalidate(id) { await updateQueueItemStatus([id], 'invalid'); },
+  async invalidate(id) {
+    const numeric = Number(id);
+    if (!Number.isSafeInteger(numeric) || numeric <= 0) throw new Error('Item Instagram inválido.');
+    const response = await getSupabaseClient().rpc('instagram_invalidate_queue_item', {
+      p_queue_item_id: numeric,
+      p_reason: 'invalidado pelo operador',
+    });
+    if (response.error) throw new Error(response.error.message);
+  },
 };
