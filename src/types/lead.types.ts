@@ -37,7 +37,6 @@ export type LeadDatabaseRow = {
   leads_postal_code: string | null;
   leads_categories: string[] | null;
   leads_score: number | null;
-  leads_priority_score: number;
   leads_reviews_count: number | null;
   leads_origin: LeadOrigin;
   maps_search_candidates_id?: string | null;

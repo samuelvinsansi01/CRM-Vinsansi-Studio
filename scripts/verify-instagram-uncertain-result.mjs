@@ -4,7 +4,7 @@ const read = (path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8').r
 const popup = read('../../instagram-extension/popup.js');
 const content = read('../../instagram-extension/content.js');
 const api = read('../api/instagram/extension.ts');
-const migration = read('../supabase/migrations/20260802150000_instagram_execution_progress.sql') + '\n' + read('../supabase/migrations/20260813130000_instagram_dispatch_operational.sql');
+const migration = read('../supabase/migrations/20260802150000_instagram_execution_progress.sql');
 const failures = [];
 const assert = (condition, message) => { if (!condition) failures.push(message); };
 
@@ -70,8 +70,7 @@ assert(uncertainStart >= 0 && confirmedFailureStart > uncertainStart, 'Resultado
 assert(uncertainBlock.includes("progress_step:'reconciliation_required'"), 'Resultado incerto não é persistido como reconciliation_required.');
 assert(uncertainBlock.includes("return { status:'reconciliation_required'"), 'Resultado incerto pode alcançar o fallback textual.');
 assert(!uncertainBlock.includes("status:'error'"), 'Resultado incerto ainda pode ser persistido como error.');
-assert(confirmedFailureBlock.includes("progress_step:'reconciliation_required'"), 'Falha de mídia depois das mensagens deve exigir reconciliação, não retry cego.');
-assert(!confirmedFailureBlock.includes("status:'error'"), 'Falha depois das quatro mensagens não pode voltar como erro reprocessável.');
+assert(confirmedFailureBlock.includes("status:'error'"), 'Falha confirmada deixou de ser persistida como error.');
 
 const sendImageFlow = sliceBetween(popup, 'async function sendCurrentRamoImage()', 'async function renderImages()');
 assert(count(sendImageFlow, "sendToInstagramTab('CRM_INSTAGRAM_UPLOAD_IMAGE'") === 1, 'A função de upload pode ser chamada novamente na mesma tentativa.');
@@ -89,7 +88,6 @@ const claimFunction = sliceBetween(migration, 'CREATE OR REPLACE FUNCTION public
 const claimGuard = claimFunction.match(/IF FOUND AND v_existing\.step IN \(([^)]+)\)/)?.[1] || '';
 assert(claimGuard.includes("'reconciliation_required'") && !claimGuard.includes("'error'"), 'Claim não distingue reconciliação de falha confirmada.');
 assert(migration.includes("v_progress.step IN ('sent','invalid','reconciliation_required')"), 'reconciliation_required não é terminal para transições posteriores.');
-assert(migration.includes('instagram_error_after_dispatch_requires_reconciliation'), 'Banco não bloqueia erro reprocessável depois que o disparo começou.');
 assert(api.includes("candidate = items.find((item) => item.status === 'queued'") && api.includes('p_step: step'), 'API não preserva seleção queued e persistência do estado de reconciliação.');
 
 if (failures.length) {

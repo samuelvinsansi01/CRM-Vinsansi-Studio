@@ -27,8 +27,6 @@ export type BranchConfigRecord = ConfigBaseRecord & {
   order: number;
   minRating: number;
   minReviews: number;
-  stockTargetWhatsapp: number;
-  stockTargetInstagram: number;
   imageName: string;
   /** Define se o Worker deve bloquear o disparo quando a imagem do ramo nao estiver disponivel. */
   imageRequired: boolean;

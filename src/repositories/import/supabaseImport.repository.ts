@@ -52,7 +52,6 @@ const NORMALIZED_LEADS_SELECT = `
   leads_postal_code,
   leads_categories,
   leads_score,
-  leads_priority_score,
   leads_reviews_count,
   leads_origin,
   leads_created_at,
@@ -105,13 +104,6 @@ function normalizeLeadInput(input: ImportLeadInput): ImportLeadInput {
 function rowToImportLead(row: LeadDatabaseRow): ImportLead {
   const mapped = mapLead(row);
   const destination = mapped.destination === 'Agregador' ? 'Agregadores' : mapped.destination;
-  const originalDestination: ImportLeadDestination = row.contact_sources_id === 4
-    ? 'Instagram'
-    : row.contact_sources_id === 3
-      ? 'Agregadores'
-      : row.contact_sources_id === 2
-        ? 'Com site'
-        : 'WhatsApp';
 
   return {
     id: mapped.id,
@@ -120,15 +112,14 @@ function rowToImportLead(row: LeadDatabaseRow): ImportLead {
     branch_id: mapped.branch_id,
     subcategoria: row.leads_categories?.[1] ?? row.leads_categories?.[0] ?? mapped.branch,
     destino: destination,
-    original_destination: originalDestination,
+    original_destination: destination,
     destination,
     send_instagram: destination === 'Instagram',
     instagram_url: mapped.instagram,
     status: mapped.status,
     motivo: '',
-    rating: Number(row.leads_score ?? 0),
+    rating: 0,
     reviews: Number(row.leads_reviews_count ?? 0),
-    priority_score: Number(row.leads_priority_score ?? 0),
     whatsapp: mapped.phone,
     instagram: mapped.instagram,
     site: mapped.site,
@@ -283,12 +274,11 @@ async function resolveLookups(leads: ImportLead[]): Promise<Map<string, Canonica
 
   const contactSourceFor = (lead: ImportLead) => {
     const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-    const sourceDestination = lead.original_destination ?? destination;
-    const expectedKey = sourceDestination === 'Instagram'
+    const expectedKey = destination === 'Instagram'
       ? 'instagram'
-      : sourceDestination === 'Agregadores'
+      : destination === 'Agregadores'
         ? 'agregador'
-        : sourceDestination === 'Com site'
+        : destination === 'Com site'
           ? 'dominio_proprio'
           : 'sem_site';
     const normalizedExpectedKey = normalizeComparable(expectedKey);

@@ -43,7 +43,6 @@ export type ImportLead = {
   rejectionCode?: ImportRejectionCode;
   rating?: number;
   reviews?: number;
-  priority_score?: number;
   whatsapp?: string;
   instagram?: string;
   site?: string;

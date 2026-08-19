@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+const source = fs.readFileSync(new URL('../api/desktop/worker-provision.ts', import.meta.url), 'utf8');
+const fail = (message) => { console.error(message); process.exit(1); };
+if (!source.includes('DESKTOP_WORKER_PROVISIONING_ENABLED')) fail('Provisionamento desktop nao e fail-closed.');
+if (!source.includes('DESKTOP_WORKER_PROVISIONING_ALLOWED_EMAILS')) fail('Allowlist de email ausente.');
+if (!source.includes('SUPABASE_SERVICE_ROLE_KEY')) fail('Credencial server-side nao e lida pelo endpoint.');
+if (!source.includes("crypto.subtle.encrypt")) fail('Credencial nao e cifrada para o dispositivo.');
+if (!source.includes("RSA-OAEP")) fail('RSA-OAEP ausente.');
+if (!source.includes('auth.getUser(token)')) fail('Endpoint nao valida sessao do usuario.');
+if (/serviceRoleKey\s*[,}]/.test(source.split('return send(res, 200')[1] ?? '')) fail('Service Role parece retornar em texto claro.');
+console.log('OK: provisionamento desktop autentica, aplica allowlist e cifra a credencial.');

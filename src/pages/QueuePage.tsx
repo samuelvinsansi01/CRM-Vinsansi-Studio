@@ -39,16 +39,7 @@ const legacyInstagramStatusLabel: Record<InstagramQueueStatus, string> = {
   paused: 'Pausada',
   error: 'Erro',
   invalid: 'Inválida',
-  reconciliation_required: 'Reconciliação necessária',
 };
-
-function instagramQueueStatusLabel(status: InstagramQueueStatus) {
-  return legacyInstagramStatusLabel[status] ?? statusLabel(status);
-}
-
-function instagramQueueStatusTone(status: InstagramQueueStatus) {
-  return status === 'reconciliation_required' ? 'warning' : statusTone(status);
-}
 
 
 function todayInputValue() {
@@ -615,7 +606,7 @@ function InstagramQueuePage() {
   };
 
   const handleReprocessErrors = async () => {
-    const errorIds = visibleBatches.flatMap((batch) => batch.leads).filter((lead) => lead.status === 'error').map((lead) => lead.id);
+    const errorIds = visibleBatches.flatMap((batch) => batch.leads).filter((lead) => isStatusGroup(lead.status, 'error')).map((lead) => lead.id);
     if (!errorIds.length) {
       pushToast({ title: 'Sem erros', description: 'Não há itens com erro neste filtro.', tone: 'warning' });
       return;
@@ -641,7 +632,7 @@ function InstagramQueuePage() {
         <MetricCard icon={Users} value={String(summary.total)} label="Total" />
         <MetricCard icon={List} value={String(summary.queued)} label="Em fila" tone="primary" />
         <MetricCard icon={Send} value={String(summary.sent)} label="Enviados" tone="success" />
-        <MetricCard icon={Bug} value={String(summary.errors)} label="Erros / reconciliação" tone="warning" />
+        <MetricCard icon={Bug} value={String(summary.errors)} label="Erros" tone="warning" />
         <MetricCard icon={X} value={String(summary.invalid)} label="Invalidos" tone="danger" />
       </section>
       <div className="queue-topline queue-topline--actions">
@@ -729,7 +720,7 @@ function InstagramBatch({
     () => ({
       sent: batch.leads.filter((lead) => isStatusGroup(lead.status, 'sent')).length,
       queued: batch.leads.filter((lead) => isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')).length,
-      errors: batch.leads.filter((lead) => lead.status === 'error' || lead.status === 'reconciliation_required').length,
+      errors: batch.leads.filter((lead) => isStatusGroup(lead.status, 'error')).length,
       invalid: batch.leads.filter((lead) => isStatusGroup(lead.status, 'invalid')).length,
     }),
     [batch.leads],
@@ -762,7 +753,7 @@ function InstagramBatch({
                   <Tag>{lead.branch}</Tag>
                   {String(lead.type) !== siteBadgeLabel(lead) ? <Tag>{lead.type}</Tag> : null}
                   <Tag>{siteBadgeLabel(lead)}</Tag>
-                  <Tag tone={instagramQueueStatusTone(lead.status)}>{instagramQueueStatusLabel(lead.status)}</Tag>
+                  <Tag tone={statusTone(lead.status)}>{statusLabel(lead.status)}</Tag>
                 </span>
                 <span className="batch-row__icons">
                   <button type="button" className="batch-row__action" onClick={() => onEdit(lead)} aria-label="Visualizar lead">
@@ -855,7 +846,7 @@ function InstagramLeadDrawer({
           <Field label="Tipo" value={lead?.type ?? ''} readOnly />
           <Field label="Perfil remetente" value={lead?.profile ?? ''} readOnly />
           <Field label="Template ID" value={lead?.template_id ?? ''} readOnly />
-          <Field label="Status" value={lead ? instagramQueueStatusLabel(lead.status) : ''} readOnly />
+          <Field label="Status" value={lead ? statusLabel(lead.status) : ''} readOnly />
           <Field label="Posição na fila" type="number" min="1" value={draft.position} readOnly={mode === 'view'} onChange={(value) => updateDraft('position', value)} />
           <Field label="Agendado para" type="date" value={draft.scheduled_date} readOnly={mode === 'view'} onChange={(value) => updateDraft('scheduled_date', value)} />
           <Field as="textarea" label="Mensagem 1 (template)" value={lead?.message1 ?? ''} readOnly />

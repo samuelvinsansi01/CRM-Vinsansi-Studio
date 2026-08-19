@@ -1,5 +1,4 @@
 import { LEAD_STATUS } from '../status/leadStatus';
-import { calculatePersistedLeadPriorityScore } from '../lead-score/leadScore.service';
 import { eventBus } from '../../lib/events';
 import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
@@ -237,7 +236,7 @@ function mapPreparationLead(
     state: context.state,
     contact: channel === 'WhatsApp' ? normalizePhone(getEffectiveWhatsAppPhone(row)) : normalizeInstagramUsername(row.leads_instagram),
     channel,
-    score: calculatePersistedLeadPriorityScore(row as unknown as Record<string, unknown>),
+    score: Number(row.leads_score ?? 0),
     templateType: templateTypeForLead(context),
     ready: !reason,
     blockReason: reason || undefined,

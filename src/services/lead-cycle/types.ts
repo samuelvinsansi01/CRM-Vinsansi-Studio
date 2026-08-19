@@ -9,8 +9,6 @@ export type LeadCycleLead = {
   state: string;
   city: string;
   phone: string;
-  rawPhone: string;
-  whatsapp: string;
   instagram: string;
   website: string;
   mapsUrl: string;
@@ -24,15 +22,6 @@ export type LeadCycleLead = {
   updatedAt: string;
 };
 
-export type LeadCycleDetailsInput = {
-  company: string;
-  channel: LeadCycleChannel;
-  rawPhone: string;
-  whatsapp: string;
-  instagram: string;
-  website: string;
-  mapsUrl: string;
-};
 
 export type LeadRoutingCommand =
   | 'route-imported-to-whatsapp'
@@ -42,8 +31,6 @@ export type LeadRoutingCommand =
   | 'set-valid-channel-whatsapp'
   | 'set-valid-channel-instagram'
   | 'archive-valid'
-  | 'invalidate-valid'
-  | 'return-valid-to-imported'
   | 'invalidate-pre-send'
   | 'archive-pre-send';
 

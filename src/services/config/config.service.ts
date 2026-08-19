@@ -7,8 +7,6 @@ import { branchSlug, normalizeBranchId } from './branchIdentity';
 import {
   DEFAULT_BRANCH_MIN_RATING,
   DEFAULT_BRANCH_MIN_REVIEWS,
-  DEFAULT_BRANCH_STOCK_TARGET_WHATSAPP,
-  DEFAULT_BRANCH_STOCK_TARGET_INSTAGRAM,
   DEFAULT_TEMPLATE_MESSAGE_1,
   DEFAULT_TEMPLATE_MESSAGE_2,
 } from './config.seed';
@@ -181,7 +179,7 @@ function branchCategoriesFromInput(
   const legacyKeys = [
     'slug', 'category', 'subcategories', 'subramos', 'keywords', 'associatedCategories',
     'categoriesList', 'categoria', 'order', 'ordem', 'minRating', 'notaMinima',
-    'minReviews', 'reviewsMinimos', 'stockTargetWhatsapp', 'stock_target_whatsapp', 'stockTargetInstagram', 'stock_target_instagram', 'imageName', 'image_name', 'imagem',
+    'minReviews', 'reviewsMinimos', 'imageName', 'image_name', 'imagem',
     'imageRequired', 'image_required',
   ];
   if (!legacyKeys.some((key) => hasOwn(raw, key))) return existing?.categories ?? null;
@@ -197,8 +195,6 @@ function branchCategoriesFromInput(
     order: toInteger(valueFromInput(raw, ['order', 'ordem'], existing?.order ?? 0), existing?.order ?? 0, 0),
     minRating: toNumber(valueFromInput(raw, ['minRating', 'notaMinima'], existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING), existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING, 0),
     minReviews: toInteger(valueFromInput(raw, ['minReviews', 'reviewsMinimos'], existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS), existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS, 0),
-    stockTargetWhatsapp: toInteger(valueFromInput(raw, ['stockTargetWhatsapp', 'stock_target_whatsapp'], existing?.stockTargetWhatsapp ?? DEFAULT_BRANCH_STOCK_TARGET_WHATSAPP), existing?.stockTargetWhatsapp ?? DEFAULT_BRANCH_STOCK_TARGET_WHATSAPP, 0),
-    stockTargetInstagram: toInteger(valueFromInput(raw, ['stockTargetInstagram', 'stock_target_instagram'], existing?.stockTargetInstagram ?? DEFAULT_BRANCH_STOCK_TARGET_INSTAGRAM), existing?.stockTargetInstagram ?? DEFAULT_BRANCH_STOCK_TARGET_INSTAGRAM, 0),
     imageName,
     imageRequired: toBoolean(valueFromInput(raw, ['imageRequired', 'image_required'], existing?.imageRequired ?? Boolean(imageName)), existing?.imageRequired ?? Boolean(imageName)),
   };
@@ -229,8 +225,6 @@ function normalizeBranchInput(input: CreateConfigRecordInput | UpdateConfigRecor
     status: statusFromActive(active),
     minRating: toNumber(metadata.minRating ?? metadata.min_rating, existing?.minRating ?? DEFAULT_BRANCH_MIN_RATING, 0),
     minReviews: toInteger(metadata.minReviews ?? metadata.min_reviews, existing?.minReviews ?? DEFAULT_BRANCH_MIN_REVIEWS, 0),
-    stockTargetWhatsapp: toInteger(metadata.stockTargetWhatsapp ?? metadata.stock_target_whatsapp, existing?.stockTargetWhatsapp ?? DEFAULT_BRANCH_STOCK_TARGET_WHATSAPP, 0),
-    stockTargetInstagram: toInteger(metadata.stockTargetInstagram ?? metadata.stock_target_instagram, existing?.stockTargetInstagram ?? DEFAULT_BRANCH_STOCK_TARGET_INSTAGRAM, 0),
     imageName,
     imageRequired: toBoolean(metadata.imageRequired ?? metadata.image_required, existing?.imageRequired ?? Boolean(imageName)),
     createdAt,

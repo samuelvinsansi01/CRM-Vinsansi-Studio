@@ -1,6 +1,6 @@
 import { normalizeBrazilState } from '../geo/brazilState';
 import { normalizeInstagramUsername } from '../instagram/instagram.utils';
-import { calculateLeadPriorityScore, normalizeGoogleRating } from '../lead-score/leadScore.service';
+import { calculateLeadScore } from '../lead-score/leadScore.service';
 import { isStatusGroup } from '../status/status.mapper';
 import { LEAD_STATUS } from '../status/leadStatus';
 import { normalizePhone, normalizeSiteIdentity } from './importValidation';
@@ -38,7 +38,6 @@ export type ExistingLeadInsert = {
   leads_categories: string[];
   leads_score: number;
   leads_reviews_count: number;
-  leads_priority_score: number;
   leads_origin: LeadOrigin;
   leads_created_at: string;
   leads_updated_at: string;
@@ -131,9 +130,8 @@ function commonPayload(
     leads_website: website || null,
     leads_maps: maps || null,
     leads_categories: compactCategories([lead.ramo, lead.subcategoria]),
-    leads_score: normalizeGoogleRating(lead.rating),
+    leads_score: calculateLeadScore(lead),
     leads_reviews_count: Math.max(0, Math.trunc(Number(lead.reviews ?? 0) || 0)),
-    leads_priority_score: calculateLeadPriorityScore(lead),
     leads_origin: options.origin ?? (options.apifyImportJobId ? 'apify' : 'api'),
     leads_updated_at: new Date().toISOString(),
   } as const;

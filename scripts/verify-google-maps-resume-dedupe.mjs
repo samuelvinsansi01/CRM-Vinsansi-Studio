@@ -33,7 +33,7 @@ assert(termsFor(fixture.branch, []).length === 1, 'Zero subramos não resulta so
 assert(termsFor(fixture.branch, ['Marcenaria Planejada']).length === 2, 'Um subramo não resulta em ramo principal seguido do único subramo.');
 assert(termsFor(fixture.branch, ['A', 'B', 'C']).join(',') === `${fixture.branch},A,B,C`, 'N subramos não preservam ramo principal seguido de todos os N termos.');
 assert(apiSource.includes('function strings(value: unknown): string[]') && apiSource.includes('if (!key || seen.has(key)) return false'), 'API não preserva o contrato 0/1/N com dedupe normalizado de termos.');
-assert(apiSource.includes("const socialHosts = new Set(['facebook.com', 'instagram.com', 'wa.me', 'whatsapp.com', 'api.whatsapp.com', 'web.whatsapp.com'])") && apiSource.includes("return ''"), 'Redes sociais ainda podem ser promovidas ao campo website pela API.');
+assert(apiSource.includes("hostname === 'facebook.com' || hostname.endsWith('.facebook.com')") && apiSource.includes("return ''"), 'Facebook ainda pode ser promovido ao campo website pela API.');
 assert(utilsSource.includes("return { kind: 'facebook', href }") && detailSource.includes("provider === 'facebook' ? 'facebook'"), 'Extrator local ainda classifica Facebook como website.');
 assert(operationalSource.includes('processedCountBase: state.items.length') && operationalSource.includes('processedKeys: state.items.map'), 'Orquestrador não entrega dedupe/contagem acumulada ao runner antes do detalhe.');
 assert(operationalSource.includes("['completed', 'exhausted'].includes(combo.status)") && operationalSource.includes("'terminal_combination_ignored'"), 'Combinação terminal não possui guard explícito contra callback repetido.');
@@ -83,7 +83,7 @@ const context = vm.createContext({
       async loadCheckpoint() { return checkpoint ? structuredClone(checkpoint) : null; },
     },
     diagnostics: {
-      collect: () => ({ fixture: true }), locateFeed: () => feed, detectNoResults: () => false, detectLayout: () => ({ kind: 'feed', ready: true, noResults: false, feed, detailDetected: false }),
+      collect: () => ({ fixture: true }), locateFeed: () => feed, detectNoResults: () => false,
       placeLinks: () => {
         if (crashBeforeC && detailOpens.length === 2 && !crashDelivered) {
           crashDelivered = true;

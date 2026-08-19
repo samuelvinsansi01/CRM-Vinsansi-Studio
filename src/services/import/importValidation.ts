@@ -569,61 +569,36 @@ function validateQualification(lead: NormalizedRawLead, branchRule: ImportBranch
   return null;
 }
 
-function classifyDestination(
-  lead: NormalizedRawLead,
-  website: WebsiteClassification,
-  settings: ImportSettings,
-): { destination?: ImportLeadDestination; sourceDestination?: ImportLeadDestination; rejection?: Rejection; reason: string } {
+function classifyDestination(lead: NormalizedRawLead, website: WebsiteClassification, settings: ImportSettings): { destination?: ImportLeadDestination; rejection?: Rejection; reason: string } {
   const hasPhone = Boolean(lead.identity.phone);
   const instagram = lead.identity.instagram || (website.type === 'instagram' ? normalizeInstagram(lead.site) : '');
-  const sourceDestination: ImportLeadDestination = hasPhone
-    ? website.type === 'commercial'
-      ? 'Com site'
-      : website.type === 'aggregator'
-        ? 'Agregadores'
-        : 'WhatsApp'
-    : 'Instagram';
-
-  // Regra canônica de roteamento inicial: Instagram válido tem prioridade sobre
-  // telefone/WhatsApp e sobre a classificação do site. A classificação de origem
-  // continua preservada separadamente em original_destination/contact_sources.
-  if (instagram && settings.routes.instagram) {
-    return {
-      destination: 'Instagram',
-      sourceDestination,
-      reason: 'instagram válido priorizado como destino inicial',
-    };
-  }
 
   if (website.type === 'blocked') {
-    return { rejection: reject('blocked_site', website.reason), sourceDestination, reason: website.reason };
+    return { rejection: reject('blocked_site', website.reason), reason: website.reason };
   }
 
   if (hasPhone) {
     if (website.type === 'commercial') {
-      if (!settings.routes.ownSite) return { rejection: reject('destination_disabled', 'Com site'), sourceDestination, reason: website.reason };
-      return { destination: 'Com site', sourceDestination, reason: website.reason };
+      if (!settings.routes.ownSite) return { rejection: reject('destination_disabled', 'Com site'), reason: website.reason };
+      return { destination: 'Com site', reason: website.reason };
     }
 
     if (website.type === 'aggregator') {
-      if (!settings.routes.aggregators) return { rejection: reject('destination_disabled', 'Agregadores'), sourceDestination, reason: website.reason };
-      return { destination: 'Agregadores', sourceDestination, reason: website.reason };
+      if (!settings.routes.aggregators) return { rejection: reject('destination_disabled', 'Agregadores'), reason: website.reason };
+      return { destination: 'Agregadores', reason: website.reason };
     }
 
-    if (!settings.routes.whatsapp) return { rejection: reject('destination_disabled', 'WhatsApp'), sourceDestination, reason: website.reason };
-    return { destination: 'WhatsApp', sourceDestination, reason: website.reason };
+    if (!settings.routes.whatsapp) return { rejection: reject('destination_disabled', 'WhatsApp'), reason: website.reason };
+    return { destination: 'WhatsApp', reason: website.reason };
   }
 
   if (instagram) {
-    return {
-      rejection: reject('destination_disabled', 'Instagram'),
-      sourceDestination: 'Instagram',
-      reason: 'instagram válido, mas a rota Instagram está desativada',
-    };
+    if (!settings.routes.instagram) return { rejection: reject('destination_disabled', 'Instagram'), reason: 'sem telefone whatsapp validado' };
+    return { destination: 'Instagram', reason: 'sem telefone whatsapp validado' };
   }
 
-  if (website.type === 'facebook') return { rejection: reject('facebook_site'), sourceDestination, reason: website.reason };
-  return { rejection: reject('missing_contact'), sourceDestination, reason: 'sem telefone e sem instagram' };
+  if (website.type === 'facebook') return { rejection: reject('facebook_site'), reason: website.reason };
+  return { rejection: reject('missing_contact'), reason: 'sem telefone e sem instagram' };
 }
 
 function canUseSecondaryInstagramRoute(lead: NormalizedRawLead, branchRule: ImportBranchRule | null, settings: ImportSettings) {
@@ -655,19 +630,12 @@ function applyRejection(draft: ImportLeadInput, rejection: Rejection, settings: 
   draft.motivo = settings.logs.logRejectionReason ? rejection.reason : 'Recusado pelas regras de importacao.';
 }
 
-function approveDraft(
-  draft: ImportLeadInput,
-  destination: ImportLeadDestination,
-  reason: string,
-  sourceDestination: ImportLeadDestination = destination,
-) {
+function approveDraft(draft: ImportLeadInput, destination: ImportLeadDestination, reason: string) {
   // WhatsApp aguarda a confirmação persistida da Evolution; os demais destinos
   // preservam a revisão operacional existente.
   draft.status = destination === 'WhatsApp' ? 'review' : 'pending';
   draft.destino = destination;
-  draft.original_destination = draft.original_destination && draft.original_destination !== 'Recusado'
-    ? draft.original_destination
-    : sourceDestination;
+  draft.original_destination = draft.original_destination && draft.original_destination !== 'Recusado' ? draft.original_destination : destination;
   draft.destination = draft.send_instagram ? 'Instagram' : destination;
   draft.destination_override = draft.send_instagram ? 'Instagram' : undefined;
   if (!draft.send_instagram) {
@@ -806,7 +774,7 @@ export async function normalizeImportItems(rawItems: unknown[], context: ImportV
       continue;
     }
 
-    approveDraft(draft, classification.destination ?? 'WhatsApp', classification.reason, classification.sourceDestination);
+    approveDraft(draft, classification.destination ?? 'WhatsApp', classification.reason);
     normalized.push({ input: draft, ignored: false, code: 'approved' });
     incrementReason(reasons, 'approved');
     rememberIdentity(payloadIdentity, lead);

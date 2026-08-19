@@ -138,14 +138,14 @@ Pare se Apify reaparecer, cadastro resolver WhatsApp como origem, simulação pe
 ### Ação manual
 
 1. Executar `node --check background.js`, `node --check content.js` e `node --check popup.js`.
-2. Confirmar `manifest_version=3`, versão `1.6.1`, permissões esperadas e host `https://crm-vinsansi-studio.vercel.app/*`.
+2. Confirmar `manifest_version=3`, versão `1.5.0`, permissões esperadas e host `https://painel.samuelvinsansi.com.br/*`.
 3. Carregar a pasta descompactada em `chrome://extensions` no modo de desenvolvedor.
 4. No CRM, vincular um perfil Instagram autorizado e copiar o token temporário para a extensão. O token fica somente em `chrome.storage.session`.
 5. Não inserir chave Supabase, service role, senha ou token permanente no pacote.
 
 ### Verificação pós-deploy
 
-- Extensão consulta `https://crm-vinsansi-studio.vercel.app/api` e rejeita token expirado/perfil divergente.
+- Extensão consulta `https://painel.samuelvinsansi.com.br/api` e rejeita token expirado/perfil divergente.
 - Inválidos aparecem em `skipped_invalid_recipient`, nunca são claimed e não bloqueiam o próximo válido.
 - Upload executa probe e somente uma tentativa mutável; perda de resposta, ausência de preview após dispatch ou incerteza após clique resultam em `reconciliation_required` sem fallback textual.
 - Mensagens confirmadas e progresso persistido não são reenviados.

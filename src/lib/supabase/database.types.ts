@@ -30,7 +30,6 @@ export type LeadRow = {
   leads_postal_code: string | null;
   leads_categories: string[] | null;
   leads_score: number | null;
-  leads_priority_score: number;
   leads_reviews_count: number | null;
   leads_origin: string;
   maps_search_candidates_id: string | null;

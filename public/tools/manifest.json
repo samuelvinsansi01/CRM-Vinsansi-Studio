@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-13T20:36:00-03:00",
+  "updatedAt": "2026-08-02T08:00:00-03:00",
   "tools": [
     {
       "id": "worker",
@@ -7,17 +7,17 @@
       "description": "Worker WhatsApp com heartbeats, recuperação controlada, configurações centralizadas, Vault e idempotência.",
       "version": "3.6.0",
       "path": "/tools/worker-latest.zip",
-      "fileName": "Worker_v3.6.0_verificado.zip",
-      "size": 6184379
+      "fileName": "Worker_v3.6.0_observabilidade_recuperacao.zip",
+      "size": 6176144
     },
     {
       "id": "instagram-extension",
       "name": "Extensão Instagram",
-      "description": "Extensão do navegador com fila persistente, claim seguro, mídia condicional, reconciliação pós-disparo e prevenção de reenvio cego.",
-      "version": "1.6.1",
+      "description": "Extensão do navegador com progresso persistente por etapa, recuperação segura, mensagens congeladas e validação de mídia.",
+      "version": "1.5.0",
       "path": "/tools/instagram-extension-latest.zip",
-      "fileName": "Extensao_Instagram_v1.6.1_operacional.zip",
-      "size": 36506
+      "fileName": "Extensao_Instagram_v1.5.0_progresso_persistente.zip",
+      "size": 33564
     }
   ]
 }

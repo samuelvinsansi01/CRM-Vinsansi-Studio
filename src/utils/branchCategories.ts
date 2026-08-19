@@ -55,9 +55,7 @@ export function categoriesFromValue(value: unknown): string[] {
 
 export function mergeCategories(value: unknown, categoriesText: string) {
   const associatedCategories = normalizeCategoryList(categoriesText);
-  const next: Record<string, unknown> = isPlainObject(value)
-    ? { ...value }
-    : { associatedCategories: categoriesFromValue(value) };
+  const next: Record<string, unknown> = isPlainObject(value) ? { ...value } : {};
 
   next.associatedCategories = associatedCategories;
   if (Object.prototype.hasOwnProperty.call(next, 'associated_categories')) {
@@ -77,21 +75,4 @@ export function categoriesFormValue(value: unknown) {
 
 export function mergeCategoriesJson(value: string, categoriesText: string) {
   return formatCategoriesJson(mergeCategories(parseCategoriesJson(value), categoriesText));
-}
-
-export function mergeBranchAcquisitionTargets(value: unknown, whatsapp: unknown, instagram: unknown) {
-  const next: Record<string, unknown> = isPlainObject(value)
-    ? { ...value }
-    : { associatedCategories: categoriesFromValue(value) };
-  const parse = (input: unknown, fallback: number) => {
-    const parsed = Math.trunc(Number(input));
-    return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
-  };
-  next.stockTargetWhatsapp = parse(whatsapp, 1000);
-  next.stockTargetInstagram = parse(instagram, 500);
-  return next;
-}
-
-export function mergeBranchAcquisitionTargetsJson(value: string, whatsapp: unknown, instagram: unknown) {
-  return formatCategoriesJson(mergeBranchAcquisitionTargets(parseCategoriesJson(value), whatsapp, instagram));
 }

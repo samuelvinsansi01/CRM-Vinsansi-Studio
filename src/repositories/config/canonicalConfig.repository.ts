@@ -99,8 +99,6 @@ async function listBranches(userId: number): Promise<BranchConfigRecord[]> {
       order: number(metadata.order, 0),
       minRating: number(metadata.minRating ?? metadata.min_rating, 4),
       minReviews: number(metadata.minReviews ?? metadata.min_reviews, 10),
-      stockTargetWhatsapp: Math.max(0, Math.trunc(number(metadata.stockTargetWhatsapp ?? metadata.stock_target_whatsapp, 1000))),
-      stockTargetInstagram: Math.max(0, Math.trunc(number(metadata.stockTargetInstagram ?? metadata.stock_target_instagram, 500))),
       imageName: String(metadata.imageName ?? metadata.image_name ?? ''),
       imageRequired: bool(metadata.imageRequired ?? metadata.image_required, false),
       active,
