@@ -1,0 +1,12 @@
+PATCH CRM v0.6.2 — PASSO A PASSO
+
+1. No Supabase do CRM, abra SQL Editor.
+2. Abra o arquivo APLICAR-NO-SUPABASE-v0.6.2.sql deste patch, copie todo o conteúdo e execute uma vez.
+3. Substitua/publique api/desktop/worker-provision.ts no CRM.
+4. Confirme no ambiente do CRM:
+   DESKTOP_WORKER_PROVISIONING_ENABLED=true
+   DESKTOP_WORKER_PROVISIONING_ALLOWED_EMAILS=SEU_EMAIL_GOOGLE_DO_CRM
+5. Faça novo deploy do CRM.
+6. Não configure token de Tunnel Cloudflare.
+7. Não mova/apague D:\cloudflared nem o arquivo credentials-file apontado pelo config.yml até concluir o primeiro Reparar instalação da v0.6.2.
+8. O app detecta D:\cloudflared\config.yml automaticamente; não é necessário instalar cloudflared via MSI.
