@@ -22,8 +22,8 @@ assert(page.includes("kind !== 'instances'"), 'Status manual ainda aparece no fo
 assert(repository.includes("rpc('save_instance_secure'"), 'Instâncias não são salvas pela RPC segura.');
 assert(!repository.includes('instances_apikey'), 'Repository ainda manipula API key na tabela pública.');
 assert(service.includes("functions.invoke('evolution-instance-sync'"), 'Frontend não invoca a função canônica de sincronização.');
-assert(syncFunction.includes('/instance/connectionState/'), 'Consulta de connectionState ausente.');
-assert(syncFunction.includes('/webhook/set/'), 'Configuração automática de webhook ausente.');
+assert(syncFunction.includes('/v1/whatsapp/instances/') && syncFunction.includes('/status'), 'Consulta do status pelo Gateway Vinsansi v1 ausente.');
+assert(syncFunction.includes('/v1/whatsapp/instances/') && syncFunction.includes('/webhook'), 'Configuração automática de webhook pelo Gateway Vinsansi v1 ausente.');
 assert(syncFunction.includes('CONNECTION_UPDATE'), 'Evento CONNECTION_UPDATE não foi configurado.');
 assert(syncFunction.includes('service_get_evolution_instances'), 'Edge Function não lê a credencial pelo RPC de service_role.');
 assert(syncFunction.includes('x-evolution-signature'), 'Webhook não recebe assinatura por header.');
@@ -31,4 +31,5 @@ assert(webhookFunction.includes('EVOLUTION_WEBHOOK_SECRET'), 'Webhook não valid
 assert(webhookFunction.includes('timingSafeEqual'), 'Webhook não usa comparação segura da assinatura.');
 assert(config.includes('[functions.evolution-connection-webhook]') && config.includes('verify_jwt = false'), 'Webhook público não foi configurado como verify_jwt=false.');
 
-console.log('Contrato Evolution: OK — webhook em tempo real, polling de reconciliação e status somente leitura.');
+assert(!syncFunction.includes('/instance/connectionState/') && !syncFunction.includes('/webhook/set/'), 'Edge Function ainda depende de rotas legadas da Evolution.');
+console.log('Contrato WhatsApp Vinsansi v1: OK — webhook em tempo real, polling de reconciliação e status somente leitura.');

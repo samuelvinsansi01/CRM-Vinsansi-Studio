@@ -6,6 +6,7 @@ const apiRoot = path.join(root, 'api');
 const functionExtensions = new Set(['.js', '.mjs', '.cjs', '.ts']);
 const expectedRoutes = [
   '/api/chat/send',
+  '/api/desktop/worker-provision',
   '/api/instagram/extension',
   '/api/instagram/pair',
   '/api/maps/extension',

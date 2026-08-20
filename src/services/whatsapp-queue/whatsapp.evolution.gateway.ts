@@ -87,12 +87,13 @@ async function requestEvolution(path: string, init: RequestInit = {}) {
 }
 
 function connectionState(payload: unknown) {
-  const record = payload as { state?: string; instance?: { state?: string }; connection?: string; status?: string };
+  const record = payload as { connected?: boolean; loggedIn?: boolean; state?: string; instance?: { state?: string }; connection?: string; status?: string };
+  if (record?.connected === true && record?.loggedIn === true) return 'open';
   return String(record?.state ?? record?.instance?.state ?? record?.connection ?? record?.status ?? '').toLowerCase();
 }
 
 async function assertConnected(instance: string) {
-  const payload = await requestEvolution(`/instance/connectionState/${encodeURIComponent(instance)}`);
+  const payload = await requestEvolution(`/v1/whatsapp/instances/${encodeURIComponent(instance)}/status`);
   const state = connectionState(payload);
   if (!['open', 'connected', 'connectado', 'conectado'].includes(state)) {
     throw new Error(`Instancia Evolution desconectada: ${instance}`);
@@ -118,9 +119,9 @@ async function sendText(instance: string, lead: WhatsAppQueueLead, text: string)
   const config = evolutionConfig();
   if (config.testMode && !config.dryRun && number !== config.testPhone) throw new Error('TEST_MODE bloqueou envio para numero diferente de TEST_PHONE.');
   if (config.dryRun) return;
-  await requestEvolution(`/message/sendText/${encodeURIComponent(instance)}`, {
+  await requestEvolution(`/v1/whatsapp/instances/${encodeURIComponent(instance)}/messages/text`, {
     method: 'POST',
-    body: JSON.stringify({ number, textMessage: { text: renderedText } }),
+    body: JSON.stringify({ number, text: renderedText, delay: 0 }),
   });
 }
 
@@ -132,15 +133,15 @@ async function sendImage(instance: string, lead: WhatsAppQueueLead) {
   const config = evolutionConfig();
   if (config.testMode && !config.dryRun && number !== config.testPhone) throw new Error('TEST_MODE bloqueou envio para numero diferente de TEST_PHONE.');
   if (config.dryRun) return;
-  await requestEvolution(`/message/sendMedia/${encodeURIComponent(instance)}`, {
+  await requestEvolution(`/v1/whatsapp/instances/${encodeURIComponent(instance)}/messages/media`, {
     method: 'POST',
     body: JSON.stringify({
       number,
-      mediaMessage: {
-        mediatype: 'image',
-        media,
-        caption: lead.imageName ?? '',
-      },
+      type: 'image',
+      media,
+      caption: lead.imageName ?? '',
+      fileName: lead.imageName ?? '',
+      delay: 0,
     }),
   });
 }
@@ -149,7 +150,9 @@ function validationItems(payload: unknown): Array<Record<string, unknown>> {
   const record = payload as Record<string, unknown>;
   const value = Array.isArray(payload)
     ? payload
-    : Array.isArray(record?.response)
+    : Array.isArray(record?.items)
+      ? record.items
+      : Array.isArray(record?.response)
       ? record.response
       : Array.isArray(record?.data)
         ? record.data
@@ -229,7 +232,7 @@ async function validateWhatsAppBatch(instance: string, leads: WhatsAppValidation
   await assertConnected(instance);
   if (config.dryRun) return leads.map((lead) => ({ leadId: lead.id, status: 'valid', valid: true }));
 
-  const payload = await requestEvolution(`/chat/whatsappNumbers/${encodeURIComponent(instance)}`, {
+  const payload = await requestEvolution(`/v1/whatsapp/instances/${encodeURIComponent(instance)}/numbers/check`, {
     method: 'POST',
     body: JSON.stringify({ numbers: leads.map(phoneForValidation) }),
   });

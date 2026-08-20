@@ -78,10 +78,10 @@ async function evolutionSend(url: string, instanceName: string, apiKey: string, 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
-    const response = await fetch(`${url.replace(/\/$/, '')}/message/sendText/${encodeURIComponent(instanceName)}`, {
+    const response = await fetch(`${url.replace(/\/$/, '')}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/messages/text`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', apikey: apiKey },
-      body: JSON.stringify({ number: recipient, textMessage: { text: message }, linkPreview: false }),
+      body: JSON.stringify({ number: recipient, text: message, delay: 0 }),
       signal: controller.signal,
     });
     const raw = await response.text();

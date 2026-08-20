@@ -5,8 +5,8 @@ type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): voi
 type RecordValue = Record<string, unknown>;
 declare const process: { env: Record<string, string | undefined> };
 
-const DEFAULT_TUNNEL_ID = '1886e172-0796-49af-8e88-ffa7fc206fbc';
-const DEFAULT_TUNNEL_NAME = 'evolution';
+const DEFAULT_TUNNEL_ID = '42e52d34-34e7-4f2d-a626-4f550500b610';
+const DEFAULT_TUNNEL_NAME = 'vinsansi-docker';
 const DEFAULT_EVOLUTION_PUBLIC_URL = 'https://evolution.samuelvinsansi.com.br';
 const DEFAULT_EVOLUTION_SERVICE_URL = 'http://host.docker.internal:8080';
 const DEFAULT_WORKER_PUBLIC_URL = 'https://worker.samuelvinsansi.com.br';
@@ -106,7 +106,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     return send(res, 200, {
       ok: true,
-      version: 4,
+      version: 5,
       supabaseUrl,
       cloudflareTunnelId: envAny('DESKTOP_CLOUDFLARE_TUNNEL_ID') || DEFAULT_TUNNEL_ID,
       cloudflareTunnelName: envAny('DESKTOP_CLOUDFLARE_TUNNEL_NAME') || DEFAULT_TUNNEL_NAME,
@@ -117,6 +117,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       cloudflareTunnelImage: envAny('DESKTOP_CLOUDFLARE_IMAGE') || DEFAULT_CLOUDFLARE_IMAGE,
       cloudflareTunnelContainerName: envAny('DESKTOP_CLOUDFLARE_CONTAINER_NAME') || DEFAULT_CLOUDFLARE_CONTAINER,
       dockerNetworkName: envAny('DESKTOP_DOCKER_NETWORK_NAME') || DEFAULT_DOCKER_NETWORK,
+      evolutionOperatorEmail: email,
       encryptedServiceRoleKey,
       encryptedCloudflareTunnelToken,
     });

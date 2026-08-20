@@ -34,6 +34,7 @@ function messageOf(error: unknown) {
 }
 
 function connectionState(payload: Row | null) {
+  if (payload?.connected === true && payload?.loggedIn === true) return 'open';
   const instance = payload?.instance as Row | undefined;
   const data = payload?.data as Row | undefined;
   const dataInstance = data?.instance as Row | undefined;
@@ -97,7 +98,7 @@ async function configureConnectionWebhook(
   webhookUrl.searchParams.set("instance_id", String(instanceId));
 
   let existingEvents: string[] = [];
-  const findResponse = await fetchWithTimeout(`${baseUrl}/webhook/find/${encodeURIComponent(instanceName)}`, {
+  const findResponse = await fetchWithTimeout(`${baseUrl}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/webhook`, {
     method: "GET",
     headers: { Accept: "application/json", apikey: apiKey },
   }).catch(() => null);
@@ -123,8 +124,8 @@ async function configureConnectionWebhook(
     "CONTACTS_UPDATE",
   ];
   const events = Array.from(new Set([...existingEvents, ...managedEvents]));
-  const response = await fetchWithTimeout(`${baseUrl}/webhook/set/${encodeURIComponent(instanceName)}`, {
-    method: "POST",
+  const response = await fetchWithTimeout(`${baseUrl}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/webhook`, {
+    method: "PUT",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
@@ -212,7 +213,7 @@ Deno.serve(async (request: Request) => {
 
       try {
         if (!instanceName || !baseUrl || !apiKey) throw new Error("Nome, URL ou API key ausente.");
-        const response = await fetchWithTimeout(`${baseUrl}/instance/connectionState/${encodeURIComponent(instanceName)}`, {
+        const response = await fetchWithTimeout(`${baseUrl}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/status`, {
           method: "GET",
           headers: { Accept: "application/json", apikey: apiKey },
         });
