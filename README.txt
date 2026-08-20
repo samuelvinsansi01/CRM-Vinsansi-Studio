@@ -1,4 +1,4 @@
-VINSANSI STUDIO — PATCH CRM v1.0.0 / EVOLUTION GO
+VINSANSI STUDIO — PATCH CRM v1.0.1 / EVOLUTION GO
 =================================================
 
 Este patch fecha a migração do CRM para o contrato estável do Vinsansi WhatsApp Gateway v1.
@@ -38,16 +38,23 @@ O Vinsansi WhatsApp Gateway publica a porta 8080 do host. Essa ponte é estável
 
 VARIÁVEIS
 ---------
-Use ENV-V1.0.0.txt somente no ambiente server-side do CRM.
+Use ENV-V1.0.1.txt somente no ambiente server-side do CRM.
 Não coloque os segredos técnicos no frontend e não envie tokens/chaves pelo chat.
 
 ORDEM DE APLICAÇÃO
 ------------------
-1. Copie os quatro arquivos de produção para os mesmos caminhos do CRM. Se quiser manter os verificadores do repositório alinhados com a nova Function desktop, copie também scripts/verify-vercel-function-count.mjs.
-2. Confira as variáveis de ENV-V1.0.0.txt no deploy.
-3. Faça o deploy do CRM.
-4. Depois use o Gerenciador v1.0.0 para instalar/reparar a stack.
+1. Copie os quatro arquivos de produção para os mesmos caminhos do CRM. Se quiser manter os verificadores do repositório alinhados, copie também os scripts.
+2. Aplique a migration supabase/migrations/20260820123000_instance_credential_rotation.sql no projeto Supabase (ou pelo fluxo normal de migrations do projeto).
+3. Confira as variáveis de ENV-V1.0.1.txt no deploy.
+4. Faça o deploy do CRM.
+5. Depois use o Gerenciador v1.0.1 para Reparar instalação; ele detectará e corrigirá automaticamente as chaves legadas duplicadas.
 
 VALIDAÇÃO OPCIONAL NO REPOSITÓRIO
 ---------------------------------
 Os scripts em scripts/ podem ser executados no ambiente de desenvolvimento para validar provisionamento, contrato Gateway v1, ausência das rotas legadas nos arquivos migrados e inventário das Vercel Functions (10 rotas, dentro do limite do projeto).
+
+
+CORREÇÃO v1.0.1
+- Aplique também supabase/migrations/20260820123000_instance_credential_rotation.sql.
+- A função nova rotaciona somente a credencial da instância do usuário autenticado.
+- Isso corrige instalações legadas em que dois chips reutilizavam a mesma chave Evolution.

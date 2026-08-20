@@ -1,0 +1,28 @@
+# Vinsansi Studio — provisionamento desktop v1.0.1
+# Variáveis SOMENTE server-side no deploy do CRM.
+
+DESKTOP_WORKER_PROVISIONING_ENABLED=true
+DESKTOP_WORKER_PROVISIONING_ALLOWED_EMAILS=SEU_EMAIL_GOOGLE_DO_CRM
+
+# Use o token ATUAL do Tunnel vinsansi-docker. Nunca coloque no frontend ou no chat.
+DESKTOP_CLOUDFLARE_TUNNEL_TOKEN=SEU_TOKEN_ATUAL_DO_TUNNEL
+DESKTOP_CLOUDFLARE_TUNNEL_ID=42e52d34-34e7-4f2d-a626-4f550500b610
+DESKTOP_CLOUDFLARE_TUNNEL_NAME=vinsansi-docker
+
+DESKTOP_EVOLUTION_PUBLIC_URL=https://evolution.samuelvinsansi.com.br
+DESKTOP_EVOLUTION_SERVICE_URL=http://host.docker.internal:8080
+
+DESKTOP_WORKER_PUBLIC_URL=https://worker.samuelvinsansi.com.br
+DESKTOP_WORKER_SERVICE_URL=http://lead-certo-whatsapp-worker:8787
+
+DESKTOP_CLOUDFLARE_IMAGE=cloudflare/cloudflared:2026.7.3
+DESKTOP_CLOUDFLARE_CONTAINER_NAME=vinsansi-cloudflared
+DESKTOP_DOCKER_NETWORK_NAME=vinsansi-network
+
+# Permanecem necessárias as variáveis Supabase server-side já usadas pelo CRM:
+# SUPABASE_URL (ou VITE_SUPABASE_URL)
+# SUPABASE_ANON_KEY / SUPABASE_PUBLISHABLE_KEY
+# SUPABASE_SERVICE_ROLE_KEY
+
+# NÃO criar variáveis para GLOBAL_API_KEY da Evolution Go nem senha do Postgres.
+# Esses dois segredos são gerados localmente pelo Gerenciador e protegidos pelo Electron safeStorage.
