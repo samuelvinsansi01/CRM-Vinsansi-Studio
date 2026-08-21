@@ -1,13 +1,13 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { normalizeInstagramUsername } from '../../server/instagram/identity.js';
-import { verifyInstagramExtensionToken } from '../../server/instagram/token.js';
+import { sessionScope } from '../../server/tools/executor.js';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void; end(): void };
 type RecordValue = Record<string, unknown>;
 type QueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'error' | 'invalid';
 type InstagramStep = 'queued' | 'claimed' | 'profile_opened' | 'following' | 'followed' | 'dm_opened' | 'messages_sending' | 'media_sending' | 'sent' | 'invalid' | 'error' | 'reconciliation_required';
-type TokenScope = { userId: string; profile: string };
+type TokenScope = { organizationId: number; memberId: number; legacyScopeUsersId: number; profile: string; client: SupabaseClient };
 declare const process: { env: Record<string, string | undefined> };
 
 const CATALOG = {
@@ -47,10 +47,12 @@ function semanticStatus(name: unknown): QueueStatus {
 }
 
 async function tokenScope(req: ApiRequest): Promise<TokenScope> {
-  const token = bearer(req);
-  if (!token) throw new Error('extension_token_required');
-  const payload = await verifyInstagramExtensionToken(token);
-  return { userId: String(payload.sub), profile: normalizeInstagramUsername(payload.profile) };
+  const scope=await sessionScope(req);
+  if(scope.toolId!=='vinsansi_instagram')throw new Error('tool_scope_mismatch');
+  const metadata=(scope.installation.metadata??{}) as RecordValue;
+  const profile=normalizeInstagramUsername(metadata.instagramProfile);
+  if(!profile)throw new Error('instagram_profile_not_bound');
+  return {organizationId:scope.organizationId,memberId:Number(scope.context.memberId),legacyScopeUsersId:Number(scope.context.legacyScopeUsersId),profile,client:scope.client};
 }
 
 async function catalog(client: SupabaseClient) {
@@ -77,7 +79,7 @@ async function instagramChannelId(client: SupabaseClient) {
 }
 
 async function socialForScope(client: SupabaseClient, scope: TokenScope) {
-  const response = await client.from('socials').select('*').eq('users_id', Number(scope.userId));
+  const response = await client.from('socials').select('*').eq('organizations_id', scope.organizationId);
   if (response.error) throw new Error(response.error.message);
   const row = ((response.data ?? []) as RecordValue[]).find((item) => normalizeInstagramUsername(item.socials_username) === scope.profile);
   if (!row) throw new Error('instagram_profile_not_available_for_token');
@@ -87,14 +89,14 @@ async function socialForScope(client: SupabaseClient, scope: TokenScope) {
 async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDate?: string) {
   const social = await socialForScope(client, scope);
   const channelId = await instagramChannelId(client);
-  let queuesQuery = client.from('queues').select('*').eq('users_id', Number(scope.userId)).eq('channels_id', channelId);
+  let queuesQuery = client.from('queues').select('*').eq('organizations_id', scope.organizationId).eq('channels_id', channelId);
   if (scheduledDate) queuesQuery = queuesQuery.gte('queues_scheduled_at', `${scheduledDate}T00:00:00.000Z`).lt('queues_scheduled_at', `${scheduledDate}T23:59:59.999Z`);
   const queuesResponse = await queuesQuery;
   if (queuesResponse.error) throw new Error(queuesResponse.error.message);
   const queues = (queuesResponse.data ?? []) as RecordValue[];
   const queueIds = queues.map((row) => Number(row.queues_id));
   if (!queueIds.length) return [];
-  const itemsResponse = await client.from('queue_items').select('*').eq('users_id', Number(scope.userId)).eq('socials_id', Number(social.socials_id)).in('queues_id', queueIds).order('queue_items_position');
+  const itemsResponse = await client.from('queue_items').select('*').eq('organizations_id', scope.organizationId).eq('socials_id', Number(social.socials_id)).in('queues_id', queueIds).order('queue_items_position');
   if (itemsResponse.error) throw new Error(itemsResponse.error.message);
   const items = (itemsResponse.data ?? []) as RecordValue[];
   const unique = (key: string) => Array.from(new Set(items.map((row) => Number(row[key])).filter(Number.isSafeInteger)));
@@ -179,7 +181,7 @@ async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, 
   if (!itemBeforeClaim.instagram_username) throw new Error('invalid_instagram_recipient_contract');
   const social = await socialForScope(client, scope);
   const response = await client.rpc('instagram_claim_queue_item', {
-    p_users_id: Number(scope.userId),
+    p_users_id: scope.legacyScopeUsersId,
     p_queue_item_id: Number(id),
     p_socials_id: Number(social.socials_id),
     p_consumer_id: consumerId || 'instagram-extension',
@@ -189,6 +191,7 @@ async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, 
     throw new Error(response.error.message);
   }
   const claimed = Array.isArray(response.data) ? response.data[0] : response.data;
+  await client.from('queue_items').update({dispatched_by_member_id:scope.memberId}).eq('organizations_id',scope.organizationId).eq('queue_items_id',Number(id)).is('dispatched_by_member_id',null);
   const item = (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
   return item ? { ...item, claim_token: text((claimed as RecordValue)?.claim_token), status: 'claimed' } : null;
 }
@@ -199,7 +202,7 @@ async function transition(client: SupabaseClient, scope: TokenScope, body: Recor
   const claimToken = text(body.claim_token);
   if (!claimToken) throw new Error('instagram_claim_token_required');
   const response = await client.rpc('instagram_update_queue_progress', {
-    p_users_id: Number(scope.userId),
+    p_users_id: scope.legacyScopeUsersId,
     p_queue_item_id: Number(id),
     p_claim_token: claimToken,
     p_step: step,
@@ -219,7 +222,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const action = text(body.action);
     const requestId = text(body.request_id);
     if (normalizeInstagramUsername(body.profile_username) !== scope.profile) throw new Error('profile_scope_mismatch');
-    const client = serviceClient();
+    const client = scope.client;
     const consumerId = text(body.consumer_id) || text(body.browser_id) || 'instagram-extension';
     if (action === 'queue') await client.rpc('instagram_recover_stale_items', { p_stale_before: new Date(Date.now() - 15 * 60 * 1000).toISOString() });
     if (action === 'queue') return send(req, res, 200, { ok: true, request_id: requestId, items: await loadItems(client, scope, text(body.scheduled_date)) });

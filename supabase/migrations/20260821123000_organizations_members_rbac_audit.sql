@@ -841,10 +841,10 @@ AS $$
     SELECT a.organizations_id FROM public.user_active_organizations a,actor
      WHERE a.users_id=actor.users_id
   )
-  SELECT o.organizations_id,o.organizations_name,
-         CASE WHEN m.organization_members_id IS NULL AND public.is_platform_owner() THEN 'platform_owner' ELSE m.access_level END,
-         m.organization_members_id,r.organization_roles_name,
-         EXISTS(SELECT 1 FROM active_ctx a WHERE a.organizations_id=o.organizations_id)
+  SELECT o.organizations_id::bigint,o.organizations_name::text,
+         (CASE WHEN m.organization_members_id IS NULL AND public.is_platform_owner() THEN 'platform_owner' ELSE m.access_level END)::text,
+         m.organization_members_id::bigint,r.organization_roles_name::text,
+         EXISTS(SELECT 1 FROM active_ctx a WHERE a.organizations_id=o.organizations_id)::boolean
     FROM public.organizations o
     LEFT JOIN public.organization_members m
       ON m.organizations_id=o.organizations_id AND m.users_id=(SELECT users_id FROM actor) AND m.status_id=1
@@ -1123,8 +1123,11 @@ BEGIN
     RAISE EXCEPTION 'permission_denied:members.view';
   END IF;
   RETURN QUERY
-  SELECT m.organization_members_id,u.users_id,coalesce(nullif(u.users_name,''),split_part(coalesce(au.email,''),'@',1)),au.email,
-         m.access_level,m.organization_roles_id,r.organization_roles_name,m.status_id,m.joined_at,m.deactivated_at
+  SELECT m.organization_members_id::bigint,u.users_id::bigint,
+         coalesce(nullif(u.users_name,''),split_part(coalesce(au.email,''),'@',1))::text,
+         coalesce(au.email,'')::text,
+         m.access_level::text,m.organization_roles_id::bigint,r.organization_roles_name::text,
+         m.status_id::bigint,m.joined_at::timestamptz,m.deactivated_at::timestamptz
     FROM public.organization_members m
     JOIN public.users u ON u.users_id=m.users_id
     LEFT JOIN auth.users au ON au.id=u.auth_user_id
@@ -1158,14 +1161,14 @@ BEGIN
     RAISE EXCEPTION 'permission_denied:roles.view';
   END IF;
   RETURN QUERY
-  SELECT r.organization_roles_id,r.organization_roles_name,r.organization_roles_key,r.organization_roles_description,
-         r.is_system_template,r.is_editable,r.status_id,
-         (SELECT count(*) FROM public.organization_members m WHERE m.organization_roles_id=r.organization_roles_id AND m.status_id=1),
+  SELECT r.organization_roles_id::bigint,r.organization_roles_name::text,r.organization_roles_key::text,r.organization_roles_description::text,
+         r.is_system_template::boolean,r.is_editable::boolean,r.status_id::bigint,
+         (SELECT count(*)::bigint FROM public.organization_members m WHERE m.organization_roles_id=r.organization_roles_id AND m.status_id=1),
          coalesce((SELECT array_agg(p.permissions_key ORDER BY p.permissions_key)
-                     FROM public.organization_role_permissions rp
-                     JOIN public.permissions p ON p.permissions_id=rp.permissions_id
-                    WHERE rp.organization_roles_id=r.organization_roles_id),ARRAY[]::text[]),
-         public.can_assign_organization_role(r.organization_roles_id)
+                      FROM public.organization_role_permissions rp
+                      JOIN public.permissions p ON p.permissions_id=rp.permissions_id
+                     WHERE rp.organization_roles_id=r.organization_roles_id),ARRAY[]::text[])::text[],
+         public.can_assign_organization_role(r.organization_roles_id)::boolean
     FROM public.organization_roles r
    WHERE r.organizations_id=public.current_organization_id()
    ORDER BY r.is_system_template DESC,lower(r.organization_roles_name);
@@ -1185,7 +1188,7 @@ BEGIN
   END IF;
 
   RETURN QUERY
-  SELECT p.permissions_key,p.permissions_name,p.permissions_category,p.permissions_description
+  SELECT p.permissions_key::text,p.permissions_name::text,p.permissions_category::text,p.permissions_description::text
     FROM public.permissions p
    WHERE p.permissions_sensitivity='delegable'
    ORDER BY p.permissions_category,p.permissions_name;
@@ -1374,9 +1377,10 @@ AS $$
 BEGIN
   IF NOT (public.has_organization_permission('members.view') OR public.current_access_level()='owner') THEN RAISE EXCEPTION 'permission_denied:members.view'; END IF;
   RETURN QUERY
-  SELECT i.organization_invitations_id,i.invite_email,i.access_level,i.organization_roles_id,r.organization_roles_name,
-         CASE WHEN i.invitation_status='pending' AND i.expires_at<=now() THEN 'expired' ELSE i.invitation_status END,
-         i.expires_at,i.organization_invitations_created_at
+  SELECT i.organization_invitations_id::uuid,i.invite_email::text,i.access_level::text,
+         i.organization_roles_id::bigint,r.organization_roles_name::text,
+         (CASE WHEN i.invitation_status='pending' AND i.expires_at<=now() THEN 'expired' ELSE i.invitation_status END)::text,
+         i.expires_at::timestamptz,i.organization_invitations_created_at::timestamptz
     FROM public.organization_invitations i
     LEFT JOIN public.organization_roles r ON r.organization_roles_id=i.organization_roles_id
    WHERE i.organizations_id=public.current_organization_id()
@@ -1773,11 +1777,12 @@ AS $$
 BEGIN
   IF NOT public.is_platform_owner() THEN RAISE EXCEPTION 'platform_owner_required'; END IF;
   RETURN QUERY
-  SELECT o.organizations_id,o.organizations_name,o.status_id,
-         owner_m.organization_members_id,
-         coalesce(nullif(owner_u.users_name,''),split_part(coalesce(owner_auth.email,''),'@',1)),owner_auth.email,
-         (SELECT count(*) FROM public.organization_members m WHERE m.organizations_id=o.organizations_id AND m.status_id=1),
-         o.organizations_created_at
+  SELECT o.organizations_id::bigint,o.organizations_name::text,o.status_id::bigint,
+         owner_m.organization_members_id::bigint,
+         coalesce(nullif(owner_u.users_name,''),split_part(coalesce(owner_auth.email,''),'@',1))::text,
+         coalesce(owner_auth.email,'')::text,
+         (SELECT count(*)::bigint FROM public.organization_members m WHERE m.organizations_id=o.organizations_id AND m.status_id=1),
+         o.organizations_created_at::timestamptz
     FROM public.organizations o
     LEFT JOIN public.organization_members owner_m ON owner_m.organizations_id=o.organizations_id AND owner_m.access_level='owner' AND owner_m.status_id=1
     LEFT JOIN public.users owner_u ON owner_u.users_id=owner_m.users_id

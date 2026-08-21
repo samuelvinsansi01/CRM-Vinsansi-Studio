@@ -732,15 +732,24 @@ $$;
 CREATE OR REPLACE FUNCTION public.get_user_operational_settings()
 RETURNS TABLE(dispatch_settings jsonb,import_settings jsonb,extension_runtime_config jsonb,operational_timezone text,operational_cutoff_hour smallint,settings_version integer,updated_at timestamptz)
 LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public AS $$
-DECLARE v_org bigint:=public.current_organization_id(); wa jsonb; ig jsonb; cap jsonb; wa_v bigint; ig_v bigint; cap_v bigint; newest timestamptz;
+DECLARE
+  v_org bigint:=public.current_organization_id();
+  wa jsonb; ig jsonb; cap jsonb;
+  wa_v bigint; ig_v bigint; cap_v bigint;
+  wa_at timestamptz; ig_at timestamptz; cap_at timestamptz;
 BEGIN
   PERFORM public.require_organization_permission('settings.view');
-  SELECT settings,settings_version,organization_tool_settings.updated_at INTO wa,wa_v,newest FROM public.organization_tool_settings WHERE organizations_id=v_org AND tool_id='vinsansi_whatsapp_manager';
-  SELECT settings,settings_version,greatest(newest,organization_tool_settings.updated_at) INTO ig,ig_v,newest FROM public.organization_tool_settings WHERE organizations_id=v_org AND tool_id='vinsansi_instagram';
-  SELECT settings,settings_version,greatest(newest,organization_tool_settings.updated_at) INTO cap,cap_v,newest FROM public.organization_tool_settings WHERE organizations_id=v_org AND tool_id='vinsansi_capture';
-  RETURN QUERY SELECT jsonb_build_object('whatsapp',wa->'whatsapp','instagram',ig->'instagram','chipLevels',wa->'chipLevels'),cap,
-    jsonb_build_object('version',1,'source','platform','generatedAt',clock_timestamp(),'instagram',jsonb_build_object('dispatch',ig->'instagram'),'whatsapp',jsonb_build_object('dispatch',wa->'whatsapp')),
-    coalesce(wa->>'operationalTimezone','America/Sao_Paulo'),coalesce((wa->>'operationalCutoffHour')::smallint,22::smallint),greatest(wa_v,ig_v,cap_v)::integer,newest;
+  SELECT ots.settings,ots.settings_version,ots.updated_at INTO wa,wa_v,wa_at FROM public.organization_tool_settings ots WHERE ots.organizations_id=v_org AND ots.tool_id='vinsansi_whatsapp_manager';
+  SELECT ots.settings,ots.settings_version,ots.updated_at INTO ig,ig_v,ig_at FROM public.organization_tool_settings ots WHERE ots.organizations_id=v_org AND ots.tool_id='vinsansi_instagram';
+  SELECT ots.settings,ots.settings_version,ots.updated_at INTO cap,cap_v,cap_at FROM public.organization_tool_settings ots WHERE ots.organizations_id=v_org AND ots.tool_id='vinsansi_capture';
+  RETURN QUERY SELECT
+    jsonb_build_object('whatsapp',wa->'whatsapp','instagram',ig->'instagram','chipLevels',wa->'chipLevels')::jsonb,
+    coalesce(cap,'{}'::jsonb)::jsonb,
+    jsonb_build_object('version',1,'source','platform','generatedAt',clock_timestamp(),'instagram',jsonb_build_object('dispatch',ig->'instagram'),'whatsapp',jsonb_build_object('dispatch',wa->'whatsapp'))::jsonb,
+    coalesce(nullif(wa->>'operationalTimezone',''),'America/Sao_Paulo')::text,
+    coalesce((wa->>'operationalCutoffHour')::smallint,22::smallint)::smallint,
+    greatest(coalesce(wa_v,0::bigint),coalesce(ig_v,0::bigint),coalesce(cap_v,0::bigint))::integer,
+    coalesce(nullif(greatest(coalesce(wa_at,'-infinity'::timestamptz),coalesce(ig_at,'-infinity'::timestamptz),coalesce(cap_at,'-infinity'::timestamptz)),'-infinity'::timestamptz),statement_timestamp())::timestamptz;
 END;
 $$;
 
@@ -785,6 +794,109 @@ DECLARE v bigint;
 BEGIN
   SELECT settings_version INTO v FROM public.organization_tool_settings WHERE organizations_id=public.current_organization_id() AND tool_id='vinsansi_capture';
   RETURN public.reset_organization_tool_settings('vinsansi_capture',v)->'settings';
+END;
+$$;
+
+-- Correcao retroativa dos contratos tabulares de Organizacoes da Etapa 2.
+-- PL/pgSQL exige correspondencia exata (inclusive varchar x text) no RETURN QUERY.
+CREATE OR REPLACE FUNCTION public.list_my_organizations()
+RETURNS TABLE(organizations_id bigint,organizations_name text,access_level text,organization_members_id bigint,role_name text,is_active_context boolean)
+LANGUAGE sql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public AS $$
+  WITH actor AS (SELECT public.current_actor_user_id() users_id),
+  active_ctx AS (
+    SELECT a.organizations_id FROM public.user_active_organizations a,actor
+     WHERE a.users_id=actor.users_id
+  )
+  SELECT o.organizations_id::bigint,o.organizations_name::text,
+         (CASE WHEN m.organization_members_id IS NULL AND public.is_platform_owner() THEN 'platform_owner' ELSE m.access_level END)::text,
+         m.organization_members_id::bigint,r.organization_roles_name::text,
+         EXISTS(SELECT 1 FROM active_ctx a WHERE a.organizations_id=o.organizations_id)::boolean
+    FROM public.organizations o
+    LEFT JOIN public.organization_members m
+      ON m.organizations_id=o.organizations_id AND m.users_id=(SELECT users_id FROM actor) AND m.status_id=1
+    LEFT JOIN public.organization_roles r ON r.organization_roles_id=m.organization_roles_id
+   WHERE o.status_id=1 AND (m.organization_members_id IS NOT NULL OR public.is_platform_owner())
+   ORDER BY o.organizations_name,o.organizations_id;
+$$;
+
+CREATE OR REPLACE FUNCTION public.list_organization_members_admin()
+RETURNS TABLE(member_id bigint,users_id bigint,name text,email text,access_level text,role_id bigint,role_name text,status_id bigint,joined_at timestamptz,deactivated_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public,auth AS $$
+BEGIN
+  IF NOT (public.has_organization_permission('members.view') OR public.current_access_level()='owner') THEN RAISE EXCEPTION 'permission_denied:members.view'; END IF;
+  RETURN QUERY
+  SELECT m.organization_members_id::bigint,u.users_id::bigint,
+         coalesce(nullif(u.users_name,''),split_part(coalesce(au.email,''),'@',1))::text,
+         coalesce(au.email,'')::text,m.access_level::text,m.organization_roles_id::bigint,
+         r.organization_roles_name::text,m.status_id::bigint,m.joined_at::timestamptz,m.deactivated_at::timestamptz
+    FROM public.organization_members m
+    JOIN public.users u ON u.users_id=m.users_id
+    LEFT JOIN auth.users au ON au.id=u.auth_user_id
+    LEFT JOIN public.organization_roles r ON r.organization_roles_id=m.organization_roles_id
+   WHERE m.organizations_id=public.current_organization_id()
+   ORDER BY CASE m.access_level WHEN 'owner' THEN 1 WHEN 'manager' THEN 2 ELSE 3 END,lower(coalesce(u.users_name,au.email,''));
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.list_organization_roles_admin()
+RETURNS TABLE(role_id bigint,name text,role_key text,description text,is_system_template boolean,is_editable boolean,status_id bigint,member_count bigint,permission_keys text[],can_assign boolean)
+LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public AS $$
+BEGIN
+  IF NOT (public.has_organization_permission('roles.view') OR public.current_access_level()='owner') THEN RAISE EXCEPTION 'permission_denied:roles.view'; END IF;
+  RETURN QUERY
+  SELECT r.organization_roles_id::bigint,r.organization_roles_name::text,r.organization_roles_key::text,r.organization_roles_description::text,
+         r.is_system_template::boolean,r.is_editable::boolean,r.status_id::bigint,
+         (SELECT count(*)::bigint FROM public.organization_members m WHERE m.organization_roles_id=r.organization_roles_id AND m.status_id=1),
+         coalesce((SELECT array_agg(p.permissions_key ORDER BY p.permissions_key) FROM public.organization_role_permissions rp JOIN public.permissions p ON p.permissions_id=rp.permissions_id WHERE rp.organization_roles_id=r.organization_roles_id),ARRAY[]::text[])::text[],
+         public.can_assign_organization_role(r.organization_roles_id)::boolean
+    FROM public.organization_roles r
+   WHERE r.organizations_id=public.current_organization_id()
+   ORDER BY r.is_system_template DESC,lower(r.organization_roles_name);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.list_delegable_permissions()
+RETURNS TABLE(permission_key text,name text,category text,description text)
+LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public AS $$
+BEGIN
+  IF NOT (public.has_organization_permission('roles.view') OR public.current_access_level()='owner') THEN RAISE EXCEPTION 'permission_denied:roles.view'; END IF;
+  RETURN QUERY SELECT p.permissions_key::text,p.permissions_name::text,p.permissions_category::text,p.permissions_description::text
+    FROM public.permissions p WHERE p.permissions_sensitivity='delegable' ORDER BY p.permissions_category,p.permissions_name;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.list_organization_invitations()
+RETURNS TABLE(invitation_id uuid,email text,access_level text,role_id bigint,role_name text,status text,expires_at timestamptz,created_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public AS $$
+BEGIN
+  IF NOT (public.has_organization_permission('members.view') OR public.current_access_level()='owner') THEN RAISE EXCEPTION 'permission_denied:members.view'; END IF;
+  RETURN QUERY
+  SELECT i.organization_invitations_id::uuid,i.invite_email::text,i.access_level::text,i.organization_roles_id::bigint,
+         r.organization_roles_name::text,(CASE WHEN i.invitation_status='pending' AND i.expires_at<=now() THEN 'expired' ELSE i.invitation_status END)::text,
+         i.expires_at::timestamptz,i.organization_invitations_created_at::timestamptz
+    FROM public.organization_invitations i
+    LEFT JOIN public.organization_roles r ON r.organization_roles_id=i.organization_roles_id
+   WHERE i.organizations_id=public.current_organization_id()
+   ORDER BY i.organization_invitations_created_at DESC;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.list_platform_organizations_admin()
+RETURNS TABLE(organization_id bigint,name text,status_id bigint,owner_member_id bigint,owner_name text,owner_email text,member_count bigint,created_at timestamptz)
+LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public,auth AS $$
+BEGIN
+  IF NOT public.is_platform_owner() THEN RAISE EXCEPTION 'platform_owner_required'; END IF;
+  RETURN QUERY
+  SELECT o.organizations_id::bigint,o.organizations_name::text,o.status_id::bigint,owner_m.organization_members_id::bigint,
+         coalesce(nullif(owner_u.users_name,''),split_part(coalesce(owner_auth.email,''),'@',1))::text,
+         coalesce(owner_auth.email,'')::text,
+         (SELECT count(*)::bigint FROM public.organization_members m WHERE m.organizations_id=o.organizations_id AND m.status_id=1),
+         o.organizations_created_at::timestamptz
+    FROM public.organizations o
+    LEFT JOIN public.organization_members owner_m ON owner_m.organizations_id=o.organizations_id AND owner_m.access_level='owner' AND owner_m.status_id=1
+    LEFT JOIN public.users owner_u ON owner_u.users_id=owner_m.users_id
+    LEFT JOIN auth.users owner_auth ON owner_auth.id=owner_u.auth_user_id
+   ORDER BY o.status_id,o.organizations_name,o.organizations_id;
 END;
 $$;
 

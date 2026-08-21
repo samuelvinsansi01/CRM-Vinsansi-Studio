@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../server/maps/shared.js';
-import { issueMapsExtensionToken, sha256, type MapsExtensionScope } from '../../server/maps/token.js';
+import { sha256, type MapsExtensionScope } from '../../server/maps/token.js';
 
-const EXTENSION_VERSION = '0.17.1';
+const EXTENSION_VERSION = '0.18.0';
 const DEFAULT_BRANCH_TARGET_WHATSAPP = 1000;
 const DEFAULT_BRANCH_TARGET_INSTAGRAM = 500;
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
@@ -397,18 +397,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     if (action === 'session_refresh') {
-      const issued = await issueMapsExtensionToken({ userId: usersId, installationId: scope.installationId, scopes: scope.token.scopes });
-      return send(req, res, 200, { ok: true, token: issued.token, expiresAt: new Date(issued.payload.exp * 1000).toISOString(), scopes: issued.payload.scopes });
+      return send(req, res, 200, { ok: true, refreshed: true, inactivityExpiresAt: new Date(Date.now()+30*86_400_000).toISOString(), scopes: scope.token.scopes });
     }
     if (action === 'session_revoke') {
-      await client.from('maps_extension_installations').update({ status: 'revoked', revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_extension_installations_id', scope.installationRowId);
-      const canonicalRevoke = await client.rpc('service_set_tool_installation_status', {
-        p_organizations_id: scope.organizationId,
-        p_tool_id: 'vinsansi_capture',
-        p_external_installation_id: scope.installationId,
-        p_status: 'revoked',
-      });
-      if (canonicalRevoke.error) throw new Error(`canonical_installation_revoke_failed:${canonicalRevoke.error.message}`);
+      await client.from('tool_user_sessions').update({revoked_at:new Date().toISOString(),logout_reason:'user_logout'}).eq('tool_user_sessions_id',scope.sessionId);
       return send(req, res, 200, { ok: true, revoked: true });
     }
     if (action === 'catalogs') {
@@ -496,6 +488,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         if (message.includes('MAPS_ACTIVE_EXECUTION_LIMIT')) throw new Error('MAPS_ACTIVE_EXECUTION_LIMIT');
         throw new Error(`maps_execution_create_failed:${message}`);
       }
+      const pinned=await client.from('maps_search_executions').update({initiated_by_member_id:scope.memberId,source_installation_id:scope.organizationToolInstallationId}).eq('organizations_id',scope.organizationId).eq('maps_search_executions_id',executionId);
+      if(pinned.error)throw new Error(`maps_execution_pin_failed:${pinned.error.message}`);
       const execution = { ...(inserted.data as Row), branch_name: branch.branches_name };
       const next = await nextCoverage(client, execution);
       const activeCount = await activeExecutionCount(client, usersId);

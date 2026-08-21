@@ -22,6 +22,18 @@ SELECT public.stage3_assert((SELECT settings->>'minRating'='4.5' FROM public.org
 SELECT public.stage3_assert((SELECT organization_tool_installations_id IS NOT NULL FROM public.maps_extension_installations WHERE installation_id='gmaps-smoke-installation-0001'),'maps_canonical_link');
 SELECT public.stage3_assert((SELECT metadata->>'legacyBridge'='maps_extension_installations' FROM public.organization_tool_installations WHERE external_installation_id='gmaps-smoke-installation-0001'),'maps_bridge_metadata');
 
+-- Executa todos os RETURNS TABLE de Organizacoes da Etapa 2 contra auth.users.email varchar(255).
+-- Qualquer diferenca de quantidade, ordem ou tipo falha aqui com SQLSTATE 42804.
+SELECT public.stage3_assert((SELECT count(*)=1 AND min(owner_email)='drew@example.com' FROM public.list_platform_organizations_admin()),'platform_organizations_return_contract');
+SELECT public.stage3_assert((SELECT count(*)=1 AND min(email)='drew@example.com' FROM public.list_organization_members_admin()),'organization_members_return_contract');
+SELECT public.stage3_assert((SELECT count(*)=1 FROM public.list_my_organizations()),'my_organizations_return_contract');
+SELECT public.stage3_assert((SELECT count(*)=1 FROM public.list_organization_roles_admin()),'organization_roles_return_contract');
+SELECT public.stage3_assert((SELECT count(*)=1 FROM public.list_delegable_permissions()),'delegable_permissions_return_contract');
+SELECT public.stage3_assert((SELECT count(*)=1 FROM public.list_organization_invitations()),'organization_invitations_return_contract');
+
+-- get_user_operational_settings e o unico RETURNS TABLE novo da Etapa 3.
+SELECT public.stage3_assert((SELECT count(*)=1 AND bool_and(dispatch_settings IS NOT NULL AND import_settings IS NOT NULL AND extension_runtime_config IS NOT NULL AND operational_timezone IS NOT NULL AND operational_cutoff_hour IS NOT NULL AND settings_version IS NOT NULL AND updated_at IS NOT NULL) FROM public.get_user_operational_settings()),'stage3_settings_return_contract_and_nullability');
+
 SELECT public.stage3_assert((SELECT relrowsecurity FROM pg_class WHERE oid='public.platform_tools'::regclass),'platform_tools_rls');
 SELECT public.stage3_assert((SELECT relrowsecurity FROM pg_class WHERE oid='public.organization_tools'::regclass),'organization_tools_rls');
 SELECT public.stage3_assert((SELECT relrowsecurity FROM pg_class WHERE oid='public.organization_tool_installations'::regclass),'installations_rls');
@@ -34,8 +46,8 @@ SELECT public.stage3_assert(NOT has_table_privilege('authenticated','public.orga
 SELECT public.stage3_assert(NOT has_table_privilege('authenticated','public.organization_tool_entitlements','UPDATE'),'entitlement_no_organization_write');
 
 INSERT INTO public.users VALUES(3,'Outra Scope',NULL,true),(4,'Outro Dono',gen_random_uuid(),false);
-INSERT INTO public.organizations VALUES(11,'Outra Organização',3,1);
-INSERT INTO public.organization_members VALUES(101,11,4,'owner',1);
+INSERT INTO public.organizations(organizations_id,organizations_name,legacy_scope_users_id,status_id) VALUES(11,'Outra Organização',3,1);
+INSERT INTO public.organization_members(organization_members_id,organizations_id,users_id,access_level,status_id) VALUES(101,11,4,'owner',1);
 INSERT INTO public.organization_tools(organizations_id,tool_id,enabled) VALUES(11,'vinsansi_capture',true);
 INSERT INTO public.organization_tool_settings(organizations_id,tool_id,settings,settings_schema_version)
 SELECT 11,tool_id,default_settings,settings_schema_version FROM public.platform_tools WHERE tool_id='vinsansi_capture';

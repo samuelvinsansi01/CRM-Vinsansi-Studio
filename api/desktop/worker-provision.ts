@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { exchangePairing, startPairing } from '../../server/tools/executor.js';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void };
@@ -37,10 +37,6 @@ function send(res: ApiResponse, status: number, payload: unknown) {
   res.setHeader('Pragma', 'no-cache');
   return res.status(status).json(payload);
 }
-function allowedEmails() {
-  return new Set(envAny('DESKTOP_WORKER_PROVISIONING_ALLOWED_EMAILS')
-    .split(',').map((value) => value.trim().toLowerCase()).filter(Boolean));
-}
 async function importRsaPublicKey(pem: string) {
   const base64 = pem.replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s+/g, '');
   const binary = atob(base64);
@@ -67,25 +63,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const token = bearer(req);
     const supabaseUrl = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
-    const publicKey = envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY');
-    const serviceRoleKey = envAny('SUPABASE_SERVICE_ROLE_KEY');
     const cloudflareTunnelToken = envAny('DESKTOP_CLOUDFLARE_TUNNEL_TOKEN');
     if (!token) return send(res, 401, { ok: false, error: 'auth_required' });
-    if (!supabaseUrl || !publicKey || !serviceRoleKey || !cloudflareTunnelToken) {
+    if (!supabaseUrl || !envAny('SUPABASE_SERVICE_ROLE_KEY') || !cloudflareTunnelToken) {
       return send(res, 503, { ok: false, error: 'worker_provisioning_backend_not_configured' });
     }
-
-    const authClient = createClient(supabaseUrl, publicKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const auth = await authClient.auth.getUser(token);
-    if (auth.error || !auth.data.user) return send(res, 401, { ok: false, error: 'auth_invalid' });
-
-    const email = String(auth.data.user.email ?? '').trim().toLowerCase();
-    const allowed = allowedEmails();
-    if (!email || !allowed.size || !allowed.has(email)) return send(res, 403, { ok: false, error: 'worker_provisioning_not_authorized' });
-
-    const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const owner = await admin.from('users').select('users_id').eq('auth_user_id', auth.data.user.id).maybeSingle();
-    if (owner.error || !owner.data?.users_id) return send(res, 403, { ok: false, error: 'public_user_not_found' });
 
     const body = bodyRecord(req.body);
     const action = String(body.action ?? 'provision').trim().toLowerCase();
@@ -99,8 +81,20 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     try { key = await importRsaPublicKey(pem); }
     catch { return send(res, 400, { ok: false, error: 'worker_provisioning_public_key_invalid' }); }
 
-    const [encryptedServiceRoleKey, encryptedCloudflareTunnelToken] = await Promise.all([
-      encryptValue(key, serviceRoleKey),
+    const organizationId = Number(body.organization_id);
+    const externalInstallationId = String(body.external_installation_id ?? '').trim();
+    if (!Number.isSafeInteger(organizationId) || organizationId <= 0 || !externalInstallationId) {
+      return send(res, 400, { ok: false, error: 'worker_provisioning_context_invalid' });
+    }
+    const pairing = await startPairing(req, {
+      toolId: 'vinsansi_whatsapp_manager', organizationId, externalInstallationId,
+      version: String(body.app_version ?? '1.1.0'),
+      capabilities: ['organization.context','member.context','settings.read','presence.heartbeat','activity.report','whatsapp.instances.manage','whatsapp.queue.execute'],
+    });
+    const exchanged = await exchangePairing({ pairingCode: pairing.pairingCode });
+    const [encryptedInstallationCredential, encryptedUserSession, encryptedCloudflareTunnelToken] = await Promise.all([
+      encryptValue(key, exchanged.installationCredential),
+      encryptValue(key, exchanged.userSession),
       encryptValue(key, cloudflareTunnelToken),
     ]);
 
@@ -117,8 +111,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       cloudflareTunnelImage: envAny('DESKTOP_CLOUDFLARE_IMAGE') || DEFAULT_CLOUDFLARE_IMAGE,
       cloudflareTunnelContainerName: envAny('DESKTOP_CLOUDFLARE_CONTAINER_NAME') || DEFAULT_CLOUDFLARE_CONTAINER,
       dockerNetworkName: envAny('DESKTOP_DOCKER_NETWORK_NAME') || DEFAULT_DOCKER_NETWORK,
-      evolutionOperatorEmail: email,
-      encryptedServiceRoleKey,
+      organizationId,
+      encryptedInstallationCredential,
+      encryptedUserSession,
       encryptedCloudflareTunnelToken,
     });
   } catch {

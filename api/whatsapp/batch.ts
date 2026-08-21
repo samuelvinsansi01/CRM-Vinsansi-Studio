@@ -4,7 +4,7 @@ import { organizationScopedAuthHeaders, resolveOrganizationContext } from '../..
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void };
 type RecordValue = Record<string, unknown>;
-type AuthContext = { client: SupabaseClient; publicUserId: number };
+type AuthContext = { client: SupabaseClient; publicUserId: number; organizationId:number };
 declare const process: { env: Record<string, string | undefined> };
 
 function envAny(...names: string[]) { for (const name of names) { const value = process.env[name]; if (String(value ?? '').trim()) return String(value).trim(); } return ''; }
@@ -26,11 +26,11 @@ async function authenticate(req: ApiRequest): Promise<AuthContext> {
   const organization = await resolveOrganizationContext(client);
   const allowed = await client.rpc('has_organization_permission', { p_permission_key: 'queues.control' });
   if (allowed.error || allowed.data !== true) throw new Error('queue_control_permission_denied');
-  return { client, publicUserId: organization.scopeUsersId };
+  return { client, publicUserId: organization.scopeUsersId,organizationId:organization.organizationId };
 }
 
 async function ownedItems(auth: AuthContext, ids: number[]) {
-  const response = await auth.client.from('queue_items').select('queue_items_id,chips_id').eq('users_id', auth.publicUserId).in('queue_items_id', ids);
+  const response = await auth.client.from('queue_items').select('queue_items_id,chips_id').eq('organizations_id',auth.organizationId).in('queue_items_id', ids);
   if (response.error) throw new Error(`queue_authorization_check_failed:${response.error.message}`);
   const rows = (response.data ?? []) as RecordValue[];
   if (rows.length !== ids.length) throw new Error('queue_item_not_available_for_current_user');
@@ -40,23 +40,23 @@ async function ownedItems(auth: AuthContext, ids: number[]) {
 async function chipInstance(auth: AuthContext, items: RecordValue[], provided: string) {
   const chipIds = Array.from(new Set(items.map((row) => Number(row.chips_id)).filter(Number.isSafeInteger)));
   if (chipIds.length !== 1) throw new Error('batch_multiple_chips_not_supported');
-  const chip = await auth.client.from('chips').select('chips_id,instances_id').eq('users_id', auth.publicUserId).eq('chips_id', chipIds[0]).single();
+  const chip = await auth.client.from('chips').select('chips_id,instances_id').eq('organizations_id',auth.organizationId).eq('chips_id', chipIds[0]).single();
   if (chip.error) throw new Error(`chip_not_found:${chip.error.message}`);
-  const instance = await auth.client.from('instances').select('instances_name').eq('users_id', auth.publicUserId).eq('instances_id', Number((chip.data as RecordValue).instances_id)).single();
+  const instance = await auth.client.from('instances').select('instances_name').eq('organizations_id',auth.organizationId).eq('instances_id', Number((chip.data as RecordValue).instances_id)).single();
   if (instance.error) throw new Error(`instance_not_found:${instance.error.message}`);
   const name = String((instance.data as RecordValue).instances_name ?? '');
   if (provided && provided !== name) throw new Error('batch_chip_mismatch');
   return name;
 }
 
-async function callWorker(action: string, userId: number, ids: number[], chip: string) {
+async function callWorker(action: string, ids: number[], chip: string) {
   const base = envAny('WHATSAPP_WORKER_BATCH_URL') || `${envAny('WHATSAPP_VALIDATION_WORKER_URL').replace(/\/$/, '')}/batch/whatsapp`;
   const token = envAny('WHATSAPP_WORKER_BATCH_TOKEN', 'WHATSAPP_VALIDATION_WORKER_TOKEN');
   if (!base || base === '/batch/whatsapp') throw new Error('worker_batch_backend_not_configured');
   if (!token) throw new Error('worker_batch_token_not_configured');
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch(`${base.replace(/\/$/, '')}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Worker-Token': token }, body: JSON.stringify({ user_id: userId, queue_item_ids: ids, chip_instance: chip }), signal: controller.signal });
+    const response = await fetch(`${base.replace(/\/$/, '')}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Worker-Token': token }, body: JSON.stringify({ queue_item_ids: ids, chip_instance: chip }), signal: controller.signal });
     const payload = await response.json().catch(() => null);
     if (!response.ok || payload?.ok === false) throw new Error(String(payload?.message ?? payload?.error ?? `worker_http_${response.status}`));
     return payload;
@@ -77,7 +77,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const items = await ownedItems(auth, ids);
       chip = await chipInstance(auth, items, chip);
     } else if (!chip) return send(res, 400, { ok: false, error: 'batch_chip_required' });
-    return send(res, action === 'start' ? 202 : 200, await callWorker(action, auth.publicUserId, ids, chip));
+    return send(res, action === 'start' ? 202 : 200, await callWorker(action, ids, chip));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'worker_batch_proxy_error';
     const status = message.includes('auth_') ? 401 : message.includes('not_available') ? 403 : message.includes('required') || message.includes('mismatch') || message.includes('multiple') ? 400 : 502;

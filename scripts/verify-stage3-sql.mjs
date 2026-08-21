@@ -26,16 +26,19 @@ function apply(file) {
 try {
   checked(['run', '--rm', '--name', container, '-e', 'POSTGRES_PASSWORD=stage3', '-e', 'POSTGRES_DB=vinsansi', '-d', 'postgres:15-alpine']);
   let ready = false;
+  let consecutiveReady = 0;
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const probe = run(['exec', container, 'pg_isready', '-U', 'postgres', '-d', 'vinsansi']);
-    if (probe.status === 0) { ready = true; break; }
+    consecutiveReady = probe.status === 0 ? consecutiveReady + 1 : 0;
+    if (consecutiveReady >= 3) { ready = true; break; }
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
   }
   if (!ready) throw new Error('PostgreSQL de smoke test não ficou pronto.');
   apply('scripts/sql/stage3-smoke-base.sql');
   apply('supabase/migrations/20260821190000_tools_control_plane.sql');
+  apply('PATCH-CORRETIVO-v1.2.0-RPC-RETURNS-TABLE.sql');
   apply('scripts/sql/stage3-smoke-assertions.sql');
-  console.log('Etapa 3 SQL: migration aplicada e contratos funcionais aprovados no PostgreSQL 15.');
+  console.log('Etapas 2/3 SQL: migration, patch idempotente e contratos RETURNS TABLE aprovados no PostgreSQL 15.');
 } finally {
   run(['stop', container]);
 }

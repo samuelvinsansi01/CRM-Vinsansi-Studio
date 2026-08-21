@@ -1,6 +1,10 @@
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT '00000000-0000-0000-0000-000000000001'::uuid $$;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'service_role'::text $$;
+CREATE TABLE auth.users (
+  id uuid PRIMARY KEY,
+  email character varying(255)
+);
 
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
@@ -16,6 +20,17 @@ CREATE TABLE public.organizations (
   organizations_id bigint PRIMARY KEY,
   organizations_name text,
   legacy_scope_users_id bigint NOT NULL REFERENCES public.users(users_id),
+  status_id integer NOT NULL DEFAULT 1,
+  organizations_created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.organization_roles (
+  organization_roles_id bigint PRIMARY KEY,
+  organizations_id bigint NOT NULL REFERENCES public.organizations(organizations_id),
+  organization_roles_name text NOT NULL,
+  organization_roles_key text NOT NULL,
+  organization_roles_description text,
+  is_system_template boolean NOT NULL DEFAULT false,
+  is_editable boolean NOT NULL DEFAULT true,
   status_id integer NOT NULL DEFAULT 1
 );
 CREATE TABLE public.organization_members (
@@ -23,12 +38,47 @@ CREATE TABLE public.organization_members (
   organizations_id bigint NOT NULL REFERENCES public.organizations(organizations_id),
   users_id bigint NOT NULL REFERENCES public.users(users_id),
   access_level text NOT NULL,
-  status_id integer NOT NULL DEFAULT 1
+  organization_roles_id bigint REFERENCES public.organization_roles(organization_roles_id),
+  status_id integer NOT NULL DEFAULT 1,
+  joined_at timestamptz NOT NULL DEFAULT now(),
+  deactivated_at timestamptz
+);
+CREATE TABLE public.permissions (
+  permissions_id bigint PRIMARY KEY,
+  permissions_key text NOT NULL,
+  permissions_name text NOT NULL,
+  permissions_category text NOT NULL,
+  permissions_description text,
+  permissions_sensitivity text NOT NULL
+);
+CREATE TABLE public.organization_role_permissions (
+  organization_roles_id bigint NOT NULL REFERENCES public.organization_roles(organization_roles_id),
+  permissions_id bigint NOT NULL REFERENCES public.permissions(permissions_id)
+);
+CREATE TABLE public.organization_invitations (
+  organization_invitations_id uuid PRIMARY KEY,
+  organizations_id bigint NOT NULL REFERENCES public.organizations(organizations_id),
+  invite_email text NOT NULL,
+  access_level text NOT NULL,
+  organization_roles_id bigint REFERENCES public.organization_roles(organization_roles_id),
+  invitation_status text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  organization_invitations_created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE public.user_active_organizations (
+  users_id bigint PRIMARY KEY REFERENCES public.users(users_id),
+  organizations_id bigint NOT NULL REFERENCES public.organizations(organizations_id)
 );
 
 INSERT INTO public.users VALUES(1,'Vinsansi Scope',NULL,true),(2,'Drew','00000000-0000-0000-0000-000000000001',false);
-INSERT INTO public.organizations VALUES(10,'Vinsansi Studio',1,1);
-INSERT INTO public.organization_members VALUES(100,10,2,'owner',1);
+INSERT INTO auth.users VALUES('00000000-0000-0000-0000-000000000001','drew@example.com');
+INSERT INTO public.organizations(organizations_id,organizations_name,legacy_scope_users_id,status_id) VALUES(10,'Vinsansi Studio',1,1);
+INSERT INTO public.organization_roles VALUES(1000,10,'Proprietário','owner','Controle total',true,false,1);
+INSERT INTO public.organization_members(organization_members_id,organizations_id,users_id,access_level,organization_roles_id,status_id) VALUES(100,10,2,'owner',1000,1);
+INSERT INTO public.permissions VALUES(2000,'members.view','Ver membros','Organização','Lista membros','delegable');
+INSERT INTO public.organization_role_permissions VALUES(1000,2000);
+INSERT INTO public.organization_invitations VALUES('20000000-0000-0000-0000-000000000001',10,'invite@example.com','member',1000,'pending',now()+interval '1 day',now());
+INSERT INTO public.user_active_organizations VALUES(2,10);
 
 CREATE TABLE public.user_operational_settings (
   user_operational_settings_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -83,10 +133,11 @@ CREATE FUNCTION public.is_platform_owner(p_users_id bigint DEFAULT NULL) RETURNS
 CREATE FUNCTION public.current_organization_id() RETURNS bigint LANGUAGE sql STABLE AS $$ SELECT 10::bigint $$;
 CREATE FUNCTION public.current_organization_member_id() RETURNS bigint LANGUAGE sql STABLE AS $$ SELECT 100::bigint $$;
 CREATE FUNCTION public.has_organization_permission(p_permission_key text) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT true $$;
+CREATE FUNCTION public.current_access_level() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'owner'::text $$;
+CREATE FUNCTION public.can_assign_organization_role(p_role_id bigint) RETURNS boolean LANGUAGE sql STABLE AS $$ SELECT p_role_id IS NOT NULL $$;
 CREATE FUNCTION public.require_organization_permission(p_permission_key text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF p_permission_key IS NULL THEN RAISE EXCEPTION 'permission_required'; END IF; END $$;
 CREATE FUNCTION public.append_audit_event(
   p_source text,p_action text,p_entity_type text,p_entity_id text DEFAULT NULL,p_lead_id bigint DEFAULT NULL,
   p_queue_item_id bigint DEFAULT NULL,p_channel_id bigint DEFAULT NULL,p_previous_status_id bigint DEFAULT NULL,
   p_target_status_id bigint DEFAULT NULL,p_message text DEFAULT NULL,p_metadata jsonb DEFAULT '{}'::jsonb,p_users_id bigint DEFAULT NULL
 ) RETURNS bigint LANGUAGE sql AS $$ SELECT 1::bigint $$;
-

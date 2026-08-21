@@ -11,15 +11,45 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 const includes = (source, value, message = value) => expect(source.includes(value), message);
 
 const pkg = JSON.parse(read('package.json'));
-expect(pkg.version === '1.2.0', `package.version esperado 1.2.0; recebido ${pkg.version}`);
+expect(['1.2.0','1.3.0'].includes(pkg.version), `package.version esperado 1.2.0+; recebido ${pkg.version}`);
 expect(exists('APLICAR-NO-SUPABASE-v1.2.0.sql'), 'SQL consolidado v1.2.0 ausente.');
 expect(exists('PASSO-A-PASSO-v1.2.0.md'), 'Passo a passo v1.2.0 ausente.');
 expect(exists('CHANGELOG-v1.2.0.md'), 'Changelog v1.2.0 ausente.');
+expect(exists('PATCH-CORRETIVO-v1.2.0-RPC-RETURNS-TABLE.sql'), 'Patch corretivo dos RPCs tabulares ausente.');
 
 const migrationPath = 'supabase/migrations/20260821190000_tools_control_plane.sql';
 const migration = read(migrationPath);
 const consolidated = read('APLICAR-NO-SUPABASE-v1.2.0.sql');
 expect(migration === consolidated, 'SQL consolidado diverge da migration versionada da Etapa 3.');
+
+const stage2 = read('supabase/migrations/20260821123000_organizations_members_rbac_audit.sql');
+const correctivePatch = read('PATCH-CORRETIVO-v1.2.0-RPC-RETURNS-TABLE.sql');
+const stage3Native = migration.split('-- Correcao retroativa dos contratos tabulares de Organizacoes da Etapa 2.')[0];
+expect((stage3Native.match(/RETURNS TABLE\s*\(/g) ?? []).length === 1, 'Etapa 3 deve possuir exatamente um RPC tabular nativo.');
+expect(!/RETURN QUERY\s+SELECT\s+\*/i.test(stage3Native), 'RPC tabular da Etapa 3 usa SELECT * e pode divergir silenciosamente.');
+for (const rpc of [
+  'list_organization_tools','get_organization_tool_details','get_organization_tool_settings',
+  'save_organization_tool_settings','reset_organization_tool_settings','set_organization_tool_enabled',
+  'set_tool_installation_status','get_effective_tool_config','update_platform_tool_catalog',
+  'set_organization_tool_entitlements','service_register_tool_installation',
+  'service_touch_tool_installation','service_set_tool_installation_status',
+  'get_user_operational_settings','save_dispatch_settings','reset_dispatch_settings',
+  'save_import_settings','reset_import_settings','service_get_operational_settings',
+]) includes(migration, `FUNCTION public.${rpc}`, `RPC novo da Etapa 3 ausente da auditoria: ${rpc}`);
+
+for (const rpc of [
+  'list_my_organizations','list_organization_members_admin','list_organization_roles_admin',
+  'list_delegable_permissions','list_organization_invitations','list_platform_organizations_admin',
+]) {
+  includes(stage2, `FUNCTION public.${rpc}`, `RPC tabular de Organizacoes da Etapa 2 ausente: ${rpc}`);
+  includes(migration, `FUNCTION public.${rpc}`, `Correcao retroativa ausente do consolidado v1.2.0: ${rpc}`);
+}
+for (const sql of [stage2,migration,correctivePatch]) {
+  expect(!sql.includes("'@',1)),owner_auth.email,") && !sql.includes("'@',1)),au.email,"), 'Email varchar do Supabase Auth retornado sem cast para text.');
+}
+includes(correctivePatch, "coalesce(owner_auth.email,'')::text", 'Patch não corrige owner_email varchar para text.');
+includes(correctivePatch, "coalesce(au.email,'')::text", 'Patch não corrige email de membro varchar para text.');
+includes(stage3Native, "coalesce(cap,'{}'::jsonb)::jsonb", 'RPC tabular da Etapa 3 não protege import_settings nulo.');
 
 for (const contract of [
   'CREATE TABLE IF NOT EXISTS public.platform_tools',
@@ -82,7 +112,7 @@ includes(mapsPair, 'organization_tool_installations_id', 'Pairing Maps não grav
 includes(mapsShared, 'service_touch_tool_installation', 'Maps não toca o registro canônico atual.');
 
 const worker = read('../Gerenciador/resources/worker/src/worker.js');
-includes(worker, 'service_get_operational_settings', 'Bridge comprovado do Worker embarcado foi quebrado.');
+expect(worker.includes('service_get_operational_settings')||worker.includes('executor_effective_operational_settings'),'Bridge/configuração efetiva do Worker embarcado foi quebrada.');
 expect(!exists('public/tools/worker-latest.zip'), 'Worker standalone voltou ao pacote.');
 expect(!exists('supabase/functions/apify-account-check') && !exists('supabase/functions/apify-google-maps-start') && !exists('supabase/functions/apify-google-maps-sync'), 'Apify voltou ao release.');
 

@@ -1,49 +1,22 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { issueInstagramExtensionToken, normalizeInstagramProfile } from '../../server/instagram/token.js';
-import { organizationScopedAuthHeaders, resolveOrganizationContext } from '../../server/organization/context.js';
+import type { ApiRequest,ApiResponse } from '../../server/maps/shared.js';
+import { body,send,serviceClient } from '../../server/maps/shared.js';
+import { exchangePairing,executorStatus,numericId,startPairing } from '../../server/tools/executor.js';
+import { normalizeInstagramProfile } from '../../server/instagram/token.js';
 
-type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
-type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void };
-type RecordValue = Record<string, unknown>;
-declare const process: { env: Record<string, string | undefined> };
-
-function envAny(...names: string[]) { for (const name of names) { const value = process.env[name]; if (String(value ?? '').trim()) return String(value).trim(); } return ''; }
-function bodyRecord(body: unknown): RecordValue { if (typeof body === 'string') { try { return JSON.parse(body) as RecordValue; } catch { return {}; } } return body && typeof body === 'object' && !Array.isArray(body) ? body as RecordValue : {}; }
-function header(req: ApiRequest, name: string) { const key = Object.keys(req.headers ?? {}).find((item) => item.toLowerCase() === name.toLowerCase()); const value = key ? req.headers?.[key] : undefined; return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? ''); }
-function bearer(req: ApiRequest) { return header(req, 'authorization').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? ''; }
-function send(res: ApiResponse, status: number, payload: unknown) { res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); return res.status(status).json(payload); }
-
-async function authenticate(req: ApiRequest): Promise<{ client: SupabaseClient; publicUserId: number }> {
-  const token = bearer(req);
-  const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const key = envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY');
-  if (!token) throw new Error('auth_required');
-  if (!url || !key) throw new Error('supabase_auth_backend_not_configured');
-  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: organizationScopedAuthHeaders(token, req.headers) } });
-  const auth = await client.auth.getUser(token);
-  if (auth.error || !auth.data.user) throw new Error('auth_invalid');
-  const organization = await resolveOrganizationContext(client);
-  const allowed = await client.rpc('has_organization_permission', { p_permission_key: 'instagram.use' });
-  if (allowed.error || allowed.data !== true) throw new Error('instagram_permission_denied');
-  return { client, publicUserId: organization.scopeUsersId };
-}
-
-export default async function handler(req: ApiRequest, res: ApiResponse) {
-  if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method_not_allowed' });
-  try {
-    const auth = await authenticate(req);
-    const body = bodyRecord(req.body);
-    const profile = normalizeInstagramProfile(body.profile_username ?? body.profile);
-    if (!profile) return send(res, 400, { ok: false, error: 'instagram_profile_required' });
-    const profiles = await auth.client.from('socials').select('socials_id,socials_username').eq('users_id', auth.publicUserId);
-    if (profiles.error) throw new Error(`instagram_profile_authorization_failed:${profiles.error.message}`);
-    const available = ((profiles.data ?? []) as Array<{ socials_username?: unknown }>).some((row) => normalizeInstagramProfile(row.socials_username) === profile);
-    if (!available) return send(res, 403, { ok: false, error: 'instagram_profile_not_available_for_current_user' });
-    const issued = await issueInstagramExtensionToken({ userId: String(auth.publicUserId), profile });
-    return send(res, 200, { ok: true, token: issued.token, profile_username: issued.payload.profile, expires_at: new Date(issued.payload.exp * 1000).toISOString() });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'instagram_pairing_error';
-    const status = ['auth_required', 'auth_invalid'].includes(message) ? 401 : message.includes('not_available') ? 403 : message.includes('not_configured') ? 503 : 500;
-    return send(res, status, { ok: false, error: message, message });
-  }
+export default async function handler(req:ApiRequest,res:ApiResponse){
+  if(req.method!=='POST')return send(req,res,405,{ok:false,error:'method_not_allowed'});
+  try{
+    const input=body(req);const profile=normalizeInstagramProfile(input.profile_username??input.profile);
+    if(!profile)throw new Error('instagram_profile_required');
+    const organizationId=numericId(input.organizationId??Object.entries(req.headers??{}).find(([k])=>k.toLowerCase()==='x-vinsansi-organization-id')?.[1]);
+    const externalInstallationId=String(input.externalInstallationId??input.installation_id??`instagram-${crypto.randomUUID()}`).trim();
+    const pairing=await startPairing(req,{toolId:'vinsansi_instagram',organizationId,externalInstallationId,version:input.version??'1.7.0',capabilities:['organization.context','member.context','settings.read','presence.heartbeat','activity.report','instagram.queue.execute','instagram.dm.send','instagram.media.send','instagram.result.report']});
+    const admin=serviceClient();const profiles=await admin.from('socials').select('socials_id,socials_username').eq('organizations_id',organizationId);
+    if(profiles.error)throw new Error(`instagram_profile_authorization_failed:${profiles.error.message}`);
+    if(!(profiles.data??[]).some((row)=>normalizeInstagramProfile(row.socials_username)===profile)){await admin.from('tool_executor_pairings').update({revoked_at:new Date().toISOString()}).eq('tool_executor_pairings_id',pairing.pairingId);throw new Error('instagram_profile_not_available_for_organization');}
+    const issued=await exchangePairing({pairingCode:pairing.pairingCode});
+    await admin.from('organization_tool_installations').update({metadata:{instagramProfile:profile,pairing:'stage4'}}).eq('organizations_id',organizationId).eq('tool_id','vinsansi_instagram').eq('external_installation_id',externalInstallationId);
+    const bundle=JSON.stringify({version:1,userSession:issued.userSession,installationCredential:issued.installationCredential,organizationId:issued.organizationId,memberId:issued.memberId,externalInstallationId,profile});
+    return send(req,res,200,{ok:true,token:bundle,user_session:issued.userSession,installation_credential:issued.installationCredential,organization_id:issued.organizationId,member_id:issued.memberId,profile_username:profile});
+  }catch(error){const message=error instanceof Error?error.message:String(error);return send(req,res,executorStatus(error),{ok:false,error:message,message});}
 }

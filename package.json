@@ -1,14 +1,15 @@
 {
   "name": "gease-visual-shell",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "node scripts/verify-release-v1.1.0.mjs && node scripts/verify-stage3.mjs && node scripts/verify-syntax.mjs",
-    "verify:stage3:sql": "node scripts/verify-stage3-sql.mjs"
+    "verify:release": "node scripts/verify-release-v1.1.0.mjs && node scripts/verify-stage3.mjs && node scripts/verify-stage4.mjs && node scripts/verify-syntax.mjs",
+    "verify:stage3:sql": "node scripts/verify-stage3-sql.mjs",
+    "verify:stage4:sql": "node scripts/verify-stage4-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

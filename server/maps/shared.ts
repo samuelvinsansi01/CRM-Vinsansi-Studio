@@ -1,6 +1,6 @@
 // Server-only Maps infrastructure shared by the two public route entrypoints.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { verifyMapsExtensionToken, type MapsExtensionScope } from './token.js';
+import { sha256, type MapsExtensionScope } from './token.js';
 import { ORGANIZATION_HEADER, organizationScopedAuthHeaders, resolveOrganizationContext } from '../organization/context.js';
 
 export type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
@@ -13,7 +13,7 @@ export function body(req: ApiRequest): Row { if (typeof req.body === 'string') {
 export function header(req: ApiRequest, name: string) { const key = Object.keys(req.headers ?? {}).find((item) => item.toLowerCase() === name.toLowerCase()); const value = key ? req.headers?.[key] : undefined; return Array.isArray(value) ? text(value[0]) : text(value); }
 export function bearer(req: ApiRequest) { return header(req, 'authorization').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? ''; }
 export function serviceClient() { const url = text(process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL); const key = text(process.env.SUPABASE_SERVICE_ROLE_KEY); if (!url || !key) throw new Error('maps_backend_not_configured'); return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }); }
-export function setCors(req: ApiRequest, res: ApiResponse) { const origin = header(req, 'origin'); if (/^chrome-extension:\/\/[a-p]{32}$/i.test(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); } res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); res.setHeader('Access-Control-Allow-Headers', `Content-Type, Authorization, ${ORGANIZATION_HEADER}`); res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); }
+export function setCors(req: ApiRequest, res: ApiResponse) { const origin = header(req, 'origin'); if (/^chrome-extension:\/\/[a-p]{32}$/i.test(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); } res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS'); res.setHeader('Access-Control-Allow-Headers', `Content-Type, Authorization, ${ORGANIZATION_HEADER}, X-Vinsansi-Installation-Credential`); res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); }
 export function send(req: ApiRequest, res: ApiResponse, status: number, payload: unknown) { setCors(req, res); return res.status(status).json(payload); }
 export function normalize(value: unknown) { return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' '); }
 
@@ -39,12 +39,21 @@ export async function authenticatedUser(req: ApiRequest) {
 }
 
 export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope[]) {
-  const payload = await verifyMapsExtensionToken(bearer(req), scopes);
+  const raw=bearer(req);if(!raw)throw new Error('token_required');
   const client = serviceClient();
-  const installation = await client.from('maps_extension_installations').select('maps_extension_installations_id,organizations_id,status,scopes').eq('users_id', Number(payload.sub)).eq('extension_type', 'google_maps').eq('installation_id', payload.installationId).maybeSingle();
+  const cutoff=new Date(Date.now()-30*86_400_000).toISOString();
+  const session=await client.from('tool_user_sessions').select('tool_user_sessions_id,auth_users_id,organization_tool_installations!inner(*)').eq('session_hash',await sha256(raw)).is('revoked_at',null).gt('last_used_at',cutoff).maybeSingle();
+  if(session.error||!session.data)throw new Error('token_invalid_or_expired');
+  const canonical=(session.data as unknown as {organization_tool_installations:Row}).organization_tool_installations;
+  if(canonical.tool_id!=='vinsansi_capture'||canonical.registration_status==='revoked')throw new Error('gmaps_extension_installation_revoked');
+  const context=await client.rpc('service_executor_member_context',{p_auth_users_id:session.data.auth_users_id,p_organizations_id:Number(canonical.organizations_id),p_tool_id:'vinsansi_capture'});
+  if(context.error)throw new Error(context.error.message);
+  const payload={installationId:String(canonical.external_installation_id),scopes:[...scopes]};
+  const installation = await client.from('maps_extension_installations').select('maps_extension_installations_id,organizations_id,status,scopes').eq('organizations_id', Number(canonical.organizations_id)).eq('extension_type', 'google_maps').eq('installation_id', payload.installationId).maybeSingle();
   if (installation.error || !installation.data || installation.data.status !== 'active') throw new Error('gmaps_extension_installation_revoked');
   const installationScopes = new Set(Array.isArray(installation.data.scopes) ? installation.data.scopes.map(String) : []);
-  if (payload.scopes.some((scope) => !installationScopes.has(scope))) throw new Error('gmaps_extension_scope_revoked');
+  if (scopes.some((scope) => !installationScopes.has(scope))) throw new Error('gmaps_extension_scope_revoked');
+  await client.from('tool_user_sessions').update({last_used_at:new Date().toISOString()}).eq('tool_user_sessions_id',session.data.tool_user_sessions_id);
   await client.from('maps_extension_installations').update({ last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_extension_installations_id', installation.data.maps_extension_installations_id);
   const canonicalTouch = await client.rpc('service_touch_tool_installation', {
     p_organizations_id: Number(installation.data.organizations_id),
@@ -57,7 +66,7 @@ export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope
     p_last_seen_member_id: null,
   });
   if (canonicalTouch.error) throw new Error(`canonical_installation_touch_failed:${canonicalTouch.error.message}`);
-  return { client, usersId: Number(payload.sub), organizationId: Number(installation.data.organizations_id), installationId: payload.installationId, installationRowId: String(installation.data.maps_extension_installations_id), token: payload };
+  return { client, usersId: Number((context.data as Row).legacyScopeUsersId),memberId:Number((context.data as Row).memberId),sessionId:String(session.data.tool_user_sessions_id),organizationToolInstallationId:String(canonical.organization_tool_installations_id), organizationId: Number(installation.data.organizations_id), installationId: payload.installationId, installationRowId: String(installation.data.maps_extension_installations_id), token: payload };
 }
 
 export function statusForError(message: string) {

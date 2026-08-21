@@ -1,4 +1,5 @@
-import { issueMapsExtensionToken, MAPS_EXTENSION_SCOPES, sha256 } from '../../server/maps/token.js';
+import { MAPS_EXTENSION_SCOPES, sha256 } from '../../server/maps/token.js';
+import { issueExecutorCredentials } from '../../server/tools/executor.js';
 import { authenticatedUser, body, send, serviceClient, setCors, statusForError, text, type ApiRequest, type ApiResponse } from '../../server/maps/shared.js';
 
 declare const process: { env: Record<string, string | undefined> };
@@ -50,6 +51,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         users_id: auth.usersId,
         organizations_id: auth.organizationId,
         authorized_by_member_id: auth.memberId,
+        authorized_auth_user_id: auth.authUserId,
+        authorized_actor_users_id: auth.actorUsersId,
         status: 'authorized',
         authorized_at: new Date().toISOString(),
       }).eq('maps_extension_pairings_id', pairingId).eq('status', 'pending').select('maps_extension_pairings_id').maybeSingle();
@@ -98,14 +101,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (linked.error) throw new Error(`canonical_installation_link_failed:${linked.error.message}`);
       const consumed = await client.from('maps_extension_pairings').update({ status: 'consumed', consumed_at: new Date().toISOString() }).eq('maps_extension_pairings_id', pairingId).eq('status', 'authorized').select('maps_extension_pairings_id').maybeSingle();
       if (consumed.error || !consumed.data) throw new Error('pairing_exchange_conflict');
-      const issued = await issueMapsExtensionToken({ userId: Number(current.data.users_id), installationId });
+      const issued = await issueExecutorCredentials({client,toolId:'vinsansi_capture',organizationId:Number(current.data.organizations_id),externalInstallationId:installationId,authUserId:String(current.data.authorized_auth_user_id),usersId:Number(current.data.authorized_actor_users_id),memberId:Number(current.data.authorized_by_member_id),version:/^\d+\.\d+\.\d+$/.test(installedVersion)?installedVersion:null,capabilities:['capture.maps']});
       return send(req, res, 200, {
         ok: true,
-        token: issued.token,
-        expiresAt: new Date(issued.payload.exp * 1000).toISOString(),
-        userId: String(current.data.users_id),
+        token: issued.userSession,
+        userSession: issued.userSession,
+        installationCredential: issued.installationCredential,
+        organizationId: Number(current.data.organizations_id),
+        memberId: Number(current.data.authorized_by_member_id),
         installationId,
-        scopes: issued.payload.scopes,
+        scopes: [...MAPS_EXTENSION_SCOPES],
       });
     }
 
