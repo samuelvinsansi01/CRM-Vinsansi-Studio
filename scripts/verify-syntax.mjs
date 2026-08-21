@@ -28,6 +28,7 @@ function walk(dir) {
 const files = [
   ...walk(path.join(root, 'src')),
   ...walk(path.join(root, 'api')),
+  ...walk(path.join(root, 'server')),
   ...walk(path.join(root, 'supabase/functions')),
 ].filter((file) => /\.(ts|tsx)$/.test(file) && !file.endsWith('.d.ts'));
 const diagnostics = [];

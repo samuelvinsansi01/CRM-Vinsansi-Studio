@@ -70,6 +70,25 @@ for (const [file, permission] of [
   includes(source, `p_permission_key: "${permission}"`, `${file} não usa a permissão esperada ${permission}.`);
 }
 
+for (const contract of [
+  'ALTER FUNCTION public.save_instance_secure(bigint,text,text,text) RENAME TO save_instance_secure_rbac_inner',
+  "PERFORM public.require_organization_permission('whatsapp.instances.manage')",
+  'GRANT EXECUTE ON FUNCTION public.save_instance_secure(bigint,text,text,text) TO authenticated',
+]) includes(migration, contract, `Contrato SQL de credencial/instância ausente: ${contract}`);
+
+const productionGatewaySources = [
+  'server/routes/system/chat/send.ts',
+  'supabase/functions/evolution-instance-sync/index.ts',
+  'src/services/whatsapp-queue/whatsapp.gateway.ts',
+].map(read).join('\n');
+for (const endpoint of ['/messages/text','/status','/webhook']) {
+  expect(new RegExp(`v1\\/whatsapp.*${endpoint.replace('/', '\\/')}`).test(productionGatewaySources), `Rota Gateway v1 ausente no CRM: ${endpoint}`);
+}
+includes(productionGatewaySources, '/api/whatsapp/dispatch', 'Gateway do painel não usa a API interna do CRM para disparo.');
+for (const legacy of ['/message/sendText','/message/sendMedia','/chat/whatsappNumbers','/instance/connectionState','/webhook/find','/webhook/set']) {
+  expect(!productionGatewaySources.includes(legacy), `Rota legada voltou ao CRM: ${legacy}`);
+}
+
 expect(!exists('public/tools/worker-latest.zip'), 'Worker standalone voltou ao pacote.');
 
 if (failures.length) {

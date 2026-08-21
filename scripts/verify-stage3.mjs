@@ -105,7 +105,7 @@ expect(!settingsRepository.includes('save_extension_runtime_config'), 'Repositó
 expect(!platformConfig.includes('updateExtensionRuntimeConfig'), 'Platform config ainda publica blob derivado.');
 includes(platformConfig, 'buildExtensionRuntimeConfig()', 'Bridge runtime deixou de ser read-through dinâmico.');
 
-const mapsPair = read('api/maps/pair.ts');
+const mapsPair = read('server/routes/maps/pair.ts');
 const mapsShared = read('server/maps/shared.ts');
 includes(mapsPair, "p_tool_id: 'vinsansi_capture'", 'Pairing Maps não registra instalação canônica.');
 includes(mapsPair, 'organization_tool_installations_id', 'Pairing Maps não grava vínculo legado/canônico.');

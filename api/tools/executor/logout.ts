@@ -1,4 +1,0 @@
-import type { ApiRequest,ApiResponse } from '../../../server/maps/shared.js';
-import { send,setCors } from '../../../server/maps/shared.js';
-import { executorStatus,sessionScope } from '../../../server/tools/executor.js';
-export default async function handler(req:ApiRequest,res:ApiResponse){setCors(req,res);if(req.method==='OPTIONS')return res.status(204).end();if(req.method!=='POST')return send(req,res,405,{error:'method_not_allowed'});try{const scope=await sessionScope(req);const revoked=await scope.client.from('tool_user_sessions').update({revoked_at:new Date().toISOString(),logout_reason:'user_logout'}).eq('tool_user_sessions_id',scope.sessionId);if(revoked.error)throw new Error(revoked.error.message);return send(req,res,200,{ok:true});}catch(error){return send(req,res,executorStatus(error),{ok:false,error:error instanceof Error?error.message:String(error)});}}
