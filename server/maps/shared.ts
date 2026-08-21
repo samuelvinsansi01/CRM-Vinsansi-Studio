@@ -1,6 +1,7 @@
 // Server-only Maps infrastructure shared by the two public route entrypoints.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { verifyMapsExtensionToken, type MapsExtensionScope } from './token.js';
+import { ORGANIZATION_HEADER, organizationScopedAuthHeaders, resolveOrganizationContext } from '../organization/context.js';
 
 export type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 export type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void; end(): void };
@@ -12,7 +13,7 @@ export function body(req: ApiRequest): Row { if (typeof req.body === 'string') {
 export function header(req: ApiRequest, name: string) { const key = Object.keys(req.headers ?? {}).find((item) => item.toLowerCase() === name.toLowerCase()); const value = key ? req.headers?.[key] : undefined; return Array.isArray(value) ? text(value[0]) : text(value); }
 export function bearer(req: ApiRequest) { return header(req, 'authorization').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? ''; }
 export function serviceClient() { const url = text(process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL); const key = text(process.env.SUPABASE_SERVICE_ROLE_KEY); if (!url || !key) throw new Error('maps_backend_not_configured'); return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }); }
-export function setCors(req: ApiRequest, res: ApiResponse) { const origin = header(req, 'origin'); if (/^chrome-extension:\/\/[a-p]{32}$/i.test(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); } res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization'); res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); }
+export function setCors(req: ApiRequest, res: ApiResponse) { const origin = header(req, 'origin'); if (/^chrome-extension:\/\/[a-p]{32}$/i.test(origin)) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Vary', 'Origin'); } res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); res.setHeader('Access-Control-Allow-Headers', `Content-Type, Authorization, ${ORGANIZATION_HEADER}`); res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); }
 export function send(req: ApiRequest, res: ApiResponse, status: number, payload: unknown) { setCors(req, res); return res.status(status).json(payload); }
 export function normalize(value: unknown) { return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' '); }
 
@@ -22,12 +23,19 @@ export async function authenticatedUser(req: ApiRequest) {
   const url = text(process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL);
   const key = text(process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY);
   if (!url || !key) throw new Error('supabase_auth_backend_not_configured');
-  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: organizationScopedAuthHeaders(token, req.headers) } });
   const auth = await client.auth.getUser(token);
   if (auth.error || !auth.data.user) throw new Error('auth_invalid');
-  const result = await client.from('users').select('users_id').eq('auth_user_id', auth.data.user.id).maybeSingle();
-  if (result.error || !result.data?.users_id) throw new Error('public_user_not_found');
-  return { authUserId: auth.data.user.id, usersId: Number(result.data.users_id) };
+  const organization = await resolveOrganizationContext(client);
+  const allowed = await client.rpc('has_organization_permission', { p_permission_key: 'capture.use' });
+  if (allowed.error || allowed.data !== true) throw new Error('capture_permission_denied');
+  return {
+    authUserId: auth.data.user.id,
+    usersId: organization.scopeUsersId,
+    actorUsersId: organization.actorUsersId,
+    organizationId: organization.organizationId,
+    memberId: organization.memberId,
+  };
 }
 
 export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope[]) {

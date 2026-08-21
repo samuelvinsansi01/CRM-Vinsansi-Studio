@@ -20,6 +20,7 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { useCatalogRecords } from '../hooks/useCatalogRecords';
 import { useConfigRecords } from '../hooks/useConfigRecords';
 import { DEFAULT_TEMPLATE_MESSAGE_1, DEFAULT_TEMPLATE_MESSAGE_2 } from '../services/config/config.seed';
@@ -480,6 +481,13 @@ function previewMessage(message: string) {
 }
 
 export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
+  const { hasPermission } = useOrganizationContext();
+  const managePermission = kind === 'chips'
+    ? 'whatsapp.instances.manage'
+    : kind === 'instagram'
+      ? 'instagram.settings'
+      : 'templates.manage';
+  const canManage = hasPermission(managePermission);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [templateBranchFilter, setTemplateBranchFilter] = useState('Todos');
@@ -585,6 +593,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   };
 
   const openCreateDrawer = () => {
+    if (!canManage) return;
     setDrawerMode('create');
     setEditingId(null);
     setForm(createEmptyForm(kind, modalOptions));
@@ -659,6 +668,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   };
 
   const saveForm = async () => {
+    if (!canManage) return;
     setSaving(true);
 
     try {
@@ -682,6 +692,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
   };
 
   const toggleStatusRow = async (row: ConfigTableRow) => {
+    if (!canManage) return;
     try {
       await toggleArchive(row.id);
       pushToast({ title: 'Status atualizado', description: 'O status foi alternado com sucesso.', tone: 'info' });
@@ -714,7 +725,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
 
   return (
     <div className={`config-table-page config-table-page--${kind}`}>
-      <PageHeader title={screen.title} action={<Button iconLeft={Plus} onClick={openCreateDrawer}>{screen.action}</Button>} />
+      <PageHeader title={screen.title} action={canManage ? <Button iconLeft={Plus} onClick={openCreateDrawer}>{screen.action}</Button> : undefined} />
       <section className={`metric-grid metric-grid--${screen.metrics.length === 3 ? 3 : 4}`}>
         {recordMetrics.map((metric) => (
           <MetricCard {...metric} key={metric.label} />
@@ -740,7 +751,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
         totalPages={totalPages}
         onPageChange={(nextPage) => { setPage(nextPage); setSelectedRows([]); }}
       >
-        {selectedRecords.length ? (
+        {canManage && selectedRecords.length ? (
           <div className="lead-bulk-actions">
             <span>{selectedRecords.length} selecionado(s)</span>
             {canBulkDeactivate ? <Button size="sm" variant="danger" iconLeft={PowerOff} onClick={() => runBulkAction('desativados', () => bulkArchive(selectedIds))}>Desativar</Button> : null}
@@ -755,12 +766,14 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
           <DataTable
             columns={screen.columns}
             rows={pageRows}
-            actions={['edit', 'deactivate']}
+            actions={canManage ? ['edit', 'deactivate'] : ['view']}
+            selectable={canManage}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
             getRowActions={(row) => {
               const record = recordById.get(row.id);
               if (!record) return [];
+              if (!canManage) return ['view' as TableAction];
               return record.active
                 ? ['edit' as TableAction, 'deactivate' as TableAction]
                 : ['view' as TableAction, 'activate' as TableAction];
@@ -779,7 +792,7 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
           drawerMode === 'view' ? (
             <>
               <Button variant="secondary" onClick={closeDrawer}>Fechar</Button>
-              {editingRecord && editingRecord.active ? (
+              {canManage && editingRecord && editingRecord.active ? (
                 <Button onClick={() => {
                   const row = pageRows.find((item) => item.id === editingId);
                   if (row) openRecordDrawer(row, 'edit');

@@ -18,8 +18,13 @@ import { ToolsPage } from './pages/ToolsPage';
 import { MonitoringPage } from './pages/MonitoringPage';
 import { MapsExtensionAuthorizePage } from './pages/MapsExtensionAuthorizePage';
 import { MapsSearchesPage } from './pages/MapsSearchesPage';
-import { pageTitles, type PageId } from './pages/pageRegistry';
+import { OrganizationMembersPage } from './pages/OrganizationMembersPage';
+import { OrganizationRolesPage } from './pages/OrganizationRolesPage';
+import { OrganizationSettingsPage } from './pages/OrganizationSettingsPage';
+import { PlatformOrganizationsPage } from './pages/PlatformOrganizationsPage';
+import { pagePermissions, pageTitles, type PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
+import { useOrganizationContext } from './providers/OrganizationProvider';
 import { syncEvolutionInstances } from './services/evolution-instances/evolutionInstances.service';
 
 const ACTIVE_PAGE_STORAGE_KEY = 'painel:active-page';
@@ -49,14 +54,22 @@ function initialPage(): PageId {
 
 export function App() {
   const { isAuthenticated, loading } = useAuthContext();
+  const { context: organizationContext, organizationId, loading: organizationLoading, error: organizationError, hasPermission } = useOrganizationContext();
   const [activePage, setActivePage] = useState<PageId>(initialPage);
+  const canSyncEvolution = hasPermission('whatsapp.instances.manage');
 
   useEffect(() => {
     window.sessionStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, activePage);
   }, [activePage]);
 
   useEffect(() => {
-    if (!isAuthenticated) return undefined;
+    if (!isAuthenticated || organizationLoading || !organizationContext) return;
+    const permission = pagePermissions[activePage];
+    if (permission && !hasPermission(permission)) setActivePage('home');
+  }, [activePage, hasPermission, isAuthenticated, organizationContext, organizationLoading]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !organizationId || !canSyncEvolution) return undefined;
     let disposed = false;
 
     const reconcile = async (configureWebhook: boolean) => {
@@ -83,7 +96,7 @@ export function App() {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [isAuthenticated]);
+  }, [canSyncEvolution, isAuthenticated, organizationId]);
 
   // Não desmontar o painel autenticado durante renovação de token ou recuperação de foco.
   if (loading && !isAuthenticated) {
@@ -95,6 +108,21 @@ export function App() {
   }
 
   if (!isAuthenticated) return <LoginPage />;
+
+  if (organizationLoading && !organizationContext) {
+    return <div className="login-page"><div className="login-panel login-panel--loading">Carregando organização...</div></div>;
+  }
+
+  if (organizationError && !organizationContext) {
+    return (
+      <div className="login-page">
+        <div className="login-panel">
+          <strong>Não foi possível carregar a organização.</strong>
+          <p>{organizationError}</p>
+        </div>
+      </div>
+    );
+  }
 
   const mapsPairingId = new URLSearchParams(window.location.search).get('maps_pairing');
   if (mapsPairingId) return <MapsExtensionAuthorizePage pairingId={mapsPairingId} />;
@@ -120,6 +148,11 @@ export function App() {
       {activePage === 'message-branches' ? <ConfigTablePage kind="branches" /> : null}
       {activePage === 'message-templates' ? <ConfigTablePage kind="templates" /> : null}
       {activePage === 'message-variables' ? <CatalogCrudPage kind="template_variables" /> : null}
+
+      {activePage === 'organization-settings' ? <OrganizationSettingsPage /> : null}
+      {activePage === 'organization-members' ? <OrganizationMembersPage /> : null}
+      {activePage === 'organization-roles' ? <OrganizationRolesPage /> : null}
+      {activePage === 'platform-organizations' ? <PlatformOrganizationsPage /> : null}
 
       {activePage === 'settings' ? <SettingsOverviewPage onNavigate={setActivePage} /> : null}
       {activePage === 'config-contact-sources' ? <CatalogCrudPage kind="contact_sources" /> : null}

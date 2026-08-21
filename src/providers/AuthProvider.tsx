@@ -12,6 +12,7 @@ import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import { ensurePublicUser } from '../services/auth/publicUser.service';
 import { createProfileAvatarUrl } from '../services/auth/userProfile.service';
+import { clearActiveOrganizationSessionId } from '../services/organization/organizationSession';
 
 export type AuthUser = {
   /** UUID do Supabase Auth. */
@@ -223,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(signOutError.message);
         throw new Error(signOutError.message);
       }
+      clearActiveOrganizationSessionId();
       setUser(null);
       setLoading(false);
     },

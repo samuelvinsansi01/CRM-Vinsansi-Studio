@@ -49,21 +49,31 @@ Deno.serve(async (request: Request) => {
     const accountId = Number(body?.apifyAccountId ?? body?.apify_accounts_id);
     if (!Number.isInteger(accountId) || accountId <= 0) return jsonResponse({ error: "Conta Apify inválida." }, 400);
 
-    const { data: internalUser, error: userError } = await admin.from("users").select("users_id").eq("auth_user_id", authData.user.id).maybeSingle();
-    if (userError) throw new Error(userError.message);
-    if (!internalUser?.users_id) return jsonResponse({ error: "Usuário interno não encontrado." }, 403);
+    const { data: organizationContext, error: contextError } = await admin.rpc("resolve_organization_context_for_auth_user", { p_auth_user_id: authData.user.id, p_organization_id: Number(request.headers.get("x-vinsansi-organization-id") ?? 0) || null });
+    if (contextError) throw new Error(contextError.message);
+    const usersId = Number(organizationContext?.scopeUsersId ?? 0);
+    if (!usersId) return jsonResponse({ error: "Contexto da organização não encontrado." }, 403);
+    const organizationId = Number(organizationContext?.organizationId ?? 0);
+    if (!organizationId) return jsonResponse({ error: "Organização inválida." }, 403);
+    const { data: allowed, error: permissionError } = await admin.rpc("auth_user_has_organization_permission", {
+      p_auth_user_id: authData.user.id,
+      p_organization_id: organizationId,
+      p_permission_key: "settings.manage",
+    });
+    if (permissionError) throw new Error(permissionError.message);
+    if (!allowed) return jsonResponse({ error: "Sem permissão para esta ação." }, 403);
 
     const { data: account, error: accountError } = await admin
       .from("apify_accounts")
       .select("apify_accounts_id")
       .eq("apify_accounts_id", accountId)
-      .eq("users_id", internalUser.users_id)
+      .eq("users_id", usersId)
       .maybeSingle();
     if (accountError) throw new Error(accountError.message);
     if (!account) return jsonResponse({ error: "Conta Apify não encontrada." }, 404);
 
     const { data: secretRows, error: secretError } = await admin.rpc("service_get_apify_account_secret", {
-      p_users_id: Number(internalUser.users_id),
+      p_users_id: Number(usersId),
       p_apify_accounts_id: accountId,
     });
     if (secretError) throw new Error(secretError.message);
@@ -85,7 +95,7 @@ Deno.serve(async (request: Request) => {
           last_checked_at: checkedAt,
           last_error: message,
           updated_at: checkedAt,
-        }).eq("apify_accounts_id", accountId).eq("users_id", internalUser.users_id);
+        }).eq("apify_accounts_id", accountId).eq("users_id", usersId);
         return jsonResponse({ error: message }, response.status === 401 || response.status === 403 ? 401 : 502);
       }
 
@@ -98,7 +108,7 @@ Deno.serve(async (request: Request) => {
         last_checked_at: checkedAt,
         last_error: null,
         updated_at: checkedAt,
-      }).eq("apify_accounts_id", accountId).eq("users_id", internalUser.users_id);
+      }).eq("apify_accounts_id", accountId).eq("users_id", usersId);
       if (updateError) throw new Error(updateError.message);
 
       return jsonResponse({ accountId, connected: true, username, plan, checkedAt });
@@ -109,7 +119,7 @@ Deno.serve(async (request: Request) => {
         last_checked_at: checkedAt,
         last_error: message,
         updated_at: checkedAt,
-      }).eq("apify_accounts_id", accountId).eq("users_id", internalUser.users_id);
+      }).eq("apify_accounts_id", accountId).eq("users_id", usersId);
       return jsonResponse({ error: message }, 502);
     }
   } catch (error) {

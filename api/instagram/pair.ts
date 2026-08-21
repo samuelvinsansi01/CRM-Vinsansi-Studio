@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { issueInstagramExtensionToken, normalizeInstagramProfile } from '../../server/instagram/token.js';
+import { organizationScopedAuthHeaders, resolveOrganizationContext } from '../../server/organization/context.js';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void };
@@ -18,12 +19,13 @@ async function authenticate(req: ApiRequest): Promise<{ client: SupabaseClient; 
   const key = envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY');
   if (!token) throw new Error('auth_required');
   if (!url || !key) throw new Error('supabase_auth_backend_not_configured');
-  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: organizationScopedAuthHeaders(token, req.headers) } });
   const auth = await client.auth.getUser(token);
   if (auth.error || !auth.data.user) throw new Error('auth_invalid');
-  const user = await client.from('users').select('users_id').eq('auth_user_id', auth.data.user.id).maybeSingle();
-  if (user.error || !user.data?.users_id) throw new Error('public_user_not_found');
-  return { client, publicUserId: Number(user.data.users_id) };
+  const organization = await resolveOrganizationContext(client);
+  const allowed = await client.rpc('has_organization_permission', { p_permission_key: 'instagram.use' });
+  if (allowed.error || allowed.data !== true) throw new Error('instagram_permission_denied');
+  return { client, publicUserId: organization.scopeUsersId };
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {

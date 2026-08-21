@@ -1,6 +1,7 @@
 import { getSupabaseClient } from '../lib/supabase';
 import { toLocalDateInputValue } from '../utils/date';
 import { getCurrentPublicUser } from '../services/auth/publicUser.service';
+import { getOrganizationContext } from '../services/organization/organization.service';
 
 export type JsonRecordRow<T> = {
   id: string;
@@ -22,6 +23,15 @@ export function createUuid() {
 }
 
 export async function getCurrentUserId() {
+  // Compatibilidade temporária do domínio legado: users_id nas tabelas operacionais
+  // representa o escopo técnico da organização ativa, nunca a autoria humana.
+  // A autoria é registrada por organization_members.
+  try {
+    const context = await getOrganizationContext();
+    if (context.organization?.legacyScopeUsersId) return context.organization.legacyScopeUsersId;
+  } catch {
+    // Durante bootstrap/migration antiga, preserva o comportamento anterior.
+  }
   const publicUser = await getCurrentPublicUser();
   return String(publicUser.users_id);
 }

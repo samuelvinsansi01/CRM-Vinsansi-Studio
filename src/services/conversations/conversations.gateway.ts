@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabase';
+import { organizationRequestHeaders } from '../organization/organizationSession';
 
 type SendResult = { ok: boolean; message_id?: number | string; external_message_id?: string | null; status?: string; error?: string; message?: string };
 
@@ -9,7 +10,7 @@ export async function sendConversationMessage(conversationId: string, message: s
   if (!token) throw new Error('Sessão expirada. Entre novamente.');
   const response = await fetch('/api/chat/send', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: organizationRequestHeaders({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
     body: JSON.stringify({ conversation_id: Number(conversationId), message, idempotency_key: idempotencyKey }),
   });
   const payload = await response.json().catch(() => null) as SendResult | null;

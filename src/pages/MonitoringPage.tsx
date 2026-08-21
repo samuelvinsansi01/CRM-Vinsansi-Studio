@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, MetricCard, Panel, Tag } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useNotificationContext } from '../providers/NotificationProvider';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { getOperationalHealth, listOperationalAlerts, requestOperationalRecovery, type OperationalHealth } from '../repositories/monitoring/operationalHealth.repository';
 
 function dateTime(value: unknown) {
@@ -12,6 +13,8 @@ function dateTime(value: unknown) {
 
 export function MonitoringPage() {
   const { push } = useNotificationContext();
+  const { hasPermission } = useOrganizationContext();
+  const canRecover = hasPermission('monitoring.manage');
   const [health, setHealth] = useState<OperationalHealth | null>(null);
   const [alerts, setAlerts] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +43,7 @@ export function MonitoringPage() {
   return (
     <div className="monitoring-page">
       <PageHeader title="Monitoramento" description="Acompanhe Workers, filas travadas, reconciliações e solicitações de recuperação."
-        action={<div className="audit-page__actions"><Button variant="secondary" iconLeft={RefreshCcw} loading={loading} onClick={() => void refresh()}>Atualizar</Button><Button iconLeft={RotateCcw} loading={recovering} onClick={() => void recover()}>Solicitar recuperação</Button></div>} />
+        action={<div className="audit-page__actions"><Button variant="secondary" iconLeft={RefreshCcw} loading={loading} onClick={() => void refresh()}>Atualizar</Button>{canRecover ? <Button iconLeft={RotateCcw} loading={recovering} onClick={() => void recover()}>Solicitar recuperação</Button> : null}</div>} />
       {error ? <div className="audit-state audit-state--error">{error}</div> : null}
       <div className="metric-grid metric-grid--5">
         <MetricCard icon={healthy ? CheckCircle2 : TriangleAlert} value={healthy ? 'Íntegro' : 'Atenção'} label="Estado geral" tone={healthy ? 'success' : 'warning'} />

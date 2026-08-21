@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArchiveRestore, Check, CheckCheck, Clock3, Inbox, MessageCircle, RefreshCcw, Search, Send, Smartphone, TriangleAlert } from 'lucide-react';
 import { Button, Panel, Tag } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import {
   listChatChips, listConversationMessages, listConversationUnreadCounts, listConversations, markConversationRead, setConversationArchived,
   type ChatChip, type Conversation, type ConversationMessage,
@@ -41,6 +42,8 @@ function MessageStatus({ status }: { status: ConversationMessage['status'] }) {
 }
 
 export function ConversationsPage() {
+  const { hasPermission } = useOrganizationContext();
+  const canReply = hasPermission('whatsapp.reply');
   const [chips, setChips] = useState<ChatChip[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -132,6 +135,7 @@ export function ConversationsPage() {
   }, [messages.length, selectedConversationId]);
 
   const handleSend = async () => {
+    if (!canReply) return;
     if (!selectedConversation || !draft.trim() || sending) return;
     const body = draft.trim();
     const optimisticId = `optimistic-${crypto.randomUUID()}`;
@@ -153,6 +157,7 @@ export function ConversationsPage() {
   };
 
   const handleArchive = async () => {
+    if (!canReply) return;
     if (!selectedConversation) return;
     try {
       await setConversationArchived(selectedConversation.id, selectedConversation.status !== 'archived');
@@ -204,7 +209,7 @@ export function ConversationsPage() {
           </div>
         </Panel>
 
-        <Panel className="chat-thread" title={selectedConversation ? displayContact(selectedConversation) : 'Mensagens'} actions={selectedConversation ? (
+        <Panel className="chat-thread" title={selectedConversation ? displayContact(selectedConversation) : 'Mensagens'} actions={selectedConversation && canReply ? (
           <Button size="sm" variant="ghost" iconLeft={selectedConversation.status === 'archived' ? ArchiveRestore : Archive} onClick={() => void handleArchive()}>
             {selectedConversation.status === 'archived' ? 'Reabrir' : 'Arquivar'}
           </Button>
@@ -226,11 +231,11 @@ export function ConversationsPage() {
                   </article>
                 ))}
               </div>
-              <div className="chat-composer">
+              {canReply ? <div className="chat-composer">
                 <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Digite uma mensagem" rows={2} maxLength={4096}
                   onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} />
                 <Button iconLeft={Send} loading={sending} disabled={!draft.trim() || selectedConversation.status === 'archived'} onClick={() => void handleSend()}>Enviar</Button>
-              </div>
+              </div> : null}
             </>
           )}
         </Panel>

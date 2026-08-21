@@ -212,11 +212,12 @@ export function AuditPage() {
         {auditHistory.events.length ? (
           <div className="audit-table-wrap">
             <table className="audit-table">
-              <thead><tr><th>Data</th><th>Origem</th><th>Ação</th><th>Entidade</th><th>Transição</th><th>Detalhes</th></tr></thead>
+              <thead><tr><th>Data</th><th>Ator</th><th>Origem</th><th>Ação</th><th>Entidade</th><th>Transição</th><th>Detalhes</th></tr></thead>
               <tbody>
                 {auditHistory.events.map((event) => (
                   <tr key={event.id}>
                     <td>{formatDateTime(event.created_at)}</td>
+                    <td><strong>{String(event.metadata?.actor_name ?? (event.metadata?.actor_type === 'system' ? 'Sistema' : '—'))}</strong><span>{String(event.metadata?.actor_type ?? '—')}</span></td>
                     <td><Tag tone="neutral">{event.source}</Tag></td>
                     <td><strong>{event.action}</strong></td>
                     <td>{event.queueItemId ? `Fila ${event.queueItemId}` : event.leadId ? `Lead ${event.leadId}` : String(event.metadata?.entity_type ?? 'Sistema')}</td>

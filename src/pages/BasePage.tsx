@@ -16,6 +16,7 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { useBaseRecords } from '../hooks/useBaseRecords';
 import { useClientPagination } from '../hooks/useClientPagination';
 import type { BaseLead } from '../services/base/types';
@@ -40,6 +41,8 @@ function statusTag(lead: BaseLead) {
 }
 
 export function BasePage() {
+  const { hasPermission } = useOrganizationContext();
+  const canArchive = hasPermission('leads.delete');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('Todos');
   const [channel, setChannel] = useState('Todos');
@@ -73,6 +76,7 @@ export function BasePage() {
   };
 
   const archive = async (ids: string[]) => {
+    if (!canArchive) return;
     try {
       const result = await archiveMany(ids);
       setSelectedRows([]);
@@ -126,7 +130,7 @@ export function BasePage() {
         totalPages={totalPages}
         onPageChange={(nextPage) => { setPage(nextPage); setSelectedRows([]); }}
       >
-        {selectedIds.length ? (
+        {canArchive && selectedIds.length ? (
           <div className="lead-bulk-actions">
             <span>{selectedIds.length} selecionado(s)</span>
             <Button size="sm" variant="secondary" iconLeft={Archive} disabled={saving} onClick={() => void archive(selectedIds)}>Arquivar</Button>
@@ -136,7 +140,7 @@ export function BasePage() {
         {!error && loading ? <div className="table-message">Carregando Base Permanente...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead finalizado.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable columns={columns} rows={pageItems} actions={['archive']} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={handleAction} />
+          <DataTable columns={columns} rows={pageItems} actions={canArchive ? ['archive'] : []} selectable={canArchive} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={canArchive ? handleAction : undefined} />
         ) : null}
       </TableCard>
 

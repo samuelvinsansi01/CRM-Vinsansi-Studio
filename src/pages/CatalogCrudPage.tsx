@@ -20,6 +20,7 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { useCatalogRecords } from '../hooks/useCatalogRecords';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { syncEvolutionInstances } from '../services/evolution-instances/evolutionInstances.service';
@@ -285,6 +286,13 @@ function CatalogForm({ kind, form, channels, onChange }: { kind: CatalogKind; fo
 }
 
 export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
+  const { hasPermission } = useOrganizationContext();
+  const managePermission = kind === 'instances'
+    ? 'whatsapp.instances.manage'
+    : kind === 'template_channels' || kind === 'template_types' || kind === 'template_variables'
+      ? 'templates.manage'
+      : 'settings.manage';
+  const canManage = hasPermission(managePermission);
   const definition = definitions[kind];
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('Todos');
@@ -315,6 +323,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
 
   const notify = (toast: Omit<ToastItem, 'id'>) => setToasts((current) => [...current, { ...toast, id: crypto.randomUUID() }]);
   const openCreate = () => {
+    if (!canManage) return;
     setEditing(null);
     setForm(initialForm(kind));
     setDrawerOpen(true);
@@ -357,6 +366,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
   };
 
   const save = async () => {
+    if (!canManage) return;
     setSaving(true);
     try {
       if (editing) await update(editing.id, form);
@@ -378,6 +388,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
   };
 
   const confirmDelete = async () => {
+    if (!canManage) return;
     if (!deleting) return;
     try {
       await remove(deleting.id);
@@ -401,7 +412,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
       <PageHeader
         title={definition.title}
         description={definition.description}
-        action={<Button iconLeft={Plus} size="lg" onClick={openCreate}>Adicionar {definition.singular}</Button>}
+        action={canManage ? <Button iconLeft={Plus} size="lg" onClick={openCreate}>Adicionar {definition.singular}</Button> : undefined}
       />
 
       <section className="metric-grid metric-grid--3">
@@ -423,9 +434,9 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
           variant="secondary"
           iconLeft={RefreshCcw}
           loading={kind === 'instances' ? syncingInstances : refreshing}
-          onClick={() => kind === 'instances' ? void syncInstances(true) : void refresh()}
+          onClick={() => kind === 'instances' && canManage ? void syncInstances(true) : void refresh()}
         >
-          {kind === 'instances' ? 'Sincronizar Evolution' : 'Atualizar'}
+          {kind === 'instances' && canManage ? 'Sincronizar Evolution' : 'Atualizar'}
         </Button>
       </FiltersBar>
 
@@ -444,9 +455,9 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
           <DataTable<CatalogTableRow>
             rows={pageItems}
             columns={columnsFor(kind)}
-            actions={['edit', 'delete']}
+            actions={canManage ? ['edit', 'delete'] : []}
             selectable={false}
-            onAction={onAction}
+            onAction={canManage ? onAction : undefined}
           />
         ) : null}
       </TableCard>

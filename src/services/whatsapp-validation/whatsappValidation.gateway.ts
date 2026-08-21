@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabase';
+import { organizationRequestHeaders } from '../organization/organizationSession';
 
 export type WhatsAppValidationRequest = {
   id: string;
@@ -116,11 +117,11 @@ async function authenticatedHeaders(operation: ValidationOperation) {
   if (error) throw new Error(error.message);
   const token = data.session?.access_token;
   if (!token) throw new Error('Sessão inválida. Entre novamente no painel.');
-  return {
+  return organizationRequestHeaders({
     'Content-Type': 'application/json',
     'X-Lead-Certo-Operation': operation,
     Authorization: `Bearer ${token}`,
-  };
+  });
 }
 
 async function callValidationWorker(

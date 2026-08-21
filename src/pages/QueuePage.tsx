@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bug, Calendar, CheckSquare, ChevronDown, ChevronUp, Eye, Flag, List, ListPlus, Pause, Play, RefreshCcw, Send, Square, Users, X } from 'lucide-react';
 import { Button, ConfirmDialog, Drawer, Field, MetricCard, Pagination, RowsPerPageControl, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { ApprovedLeadsQueueDrawer } from '../components/ApprovedLeadsQueueDrawer';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useInstagramQueue } from '../hooks/useInstagramQueue';
@@ -82,6 +83,11 @@ export function QueuePage({ channel }: QueuePageProps) {
 }
 
 function WhatsAppQueuePage() {
+  const { hasPermission } = useOrganizationContext();
+  const canPrepare = hasPermission('queues.prepare');
+  const canControl = hasPermission('queues.control');
+  const canEditLead = hasPermission('leads.edit');
+  const canInvalidate = hasPermission('leads.validate');
   const [activeChip, setActiveChip] = useState('');
   const [scheduledDate, setScheduledDate] = useState(todayInputValue);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -143,6 +149,7 @@ function WhatsAppQueuePage() {
   };
 
   const handleStart = async () => {
+    if (!canControl) return;
     const leads = selectedOrRunnableLeads();
     const ids = leads.map((lead) => lead.id);
     if (!ids.length) {
@@ -185,6 +192,7 @@ function WhatsAppQueuePage() {
   const targetChips = () => activeChip ? [activeChip] : Array.from(new Set(batches.map((batch) => batch.chip).filter(Boolean)));
 
   const handlePause = async () => {
+    if (!canControl) return;
     try {
       const targets = targetChips();
       await Promise.all(targets.map((chip) => pauseBatch(chip)));
@@ -195,6 +203,7 @@ function WhatsAppQueuePage() {
   };
 
   const handleResume = async () => {
+    if (!canControl) return;
     try {
       const targets = targetChips();
       await Promise.all(targets.map((chip) => resumeBatch(chip)));
@@ -205,6 +214,7 @@ function WhatsAppQueuePage() {
   };
 
   const handleStop = async () => {
+    if (!canControl) return;
     try {
       const targets = targetChips();
       await Promise.all(targets.map((chip) => stopBatch(chip)));
@@ -216,6 +226,7 @@ function WhatsAppQueuePage() {
   };
 
   const handleReprocess = async () => {
+    if (!canControl) return;
     const ids = selectedIds.length ? selectedIds : visibleActionIds((lead) => permissionsFor('whatsapp-queue', lead.status).canRetry());
     if (!ids.length) {
       pushToast({ title: 'Nada para reprocessar', description: 'Selecione leads com erro ou invalidos.', tone: 'warning' });
@@ -233,6 +244,7 @@ function WhatsAppQueuePage() {
   };
 
   const handleSaveLead = async (draft: QueueDraft) => {
+    if (!canEditLead) return;
     if (!editingLead) return;
     const position = Number(draft.position);
     if (!Number.isSafeInteger(position) || position < 1) {
@@ -253,6 +265,7 @@ function WhatsAppQueuePage() {
   };
 
   const handleInvalidate = async () => {
+    if (!canInvalidate) return;
     if (!confirmLead) return;
     await invalidate(confirmLead);
     setConfirmLead(null);
@@ -284,15 +297,17 @@ function WhatsAppQueuePage() {
       <div className="queue-topline queue-topline--actions">
         <div className="queue-controls">
           <SelectField className="queue-inline-filter" options={chipFilterOptions} value={activeChip} onChange={setActiveChip} placeholder="Todos os chips" />
-          <Button variant="secondary" iconLeft={ListPlus} disabled={loading || running} onClick={() => setApprovedDrawerOpen(true)}>Puxar aprovados</Button>
-          <Button variant="danger" iconLeft={Square} disabled={!running && batchState.status !== 'paused'} onClick={handleStop}>Parar</Button>
-          {running ? (
-            <Button variant="secondary" iconLeft={Pause} onClick={handlePause}>Pausar</Button>
-          ) : batchState.status === 'paused' ? (
-            <Button variant="secondary" iconLeft={Play} onClick={handleResume}>Retomar</Button>
-          ) : null}
-          <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || starting || running} onClick={handleReprocess}>Reprocessar</Button>
-          <Button iconLeft={Play} disabled={loading || starting || running || batchState.status === 'paused'} onClick={handleStart}>{startButtonLabel}</Button>
+          {canPrepare ? <Button variant="secondary" iconLeft={ListPlus} disabled={loading || running} onClick={() => setApprovedDrawerOpen(true)}>Puxar aprovados</Button> : null}
+          {canControl ? <>
+            <Button variant="danger" iconLeft={Square} disabled={!running && batchState.status !== 'paused'} onClick={handleStop}>Parar</Button>
+            {running ? (
+              <Button variant="secondary" iconLeft={Pause} onClick={handlePause}>Pausar</Button>
+            ) : batchState.status === 'paused' ? (
+              <Button variant="secondary" iconLeft={Play} onClick={handleResume}>Retomar</Button>
+            ) : null}
+            <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || starting || running} onClick={handleReprocess}>Reprocessar</Button>
+            <Button iconLeft={Play} disabled={loading || starting || running || batchState.status === 'paused'} onClick={handleStart}>{startButtonLabel}</Button>
+          </> : null}
         </div>
       </div>
 
@@ -321,6 +336,7 @@ function WhatsAppQueuePage() {
               defaultExpanded={index === 0}
               onEdit={(lead) => { setEditingLead(lead); setDrawerMode('view'); }}
               onInvalidate={setConfirmLead}
+              canInvalidate={canInvalidate}
             />
           )) : null}
         </div>
@@ -336,7 +352,7 @@ function WhatsAppQueuePage() {
       </section>
 
       <ApprovedLeadsQueueDrawer
-        open={approvedDrawerOpen}
+        open={canPrepare && approvedDrawerOpen}
         channel="WhatsApp"
         scheduledDate={scheduledDate}
         preferredResourceId={activeChip}
@@ -344,9 +360,9 @@ function WhatsAppQueuePage() {
         onPrepared={refresh}
         onToast={(title, description, tone) => pushToast({ title, description, tone })}
       />
-      <QueueLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
+      <QueueLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} canEdit={canEditLead} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
-        open={Boolean(confirmLead)}
+        open={canInvalidate && Boolean(confirmLead)}
         title="Invalidar lead da fila?"
         description="Essa ação marca o lead como inválido localmente e remove da execução do lote."
         confirmLabel="Invalidar"
@@ -365,12 +381,14 @@ function WhatsAppBatch({
   showScope = false,
   onEdit,
   onInvalidate,
+  canInvalidate,
 }: {
   batch: WhatsAppQueueBatch;
   defaultExpanded?: boolean;
   showScope?: boolean;
   onEdit: (lead: WhatsAppQueueLead) => void;
   onInvalidate: (lead: WhatsAppQueueLead) => void;
+  canInvalidate: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [openRow, setOpenRow] = useState('');
@@ -417,7 +435,7 @@ function WhatsAppBatch({
                   <button type="button" className="batch-row__action" onClick={() => onEdit(lead)} aria-label="Visualizar lead">
                     <Eye size={18} />
                   </button>
-                  <button type="button" className="batch-row__action batch-row__action--danger" disabled={!permissionsFor('whatsapp-queue', lead.status).canInvalidate()} onClick={() => onInvalidate(lead)} aria-label="Invalidar lead">
+                  <button type="button" className="batch-row__action batch-row__action--danger" disabled={!canInvalidate || !permissionsFor('whatsapp-queue', lead.status).canInvalidate()} onClick={() => onInvalidate(lead)} aria-label="Invalidar lead">
                     <Flag size={18} />
                   </button>
                   <button type="button" className="batch-row__toggle" onClick={() => setOpenRow(openRow === lead.id ? '' : lead.id)}>
@@ -445,6 +463,7 @@ function QueueLeadDrawer({
   lead,
   mode,
   saving,
+  canEdit,
   onModeChange,
   onClose,
   onSave,
@@ -452,6 +471,7 @@ function QueueLeadDrawer({
   lead: WhatsAppQueueLead | null;
   mode: 'view' | 'edit';
   saving: boolean;
+  canEdit: boolean;
   onModeChange: (mode: 'view' | 'edit') => void;
   onClose: () => void;
   onSave: (draft: QueueDraft) => void;
@@ -484,12 +504,12 @@ function QueueLeadDrawer({
         mode === 'edit' ? (
           <>
             <Button variant="secondary" onClick={() => onModeChange('view')}>Cancelar</Button>
-            <Button loading={saving} onClick={() => draft && onSave(draft)}>Salvar</Button>
+            {canEdit ? <Button loading={saving} onClick={() => draft && onSave(draft)}>Salvar</Button> : null}
           </>
         ) : (
           <>
             <Button variant="secondary" onClick={onClose}>Fechar</Button>
-            {lead && permissionsFor('whatsapp-queue', lead.status).canEdit() ? (
+            {canEdit && lead && permissionsFor('whatsapp-queue', lead.status).canEdit() ? (
               <Button onClick={() => onModeChange('edit')}>Editar</Button>
             ) : null}
           </>
@@ -518,6 +538,12 @@ function QueueLeadDrawer({
 }
 
 function InstagramQueuePage() {
+  const { hasPermission } = useOrganizationContext();
+  const canPrepare = hasPermission('queues.prepare');
+  const canControl = hasPermission('queues.control');
+  const canEditLead = hasPermission('leads.edit');
+  const canInvalidate = hasPermission('leads.validate');
+  const canUseInstagram = hasPermission('instagram.use');
   const [activeProfile, setActiveProfile] = useState('');
   const [scheduledDate, setScheduledDate] = useState(todayInputValue);
   const [editingLead, setEditingLead] = useState<InstagramQueueLead | null>(null);
@@ -559,6 +585,7 @@ function InstagramQueuePage() {
   };
 
   const handleSaveLead = async (draft: InstagramQueueDraft) => {
+    if (!canEditLead) return;
     if (!editingLead) return;
     const position = Number(draft.position);
     if (!Number.isSafeInteger(position) || position < 1) {
@@ -579,6 +606,7 @@ function InstagramQueuePage() {
   };
 
   const handleInvalidate = async () => {
+    if (!canInvalidate) return;
     if (!confirmLead) return;
     await invalidate(confirmLead);
     setConfirmLead(null);
@@ -586,6 +614,7 @@ function InstagramQueuePage() {
   };
 
   const handlePairExtension = async () => {
+    if (!canUseInstagram) return;
     const profile = activeProfile || (profiles.length === 1 ? profiles[0] : '');
     if (!profile) {
       pushToast({ title: 'Selecione um perfil', description: 'Escolha o perfil Instagram antes de gerar o vínculo.', tone: 'warning' });
@@ -615,6 +644,7 @@ function InstagramQueuePage() {
   };
 
   const handleReprocessErrors = async () => {
+    if (!canControl) return;
     const errorIds = visibleBatches.flatMap((batch) => batch.leads).filter((lead) => lead.status === 'error').map((lead) => lead.id);
     if (!errorIds.length) {
       pushToast({ title: 'Sem erros', description: 'Não há itens com erro neste filtro.', tone: 'warning' });
@@ -647,9 +677,9 @@ function InstagramQueuePage() {
       <div className="queue-topline queue-topline--actions">
         <div className="queue-controls">
           <SelectField className="queue-inline-filter" options={profileFilterOptions} value={activeProfile} onChange={setActiveProfile} placeholder="Todos os perfis" />
-          <Button variant="secondary" iconLeft={ListPlus} disabled={loading} onClick={() => setApprovedDrawerOpen(true)}>Puxar aprovados</Button>
-          <Button variant="secondary" iconLeft={RefreshCcw} loading={reprocessing} disabled={loading || reprocessing} onClick={handleReprocessErrors}>Reprocessar erros</Button>
-          <Button iconLeft={Send} loading={pairing} disabled={loading || pairing} onClick={handlePairExtension}>Vincular extensão</Button>
+          {canPrepare ? <Button variant="secondary" iconLeft={ListPlus} disabled={loading} onClick={() => setApprovedDrawerOpen(true)}>Puxar aprovados</Button> : null}
+          {canControl ? <Button variant="secondary" iconLeft={RefreshCcw} loading={reprocessing} disabled={loading || reprocessing} onClick={handleReprocessErrors}>Reprocessar erros</Button> : null}
+          {canUseInstagram ? <Button iconLeft={Send} loading={pairing} disabled={loading || pairing} onClick={handlePairExtension}>Vincular extensão</Button> : null}
         </div>
       </div>
       <section className="queue-list-card">
@@ -669,6 +699,7 @@ function InstagramQueuePage() {
               defaultExpanded={index === 0}
               onEdit={(lead) => { setEditingLead(lead); setDrawerMode('view'); }}
               onInvalidate={setConfirmLead}
+              canInvalidate={canInvalidate}
             />
           )) : null}
         </div>
@@ -684,7 +715,7 @@ function InstagramQueuePage() {
       </section>
 
       <ApprovedLeadsQueueDrawer
-        open={approvedDrawerOpen}
+        open={canPrepare && approvedDrawerOpen}
         channel="Instagram"
         scheduledDate={scheduledDate}
         preferredResourceId={activeProfile}
@@ -692,9 +723,9 @@ function InstagramQueuePage() {
         onPrepared={refresh}
         onToast={(title, description, tone) => pushToast({ title, description, tone })}
       />
-      <InstagramLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
+      <InstagramLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} canEdit={canEditLead} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
-        open={Boolean(confirmLead)}
+        open={canInvalidate && Boolean(confirmLead)}
         title="Invalidar lead do Instagram?"
         description="Essa ação marca o lead como inválido localmente e remove da execução do lote."
         confirmLabel="Invalidar"
@@ -715,12 +746,14 @@ function InstagramBatch({
   showScope = false,
   onEdit,
   onInvalidate,
+  canInvalidate,
 }: {
   batch: InstagramQueueBatch;
   defaultExpanded?: boolean;
   showScope?: boolean;
   onEdit: (lead: InstagramQueueLead) => void;
   onInvalidate: (lead: InstagramQueueLead) => void;
+  canInvalidate: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [openRow, setOpenRow] = useState('');
@@ -768,7 +801,7 @@ function InstagramBatch({
                   <button type="button" className="batch-row__action" onClick={() => onEdit(lead)} aria-label="Visualizar lead">
                     <Eye size={18} />
                   </button>
-                  <button type="button" className="batch-row__action batch-row__action--danger" disabled={!permissionsFor('instagram-queue', lead.status).canInvalidate()} onClick={() => onInvalidate(lead)} aria-label="Invalidar lead">
+                  <button type="button" className="batch-row__action batch-row__action--danger" disabled={!canInvalidate || !permissionsFor('instagram-queue', lead.status).canInvalidate()} onClick={() => onInvalidate(lead)} aria-label="Invalidar lead">
                     <Flag size={18} />
                   </button>
                   <button type="button" className="batch-row__toggle" onClick={() => setOpenRow(openRow === lead.id ? '' : lead.id)}>
@@ -796,6 +829,7 @@ function InstagramLeadDrawer({
   lead,
   mode,
   saving,
+  canEdit,
   onModeChange,
   onClose,
   onSave,
@@ -803,6 +837,7 @@ function InstagramLeadDrawer({
   lead: InstagramQueueLead | null;
   mode: 'view' | 'edit';
   saving: boolean;
+  canEdit: boolean;
   onModeChange: (mode: 'view' | 'edit') => void;
   onClose: () => void;
   onSave: (draft: InstagramQueueDraft) => void;
@@ -835,12 +870,12 @@ function InstagramLeadDrawer({
         mode === 'edit' ? (
           <>
             <Button variant="secondary" onClick={() => onModeChange('view')}>Cancelar</Button>
-            <Button loading={saving} onClick={() => draft && onSave(draft)}>Salvar</Button>
+            {canEdit ? <Button loading={saving} onClick={() => draft && onSave(draft)}>Salvar</Button> : null}
           </>
         ) : (
           <>
             <Button variant="secondary" onClick={onClose}>Fechar</Button>
-            {lead && permissionsFor('instagram-queue', lead.status).canEdit() ? (
+            {canEdit && lead && permissionsFor('instagram-queue', lead.status).canEdit() ? (
               <Button onClick={() => onModeChange('edit')}>Editar</Button>
             ) : null}
           </>

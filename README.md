@@ -1,31 +1,24 @@
-# Painel CRM operacional
+# CRM - Vinsansi Studio v1.1.0
 
-Plataforma de prospecção B2B local, qualificação, deduplicação, roteamento e execução multicanal.
+CRM central da plataforma Vinsansi para aquisição, qualificação, roteamento, filas multicanal e gestão organizacional.
 
-## Fluxo canônico
+## Arquitetura desta versão
 
-Cadastro manual ou extensão Google Maps → importação → normalização → qualificação → deduplicação → roteamento → validação → fila → execução → histórico → Base Permanente.
+- CRM/Supabase continuam como fonte central de verdade.
+- Worker WhatsApp continua embarcado no Gerenciador de Disparos; não existe download de Worker standalone no CRM.
+- Extensão Instagram continua como executor do canal Instagram.
+- Google Maps continua operacional e será evoluído para Vinsansi Captura nas etapas seguintes.
+- Organizações passam a ser o tenant canônico dos dados.
+- Acesso interno passa a usar Platform Owner, Dono, Gestor, Membro, funções editáveis e permissões granulares.
+- Ações humanas relevantes passam a registrar autoria por membro e auditoria por organização.
 
-Os componentes Apify permanecem apenas para compatibilidade histórica e não fazem parte do fluxo ativo.
+## Instalação da v1.1.0
 
-## Componentes
+1. A v1.0.2 corrigida deve estar aplicada e homologada.
+2. Execute `APLICAR-NO-SUPABASE-v1.1.0.sql` no SQL Editor do Supabase.
+3. Atualize as Edge Functions indicadas em `PASSO-A-PASSO-v1.1.0.md`.
+4. Configure as variáveis server-side descritas em `.env.example`.
+5. Publique o CRM.
+6. Execute `npm run build` no ambiente de deploy e faça o checklist de homologação.
 
-- Painel React/Vite.
-- Supabase/PostgreSQL, RLS, Vault e Edge Functions.
-- Worker WhatsApp distribuído na página Ferramentas.
-- Extensão Instagram distribuída na página Ferramentas.
-
-## Verificação
-
-```bash
-npm ci
-npm run verify:all
-npm run build
-```
-
-Consulte `docs/` antes de implantar, recuperar ou publicar uma release.
-
-
-## Conversas por chip
-
-A Etapa 13 adiciona atendimento textual por chip via webhooks Evolution. Consulte `docs/DEPLOYMENT.md` e `docs/RECOVERY.md`.
+Consulte `PASSO-A-PASSO-v1.1.0.md` para a ordem exata.

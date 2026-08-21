@@ -21,6 +21,10 @@ export type PageId =
   | 'config-instances'
   | 'config-template-channels'
   | 'config-template-types'
+  | 'organization-settings'
+  | 'organization-members'
+  | 'organization-roles'
+  | 'platform-organizations'
   | 'account'
   | 'tools'
   | 'monitoring'
@@ -80,6 +84,17 @@ export const navGroups: readonly NavGroup[] = [
       { id: 'message-branches', label: 'Ramos' },
       { id: 'message-templates', label: 'Templates de mensagens' },
       { id: 'message-variables', label: 'Variáveis' },
+    ],
+  },
+  {
+    id: 'organization-settings',
+    label: 'Organização',
+    items: [
+      { id: 'organization-settings', label: 'Organização' },
+      { id: 'organization-members', label: 'Membros' },
+      { id: 'organization-roles', label: 'Funções e acessos' },
+      { id: 'audit', label: 'Auditoria' },
+      { id: 'platform-organizations', label: 'Plataforma' },
     ],
   },
   {
@@ -143,8 +158,43 @@ export const pageTitles: Record<PageId, string> = {
   'config-instances': 'Instâncias',
   'config-template-channels': 'Canais de template',
   'config-template-types': 'Tipos de template',
+  'organization-settings': 'Organização',
+  'organization-members': 'Membros',
+  'organization-roles': 'Funções e acessos',
+  'platform-organizations': 'Organizações da plataforma',
   account: 'Minha conta',
   tools: 'Ferramentas',
   monitoring: 'Monitoramento',
   audit: 'Auditoria',
+};
+
+export const pagePermissions: Partial<Record<PageId, string>> = {
+  'import-approved': 'leads.view',
+  'import-rejected': 'leads.view',
+  'maps-searches': 'capture.use',
+  'validation-routing': 'leads.validate',
+  base: 'leads.view',
+  whatsapp: 'queues.view',
+  instagram: 'queues.view',
+  conversations: 'whatsapp.view',
+  'sender-chips': 'whatsapp.view',
+  'sender-instagram': 'instagram.view',
+  'message-branches': 'templates.view',
+  'message-templates': 'templates.view',
+  'message-variables': 'templates.view',
+  settings: 'settings.view',
+  'config-contact-sources': 'settings.view',
+  'config-import-rules': 'settings.view',
+  'config-channels': 'settings.view',
+  'config-levels': 'settings.view',
+  'config-instances': 'whatsapp.instances.manage',
+  'config-template-channels': 'templates.view',
+  'config-template-types': 'templates.view',
+  'organization-settings': 'organization.view',
+  'organization-members': 'members.view',
+  'organization-roles': 'roles.view',
+  'platform-organizations': 'platform.organizations.manage',
+  tools: 'tools.view',
+  monitoring: 'monitoring.view',
+  audit: 'audit.view',
 };

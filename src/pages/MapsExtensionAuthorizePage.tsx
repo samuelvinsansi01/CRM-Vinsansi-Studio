@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Panel } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { getSupabaseClient } from '../lib/supabase';
+import { organizationRequestHeaders } from '../services/organization/organizationSession';
 
 export function MapsExtensionAuthorizePage({ pairingId }: { pairingId: string }) {
   const [status, setStatus] = useState<'ready' | 'authorizing' | 'authorized' | 'error'>('ready');
@@ -18,7 +19,7 @@ export function MapsExtensionAuthorizePage({ pairingId }: { pairingId: string })
       if (error || !data.session?.access_token) throw new Error('Sessão autenticada não encontrada.');
       const response = await fetch('/api/maps/pair', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` },
+        headers: organizationRequestHeaders({ 'Content-Type': 'application/json', Authorization: `Bearer ${data.session.access_token}` }),
         body: JSON.stringify({ action: 'authorize', pairingId }),
       });
       const result = await response.json().catch(() => ({}));

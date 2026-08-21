@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabase';
+import { organizationRequestHeaders } from '../organization/organizationSession';
 import type { WhatsAppQueueLead } from './types';
 
 export type WhatsAppGatewayResult = {
@@ -30,7 +31,7 @@ async function authenticatedHeaders() {
   const token = data.session?.access_token;
   if (!token) throw new Error('Sessão inválida. Entre novamente no painel.');
   headers.Authorization = `Bearer ${token}`;
-  return headers;
+  return organizationRequestHeaders(headers);
 }
 
 

@@ -1,5 +1,6 @@
 // Shared server-side implementation for the validate and revalidate entrypoints.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { organizationScopedAuthHeaders, resolveOrganizationContext } from '../organization/context.js';
 
 export type ApiRequest = {
   method?: string;
@@ -138,24 +139,19 @@ async function authenticate(req: ApiRequest): Promise<AuthContext> {
 
   const client = createClient(config.url, config.anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: { Authorization: `Bearer ${token}` } },
+    global: { headers: organizationScopedAuthHeaders(token, req.headers) },
   });
   const { data: authData, error: authError } = await client.auth.getUser(token);
   if (authError || !authData.user) throw new Error('Sessão inválida ou expirada.');
 
-  const { data: publicUser, error: publicUserError } = await client
-    .from('users')
-    .select('users_id,auth_user_id')
-    .eq('auth_user_id', authData.user.id)
-    .maybeSingle();
-  if (publicUserError || !publicUser?.users_id) {
-    throw new Error('Usuário interno não encontrado ou sem permissão.');
-  }
+  const organization = await resolveOrganizationContext(client);
+  const allowed = await client.rpc('has_organization_permission', { p_permission_key: 'leads.validate' });
+  if (allowed.error || allowed.data !== true) throw new Error('Usuário interno não encontrado ou sem permissão.');
 
   return {
     client,
     authUserId: authData.user.id,
-    publicUserId: String(publicUser.users_id),
+    publicUserId: String(organization.scopeUsersId),
   };
 }
 

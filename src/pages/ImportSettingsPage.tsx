@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { RotateCcw, Save } from 'lucide-react';
 import { Button, Field, Panel, SelectField, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { useImportSettings } from '../hooks/useImportSettings';
 import { defaultImportSettings, type ImportSettings, type UpdateImportSettingsInput } from '../services/import-settings';
 
@@ -49,6 +50,8 @@ function BooleanSetting({ label, description, value, onChange }: { label: string
 }
 
 export function ImportSettingsPage() {
+  const { hasPermission } = useOrganizationContext();
+  const canManage = hasPermission('settings.manage');
   const { settings, loading, saving, error, updateSettings } = useImportSettings();
   const [draft, setDraft] = useState<ImportSettings | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -65,6 +68,7 @@ export function ImportSettingsPage() {
   };
 
   const updateNumber = (key: 'minRating' | 'minReviews', value: string) => {
+    if (!canManage) return;
     const nextValue = key === 'minRating' ? Number(value.replace(',', '.')) : Number.parseInt(value, 10);
     if (!Number.isFinite(nextValue)) return;
     setDraft((current) => current ? { ...current, [key]: nextValue } : current);
@@ -72,6 +76,7 @@ export function ImportSettingsPage() {
   };
 
   const updateBoolean = (path: BooleanPath, value: boolean) => {
+    if (!canManage) return;
     const [group, key] = path.split('.') as ['safeMode' | 'instagramLowRating' | 'deduplication' | 'routes' | 'logs', string];
     setDraft((current) => current ? {
       ...current,
@@ -105,6 +110,7 @@ export function ImportSettingsPage() {
   };
 
   const reset = () => {
+    if (!canManage) return;
     setDraft((current) => current ? {
       ...structuredClone(defaultImportSettings),
       branchRules: current.branchRules,
@@ -113,6 +119,7 @@ export function ImportSettingsPage() {
   };
 
   const save = async () => {
+    if (!canManage) return;
     if (!draft || !settings || !dirty) return;
     try {
       const input: UpdateImportSettingsInput = {};
@@ -149,8 +156,10 @@ export function ImportSettingsPage() {
         title="Importação"
         action={(
           <div className="import-settings-actions">
-            <Button variant="secondary" iconLeft={RotateCcw} onClick={reset} disabled={saving}>Restaurar padrão</Button>
-            <Button iconLeft={Save} loading={saving} disabled={!dirty} onClick={() => void save()}>Salvar</Button>
+            {canManage ? <>
+              <Button variant="secondary" iconLeft={RotateCcw} onClick={reset} disabled={saving}>Restaurar padrão</Button>
+              <Button iconLeft={Save} loading={saving} disabled={!dirty} onClick={() => void save()}>Salvar</Button>
+            </> : null}
           </div>
         )}
       />

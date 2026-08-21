@@ -75,10 +75,19 @@ Deno.serve(async (request: Request) => {
     if (!body) return jsonResponse({ error: "Corpo inválido." }, 400);
     const action = String(body.action ?? "status");
 
-    const { data: internalUser, error: userError } = await admin.from("users").select("users_id").eq("auth_user_id", authData.user.id).maybeSingle();
-    if (userError) throw new Error(userError.message);
-    if (!internalUser?.users_id) return jsonResponse({ error: "Usuário interno não encontrado." }, 403);
-    const usersId = Number(internalUser.users_id);
+    const { data: organizationContext, error: contextError } = await admin.rpc("resolve_organization_context_for_auth_user", { p_auth_user_id: authData.user.id, p_organization_id: Number(request.headers.get("x-vinsansi-organization-id") ?? 0) || null });
+    if (contextError) throw new Error(contextError.message);
+    const usersId = Number(organizationContext?.scopeUsersId ?? 0);
+    if (!usersId) return jsonResponse({ error: "Contexto da organização não encontrado." }, 403);
+    const organizationId = Number(organizationContext?.organizationId ?? 0);
+    if (!organizationId) return jsonResponse({ error: "Organização inválida." }, 403);
+    const { data: allowed, error: permissionError } = await admin.rpc("auth_user_has_organization_permission", {
+      p_auth_user_id: authData.user.id,
+      p_organization_id: organizationId,
+      p_permission_key: "capture.use",
+    });
+    if (permissionError) throw new Error(permissionError.message);
+    if (!allowed) return jsonResponse({ error: "Sem permissão para esta ação." }, 403);
 
     if (action === "recover_stale") {
       const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();

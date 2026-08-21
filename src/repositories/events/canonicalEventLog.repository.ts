@@ -5,6 +5,10 @@ import type { DispatchMessageLogInput, EventLogInput, EventLogRecord, EventLogRe
 
 type AuditRow = {
   audit_events_id: number | string;
+  organizations_id?: number | string | null;
+  actor_users_id?: number | string | null;
+  actor_member_id?: number | string | null;
+  actor_type?: string | null;
   source: string;
   action: string;
   entity_type: string;
@@ -41,6 +45,10 @@ function mapAudit(row: AuditRow): EventLogRecord {
       entity_id: row.entity_id,
       previous_status_id: row.previous_status_id,
       target_status_id: row.target_status_id,
+      organization_id: row.organizations_id,
+      actor_users_id: row.actor_users_id,
+      actor_member_id: row.actor_member_id,
+      actor_type: row.actor_type,
     },
     created_at: row.created_at,
     updated_at: row.created_at,
@@ -103,7 +111,7 @@ export const canonicalEventLogRepository: EventLogRepository = {
   async list(limit = 100) {
     const response = await getSupabaseClient()
       .from('audit_events')
-      .select('audit_events_id,source,action,entity_type,entity_id,lead_id,queue_item_id,channel_id,previous_status_id,target_status_id,message,metadata,created_at')
+      .select('audit_events_id,organizations_id,actor_users_id,actor_member_id,actor_type,source,action,entity_type,entity_id,lead_id,queue_item_id,channel_id,previous_status_id,target_status_id,message,metadata,created_at')
       .order('created_at', { ascending: false })
       .order('audit_events_id', { ascending: false })
       .limit(limit);

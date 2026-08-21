@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, ChevronDown, ChevronLeft, ClipboardList, LogOut, UserRound } from 'lucide-react';
+import { Bell, Building2, ChevronDown, ChevronLeft, ClipboardList, LogOut, UserRound } from 'lucide-react';
 import { IconButton } from '../components';
-import { navGroups, type NavGroup, type PageId } from '../../pages/pageRegistry';
+import { navGroups, pagePermissions, type NavGroup, type PageId } from '../../pages/pageRegistry';
 import { useAuthContext } from '../../providers/AuthProvider';
+import { useOrganizationContext } from '../../providers/OrganizationProvider';
 
 type HeaderProps = {
   activePage: PageId;
@@ -20,6 +21,18 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
   const navRef = useRef<HTMLElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const { user, signOut } = useAuthContext();
+  const { organizationId, organizations, loading: organizationLoading, hasPermission, switchOrganization } = useOrganizationContext();
+  const canAccessPage = (page: PageId) => {
+    const permission = pagePermissions[page];
+    return !permission || hasPermission(permission);
+  };
+  const visibleNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items?.filter((item) => canAccessPage(item.id)),
+      sections: group.sections?.map((section) => ({ ...section, items: section.items.filter((item) => canAccessPage(item.id)) })).filter((section) => section.items.length > 0),
+    }))
+    .filter((group) => canAccessPage(group.id) || Boolean(group.items?.length) || Boolean(group.sections?.length));
   const firstName = user?.name?.split(' ')[0] || 'Usuário';
   const initials = (user?.name || user?.email || 'U')
     .split(/\s+/)
@@ -60,7 +73,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
         </button>
 
         <nav className="app-header__nav" aria-label="Principal" ref={navRef}>
-          {navGroups.map((group) => {
+          {visibleNavGroups.map((group) => {
             const items = groupItems(group);
             const hasItems = items.length > 0;
             const isOpen = hasItems && openGroup === group.id;
@@ -144,6 +157,22 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
         </nav>
 
         <div className="app-header__actions">
+          {organizations.length ? (
+            <label className="organization-switcher" title="Organização ativa">
+              <Building2 size={14} strokeWidth={1.8} aria-hidden="true" />
+              <select
+                aria-label="Organização ativa"
+                value={organizationId ?? ''}
+                disabled={organizationLoading}
+                onChange={(event) => void switchOrganization(event.target.value)}
+              >
+                {organizations.map((organization) => (
+                  <option key={organization.id} value={organization.id}>{organization.name}</option>
+                ))}
+              </select>
+              <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
+            </label>
+          ) : null}
           <span className="notification">
             <IconButton icon={Bell} label="Notificações" className="app-header__notification-button" />
             <span className="notification__dot" />
@@ -166,10 +195,12 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                   <UserRound size={14} strokeWidth={1.8} />
                   Minha conta
                 </button>
-                <button type="button" onClick={() => navigate('audit')}>
-                  <ClipboardList size={14} strokeWidth={1.8} />
-                  Auditoria
-                </button>
+                {canAccessPage('audit') ? (
+                  <button type="button" onClick={() => navigate('audit')}>
+                    <ClipboardList size={14} strokeWidth={1.8} />
+                    Auditoria
+                  </button>
+                ) : null}
                 <button type="button" onClick={() => void signOut()}>
                   <LogOut size={14} strokeWidth={1.8} />
                   Sair

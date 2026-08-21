@@ -18,6 +18,7 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useLeadCycle } from '../hooks/useLeadCycle';
 import { useQueuePreparation } from '../hooks/useQueuePreparation';
@@ -120,6 +121,9 @@ function capacityValidationDescription(result: WhatsAppCapacityValidationResult)
 }
 
 export function ValidationRoutingPage() {
+  const { hasPermission } = useOrganizationContext();
+  const canValidate = hasPermission('leads.validate');
+  const canEdit = hasPermission('leads.edit');
   const imported = useLeadCycle('imported');
   const valid = useLeadCycle('valid');
   const preSend = useLeadCycle('pre-send');
@@ -160,6 +164,7 @@ export function ValidationRoutingPage() {
   };
 
   const validateToCapacity = async () => {
+    if (!canValidate) return;
     if (!selectedChip) {
       toast('Selecione um chip', 'Somente chips ativos e conectados podem validar e receber leads.', 'warning');
       return;
@@ -245,6 +250,7 @@ export function ValidationRoutingPage() {
   );
 
   const approveSelectedInstagram = async () => {
+    if (!canValidate) return;
     if (!selectedInstagramReady.length) {
       toast('Nada para aprovar', 'Selecione leads Importados com destino Instagram e @Instagram válido.', 'warning');
       return;
@@ -271,6 +277,7 @@ export function ValidationRoutingPage() {
   };
 
   const validateRow = async (lead: LeadCycleLead) => {
+    if (!canValidate) return;
     if (lead.statusId !== 1) return;
 
     if (lead.channel === 'Instagram') {
@@ -325,6 +332,7 @@ export function ValidationRoutingPage() {
   };
 
   const returnRowToImported = async (lead: LeadCycleLead) => {
+    if (!canValidate) return;
     if (lead.statusId !== 2) return;
     try {
       const result = await valid.executeRoutingCommand('return-valid-to-imported', [lead.id]);
@@ -340,6 +348,7 @@ export function ValidationRoutingPage() {
   };
 
   const invalidateRow = async (lead: LeadCycleLead) => {
+    if (!canValidate) return;
     try {
       const result = lead.statusId === 1
         ? await imported.executeRoutingCommand('invalidate-imported', [lead.id])
@@ -359,11 +368,13 @@ export function ValidationRoutingPage() {
 
   const rowActions = (row: Row): TableAction[] => {
     const lead = allRecords.find((item) => item.id === row.id);
-    if (!lead) return ['edit'];
-    if (lead.statusId === 1) return ['validate', 'edit', 'invalidate'];
-    if (lead.statusId === 2) return ['return', 'edit', 'invalidate'];
-    if (lead.statusId === 3) return ['edit', 'invalidate'];
-    return ['edit'];
+    if (!lead) return canEdit ? ['edit'] : [];
+    const actions: TableAction[] = [];
+    if (canValidate && lead.statusId === 1) actions.push('validate');
+    if (canValidate && lead.statusId === 2) actions.push('return');
+    if (canEdit) actions.push('edit');
+    if (canValidate && [1, 2, 3].includes(lead.statusId)) actions.push('invalidate');
+    return actions;
   };
 
   const handleRowAction = (action: TableAction, row: Row) => {
@@ -382,7 +393,7 @@ export function ValidationRoutingPage() {
       void invalidateRow(lead);
       return;
     }
-    if (action !== 'edit') return;
+    if (action !== 'edit' || !canEdit) return;
 
     setEditingLead(lead);
     setLeadDraft(detailsFromLead(lead));
@@ -399,6 +410,7 @@ export function ValidationRoutingPage() {
   };
 
   const saveLeadDetails = async () => {
+    if (!canEdit) return;
     if (!editingLead) return;
     try {
       await cycleForLead(editingLead).updateDetails(editingLead, leadDraft);
@@ -411,6 +423,7 @@ export function ValidationRoutingPage() {
   };
 
   const approveEditingInstagram = async () => {
+    if (!canEdit || !canValidate) return;
     if (!editingLead || editingLead.statusId !== 1 || editingLead.channel !== 'Instagram') return;
     try {
       const updated = await imported.updateDetails(editingLead, leadDraft);
@@ -447,14 +460,14 @@ export function ValidationRoutingPage() {
               }))}
               onChange={setSelectedChip}
             />
-            <Button
+            {canValidate ? <Button
               iconLeft={CheckCircle2}
               loading={validatingCapacity}
               disabled={loading || chipCapacity.loading || !selectedChip || (chipCapacity.snapshot?.selectedResource?.available ?? 0) <= 0}
               onClick={() => void validateToCapacity()}
             >
               Validar e preencher
-            </Button>
+            </Button> : null}
           </div>
         )}
       />
@@ -482,7 +495,7 @@ export function ValidationRoutingPage() {
         totalPages={totalPages}
         onPageChange={setPage}
       >
-        {selectedRows.length ? (
+        {canValidate && selectedRows.length ? (
           <div className="lead-bulk-actions">
             <span>
               {selectedRows.length} selecionado(s) · {selectedInstagramReady.length} pronto(s) para validação Instagram
@@ -505,10 +518,11 @@ export function ValidationRoutingPage() {
           <DataTable
             columns={columns}
             rows={pageItems}
-            actions={['validate', 'edit', 'invalidate']}
+            actions={canValidate || canEdit ? ['validate', 'edit', 'invalidate'] : []}
             getRowActions={(row) => rowActions(row)}
             actionsLabel="Ações"
             onAction={(action, row) => handleRowAction(action, row)}
+            selectable={canValidate}
             selectedRows={selectedRows}
             onSelectedRowsChange={setSelectedRows}
           />
@@ -522,14 +536,14 @@ export function ValidationRoutingPage() {
         footer={(
           <>
             <Button variant="secondary" onClick={() => { setEditingLead(null); setLeadDraft(emptyLeadDetails); }}>Cancelar</Button>
-            {editingLead?.statusId === 1
+            {canEdit && canValidate && editingLead?.statusId === 1
               && leadDraft.channel === 'Instagram'
               && isValidInstagram(normalizeInstagramUsername(leadDraft.instagram)) ? (
                 <Button variant="secondary" loading={imported.saving} onClick={() => void approveEditingInstagram()}>
                   Salvar e validar Instagram
                 </Button>
               ) : null}
-            <Button loading={imported.saving || valid.saving || preSend.saving} onClick={() => void saveLeadDetails()}>Salvar</Button>
+            {canEdit ? <Button loading={imported.saving || valid.saving || preSend.saving} onClick={() => void saveLeadDetails()}>Salvar</Button> : null}
           </>
         )}
       >

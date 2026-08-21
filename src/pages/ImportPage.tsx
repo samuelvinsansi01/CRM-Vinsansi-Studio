@@ -20,6 +20,7 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
+import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { useImportLeads } from '../hooks/useImportLeads';
 import { configService } from '../services/config/config.service';
 import type { BranchConfigRecord } from '../services/config/types';
@@ -193,6 +194,10 @@ function formToInput(form: LeadForm, status: ImportLead['status'], previous?: Im
 }
 
 export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps) {
+  const { hasPermission } = useOrganizationContext();
+  const canCreate = hasPermission('leads.create');
+  const canEdit = hasPermission('leads.edit');
+  const canDelete = hasPermission('leads.delete');
   const activeStatus: ImportLeadStatus = rejected ? 'rejected' : 'approved';
   const [jsonText, setJsonText] = useState('');
   const [search, setSearch] = useState('');
@@ -312,6 +317,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   }, [clearSession, importJson, jsonText]);
 
   const saveEditedLead = async () => {
+    if (!canEdit) return;
     if (!editingLead) return;
 
     setSaving(true);
@@ -345,6 +351,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
   const addManualLead = async () => {
+    if (!canCreate) return;
     const company = manualLead.empresa.trim();
     const whatsapp = manualLead.whatsapp.trim();
     const instagramInput = manualLead.instagram.trim();
@@ -431,6 +438,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
   const approveLeads = async () => {
+    if (!canCreate) return;
     setIsImporting(true);
     try {
       const result = await importJson(jsonText, { simulate: true });
@@ -463,6 +471,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
   const confirmDelete = async () => {
+    if (!canDelete) return;
     if (!deleteLead) return;
     const persisted = /^\d+$/.test(deleteLead.id);
 
@@ -490,8 +499,8 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   const rowActions = (lead: ImportLead): TableAction[] => {
     const permissions = permissionsFor('import', lead.status);
     const actions: TableAction[] = ['view'];
-    if (permissions.canEdit()) actions.push('edit');
-    if (permissions.canArchive()) actions.push(/^\d+$/.test(lead.id) ? 'archive' : 'delete');
+    if (canEdit && permissions.canEdit()) actions.push('edit');
+    if (canDelete && permissions.canArchive()) actions.push(/^\d+$/.test(lead.id) ? 'archive' : 'delete');
     return actions;
   };
 
@@ -504,6 +513,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
   };
 
   const runBulkMove = async (nextStatus: 'approved' | 'rejected') => {
+    if (!canEdit) return;
     try {
       const result = await moveMany(selectedIds, nextStatus);
       if (result?.simulation) {
@@ -569,7 +579,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         </div>
       </section>
 
-      <section className="import-grid import-grid--manual">
+      {canCreate ? <section className="import-grid import-grid--manual">
           <Panel title="Adicionar lead" className="manual-validation">
             <p>Cadastre um lead usando um ramo ativo e pelo menos um contato. O WhatsApp será validado pela Evolution após a criação; o Instagram é validado somente por formato.</p>
             <div className="manual-validation__fields manual-validation__fields--stacked">
@@ -594,9 +604,9 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               <Button disabled={!manualLead.empresa.trim() || !manualLead.branchId || (!manualLead.whatsapp.trim() && !manualLead.instagram.trim()) || simulateImport} onClick={addManualLead}>Adicionar lead</Button>
             </div>
           </Panel>
-      </section>
+      </section> : null}
 
-      <details className="import-json-fallback">
+      {canCreate ? <details className="import-json-fallback">
         <summary>Importar backup JSON (diagnóstico)</summary>
         <section className="import-grid import-grid--manual">
           <Panel title="JSON de backup/diagnóstico" className="import-json">
@@ -614,7 +624,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             </div>
           </Panel>
         </section>
-      </details>
+      </details> : null}
 
       <section className="import-grid">
         <TableCard
@@ -634,7 +644,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             />
             <SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); setSelectedRows([]); }} placeholder="Buscar empresa, telefone ou Instagram" />
           </div>
-          {selectedLeads.length ? (
+          {canEdit && selectedLeads.length ? (
             <div className="lead-bulk-actions">
               <span>{selectedLeads.length} selecionado(s)</span>
               {canBulkApprove ? <Button size="sm" onClick={() => runBulkMove('approved')}>Aprovar</Button> : null}
@@ -649,10 +659,10 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           ) : null}
           {!error && !loading && leads.length > 0 ? (
             <DataTable
-              selectable
+              selectable={canEdit || canDelete}
               selectedRows={selectedRows}
               onSelectedRowsChange={setSelectedRows}
-              actions={['view', 'edit', 'archive']}
+              actions={canEdit || canDelete ? ['view', 'edit', 'archive'] : ['view']}
               getRowActions={rowActions}
               onAction={(action, lead) => handleRowAction(action, lead)}
               columns={columns}
@@ -673,12 +683,12 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
           drawerMode === 'edit' ? (
             <>
               <Button variant="secondary" onClick={() => editingLead ? openLeadDrawer(editingLead, 'view') : closeDrawer()}>Cancelar</Button>
-              <Button loading={saving} disabled={simulateImport && Boolean(editingLead && /^\d+$/.test(editingLead.id))} onClick={saveEditedLead}>Salvar</Button>
+              {canEdit ? <Button loading={saving} disabled={simulateImport && Boolean(editingLead && /^\d+$/.test(editingLead.id))} onClick={saveEditedLead}>Salvar</Button> : null}
             </>
           ) : (
             <>
               <Button variant="secondary" onClick={closeDrawer}>Fechar</Button>
-              {editingLead && permissionsFor('import', editingLead.status).canEdit() ? (
+              {canEdit && editingLead && permissionsFor('import', editingLead.status).canEdit() ? (
                 <Button onClick={() => openLeadDrawer(editingLead, 'edit')}>Editar</Button>
               ) : null}
             </>

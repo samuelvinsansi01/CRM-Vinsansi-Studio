@@ -1,4 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabase';
+import { organizationRequestHeaders } from '../organization/organizationSession';
 
 export type WhatsAppBatchState = {
   status: 'idle' | 'running' | 'paused' | 'stopped' | 'completed' | 'error';
@@ -29,7 +30,7 @@ async function headers() {
   if (error) throw new Error(error.message);
   const token = data.session?.access_token;
   if (!token) throw new Error('Sessão inválida. Entre novamente no painel.');
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  return organizationRequestHeaders({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` });
 }
 
 async function call(action: BatchAction, input: { ids?: string[]; chip?: string } = {}): Promise<WhatsAppBatchState> {
