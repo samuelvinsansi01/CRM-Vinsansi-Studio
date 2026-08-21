@@ -41,12 +41,23 @@ export async function authenticatedUser(req: ApiRequest) {
 export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope[]) {
   const payload = await verifyMapsExtensionToken(bearer(req), scopes);
   const client = serviceClient();
-  const installation = await client.from('maps_extension_installations').select('maps_extension_installations_id,status,scopes').eq('users_id', Number(payload.sub)).eq('extension_type', 'google_maps').eq('installation_id', payload.installationId).maybeSingle();
+  const installation = await client.from('maps_extension_installations').select('maps_extension_installations_id,organizations_id,status,scopes').eq('users_id', Number(payload.sub)).eq('extension_type', 'google_maps').eq('installation_id', payload.installationId).maybeSingle();
   if (installation.error || !installation.data || installation.data.status !== 'active') throw new Error('gmaps_extension_installation_revoked');
   const installationScopes = new Set(Array.isArray(installation.data.scopes) ? installation.data.scopes.map(String) : []);
   if (payload.scopes.some((scope) => !installationScopes.has(scope))) throw new Error('gmaps_extension_scope_revoked');
   await client.from('maps_extension_installations').update({ last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_extension_installations_id', installation.data.maps_extension_installations_id);
-  return { client, usersId: Number(payload.sub), installationId: payload.installationId, installationRowId: String(installation.data.maps_extension_installations_id), token: payload };
+  const canonicalTouch = await client.rpc('service_touch_tool_installation', {
+    p_organizations_id: Number(installation.data.organizations_id),
+    p_tool_id: 'vinsansi_capture',
+    p_external_installation_id: payload.installationId,
+    p_seen: true,
+    p_meaningful_activity: false,
+    p_installed_version: null,
+    p_reported_capabilities: null,
+    p_last_seen_member_id: null,
+  });
+  if (canonicalTouch.error) throw new Error(`canonical_installation_touch_failed:${canonicalTouch.error.message}`);
+  return { client, usersId: Number(payload.sub), organizationId: Number(installation.data.organizations_id), installationId: payload.installationId, installationRowId: String(installation.data.maps_extension_installations_id), token: payload };
 }
 
 export function statusForError(message: string) {

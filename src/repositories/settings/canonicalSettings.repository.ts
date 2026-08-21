@@ -1,6 +1,5 @@
 import type { ImportSettings, UpdateImportSettingsInput } from '../../services/import-settings';
 import { defaultImportSettings } from '../../services/import-settings/importSettings.seed';
-import type { ExtensionRuntimeConfig } from '../../services/platform-config/types';
 import { defaultDispatchSettings } from '../../services/settings/settings.seed';
 import type { DispatchSettings, UpdateDispatchSettingsInput } from '../../services/settings/types';
 import { getSupabaseClient } from '../../lib/supabase';
@@ -13,7 +12,6 @@ const MIGRATION_PREFIX = 'painel.settings-db-migrated.v1';
 type OperationalSettingsRow = {
   dispatch_settings?: DispatchSettings | null;
   import_settings?: ImportSettings | null;
-  extension_runtime_config?: ExtensionRuntimeConfig | null;
 };
 
 function clone<T>(value: T): T {
@@ -73,7 +71,6 @@ async function migrateLegacyOnce() {
 
   const dispatch = legacyValue<DispatchSettings>(userId, 'dispatch');
   const importSettings = legacyValue<ImportSettings>(userId, 'import');
-  const extension = legacyValue<ExtensionRuntimeConfig>(userId, 'extension-runtime');
   const client = getSupabaseClient();
 
   if (dispatch) {
@@ -84,11 +81,6 @@ async function migrateLegacyOnce() {
     const response = await client.rpc('save_import_settings', { p_settings: importSettings });
     if (response.error) throw new Error(`Falha ao migrar configurações locais de importação: ${response.error.message}`);
   }
-  if (extension) {
-    const response = await client.rpc('save_extension_runtime_config', { p_config: extension });
-    if (response.error) throw new Error(`Falha ao migrar configuração local da extensão: ${response.error.message}`);
-  }
-
   window.localStorage.setItem(marker, 'done');
 }
 
@@ -127,13 +119,5 @@ export const canonicalSettingsRepository: SettingsRepository = {
     const response = await getSupabaseClient().rpc('reset_dispatch_settings');
     if (response.error) throw new Error(`Não foi possível restaurar as configurações de disparo: ${response.error.message}`);
     return clone((response.data ?? defaultDispatchSettings) as DispatchSettings);
-  },
-  async getExtensionRuntimeConfig() {
-    return clone((await initializedRow()).extension_runtime_config ?? null);
-  },
-  async updateExtensionRuntimeConfig(input) {
-    const response = await getSupabaseClient().rpc('save_extension_runtime_config', { p_config: input });
-    if (response.error) throw new Error(`Não foi possível publicar a configuração da extensão: ${response.error.message}`);
-    return clone((response.data ?? input) as ExtensionRuntimeConfig);
   },
 };

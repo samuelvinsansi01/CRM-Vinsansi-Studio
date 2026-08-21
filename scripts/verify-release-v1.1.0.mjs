@@ -10,12 +10,7 @@ const failures = [];
 const expect = (condition, message) => { if (!condition) failures.push(message); };
 const includes = (source, value, message = value) => expect(source.includes(value), message);
 
-const pkg = JSON.parse(read('package.json'));
-expect(pkg.version === '1.1.0', `package.version esperado 1.1.0; recebido ${pkg.version}`);
-expect(exists('APLICAR-NO-SUPABASE-v1.1.0.sql'), 'SQL consolidado v1.1.0 ausente.');
-expect(exists('PASSO-A-PASSO-v1.1.0.md'), 'Passo a passo v1.1.0 ausente.');
-
-const migration = read('APLICAR-NO-SUPABASE-v1.1.0.sql');
+const migration = read('supabase/migrations/20260821123000_organizations_members_rbac_audit.sql');
 for (const contract of [
   "v1.1.0_requires_v1.0.2",
   'CREATE TABLE IF NOT EXISTS public.organizations',
@@ -82,4 +77,4 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log('Release v1.1.0: contratos de Organizações/RBAC, autoria, segurança e ChipConfigRecord aprovados.');
+console.log('Regressão das Etapas 1 e 2: Organizações/RBAC, autoria, segurança e ChipConfigRecord aprovados.');

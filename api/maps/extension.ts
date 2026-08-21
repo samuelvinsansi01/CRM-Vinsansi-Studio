@@ -382,6 +382,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const action = text(input.action);
     const scope = await extensionScope(req, requiredScope(action));
     const { client, usersId } = scope;
+    if (['search_create','batch_sync','coverage_transition','execution_transition','candidate_update','candidate_exclude','candidate_restore','leads_promote'].includes(action)) {
+      const activityTouch = await client.rpc('service_touch_tool_installation', {
+        p_organizations_id: scope.organizationId,
+        p_tool_id: 'vinsansi_capture',
+        p_external_installation_id: scope.installationId,
+        p_seen: true,
+        p_meaningful_activity: true,
+        p_installed_version: null,
+        p_reported_capabilities: null,
+        p_last_seen_member_id: null,
+      });
+      if (activityTouch.error) throw new Error(`canonical_installation_activity_failed:${activityTouch.error.message}`);
+    }
 
     if (action === 'session_refresh') {
       const issued = await issueMapsExtensionToken({ userId: usersId, installationId: scope.installationId, scopes: scope.token.scopes });
@@ -389,6 +402,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     if (action === 'session_revoke') {
       await client.from('maps_extension_installations').update({ status: 'revoked', revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_extension_installations_id', scope.installationRowId);
+      const canonicalRevoke = await client.rpc('service_set_tool_installation_status', {
+        p_organizations_id: scope.organizationId,
+        p_tool_id: 'vinsansi_capture',
+        p_external_installation_id: scope.installationId,
+        p_status: 'revoked',
+      });
+      if (canonicalRevoke.error) throw new Error(`canonical_installation_revoke_failed:${canonicalRevoke.error.message}`);
       return send(req, res, 200, { ok: true, revoked: true });
     }
     if (action === 'catalogs') {

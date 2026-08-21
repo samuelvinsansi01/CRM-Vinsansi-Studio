@@ -46,7 +46,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const current = await client.from('maps_extension_pairings').select('*').eq('maps_extension_pairings_id', pairingId).maybeSingle();
       if (current.error || !current.data) throw new Error('pairing_not_found');
       if (current.data.status !== 'pending' || Date.parse(String(current.data.expires_at)) <= Date.now()) throw new Error('pairing_not_pending');
-      const updated = await client.from('maps_extension_pairings').update({ users_id: auth.usersId, status: 'authorized', authorized_at: new Date().toISOString() }).eq('maps_extension_pairings_id', pairingId).eq('status', 'pending').select('maps_extension_pairings_id').maybeSingle();
+      const updated = await client.from('maps_extension_pairings').update({
+        users_id: auth.usersId,
+        organizations_id: auth.organizationId,
+        authorized_by_member_id: auth.memberId,
+        status: 'authorized',
+        authorized_at: new Date().toISOString(),
+      }).eq('maps_extension_pairings_id', pairingId).eq('status', 'pending').select('maps_extension_pairings_id').maybeSingle();
       if (updated.error || !updated.data) throw new Error('pairing_authorization_conflict');
       return send(req, res, 200, { ok: true, pairingId, authorized: true });
     }
@@ -55,6 +61,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const pairingId = text(input.pairingId);
       const pairingSecret = text(input.pairingSecret);
       const installationId = text(input.installationId);
+      const installedVersion = text(input.installedVersion);
       const current = await client.from('maps_extension_pairings').select('*').eq('maps_extension_pairings_id', pairingId).maybeSingle();
       if (current.error || !current.data) throw new Error('pairing_not_found');
       if (current.data.installation_id !== installationId || current.data.pairing_secret_hash !== await sha256(pairingSecret)) throw new Error('pairing_secret_invalid');
@@ -62,6 +69,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (current.data.status !== 'authorized' || !current.data.users_id) return send(req, res, 202, { ok: true, pending: true });
       const installation = await client.from('maps_extension_installations').upsert({
         users_id: Number(current.data.users_id),
+        organizations_id: Number(current.data.organizations_id),
         extension_type: 'google_maps',
         installation_id: installationId,
         scopes: [...MAPS_EXTENSION_SCOPES],
@@ -70,6 +78,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'users_id,extension_type,installation_id' }).select('maps_extension_installations_id').single();
       if (installation.error) throw new Error(`installation_upsert_failed:${installation.error.message}`);
+      const canonical = await client.rpc('service_register_tool_installation', {
+        p_organizations_id: Number(current.data.organizations_id),
+        p_tool_id: 'vinsansi_capture',
+        p_external_installation_id: installationId,
+        p_installed_version: /^\d+\.\d+\.\d+$/.test(installedVersion) ? installedVersion : null,
+        p_reported_capabilities: ['capture.maps'],
+        p_registered_by_member_id: current.data.authorized_by_member_id ? Number(current.data.authorized_by_member_id) : null,
+        p_metadata: {
+          legacyMapsInstallationId: String(installation.data.maps_extension_installations_id),
+          legacyBridge: 'maps_extension_installations',
+          removeInStage: 8,
+        },
+      });
+      if (canonical.error || !canonical.data) throw new Error(`canonical_installation_register_failed:${canonical.error?.message ?? 'missing_id'}`);
+      const linked = await client.from('maps_extension_installations').update({
+        organization_tool_installations_id: canonical.data,
+      }).eq('maps_extension_installations_id', installation.data.maps_extension_installations_id);
+      if (linked.error) throw new Error(`canonical_installation_link_failed:${linked.error.message}`);
       const consumed = await client.from('maps_extension_pairings').update({ status: 'consumed', consumed_at: new Date().toISOString() }).eq('maps_extension_pairings_id', pairingId).eq('status', 'authorized').select('maps_extension_pairings_id').maybeSingle();
       if (consumed.error || !consumed.data) throw new Error('pairing_exchange_conflict');
       const issued = await issueMapsExtensionToken({ userId: Number(current.data.users_id), installationId });

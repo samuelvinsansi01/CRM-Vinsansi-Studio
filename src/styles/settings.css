@@ -486,3 +486,196 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Etapa 3 — Central de Ferramentas */
+.tools-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-16);
+  margin-bottom: var(--space-20);
+}
+
+.tool-control-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-20);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 9%, transparent);
+  border-radius: var(--radius-12);
+  background: color-mix(in srgb, var(--color-pure-white) 2%, transparent);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.tool-control-card--selected {
+  border-color: color-mix(in srgb, var(--action-active) 54%, transparent);
+  background: color-mix(in srgb, var(--action-active) 5%, transparent);
+}
+
+.tool-control-card__header,
+.tool-control-card__actions,
+.tool-settings-editor__actions,
+.tool-settings-editor__meta,
+.tool-installation-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-08);
+}
+
+.tool-control-card__header > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-02);
+}
+
+.tool-control-card__header strong,
+.tool-download-card strong {
+  color: var(--app-text);
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.tool-control-card__header small,
+.tool-download-card small,
+.tool-installations-table small {
+  display: block;
+  color: var(--app-muted);
+  font-size: 11px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.tool-control-card > p {
+  min-height: 60px;
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.tool-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+  margin: 0;
+}
+
+.tool-status-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-04);
+  padding: var(--space-12);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 7%, transparent);
+  border-radius: var(--radius-08);
+}
+
+.tool-status-grid dt {
+  color: var(--app-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.tool-status-grid dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.tool-control-card__actions {
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.tool-control-card__actions .button {
+  flex: 1 1 120px;
+}
+
+.tool-detail-panel,
+.tools-panel {
+  min-height: 0 !important;
+  margin-bottom: var(--space-20);
+}
+
+.tool-detail-panel .panel__header {
+  flex-wrap: wrap;
+  gap: var(--space-12);
+  padding-bottom: var(--space-16) !important;
+}
+
+.tool-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-12);
+}
+
+.tool-overview-grid > article {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-12);
+  align-items: flex-start;
+  padding: var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+  border-radius: var(--radius-08);
+}
+
+.tool-overview-grid > article > svg { color: var(--action-active); flex: 0 0 auto; }
+.tool-overview-grid > article > div { display: grid; min-width: 0; gap: var(--space-04); }
+.tool-overview-grid strong { color: var(--app-text); font-size: 13px; line-height: 20px; }
+.tool-overview-grid span,
+.tool-overview-grid code { color: var(--app-muted); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+
+.tool-stage-boundary {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-12) var(--space-16);
+  border-left: 3px solid var(--action-active);
+  background: color-mix(in srgb, var(--action-active) 6%, transparent);
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.tool-installations-wrap { overflow-x: auto; }
+.tool-installations-table { width: 100%; min-width: 1120px; border-collapse: collapse; }
+.tool-installations-table th,
+.tool-installations-table td { padding: var(--space-12); border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 7%, transparent); text-align: left; vertical-align: top; }
+.tool-installations-table th { color: var(--app-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.tool-installations-table td { color: var(--app-text); font-size: 12px; line-height: 18px; }
+.tool-installations-table td > span { display: block; }
+.tool-capabilities { display: flex; max-width: 260px; flex-wrap: wrap; gap: var(--space-04); }
+.tool-capabilities code { padding: 2px 6px; border-radius: 4px; background: color-mix(in srgb, var(--color-pure-white) 6%, transparent); color: var(--app-muted); font-size: 10px; }
+
+.tool-settings-editor { display: grid; gap: var(--space-20); }
+.tool-settings-editor__meta { flex-wrap: wrap; }
+.tool-settings-editor__meta span { padding: var(--space-04) var(--space-08); border-radius: var(--radius-999); background: color-mix(in srgb, var(--color-pure-white) 6%, transparent); color: var(--app-muted); font-size: 11px; }
+.tool-settings-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-16); }
+.tool-settings-fields--nested { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tool-settings-group { min-width: 0; margin: 0; padding: var(--space-16); border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent); border-radius: var(--radius-08); }
+.tool-settings-group legend { padding: 0 var(--space-08); color: var(--app-text); font-size: 13px; font-weight: 600; }
+.tool-settings-fields > .tool-settings-group { grid-column: span 1; }
+.tool-settings-fields .field { min-width: 0; margin-bottom: 0 !important; }
+.tool-settings-editor__actions { justify-content: flex-end; flex-wrap: wrap; }
+
+.tools-download-grid { display: grid; gap: var(--space-12); margin-top: var(--space-16); }
+.tool-download-card { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); padding: var(--space-16); border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent); border-radius: var(--radius-08); }
+.tool-download-card > div { display: flex; align-items: center; gap: var(--space-12); }
+.tool-download-card > div > span { display: grid; gap: var(--space-02); }
+.tool-download-card > div > svg { color: var(--action-active); }
+.tool-download-card .button { text-decoration: none; }
+
+@media (max-width: 1360px) {
+  .tools-control-grid { grid-template-columns: 1fr; }
+  .tool-control-card > p { min-height: 0; }
+}
+
+@media (max-width: 800px) {
+  .tool-status-grid,
+  .tool-overview-grid,
+  .tool-settings-fields,
+  .tool-settings-fields--nested { grid-template-columns: 1fr; }
+  .tool-download-card { align-items: stretch; flex-direction: column; }
+  .tool-download-card .button { width: 100%; }
+}

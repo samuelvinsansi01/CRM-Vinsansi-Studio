@@ -103,11 +103,12 @@ export const platformConfigService = {
   },
 
   async publishExtensionRuntimeConfig() {
-    const config = await this.buildExtensionRuntimeConfig();
-    return repositories.settings.updateExtensionRuntimeConfig(config);
+    // Bridge read-through da Etapa 3: o shape legado e sempre gerado a partir
+    // das configuracoes canonicas e dos recursos atuais. Nao persiste blob derivado.
+    return this.buildExtensionRuntimeConfig();
   },
 
   async getExtensionRuntimeConfig() {
-    return repositories.settings.getExtensionRuntimeConfig();
+    return this.buildExtensionRuntimeConfig();
   },
 };
