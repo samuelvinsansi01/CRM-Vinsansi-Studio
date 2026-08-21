@@ -2,7 +2,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 type Row = Record<string, unknown>;
 
-const ACTIVE_STATES = new Set(["open", "opened", "connected", "connectado", "conectado", "online", "ready"]);
 const MESSAGE_EVENTS = new Set(["messages_upsert", "send_message"]);
 const STATUS_EVENTS = new Set(["messages_update", "messages_delete"]);
 const CHAT_EVENTS = new Set(["chats_upsert", "chats_update", "contacts_upsert", "contacts_update"]);
@@ -53,8 +52,45 @@ function connectionState(payload: Row) {
   const instance = row(payload.instance);
   const dataInstance = row(data.instance);
   return normalized(
-    data.state ?? dataInstance.state ?? instance.state ?? payload.state ?? payload.connection ?? payload.status,
+    payload.operationalState ?? payload.operational_state ?? data.operationalState ?? data.operational_state ??
+      data.state ?? dataInstance.state ?? instance.state ?? payload.state ?? payload.connection ?? payload.status,
   );
+}
+
+function connectionRuntimeSnapshot(payload: Row, current: Row = {}) {
+  const data = row(payload.data);
+  const state = connectionState(payload);
+  const connectedRaw = payload.connected ?? data.connected ?? data.Connected;
+  const loggedInRaw = payload.loggedIn ?? payload.logged_in ?? data.loggedIn ?? data.logged_in ?? data.LoggedIn;
+  const sessionRaw = payload.sessionSaved ?? payload.session_saved ?? data.sessionSaved ?? data.session_saved;
+  const socketRaw = payload.socketConnected ?? payload.socket_connected ?? data.socketConnected ?? data.socket_connected;
+  const explicitSession = typeof sessionRaw === 'boolean' ? sessionRaw : null;
+  const explicitSocket = typeof socketRaw === 'boolean' ? socketRaw : null;
+  const connected = typeof connectedRaw === 'boolean' ? connectedRaw : false;
+  const loggedIn = typeof loggedInRaw === 'boolean' ? loggedInRaw : false;
+  const jid = text(
+    payload.jid ?? payload.JID ?? payload.Jid ?? data.jid ?? data.JID ?? data.Jid ??
+      current.jid,
+  );
+  const stateOnline = ['open','opened','connected','connectado','conectado','online','ready'].includes(state);
+  const stateSaved = ['session_saved','session_save','session','session_linked','linked'].includes(state);
+  const stateReconnecting = ['reconnecting','reconnect','connecting','restoring','recovering'].includes(state);
+  const socketConnected = explicitSocket ?? ((connected && loggedIn) || stateOnline);
+
+  // Um CONNECTION_UPDATE de socket fechado não prova que a sessão foi apagada.
+  // Sem sinal explícito de logout, preservamos a sessão/JID conhecido até o próximo
+  // polling autoritativo do Gateway 1.2.0 (/status + /instance/all).
+  const explicitLogout = ['logged_out','logout','unpaired','removed','deleted','session_removed'].includes(state);
+  const sessionSaved = explicitLogout
+    ? false
+    : explicitSession ?? (socketConnected || loggedIn || Boolean(jid) || stateSaved || stateReconnecting || current.session_saved === true);
+  const operationalState = socketConnected
+    ? 'online'
+    : sessionSaved
+      ? (stateReconnecting ? 'reconnecting' : 'session_saved')
+      : 'disconnected';
+
+  return { state: state || (socketConnected ? 'open' : sessionSaved ? 'session_saved' : 'close'), connected, loggedIn, sessionSaved, socketConnected, jid, operationalState };
 }
 
 function payloadInstanceName(payload: Row) {
@@ -297,16 +333,31 @@ Deno.serve(async (request: Request) => {
     let ignored = 0;
 
     if (["connection_update", "connection"].includes(event)) {
-      const state = connectionState(payload);
-      if (!state) throw new Error("Estado de conexão ausente.");
-      const active = ACTIVE_STATES.has(state);
-      const nextStatus = active ? 1 : 2;
-      const changed = Number(instanceRow.status_id) !== nextStatus;
-      if (changed) {
-        const { error } = await admin.from("instances").update({ status_id: nextStatus, instances_updated_at: new Date().toISOString() })
-          .eq("instances_id", instanceId).eq("users_id", instanceRow.users_id);
-        if (error) throw new Error(error.message);
-      }
+      const currentResult = await admin.from("instance_runtime_states")
+        .select("session_saved,jid")
+        .eq("instances_id", instanceId)
+        .eq("users_id", instanceRow.users_id)
+        .maybeSingle();
+      if (currentResult.error) throw new Error(currentResult.error.message);
+      const runtime = connectionRuntimeSnapshot(payload, row(currentResult.data));
+      const checkedAt = new Date().toISOString();
+      const { error } = await admin.from("instance_runtime_states").upsert({
+        instances_id: instanceId,
+        users_id: Number(instanceRow.users_id),
+        provider: "evolution-go",
+        operational_state: runtime.operationalState,
+        session_saved: runtime.sessionSaved,
+        socket_connected: runtime.socketConnected,
+        connected: runtime.connected,
+        logged_in: runtime.loggedIn,
+        jid: runtime.jid || null,
+        provider_state: runtime.state || null,
+        last_error: null,
+        source: "webhook",
+        checked_at: checkedAt,
+        instance_runtime_states_updated_at: checkedAt,
+      }, { onConflict: "instances_id" });
+      if (error) throw new Error(error.message);
       processed = 1;
     } else if (MESSAGE_EVENTS.has(event)) {
       for (const item of eventRows(payload)) {

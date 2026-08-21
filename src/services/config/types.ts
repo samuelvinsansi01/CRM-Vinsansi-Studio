@@ -63,6 +63,13 @@ export type ChipConfigRecord = ConfigBaseRecord & {
   instance: string;
   apiKey: string;
   connectionStatus: string;
+  administrativelyActive: boolean;
+  operationalState: 'online' | 'reconnecting' | 'session_saved' | 'disconnected' | 'unavailable' | 'unknown';
+  sessionSaved: boolean;
+  socketConnected: boolean;
+  jid: string;
+  runtimeCheckedAt: string;
+  runtimeError: string;
   priority: number;
   startTime: string;
   endTime: string;

@@ -66,12 +66,12 @@ export function ToolsPage() {
     <div className="settings-page tools-page">
       <PageHeader
         title="Ferramentas"
-        description="Baixe os pacotes operacionais mais recentes publicados junto com a plataforma."
+        description="Baixe as extensões operacionais publicadas pela plataforma. O Worker WhatsApp é embarcado e administrado pelo Gerenciador de Disparos."
         action={<Button variant="secondary" iconLeft={RefreshCw} loading={loading} onClick={() => setRefreshKey((value) => value + 1)}>Atualizar</Button>}
       />
 
       <Panel
-        title="Pacotes disponíveis"
+        title="Extensões disponíveis"
         className="settings-card tools-panel"
         actions={manifest ? <span className="tools-updated-at">Atualizado em {formatDate(manifest.updatedAt)}</span> : null}
       >

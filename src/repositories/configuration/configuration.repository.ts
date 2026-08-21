@@ -31,6 +31,8 @@ export type LevelRecord = {
   updatedAt: string;
 };
 
+export type InstanceOperationalState = 'online' | 'reconnecting' | 'session_saved' | 'disconnected' | 'unavailable' | 'unknown';
+
 export type InstanceRecord = {
   id: string;
   kind: 'instances';
@@ -38,6 +40,13 @@ export type InstanceRecord = {
   url: string;
   statusId: string;
   active: boolean;
+  administrativelyActive: boolean;
+  operationalState: InstanceOperationalState;
+  sessionSaved: boolean;
+  socketConnected: boolean;
+  jid: string;
+  runtimeCheckedAt: string;
+  runtimeError: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -197,16 +206,31 @@ export async function listCatalogRecords(kind: CatalogKind): Promise<CatalogReco
   }
 
   if (kind === 'instances') {
-    const { data, error } = await client.from('instances')
-      .select('instances_id,status_id,instances_name,instances_url,instances_created_at,instances_updated_at')
-      .eq('users_id', userId)
-      .order('instances_name');
-    if (error) throw new Error(error.message);
-    return ((data ?? []) as Row[]).map((row): InstanceRecord => ({
-      id: text(row.instances_id), kind, name: text(row.instances_name), url: text(row.instances_url),
-      statusId: text(row.status_id), active: statusIsActive(row.status_id),
-      createdAt: text(row.instances_created_at), updatedAt: text(row.instances_updated_at),
-    }));
+    const [instanceResult, runtimeResult] = await Promise.all([
+      client.from('instances')
+        .select('instances_id,status_id,instances_name,instances_url,instances_created_at,instances_updated_at')
+        .eq('users_id', userId)
+        .order('instances_name'),
+      client.from('instance_runtime_states')
+        .select('instances_id,operational_state,session_saved,socket_connected,jid,last_error,checked_at')
+        .eq('users_id', userId),
+    ]);
+    if (instanceResult.error) throw new Error(instanceResult.error.message);
+    if (runtimeResult.error) throw new Error(runtimeResult.error.message);
+    const runtimeByInstance = new Map(((runtimeResult.data ?? []) as Row[]).map((runtime) => [text(runtime.instances_id), runtime]));
+    return ((instanceResult.data ?? []) as Row[]).map((row): InstanceRecord => {
+      const runtime = runtimeByInstance.get(text(row.instances_id)) ?? {};
+      const operationalState = text(runtime.operational_state, 'unknown') as InstanceOperationalState;
+      const socketConnected = bool(runtime.socket_connected);
+      return {
+        id: text(row.instances_id), kind, name: text(row.instances_name), url: text(row.instances_url),
+        statusId: text(row.status_id), active: socketConnected,
+        administrativelyActive: statusIsActive(row.status_id), operationalState,
+        sessionSaved: bool(runtime.session_saved), socketConnected,
+        jid: text(runtime.jid), runtimeCheckedAt: text(runtime.checked_at), runtimeError: text(runtime.last_error),
+        createdAt: text(row.instances_created_at), updatedAt: text(row.instances_updated_at),
+      };
+    });
   }
 
   if (kind === 'template_channels') {

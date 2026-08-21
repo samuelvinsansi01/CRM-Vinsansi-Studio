@@ -77,6 +77,28 @@ WITH manual_sequence(
       false,
       'yes_only_after_forward_identity',
       'Deve ser aplicada uma unica vez: renomeia prepare_queue_items e instala a barreira de prova WhatsApp.'
+    ),
+    (
+      7,
+      '20260820210000_instance_runtime_state.sql',
+      ARRAY['public.instances','public.instance_credentials','public.users'],
+      ARRAY['instances.instances_id','instances.status_id','instances.users_id'],
+      ARRAY['public.ensure_current_user()','public.save_instance_secure(bigint,text,text,text)'],
+      ARRAY['20260802100000_secure_credentials_integrations.sql'],
+      false,
+      'yes_when_preconditions_present',
+      'Separa o estado administrativo da instancia do estado operacional Evolution Go e normaliza cadastros existentes para ativo.'
+    ),
+    (
+      8,
+      '20260820211000_whatsapp_queue_runtime_guard.sql',
+      ARRAY['public.instance_runtime_states','public.instances','public.chips'],
+      ARRAY['instance_runtime_states.instances_id','instance_runtime_states.users_id','instance_runtime_states.session_saved'],
+      ARRAY['public.prepare_queue_items_without_whatsapp_validation_proof(text,bigint,date,jsonb)'],
+      ARRAY['20260820210000_instance_runtime_state.sql','20260806190000_whatsapp_validation_proof.sql'],
+      false,
+      'yes_after_instance_runtime_state',
+      'Exige sessao persistida conhecida para reservar novos itens WhatsApp, sem usar o socket instantaneo como status administrativo.'
     )
 ),
 blocked_migrations(migration_file, reason) AS (
@@ -102,3 +124,4 @@ SELECT jsonb_build_object(
     FROM blocked_migrations AS blocked
   )
 ) AS production_manual_migration_plan;
+

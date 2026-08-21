@@ -49,7 +49,7 @@ const manifest = JSON.parse(read(extensionRoot, 'manifest.json'));
 const popup = read(extensionRoot, 'popup.js');
 const content = read(extensionRoot, 'content.js');
 
-const headings = ['## A. Worker', '## B. APIs/Vercel', '## C. CRM', '## D. Extensão Instagram', '## E. Smoke test'];
+const headings = ['## A. Gerenciador / Worker Runtime', '## B. APIs/Vercel', '## C. CRM', '## D. Extensão Instagram', '## E. Smoke test'];
 let previousHeading = -1;
 for (const heading of headings) {
   const index = checklist.indexOf(heading);
@@ -132,5 +132,5 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('OK: pacote de deploy manual preserva ordem Worker → APIs/Vercel → CRM → Instagram → smoke test.');
+console.log('OK: pacote de deploy manual preserva ordem Gerenciador/Worker Runtime → APIs/Vercel → CRM → Instagram → smoke test.');
 console.log('OK: Apify, dispatch direto, migrations identity bloqueadas, backfill e mutação de banco permanecem fora do pacote.');

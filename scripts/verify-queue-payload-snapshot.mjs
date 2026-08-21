@@ -32,9 +32,8 @@ assert(instagram.includes("queueSnapshotMessage(snapshot, 1)"), 'Fila Instagram 
 assert(instagramApi.includes('queue_items_payload_snapshot'), 'API da extensão não lê o snapshot.');
 assert(instagramApi.includes('image_sha256'), 'API da extensão não entrega a identidade opcional da mídia.');
 
-const worker = manifest.tools.find((tool) => tool.id === 'worker');
 const extension = manifest.tools.find((tool) => tool.id === 'instagram-extension');
-assert(/^3\.(?:[2-9]|[1-9]\d)\.\d+$/.test(String(worker?.version ?? '')), 'Manifesto não publica Worker compatível com snapshot (3.2.0+).');
+assert(!manifest.tools.some((tool) => tool.id === 'worker'), 'Worker standalone não deve ser publicado pelo CRM.');
 assert(/^1\.(?:[4-9]|[1-9]\d)\.\d+$/.test(String(extension?.version ?? '')), 'Manifesto não publica extensão compatível com snapshot (1.4.0+).');
 
 if (failures.length) {

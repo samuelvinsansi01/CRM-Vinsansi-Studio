@@ -63,7 +63,7 @@ const definitions: Record<CatalogKind, PageDefinition> = {
   },
   instances: {
     title: 'Instâncias',
-    description: 'Cadastre as credenciais das instâncias Evolution. O status é sincronizado automaticamente pela conexão real.',
+    description: 'Cadastre as credenciais das instâncias Evolution. O estado administrativo é separado da sessão e do socket do WhatsApp.',
     singular: 'instância', tableTitle: 'Instâncias cadastradas', emptyMessage: 'Nenhuma instância cadastrada.',
   },
   template_channels: {
@@ -137,6 +137,15 @@ function statusTag(active: boolean, labels: { active: string; inactive: string }
   return <Tag tone={active ? 'success' : 'warning'}>{active ? labels.active : labels.inactive}</Tag>;
 }
 
+function instanceOperationalTag(record: InstanceRecord) {
+  if (record.operationalState === 'online') return <Tag tone="success">Conectado</Tag>;
+  if (record.operationalState === 'reconnecting') return <Tag tone="warning">Reconectando</Tag>;
+  if (record.operationalState === 'session_saved') return <Tag tone="primary">Sessão salva</Tag>;
+  if (record.operationalState === 'unavailable') return <Tag tone="danger">Indisponível</Tag>;
+  if (record.operationalState === 'disconnected') return <Tag tone="warning">Desconectado</Tag>;
+  return <Tag tone="neutral">Não verificado</Tag>;
+}
+
 function columnsFor(kind: CatalogKind): TableColumn<CatalogTableRow>[] {
   if (kind === 'contact_sources') return [
     { key: 'name', label: 'Fonte', width: '24%' },
@@ -156,7 +165,7 @@ function columnsFor(kind: CatalogKind): TableColumn<CatalogTableRow>[] {
     { key: 'name', label: 'Instância', width: '26%' },
     { key: 'url', label: 'URL', width: '38%' },
     { key: 'credential', label: 'Credencial', width: '16%' },
-    { key: 'status', label: 'Status', width: '12%' },
+    { key: 'status', label: 'WhatsApp', width: '18%' },
   ];
   if (kind === 'template_channels') return [
     { key: 'name', label: 'Canal de template', width: '34%' },
@@ -189,7 +198,7 @@ function rowFor(record: CatalogRecord, channels: ChannelOption[]): CatalogTableR
   };
   if (record.kind === 'instances') return {
     id: record.id, name: record.name, url: record.url || '—', credential: <Tag tone="neutral">Não exibida</Tag>,
-    status: statusTag(record.active, { active: 'Ativa', inactive: 'Inativa' }),
+    status: <span title={record.runtimeError || (record.jid ? `JID: ${record.jid}` : undefined)}>{instanceOperationalTag(record)}</span>,
   };
   if (record.kind === 'template_channels') return {
     id: record.id, name: record.name, blocked: record.blockedChannelNames.length ? record.blockedChannelNames.join(', ') : 'Nenhum',
@@ -230,7 +239,7 @@ function CatalogForm({ kind, form, channels, onChange }: { kind: CatalogKind; fo
         <>
           <Field label="URL da instância" type="url" value={stringValue(form.url)} placeholder="https://..." onChange={(value) => onChange('url', value)} />
           <Field label="API key" type="password" value={stringValue(form.apiKey)} placeholder="Deixe vazio para manter a chave atual" autoComplete="new-password" onChange={(value) => onChange('apiKey', value)} />
-          <p className="configuration-form-note">A chave não é exibida na listagem. Em edição, deixe o campo vazio para preservar a credencial atual. O status é somente leitura: a Evolution ativa quando a conexão está aberta e inativa quando ela cai.</p>
+          <p className="configuration-form-note">A chave não é exibida na listagem. Em edição, deixe o campo vazio para preservar a credencial atual. O cadastro permanece administrativamente ativo; sessão salva e socket conectado são sincronizados separadamente pela Evolution Go.</p>
         </>
       ) : null}
 
@@ -297,6 +306,12 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
   const activeCount = records.filter((record) => record.active).length;
   const inactiveCount = records.length - activeCount;
+  const instanceOnlineCount = kind === 'instances'
+    ? records.filter((record): record is InstanceRecord => record.kind === 'instances' && record.socketConnected).length
+    : 0;
+  const instanceSavedCount = kind === 'instances'
+    ? records.filter((record): record is InstanceRecord => record.kind === 'instances' && record.sessionSaved && !record.socketConnected).length
+    : 0;
 
   const notify = (toast: Omit<ToastItem, 'id'>) => setToasts((current) => [...current, { ...toast, id: crypto.randomUUID() }]);
   const openCreate = () => {
@@ -318,13 +333,13 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
       if (webhookFailures.length) {
         notify({
           title: 'Status sincronizado com ressalvas',
-          description: `${result.active} ativa(s), ${result.inactive} inativa(s). ${webhookFailures.length} webhook(s) não puderam ser configurados.`,
+          description: `${result.online} conectada(s), ${result.sessionSaved} com sessão salva e ${result.unavailable} indisponível(is). ${webhookFailures.length} webhook(s) não puderam ser configurados.`,
           tone: 'warning',
         });
       } else if (showSuccess) {
         notify({
           title: 'Evolution sincronizada',
-          description: `${result.active} instância(s) ativa(s) e ${result.inactive} inativa(s).`,
+          description: `${result.online} conectada(s), ${result.sessionSaved} com sessão salva e ${result.disconnected} desconectada(s).`,
           tone: 'success',
         });
       }
@@ -391,13 +406,19 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
 
       <section className="metric-grid metric-grid--3">
         <MetricCard icon={Database} value={String(records.length)} label="Total" />
-        <MetricCard icon={SquareCheck} value={String(activeCount)} label={kind === 'instances' ? 'Ativas' : 'Ativos'} tone="success" />
-        <MetricCard icon={SquareX} value={String(inactiveCount)} label={kind === 'instances' ? 'Inativas' : 'Inativos'} tone="warning" />
+        <MetricCard icon={SquareCheck} value={String(kind === 'instances' ? instanceOnlineCount : activeCount)} label={kind === 'instances' ? 'Conectadas' : 'Ativos'} tone="success" />
+        <MetricCard icon={SquareX} value={String(kind === 'instances' ? instanceSavedCount : inactiveCount)} label={kind === 'instances' ? 'Sessão salva' : 'Inativos'} tone="warning" />
       </section>
 
       <FiltersBar>
         <SearchInput value={search} placeholder="Buscar registros" onChange={(value) => { setSearch(value); resetPage(); }} />
-        <SelectField value={status} options={filterStatusOptions} onChange={(value) => { setStatus(value); resetPage(); }} />
+        <SelectField
+          value={status}
+          options={kind === 'instances'
+            ? [{ label: 'Todos', value: 'Todos' }, { label: 'Conectados', value: 'Ativos' }, { label: 'Não conectados', value: 'Inativos' }]
+            : filterStatusOptions}
+          onChange={(value) => { setStatus(value); resetPage(); }}
+        />
         <Button
           variant="secondary"
           iconLeft={RefreshCcw}

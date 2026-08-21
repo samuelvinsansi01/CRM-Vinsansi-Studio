@@ -24,6 +24,8 @@ const expectedSequence = [
   '20260807100000_fix_operational_health_batch_status.sql',
   '20260812130000_install_forward_only_identity_contract.sql',
   '20260806190000_whatsapp_validation_proof.sql',
+  '20260820210000_instance_runtime_state.sql',
+  '20260820211000_whatsapp_queue_runtime_guard.sql',
 ];
 
 assert.match(withoutComments.trim(), /^WITH\s+manual_sequence\b/i, 'Plano deve ser um unico SELECT baseado em whitelist explicita.');
@@ -58,6 +60,6 @@ assert(!/\b(?:UPDATE|DELETE FROM|INSERT INTO)\s+public\.leads\b/i.test(forward),
 assert(!/INSERT INTO public\.lead_identity_registry[\s\S]*?FROM public\.leads/i.test(forward), 'Migration forward-only passou a fazer backfill do registry.');
 assert(!/INSERT INTO public\.contact_suppressions[\s\S]*?FROM public\.leads/i.test(forward), 'Migration forward-only passou a fazer backfill de suppressions.');
 
-console.log('OK: pacote manual possui whitelist explicita de 6 migrations e nenhum executor automatico.');
+console.log('OK: pacote manual possui whitelist explicita de 8 migrations e nenhum executor automatico.');
 console.log('OK: migrations historicas de identity estao bloqueadas e ausentes da sequencia.');
 console.log('OK: WhatsApp proof vem depois da identity forward-only e suporta GENERATED ALWAYS AS IDENTITY.');

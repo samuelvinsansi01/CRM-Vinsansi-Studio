@@ -26,7 +26,8 @@ assert(account.includes('updateCurrentUserProfile') && account.includes('Escolhe
 assert(tools.includes('/tools/manifest.json') && tools.includes('Baixar ZIP'), 'Página Ferramentas não usa manifesto/download.');
 assert(!styles.includes('.nav-link--active'), 'Menu pai ainda possui estilo ativo.');
 assert(styles.includes('.nav-link:hover') && styles.includes('background: transparent'), 'Hover do menu pai não foi neutralizado.');
-assert(Array.isArray(manifest.tools) && manifest.tools.length >= 2, 'Manifesto precisa publicar Worker e Extensão.');
+assert(Array.isArray(manifest.tools) && manifest.tools.length >= 1, 'Manifesto precisa publicar as extensões operacionais.');
+assert(!manifest.tools.some((tool) => tool.id === 'worker'), 'Worker standalone não deve ser publicado; o runtime oficial pertence ao Gerenciador.');
 for (const tool of manifest.tools) {
   assert(exists(tool.path.replace(/^\//, 'public/')), `Pacote ausente: ${tool.path}`);
   assert(/latest\.zip$/.test(tool.path), `Pacote sem caminho estável latest: ${tool.path}`);

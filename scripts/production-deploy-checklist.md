@@ -1,63 +1,52 @@
 # Checklist de deploy controlado — PRODUÇÃO
 
-Este runbook é manual. Não executa migrations, não altera o banco e não inclui a extensão Google Maps. Antes de começar, registre os identificadores imutáveis dos builds atualmente publicados para permitir rollback de aplicação. As seis migrations aprovadas já devem constar como aplicadas; nunca inclua `20260802130000_identity_dedup_suppression.sql` nem `20260802131000_fix_instagram_identity_normalization.sql` em qualquer executor.
+Este runbook é manual. Não executa migrations, não altera o banco e não inclui a extensão Google Maps. Antes de começar, registre os identificadores imutáveis dos builds atualmente publicados para permitir rollback de aplicação. As oito migrations aprovadas já devem constar como aplicadas; nunca inclua `20260802130000_identity_dedup_suppression.sql` nem `20260802131000_fix_instagram_identity_normalization.sql` em qualquer executor.
 
-## A. Worker
+## A. Gerenciador / Worker Runtime
 
 ### Pré-requisito
 
-- Banco de produção com `readyForDeploy=true` e as seis migrations manuais já validadas.
-- Host Docker capaz de executar a imagem baseada em Node 22 e com acesso HTTPS ao Supabase e à Evolution.
-- Imagem/build anterior identificado e disponível para rollback.
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `WORKER_HTTP_TOKEN` configurados como secrets; o token deve ter no mínimo 32 caracteres.
-- Instâncias Evolution e credenciais já existentes no banco/Vault. O Worker não recebe API key Evolution por variável de ambiente.
+- Banco de produção com `readyForDeploy=true` e as oito migrations manuais já validadas.
+- Gerenciador de Disparos v1.0.2 ou superior instalado no host Windows com Docker Desktop funcional.
+- Evolution Go, Gateway e Worker Runtime provisionados pelo próprio Gerenciador; não distribuir ou instalar `worker-latest.zip` separadamente.
+- Instâncias Evolution e credenciais existentes no banco/Vault. O runtime não recebe API key Evolution por variável de ambiente pública.
 
 ### Pacote
 
-- `worker/Dockerfile`
-- `worker/package.json` e `worker/package-lock.json`
-- `worker/src/worker.js`
-- `worker/src/operational-window.js`
-- `worker/src/contactIdentity.js`
-- `worker/images/` montado como volume somente leitura quando houver mídia aprovada para os templates.
+- O Worker oficial é o runtime embarcado no Gerenciador (`resources/worker`), versão 3.8.0 nesta linha.
+- Gateway 1.2.0 e Evolution Go são administrados pelo mesmo produto.
+- A API `/api/desktop/worker-provision` permanece ativa exclusivamente para provisionamento seguro do runtime pelo Gerenciador; ela não representa um instalador Worker standalone.
+- Internamente o runtime continua exigindo `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `WORKER_HTTP_TOKEN`; o Gerenciador/provisionamento seguro gerencia esses valores, não o usuário final.
 
 ### Ação manual
 
-1. Validar localmente com Node 22: `npm ci`, `npm run check` e `npm run verify` no diretório `worker`.
-2. Construir uma imagem imutável a partir do `worker/Dockerfile`; não usar `latest` como única referência de rollback.
-3. Configurar as variáveis obrigatórias e, quando necessário, as opcionais abaixo.
-4. Publicar uma única réplica inicialmente. Não acionar `/dispatch/whatsapp` e não criar lote de teste antes do healthcheck e do heartbeat.
-5. Iniciar com `npm start` — o `CMD` do Dockerfile já executa esse comando.
-
-### Variáveis
-
-Obrigatórias: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_HTTP_TOKEN`.
-
-Opcionais, com fallback no código: `WORKER_HTTP_HOST`, `WORKER_HTTP_PORT`, `WORKER_IMAGES_DIR`, `MAX_IMAGE_BYTES`, `EVOLUTION_REQUEST_TIMEOUT_MS`, `EVOLUTION_INSTANCE_SYNC_SECONDS`, `WHATSAPP_VALIDATION_DELAY_MS`, `WHATSAPP_VALIDATION_MAX_LEADS`, `SCHEDULER_TICK_SECONDS`, `BATCH_PAUSE_SECONDS`, `DELAY_BETWEEN_TEXT_MESSAGES_SECONDS`, `DELAY_TEXT_TO_IMAGE_SECONDS`, `DRY_RUN`, `WORKER_INSTANCE_ID`, `WORKER_STALE_EXECUTION_SECONDS`, `WORKER_RECOVERY_INTERVAL_SECONDS`, `WORKER_HEARTBEAT_SECONDS`.
-
-Não existe variável Apify no Worker. Janela, dias ativos, timezone, delays operacionais e capacidade são lidos das configurações centralizadas; os fallbacks locais não substituem o contrato persistido. Cutoff ausente ou inválido usa 22:00.
+1. Instalar/atualizar o Gerenciador pelo pacote oficial e executar `Reparar instalação` quando houver mudança de infraestrutura.
+2. Confirmar que o Gerenciador recria/atualiza os containers sem apagar os volumes persistentes da Evolution.
+3. Validar as instâncias: sessão salva deve sobreviver a reinício do aplicativo/PC; `Novo QR` continua sendo a ação explícita para substituir uma sessão.
+4. Confirmar healthcheck do Worker Runtime, Gateway e Evolution antes de iniciar lotes reais.
 
 ### Verificação pós-deploy
 
-- `GET /health` deve responder HTTP 200 com `ok=true`, versão `3.6.0` e schema contendo `worker_batches` e `dispatch_parts`.
-- A tela Monitoramento deve mostrar heartbeat recente do novo `WORKER_INSTANCE_ID` e ausência de erro recorrente de recovery/scheduler.
-- Com `x-worker-token` válido, `POST /dispatch/whatsapp` deve responder HTTP 410 e orientar batch/scheduler.
-- `POST /batch/whatsapp/status` ou `/state`, com token válido e escopo controlado, deve responder sem iniciar disparo.
-- O scheduler deve continuar sendo o único chamador de `dispatchOne`; nenhum teste mínimo deve contornar `next_run_at`, janela ou prova WhatsApp.
+- Worker Runtime deve responder HTTP 200 em `/health`, versão `3.8.0`, com schema contendo `worker_batches` e `dispatch_parts`.
+- Gateway deve expor contrato 1.2.0 com `sessionSaved`, `socketConnected`, `jid` e estado operacional.
+- CRM não deve marcar a instância administrativamente inativa por queda transitória do socket.
+- Instância com `session_saved=true` continua elegível para preparação WhatsApp; instância sem sessão persistida não recebe novos itens.
+- A tela Monitoramento deve mostrar heartbeat recente e ausência de erro recorrente de recovery/scheduler.
+- `POST /dispatch/whatsapp` continua HTTP 410; scheduler/lotes persistentes são o único caminho de envio.
 
 ### GO
 
-Healthcheck 200, heartbeat recente, credenciais carregadas via RPC/Vault, sem loop de recovery e endpoint direto 410.
+Healthchecks válidos, sessão persistida reconhecida, heartbeat recente, nenhuma instalação Worker standalone e nenhum loop de reconexão/recovery.
 
 ### STOP / rollback
 
-Pare se healthcheck falhar, heartbeat não aparecer, houver 401 interno, erro de schema/RPC, recovery repetitivo ou tentativa fora da janela. Restaure a imagem/build anterior e preserve banco, lotes e `next_run_at`; não reverta migrations nem force itens para processamento.
+Pare se healthcheck falhar, sessão salva desaparecer sem logout explícito, heartbeat não aparecer, houver 401 interno, erro de schema/RPC ou recovery repetitivo. Reverta o pacote do Gerenciador preservando banco, volumes, lotes e `next_run_at`; não reverta migrations nem force itens para processamento.
 
 ## B. APIs/Vercel
 
 ### Pré-requisito
 
-- Worker da etapa A em GO e URL HTTPS conhecida.
+- Gerenciador/Worker Runtime da etapa A em GO e endpoint HTTPS conhecido pelo backend.
 - Deployment anterior da Vercel identificado para rollback.
 - Variáveis configuradas somente no ambiente Production; secrets nunca devem usar prefixo `VITE_`.
 
@@ -180,4 +169,4 @@ Todos os 17 passos do plano concluídos, sem alerta crítico, duplicação, bypa
 
 ### STOP / rollback
 
-Interromper no primeiro resultado divergente. Pausar lotes pelo fluxo persistente, preservar itens incertos para reconciliação e aplicar apenas rollback de Worker, deployment Vercel/CRM ou pacote da extensão. Não reverter migrations.
+Interromper no primeiro resultado divergente. Pausar lotes pelo fluxo persistente, preservar itens incertos para reconciliação e aplicar apenas rollback do Gerenciador/Worker Runtime, deployment Vercel/CRM ou pacote da extensão. Não reverter migrations.

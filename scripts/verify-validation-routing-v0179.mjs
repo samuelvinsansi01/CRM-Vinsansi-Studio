@@ -12,10 +12,6 @@ const requiredPage = [
   "await imported.executeRoutingCommand('route-imported-to-whatsapp', [lead.id])",
   "whatsappValidationService.validateInitialWithChip([lead.id], selectedChip)",
   "const totalRecords = visible.length;",
-  "const whatsappMetric = metricFor((lead) => lead.channel === 'WhatsApp');",
-  "const instagramMetric = metricFor((lead) => lead.channel === 'Instagram');",
-  "const ownSiteMetric = metricFor((lead) => lead.contactSourceId === SOURCE_OWN_SITE);",
-  "const aggregatorMetric = metricFor((lead) => lead.contactSourceId === SOURCE_AGGREGATOR);",
 ];
 
 for (const token of requiredPage) {
@@ -29,4 +25,7 @@ if (page.includes("if (lead.statusId === 1 && lead.channel === 'Instagram') retu
   throw new Error('Ação antiga de aprovação específica ainda está ativa nas linhas.');
 }
 
-console.log('Validation routing v0.17.9: ações, requisitos por destino e métricas filtradas OK.');
+if (!page.includes('value={String(whatsappTotal)} label="WhatsApp"') || !page.includes('value={String(instagramTotal)} label="Instagram"')) {
+  throw new Error('ValidationRoutingPage perdeu os cards consolidados WhatsApp/Instagram da v0.18.0.');
+}
+console.log('Validation routing v0.17.9 compatível com v0.18.0: ações e métricas consolidadas OK.');

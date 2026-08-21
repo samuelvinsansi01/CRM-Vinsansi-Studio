@@ -6,8 +6,11 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const contract = JSON.parse(fs.readFileSync(path.join(root, 'scripts/schema-real.contract.json'), 'utf8'));
 const tables = new Set(Object.keys(contract.tables));
-const incrementalSchema = fs.readFileSync(path.join(root, 'supabase/migrations/20260813090000_google_maps_api_first.sql'), 'utf8');
-for (const match of incrementalSchema.matchAll(/CREATE TABLE IF NOT EXISTS public\.([a-z0-9_]+)/gi)) tables.add(match[1]);
+const incrementalSchemas = [
+  'supabase/migrations/20260813090000_google_maps_api_first.sql',
+  'supabase/migrations/20260820210000_instance_runtime_state.sql',
+].map((file) => fs.readFileSync(path.join(root, file), 'utf8')).join('\n');
+for (const match of incrementalSchemas.matchAll(/CREATE TABLE IF NOT EXISTS public\.([a-z0-9_]+)/gi)) tables.add(match[1]);
 const failures = [];
 
 function assert(condition, message) { if (!condition) failures.push(message); }

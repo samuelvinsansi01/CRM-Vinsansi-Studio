@@ -15,3 +15,9 @@
 13. `20260802180000_chip_conversations_chat.sql`
 
 Nunca pule uma migration em um ambiente novo. Em ambiente existente, execute apenas as ainda não aplicadas.
+
+## Atualização Evolution Go / Gerenciador v1.0.2
+
+14. `20260820210000_instance_runtime_state.sql` — separa estado administrativo da instância de sessão/socket (`online`, `reconnecting`, `session_saved`, `disconnected`).
+
+15. `20260820211000_whatsapp_queue_runtime_guard.sql` — mantém `status_id` administrativo, mas exige `session_saved=true` para novos itens de fila WhatsApp.

@@ -85,6 +85,7 @@ export function chipInstance(chip: Pick<ChipConfigRecord, 'instance' | 'name'>) 
 
 const CONNECTION_OPEN_STATES = ['open', 'opened', 'connected', 'connectado', 'conectado', 'online', 'ready'];
 const CONNECTION_CLOSED_STATES = ['inativo', 'offline', 'pausado', 'paused', 'closed', 'close', 'disconnected', 'disconnect', 'error', 'erro'];
+const CONNECTION_SAVED_STATES = ['session saved', 'session_saved', 'sessao salva', 'reconnecting', 'reconectando', 'connecting', 'restoring'];
 
 function connectionStateToken(chip: Pick<ChipConfigRecord, 'connectionStatus' | 'status'>) {
   return normalizeComparable(chip.connectionStatus || chip.status);
@@ -103,25 +104,27 @@ export function isChipConnectionOpen(chip: Pick<ChipConfigRecord, 'connectionSta
 export function isOperationalWhatsAppChip(chip: ChipConfigRecord) {
   return Boolean(
     chip.active &&
+      chip.administrativelyActive &&
       chip.status !== 'Arquivado' &&
       chip.status !== 'deleted' &&
       !chip.paused &&
       chipInstance(chip) &&
-      isChipConnectionOpen(chip),
+      chip.sessionSaved,
   );
 }
 
 export function chipStatusLabel(chip: ChipConfigRecord) {
   if (chip.status === 'deleted') return 'Excluido';
   if (chip.status === 'Arquivado') return 'Arquivado';
-  if (!chip.active) return 'Inativo';
+  if (!chip.active || !chip.administrativelyActive) return 'Inativo';
   if (chip.paused) return 'Pausado';
   if (!chipInstance(chip)) return 'Sem instancia';
+  if (chip.socketConnected) return 'Conectado';
   const state = connectionStateToken(chip);
-  if (!state) return 'Ativo';
-  if (CONNECTION_CLOSED_STATES.includes(state)) return 'Offline';
-  if (CONNECTION_OPEN_STATES.includes(state) || state === 'ativo') return 'Ativo';
-  return 'Ativo';
+  if (state === 'reconnecting' || state === 'reconectando') return 'Reconectando';
+  if (chip.sessionSaved || CONNECTION_SAVED_STATES.includes(state)) return 'Sessao salva';
+  if (state === 'unavailable' || state === 'indisponivel') return 'Indisponivel';
+  return 'Desconectado';
 }
 
 

@@ -173,23 +173,35 @@ async function listTemplates(userId: number): Promise<TemplateConfigRecord[]> {
 }
 
 async function listChips(userId: number): Promise<ChipConfigRecord[]> {
-  const [chipResponse, instanceResponse, levelResponse, status] = await Promise.all([
+  const [chipResponse, instanceResponse, runtimeResponse, levelResponse, status] = await Promise.all([
     getSupabaseClient().from('chips').select('*').eq('users_id', userId).order('chips_name'),
     getSupabaseClient().from('instances').select('instances_id,status_id,instances_name,instances_url,instances_created_at,instances_updated_at').eq('users_id', userId),
+    getSupabaseClient().from('instance_runtime_states').select('instances_id,operational_state,session_saved,socket_connected,jid,checked_at,last_error').eq('users_id', userId),
     getSupabaseClient().from('levels').select('*').eq('users_id', userId),
     statusContext(),
   ]);
   if (chipResponse.error) throw new Error(`Nao foi possivel carregar os chips: ${chipResponse.error.message}`);
   if (instanceResponse.error) throw new Error(`Nao foi possivel carregar as instancias: ${instanceResponse.error.message}`);
+  if (runtimeResponse.error) throw new Error(`Nao foi possivel carregar o estado operacional das instancias: ${runtimeResponse.error.message}`);
   if (levelResponse.error) throw new Error(`Nao foi possivel carregar os niveis: ${levelResponse.error.message}`);
   const instances = new Map(((instanceResponse.data ?? []) as Row[]).map((row) => [String(row.instances_id), row]));
+  const runtimes = new Map(((runtimeResponse.data ?? []) as Row[]).map((row) => [String(row.instances_id), row]));
   const levels = new Map(((levelResponse.data ?? []) as Row[]).map((row) => [String(row.levels_id), row]));
   return ((chipResponse.data ?? []) as Row[]).map((row) => {
-    const instance = instances.get(String(row.instances_id)) ?? {};
+    const instanceId = String(row.instances_id ?? '');
+    const instance = instances.get(instanceId) ?? {};
+    const runtime = runtimes.get(instanceId) ?? {};
     const level = levels.get(String(row.levels_id)) ?? {};
     const levelName = String(level.levels_name ?? 'Padrao');
     const defaults = chipLevelDefaults(levelName);
-    const active = isActiveStatus(row.status_id, status.activeId, status.nameById) && isActiveStatus(instance.status_id, status.activeId, status.nameById);
+    const administrativelyActive = isActiveStatus(row.status_id, status.activeId, status.nameById)
+      && isActiveStatus(instance.status_id, status.activeId, status.nameById);
+    const rawOperationalState = String(runtime.operational_state ?? 'unknown');
+    const operationalState = (['online', 'reconnecting', 'session_saved', 'disconnected', 'unavailable'].includes(rawOperationalState)
+      ? rawOperationalState
+      : 'unknown') as ChipConfigRecord['operationalState'];
+    const sessionSaved = runtime.session_saved === true;
+    const socketConnected = runtime.socket_connected === true;
     const dailyLimit = number(level.levels_daily_limit, defaults.dailyLimit);
     const batchCount = Math.max(1, number(level.levels_queues, defaults.batchCount));
     return {
@@ -197,13 +209,20 @@ async function listChips(userId: number): Promise<ChipConfigRecord[]> {
       kind: 'chips',
       name: String(row.chips_name ?? ''),
       number: String(row.chips_phone ?? ''),
-      instanceId: String(row.instances_id ?? ''),
+      instanceId,
       levelId: String(row.levels_id ?? ''),
       level: levelName,
       url: String(instance.instances_url ?? ''),
       instance: String(instance.instances_name ?? ''),
       apiKey: '',
-      connectionStatus: active ? 'connected' : 'inactive',
+      connectionStatus: operationalState,
+      administrativelyActive,
+      operationalState,
+      sessionSaved,
+      socketConnected,
+      jid: String(runtime.jid ?? ''),
+      runtimeCheckedAt: String(runtime.checked_at ?? ''),
+      runtimeError: String(runtime.last_error ?? ''),
       priority: 1,
       startTime: '13:00',
       endTime: '18:00',
@@ -211,9 +230,9 @@ async function listChips(userId: number): Promise<ChipConfigRecord[]> {
       intervalSeconds: 120,
       blockSize: Math.max(1, Math.floor(dailyLimit / batchCount)),
       batches: Array.from({ length: batchCount }, (_, index) => String(index + 1)),
-      paused: !active,
-      active,
-      status: active ? 'Ativo' : 'Inativo',
+      paused: !administrativelyActive,
+      active: administrativelyActive,
+      status: administrativelyActive ? 'Ativo' : 'Inativo',
       createdAt: String(row.chips_created_at ?? ''),
       updatedAt: String(row.chips_updated_at ?? ''),
     } satisfies ChipConfigRecord;

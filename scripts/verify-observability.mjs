@@ -27,5 +27,5 @@ const lastHealthDefinition=migrationNames.filter((name)=>read(`supabase/migratio
 if(lastHealthDefinition!==fixMigration) throw new Error(`operational_health_fix_not_final:${lastHealthDefinition??'missing'}`);
 for(const token of ['getOperationalHealth','requestOperationalRecovery']) if(!page.includes(token)||!repo.includes(token)) throw new Error(`monitoring_ui_missing:${token}`);
 if(!app.includes("activePage === 'monitoring'")) throw new Error('monitoring_route_missing');
-const worker=manifest.tools.find((tool)=>tool.id==='worker'); if(worker?.version!=='3.6.0') throw new Error('worker_3_6_not_published');
+if(manifest.tools.some((tool)=>tool.id==='worker')) throw new Error('standalone_worker_must_not_be_published');
 console.log('Etapa 11: observabilidade e recuperação verificadas.');

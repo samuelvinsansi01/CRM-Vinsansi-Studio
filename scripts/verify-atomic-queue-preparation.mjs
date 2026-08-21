@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 
 const migration = readFileSync(new URL('../supabase/migrations/20260802070000_atomic_queue_preparation.sql', import.meta.url), 'utf8');
+const runtimeGuardMigration = readFileSync(new URL('../supabase/migrations/20260820211000_whatsapp_queue_runtime_guard.sql', import.meta.url), 'utf8');
+const canonicalConfig = readFileSync(new URL('../src/repositories/config/canonicalConfig.repository.ts', import.meta.url), 'utf8');
+const chipOperational = readFileSync(new URL('../src/services/config/chipOperational.ts', import.meta.url), 'utf8');
 const preparation = readFileSync(new URL('../src/services/queue-preparation/queuePreparation.service.ts', import.meta.url), 'utf8');
 const queueSchema = readFileSync(new URL('../src/repositories/queueSchema.ts', import.meta.url), 'utf8');
 const whatsappRepository = readFileSync(new URL('../src/repositories/whatsapp-queue/canonicalWhatsAppQueue.repository.ts', import.meta.url), 'utf8');
@@ -30,6 +33,12 @@ assert(!preparation.includes('compareAndSet'), 'Status do lead ainda é alterado
 assert(preparation.includes('const id = String(chip.id)'), 'Chip não utiliza chips_id como identificador transacional.');
 assert(preparation.includes('const id = String(profile.id)'), 'Perfil não utiliza socials_id como identificador transacional.');
 
+assert(runtimeGuardMigration.includes('public.instance_runtime_states AS runtime'), 'Fila WhatsApp não consulta o estado operacional separado da instância.');
+assert(runtimeGuardMigration.includes('runtime.session_saved = true'), 'Fila WhatsApp não exige sessão persistida conhecida.');
+assert(!runtimeGuardMigration.includes('runtime.socket_connected = true'), 'Fila voltou a depender do socket instantâneo em vez da sessão persistida.');
+assert(canonicalConfig.includes("from('instance_runtime_states')"), 'Configuração de chips não carrega a telemetria operacional da instância.');
+assert(chipOperational.includes('chip.sessionSaved'), 'Elegibilidade do chip não considera sessão persistida.');
+
 for (const [name, repository] of [['WhatsApp', whatsappRepository], ['Instagram', instagramRepository]]) {
   assert(repository.includes('prepareQueueItems('), `${name}: repositório não usa a RPC transacional.`);
   assert(!repository.includes("from('queue_items').insert"), `${name}: ainda existe INSERT direto em queue_items.`);
@@ -40,4 +49,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('Preparação atômica de filas confirmada: locks, capacidade, posição, fila, item e lead estão sob a RPC.');
+console.log('Preparação atômica de filas confirmada: locks, capacidade e sessão persistida por chip estão sob o contrato canônico.');

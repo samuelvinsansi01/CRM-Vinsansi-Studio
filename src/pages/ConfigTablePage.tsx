@@ -114,8 +114,19 @@ function statusTag(record: ConfigRecord) {
 
 function chipStatusTag(record: ChipConfigRecord) {
   const label = chipStatusLabel(record);
-  const tone = label === 'Ativo' ? 'success' : label === 'Arquivado' ? 'neutral' : 'danger';
-  return <Tag tone={tone}>{label}</Tag>;
+  const tone = label === 'Conectado'
+    ? 'success'
+    : label === 'Reconectando' || label === 'Sessao salva'
+      ? 'warning'
+      : label === 'Arquivado'
+        ? 'neutral'
+        : 'danger';
+  const title = [
+    record.jid ? `JID: ${record.jid}` : '',
+    record.runtimeCheckedAt ? `Verificado: ${record.runtimeCheckedAt}` : '',
+    record.runtimeError ? `Erro: ${record.runtimeError}` : '',
+  ].filter(Boolean).join(' | ');
+  return <span title={title || undefined}><Tag tone={tone}>{label}</Tag></span>;
 }
 
 function branchOptions(branches: BranchConfigRecord[]): SelectOption[] {
@@ -223,7 +234,7 @@ function makeScreen(kind: ConfigKind, options: ConfigModalOptions): ScreenDefini
         { key: 'channel', label: 'Canal', width: '12%' },
         { key: 'type', label: 'Tipo', width: '12%' },
         { key: 'messages', label: 'Mensagens', width: '30%' },
-        { key: 'status', label: 'Status', width: '10%' },
+        { key: 'status', label: 'WhatsApp', width: '10%' },
       ],
       fields: [
         { key: 'name', label: 'Nome do template', placeholder: 'Ex.: WhatsApp sem site - abordagem A', description: 'Mapeia diretamente para templates.templates_name.' },
@@ -275,8 +286,8 @@ function makeScreen(kind: ConfigKind, options: ConfigModalOptions): ScreenDefini
     emptyMessage: 'Nenhum chip configurado ainda.',
     metrics: [
       { icon: Smartphone, label: 'Total', tone: 'neutral', getValue: (records) => records.length },
-      { icon: PhoneCall, label: 'Ativos', tone: 'success', getValue: (records) => records.filter(isChip).filter(isOperationalWhatsAppChip).length },
-      { icon: PhoneOff, label: 'Inativos', tone: 'danger', getValue: (records) => records.filter(isChip).filter((record) => !isOperationalWhatsAppChip(record)).length },
+      { icon: PhoneCall, label: 'Com sessao', tone: 'success', getValue: (records) => records.filter(isChip).filter(isOperationalWhatsAppChip).length },
+      { icon: PhoneOff, label: 'Sem sessao', tone: 'danger', getValue: (records) => records.filter(isChip).filter((record) => !isOperationalWhatsAppChip(record)).length },
       { icon: Send, label: 'Capacidade/dia', tone: 'warning', getValue: (records) => records.filter(isChip).filter(isOperationalWhatsAppChip).reduce((total, record) => total + record.dailyLimit, 0) },
     ],
     columns: [

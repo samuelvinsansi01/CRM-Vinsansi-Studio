@@ -1,11 +1,20 @@
 import { eventBus } from '../../lib/events';
 import { getSupabaseClient } from '../../lib/supabase';
 
+export type EvolutionOperationalState = 'online' | 'reconnecting' | 'session_saved' | 'disconnected' | 'unavailable';
+
 export type EvolutionInstanceSyncItem = {
   instanceId: string;
   instanceName: string;
   state: string;
+  operationalState: EvolutionOperationalState;
   active: boolean;
+  online: boolean;
+  connected: boolean;
+  loggedIn: boolean;
+  sessionSaved: boolean;
+  socketConnected: boolean;
+  jid?: string;
   changed: boolean;
   webhookConfigured: boolean;
   error?: string;
@@ -17,6 +26,10 @@ export type EvolutionInstanceSyncResult = {
   total: number;
   active: number;
   inactive: number;
+  online: number;
+  sessionSaved: number;
+  disconnected: number;
+  unavailable: number;
   changed: number;
   webhookConfigured: number;
   results: EvolutionInstanceSyncItem[];
