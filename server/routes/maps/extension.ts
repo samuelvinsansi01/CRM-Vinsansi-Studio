@@ -431,10 +431,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return send(req, res, 200, {
         ok: true,
         targets: {
-          whatsapp: { target: targets.whatsapp },
-          instagram: { target: targets.instagram },
+          whatsapp: { target: targets.whatsapp, capacity: targets.whatsapp, usefulStock: null, needed: targets.whatsapp },
+          instagram: { target: targets.instagram, capacity: targets.instagram, usefulStock: null, needed: targets.instagram },
           unique: targets.unique,
-          source: 'branch_default',
+          source: 'branch_stock_target',
+          strategy: 'additive_execution_target',
         },
       });
     }

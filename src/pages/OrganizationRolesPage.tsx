@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CopyPlus, RefreshCcw, ShieldCheck } from 'lucide-react';
-import { Button, ConfirmDialog, Drawer, Field, Panel, Tag } from '../design-system/components';
+import { Button, ConfirmDialog, DataTable, Drawer, Field, FiltersBar, Panel, RowsPerPageControl, SearchInput, SelectField, TableCard, Tag, type TableColumn } from '../design-system/components';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useNotificationContext } from '../providers/NotificationProvider';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
@@ -26,6 +27,8 @@ export function OrganizationRolesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<OrganizationRole | null>(null);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
 
   const canManage = isPlatformOwner || accessLevel === 'owner';
 
@@ -54,6 +57,18 @@ export function OrganizationRolesPage() {
     }
     return [...result.entries()];
   }, [permissions]);
+  const visibleRoles = useMemo(() => roles.filter((role) => {
+    const query = search.trim().toLocaleLowerCase('pt-BR');
+    return (!query || [role.name, role.description].some((value) => String(value ?? '').toLocaleLowerCase('pt-BR').includes(query)))
+      && (typeFilter === 'all' || (typeFilter === 'system' ? role.systemTemplate : !role.systemTemplate));
+  }), [roles, search, typeFilter]);
+  const pagination = useClientPagination(visibleRoles, 20);
+  const columns: TableColumn<Record<string, React.ReactNode>>[] = [
+    { key: 'name', label: 'Função', render: (row) => <><strong>{row.name}</strong><span>{row.description}</span></> },
+    { key: 'type', label: 'Tipo', render: (row) => <Tag tone={row.systemTemplate === 'true' ? 'primary' : 'neutral'}>{row.type}</Tag> },
+    { key: 'memberCount', label: 'Membros' }, { key: 'permissionCount', label: 'Permissões' },
+    { key: 'status', label: 'Status', render: (row) => <Tag tone={row.active === 'true' ? 'success' : 'neutral'}>{row.status}</Tag> },
+  ];
 
   const openRole = (role?: OrganizationRole) => {
     setEditing(role ?? 'new');
@@ -125,22 +140,16 @@ export function OrganizationRolesPage() {
         <div><Tag tone="neutral">Membro</Tag><p>Recebe uma função, como SDR, e herda exatamente as permissões delegáveis daquela função.</p></div>
       </Panel>
 
-      {error ? <div className="configuration-state configuration-state--error">{error}</div> : null}
-      {loading && !roles.length ? <div className="configuration-state">Carregando funções...</div> : null}
-
-      <div className="organization-role-grid">
-        {roles.map((role) => (
-          <Panel key={role.id} className="organization-role-card" title={role.name} actions={role.systemTemplate ? <Tag tone="primary">Predefinida</Tag> : <Tag tone="neutral">Personalizada</Tag>}>
-            <p>{role.description || 'Sem descrição.'}</p>
-            <div className="organization-role-card__meta"><span><strong>{role.memberCount}</strong> membro(s)</span><span><strong>{role.permissionKeys.length}</strong> permissões</span></div>
-            <div className="organization-role-card__actions">
-              <Button size="sm" variant="secondary" disabled={!canManage} onClick={() => openRole(role)}>Editar</Button>
-              <Button size="sm" variant="ghost" disabled={!canManage} onClick={() => duplicateRole(role)}>Duplicar</Button>
-              {!role.systemTemplate ? <Button size="sm" variant="danger" disabled={!canManage || role.memberCount > 0} onClick={() => setDeleting(role)}>Excluir</Button> : null}
-            </div>
-          </Panel>
-        ))}
-      </div>
+      <FiltersBar>
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar função" />
+        <SelectField value={typeFilter} onChange={setTypeFilter} options={[{ label: 'Todos os tipos', value: 'all' }, { label: 'Predefinidas', value: 'system' }, { label: 'Personalizadas', value: 'custom' }]} />
+      </FiltersBar>
+      <TableCard title="Funções da organização" footerText={`${visibleRoles.length} função(ões)`} page={pagination.page} totalPages={pagination.totalPages} onPageChange={pagination.setPage} footerLeft={<RowsPerPageControl value={pagination.rowsPerPage} onChange={pagination.setRowsPerPage} />}>
+        {error ? <div className="configuration-state configuration-state--error">{error}</div> : null}
+        {loading && !roles.length ? <div className="configuration-state">Carregando funções...</div> : null}
+        {!loading && !visibleRoles.length ? <div className="configuration-state">Nenhuma função encontrada.</div> : null}
+        {visibleRoles.length ? <DataTable selectable={false} columns={columns} rows={pagination.pageItems.map((role) => ({ id: role.id, name: role.name, description: role.description || 'Sem descrição.', systemTemplate: String(role.systemTemplate), type: role.systemTemplate ? 'Predefinida' : 'Personalizada', memberCount: role.memberCount, permissionCount: role.permissionKeys.length, active: String(role.active), status: role.active ? 'Ativa' : 'Inativa' }))} getRowActions={(row) => canManage ? ['edit', 'duplicate', ...(row.systemTemplate === 'false' && Number(row.memberCount) === 0 ? ['delete' as const] : [])] : []} onAction={(action, row) => { const role = roles.find((candidate) => candidate.id === row.id); if (!role) return; if (action === 'edit') openRole(role); if (action === 'duplicate') duplicateRole(role); if (action === 'delete') setDeleting(role); }} /> : null}
+      </TableCard>
 
       <Drawer
         open={Boolean(editing)}

@@ -1,9 +1,9 @@
-import { Archive, Check, Edit2, Eye, Instagram, MessageCircle, Power, PowerOff, RefreshCcw, RotateCcw, Send, Trash2, Wifi, X } from 'lucide-react';
+import { Archive, Check, CopyPlus, Crown, Edit2, Eye, Instagram, MessageCircle, Power, PowerOff, RefreshCcw, RotateCcw, Send, Trash2, Wifi, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { IconButton } from '../action/IconButton';
 
-export type TableAction = 'view' | 'edit' | 'delete' | 'archive' | 'activate' | 'deactivate' | 'invalidate' | 'refresh' | 'test' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'return' | 'approve' | 'unapprove' | 'sent' | 'validate';
+export type TableAction = 'view' | 'edit' | 'duplicate' | 'delete' | 'archive' | 'activate' | 'deactivate' | 'revoke' | 'ownership' | 'invalidate' | 'refresh' | 'test' | 'whatsapp' | 'instagram' | 'cancel' | 'restore' | 'return' | 'approve' | 'unapprove' | 'sent' | 'validate';
 
 export type TableColumn<T> = {
   key: keyof T | string;
@@ -27,10 +27,13 @@ type DataTableProps<T> = {
 const actionIcon = {
   view: Eye,
   edit: Edit2,
+  duplicate: CopyPlus,
   delete: Trash2,
   archive: Archive,
   activate: Power,
   deactivate: PowerOff,
+  revoke: Trash2,
+  ownership: Crown,
   invalidate: X,
   refresh: RefreshCcw,
   test: Wifi,
@@ -48,10 +51,13 @@ const actionIcon = {
 const actionLabel = {
   view: 'Visualizar',
   edit: 'Editar',
+  duplicate: 'Duplicar',
   delete: 'Excluir',
   archive: 'Arquivar',
   activate: 'Ativar',
   deactivate: 'Desativar',
+  revoke: 'Revogar',
+  ownership: 'Transferir propriedade',
   invalidate: 'Invalidar',
   refresh: 'Sincronizar',
   test: 'Testar conexão',
@@ -69,10 +75,13 @@ const actionLabel = {
 const actionTone = {
   view: 'neutral',
   edit: 'neutral',
+  duplicate: 'neutral',
   delete: 'danger',
   archive: 'danger',
   activate: 'success',
   deactivate: 'danger',
+  revoke: 'danger',
+  ownership: 'warning',
   invalidate: 'danger',
   refresh: 'neutral',
   test: 'neutral',

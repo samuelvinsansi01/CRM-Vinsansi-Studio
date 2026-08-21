@@ -882,6 +882,7 @@ DECLARE
   v_org bigint:=public.current_organization_id();
   v_member public.organization_members%ROWTYPE;
   v_org_row public.organizations%ROWTYPE;
+  v_member_name text;
   v_role_name text;
   v_permissions jsonb;
   v_orgs jsonb;
@@ -894,6 +895,7 @@ BEGIN
   SELECT * INTO v_org_row FROM public.organizations WHERE organizations_id=v_org;
   SELECT * INTO v_member FROM public.organization_members
    WHERE organizations_id=v_org AND users_id=v_actor AND status_id=1 LIMIT 1;
+  SELECT coalesce(nullif(trim(users_name),''),'Usuário') INTO v_member_name FROM public.users WHERE users_id=v_actor;
   IF v_member.organization_roles_id IS NOT NULL THEN
     SELECT organization_roles_name INTO v_role_name FROM public.organization_roles WHERE organization_roles_id=v_member.organization_roles_id;
   END IF;
@@ -922,6 +924,7 @@ BEGIN
     ),
     'member',CASE WHEN v_member.organization_members_id IS NULL THEN NULL ELSE jsonb_build_object(
       'id',v_member.organization_members_id::text,
+      'name',v_member_name,
       'accessLevel',v_member.access_level,
       'roleId',CASE WHEN v_member.organization_roles_id IS NULL THEN NULL ELSE v_member.organization_roles_id::text END,
       'roleName',v_role_name

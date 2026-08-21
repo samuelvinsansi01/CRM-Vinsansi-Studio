@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { RefreshCcw, UserPlus, UsersRound } from 'lucide-react';
-import { Button, ConfirmDialog, Drawer, Field, MetricCard, Panel, SelectField, Tag } from '../design-system/components';
+import { Button, ConfirmDialog, DataTable, Drawer, Field, FiltersBar, MetricCard, RowsPerPageControl, SearchInput, SelectField, TableCard, Tag, type TableAction, type TableColumn } from '../design-system/components';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useNotificationContext } from '../providers/NotificationProvider';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
@@ -57,6 +58,8 @@ export function OrganizationMembersPage() {
   const [reassignMemberId, setReassignMemberId] = useState('');
   const [workingId, setWorkingId] = useState('');
   const [transferTarget, setTransferTarget] = useState<OrganizationMember | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const canManage = isPlatformOwner || accessLevel === 'owner' || accessLevel === 'manager';
   const canPromoteManager = isPlatformOwner || accessLevel === 'owner';
@@ -84,12 +87,33 @@ export function OrganizationMembersPage() {
   useEffect(() => { void refresh(); }, [organizationName]);
 
   const activeMembers = members.filter((member) => member.active);
+  const visibleMembers = useMemo(() => members.filter((member) => {
+    const query = search.trim().toLocaleLowerCase('pt-BR');
+    const matchesSearch = !query || [member.name, member.email, member.roleName, accessLabel(member.accessLevel)].some((value) => String(value ?? '').toLocaleLowerCase('pt-BR').includes(query));
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? member.active : !member.active);
+    return matchesSearch && matchesStatus;
+  }), [members, search, statusFilter]);
+  const memberPagination = useClientPagination(visibleMembers, 20);
+  const invitationPagination = useClientPagination(invitations, 20);
   const memberOptions = activeMembers
     .filter((member) => member.id !== deactivateMember?.id)
     .map((member) => ({ label: `${member.name} • ${member.roleName ?? accessLabel(member.accessLevel)}`, value: member.id }));
 
   const roleOptions = useMemo(() => roles.filter((role) => role.assignable).map((role) => ({ label: role.name, value: role.id })), [roles]);
   const defaultRoleFor = (level: 'manager' | 'member') => roles.find((role) => role.key === (level === 'manager' ? 'gestor' : 'sdr'))?.id ?? roles[0]?.id ?? '';
+  const memberColumns: TableColumn<Record<string, React.ReactNode>>[] = [
+    { key: 'member', label: 'Membro', render: (row) => <><strong>{row.name}</strong><span>{row.email}</span></> },
+    { key: 'level', label: 'Nível', render: (row) => <Tag tone={accessTone(String(row.accessLevel))}>{row.level}</Tag> },
+    { key: 'role', label: 'Função' },
+    { key: 'status', label: 'Status', render: (row) => <Tag tone={row.active === 'true' ? 'success' : 'neutral'}>{row.status}</Tag> },
+    { key: 'joinedAt', label: 'Entrada' },
+  ];
+  const invitationColumns: TableColumn<Record<string, React.ReactNode>>[] = [
+    { key: 'email', label: 'E-mail', render: (row) => <strong>{row.email}</strong> },
+    { key: 'level', label: 'Nível' }, { key: 'role', label: 'Função' },
+    { key: 'status', label: 'Status', render: (row) => <Tag tone={row.status === 'pending' ? 'warning' : row.status === 'accepted' ? 'success' : 'neutral'}>{row.status}</Tag> },
+    { key: 'expiresAt', label: 'Expira em' },
+  ];
 
   const openInvite = () => {
     setInviteEmail('');
@@ -193,51 +217,27 @@ export function OrganizationMembersPage() {
         <MetricCard value={String(invitations.filter((item) => item.status === 'pending').length)} label="Convites pendentes" />
       </section>
 
-      <Panel title="Membros da organização" className="organization-panel">
+      <FiltersBar>
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar por nome, e-mail ou função" />
+        <SelectField value={statusFilter} onChange={setStatusFilter} options={[{ label: 'Todos os status', value: 'all' }, { label: 'Ativos', value: 'active' }, { label: 'Inativos', value: 'inactive' }]} />
+      </FiltersBar>
+
+      <TableCard title="Membros da organização" footerText={`${visibleMembers.length} membro(s)`} page={memberPagination.page} totalPages={memberPagination.totalPages} onPageChange={memberPagination.setPage} footerLeft={<RowsPerPageControl value={memberPagination.rowsPerPage} onChange={memberPagination.setRowsPerPage} />}>
         {error ? <div className="configuration-state configuration-state--error">{error}</div> : null}
         {loading && !members.length ? <div className="configuration-state">Carregando membros...</div> : null}
-        {!loading && !members.length ? <div className="configuration-state">Nenhum membro encontrado.</div> : null}
-        {members.length ? (
-          <div className="organization-table-wrap">
-            <table className="organization-table">
-              <thead><tr><th>Membro</th><th>Nível</th><th>Função</th><th>Status</th><th>Entrada</th><th>Ações</th></tr></thead>
-              <tbody>{members.map((member) => {
-                const managerCanTouch = accessLevel !== 'manager' || member.accessLevel === 'member';
-                const editable = canManage && member.accessLevel !== 'owner' && managerCanTouch;
-                return (
-                  <tr key={member.id}>
-                    <td><strong>{member.name}</strong><span>{member.email || '—'}</span></td>
-                    <td><Tag tone={accessTone(member.accessLevel)}>{accessLabel(member.accessLevel)}</Tag></td>
-                    <td>{member.roleName || (member.accessLevel === 'owner' ? 'Acesso total' : '—')}</td>
-                    <td><Tag tone={member.active ? 'success' : 'neutral'}>{member.active ? 'Ativo' : 'Inativo'}</Tag></td>
-                    <td>{formatDate(member.joinedAt)}</td>
-                    <td><div className="organization-table__actions">
-                      {editable && member.active ? <Button size="sm" variant="secondary" onClick={() => openEdit(member)}>Editar</Button> : null}
-                      {editable && member.active ? <Button size="sm" variant="danger" disabled={workingId === member.id} onClick={() => { setDeactivateMember(member); setReassignMemberId(''); }}>Desativar</Button> : null}
-                      {editable && !member.active ? <Button size="sm" variant="secondary" loading={workingId === member.id} onClick={() => void handleReactivate(member)}>Reativar</Button> : null}
-                      {canTransferOwnership && member.active && member.accessLevel !== 'owner' ? <Button size="sm" variant="ghost" onClick={() => setTransferTarget(member)}>Tornar Dono</Button> : null}
-                    </div></td>
-                  </tr>
-                );
-              })}</tbody>
-            </table>
-          </div>
-        ) : null}
-      </Panel>
+        {!loading && !visibleMembers.length ? <div className="configuration-state">Nenhum membro encontrado.</div> : null}
+        {visibleMembers.length ? <DataTable selectable={false} columns={memberColumns} rows={memberPagination.pageItems.map((member) => ({ id: member.id, name: member.name, email: member.email || '—', accessLevel: member.accessLevel, level: accessLabel(member.accessLevel), role: member.roleName || (member.accessLevel === 'owner' ? 'Acesso total' : '—'), active: String(member.active), status: member.active ? 'Ativo' : 'Inativo', joinedAt: formatDate(member.joinedAt) }))} getRowActions={(row) => {
+          const member = members.find((item) => item.id === row.id); if (!member) return [];
+          const editable = canManage && member.accessLevel !== 'owner' && (accessLevel !== 'manager' || member.accessLevel === 'member');
+          return [...(editable ? [member.active ? 'edit' : 'activate', ...(member.active ? ['deactivate' as TableAction] : [])] : []), ...(canTransferOwnership && member.active && member.accessLevel !== 'owner' ? ['ownership' as TableAction] : [])] as TableAction[];
+        }} onAction={(action, row) => { const member = members.find((item) => item.id === row.id); if (!member) return; if (action === 'edit') openEdit(member); if (action === 'deactivate') { setDeactivateMember(member); setReassignMemberId(''); } if (action === 'activate') void handleReactivate(member); if (action === 'ownership') setTransferTarget(member); }} /> : null}
+      </TableCard>
 
-      <Panel title="Convites" className="organization-panel">
+      <TableCard title="Convites" footerText={`${invitations.length} convite(s)`} page={invitationPagination.page} totalPages={invitationPagination.totalPages} onPageChange={invitationPagination.setPage} footerLeft={<RowsPerPageControl value={invitationPagination.rowsPerPage} onChange={invitationPagination.setRowsPerPage} />}>
         {!invitations.length ? <div className="configuration-state">Nenhum convite registrado.</div> : (
-          <div className="organization-table-wrap"><table className="organization-table">
-            <thead><tr><th>E-mail</th><th>Nível</th><th>Função</th><th>Status</th><th>Expira em</th><th></th></tr></thead>
-            <tbody>{invitations.map((invite) => <tr key={invite.id}>
-              <td><strong>{invite.email}</strong></td><td>{accessLabel(invite.accessLevel)}</td><td>{invite.roleName ?? '—'}</td>
-              <td><Tag tone={invite.status === 'pending' ? 'warning' : invite.status === 'accepted' ? 'success' : 'neutral'}>{invite.status}</Tag></td>
-              <td>{formatDate(invite.expiresAt)}</td>
-              <td>{canManage && invite.status === 'pending' ? <Button size="sm" variant="ghost" onClick={() => void cancelOrganizationInvitation(invite.id).then(refresh).catch((cause) => push({ type: 'error', message: cause instanceof Error ? cause.message : 'Falha ao cancelar convite.' }))}>Cancelar</Button> : null}</td>
-            </tr>)}</tbody>
-          </table></div>
+          <DataTable selectable={false} columns={invitationColumns} rows={invitationPagination.pageItems.map((invite) => ({ id: invite.id, email: invite.email, level: accessLabel(invite.accessLevel), role: invite.roleName ?? '—', status: invite.status, expiresAt: formatDate(invite.expiresAt) }))} getRowActions={(row) => canManage && row.status === 'pending' ? ['cancel'] : []} onAction={(_, row) => void cancelOrganizationInvitation(String(row.id)).then(refresh).catch((cause) => push({ type: 'error', message: cause instanceof Error ? cause.message : 'Falha ao cancelar convite.' }))} />
         )}
-      </Panel>
+      </TableCard>
 
       <Drawer
         open={inviteOpen}

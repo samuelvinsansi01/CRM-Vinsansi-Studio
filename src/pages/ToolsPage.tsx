@@ -2,7 +2,7 @@ import {
   Activity, Boxes, Download, PackageCheck, Power, RefreshCw, RotateCcw, Save, Settings2, ShieldCheck, Wrench,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Field, Panel, SegmentedControl, SelectField, Tag } from '../design-system/components';
+import { Button, DataTable, Field, FiltersBar, Panel, SearchInput, SegmentedControl, SelectField, TableCard, Tag, type TableColumn } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useNotificationContext } from '../providers/NotificationProvider';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
@@ -135,6 +135,7 @@ export function ToolsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
 
   const canManageTools = hasPermission('tools.manage');
   const canViewSettings = hasPermission('settings.view');
@@ -171,6 +172,19 @@ export function ToolsPage() {
   useEffect(() => { if (selectedToolId) void loadDetails(selectedToolId); }, [loadDetails, selectedToolId]);
 
   const selectedSummary = useMemo(() => tools.find((tool) => tool.toolId === selectedToolId) ?? null, [selectedToolId, tools]);
+  const visibleTools = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('pt-BR');
+    return tools.filter((tool) => !query || [tool.displayName, tool.toolId, tool.description].some((value) => String(value ?? '').toLocaleLowerCase('pt-BR').includes(query)));
+  }, [search, tools]);
+  const toolColumns: TableColumn<Record<string, React.ReactNode>>[] = [
+    { key: 'tool', label: 'Ferramenta', render: (row) => <><strong>{row.displayName}</strong><span>{row.toolId}</span></> },
+    { key: 'registration', label: 'Registro', render: (row) => <Tag tone={row.enabled === 'true' ? 'success' : 'neutral'}>{row.registration}</Tag> },
+    { key: 'presence', label: 'Presença', render: (row) => <Tag tone={presenceTone(row.presenceValue as ToolPresence)}>{row.presence}</Tag> },
+    { key: 'version', label: 'Versão' },
+    { key: 'compatibility', label: 'Compatibilidade', render: (row) => <Tag tone={compatibilityTone(row.compatibilityValue as ToolCompatibility)}>{row.compatibility}</Tag> },
+    { key: 'installations', label: 'Instalações' },
+    { key: 'lastActivity', label: 'Última atividade' },
+  ];
 
   async function changeEnabled(tool: OrganizationToolSummary) {
     setSaving(true);
@@ -224,29 +238,11 @@ export function ToolsPage() {
       {error ? <div className="table-message table-message--error">{error}</div> : null}
       {loading && !tools.length ? <div className="table-message">Carregando catálogo canônico...</div> : null}
 
-      <div className="tools-control-grid">
-        {tools.map((tool) => (
-          <article className={`tool-control-card ${selectedToolId === tool.toolId ? 'tool-control-card--selected' : ''}`} key={tool.toolId}>
-            <header className="tool-control-card__header">
-              <span className="tool-card__icon">{tool.toolId === 'vinsansi_capture' ? <Wrench size={24} /> : tool.toolId === 'vinsansi_instagram' ? <Activity size={24} /> : <Boxes size={24} />}</span>
-              <div><strong>{tool.displayName}</strong><small>{tool.toolId}</small></div>
-            </header>
-            <p>{tool.description}</p>
-            <dl className="tool-status-grid">
-              <div><dt>Registro</dt><dd><Tag tone={tool.enabled ? 'success' : 'neutral'}>{administrativeLabel(tool.administrativeStatus)}</Tag></dd></div>
-              <div><dt>Presença</dt><dd><Tag tone={presenceTone(tool.presence)}>{presenceLabel(tool.presence)}</Tag></dd></div>
-              <div><dt>Versão</dt><dd>{tool.installedVersion ?? 'Não reportada'}</dd></div>
-              <div><dt>Compatibilidade</dt><dd><Tag tone={compatibilityTone(tool.compatibility)}>{compatibilityLabel(tool.compatibility)}</Tag></dd></div>
-              <div><dt>Instalações</dt><dd>{tool.installationCount}</dd></div>
-              <div><dt>Última atividade</dt><dd>{formatDate(tool.lastActivityAt)}</dd></div>
-            </dl>
-            <div className="tool-control-card__actions">
-              <Button variant="secondary" iconLeft={Settings2} onClick={() => { setSelectedToolId(tool.toolId); setActiveTab('Visão geral'); }}>Abrir central</Button>
-              {canManageTools ? <Button variant={tool.enabled ? 'danger' : 'primary'} iconLeft={Power} loading={saving} onClick={() => void changeEnabled(tool)}>{tool.enabled ? 'Desabilitar' : 'Habilitar'}</Button> : null}
-            </div>
-          </article>
-        ))}
-      </div>
+      <FiltersBar><SearchInput value={search} onChange={setSearch} placeholder="Buscar ferramenta" /></FiltersBar>
+      <TableCard title="Ferramentas da organização" footerText={`${visibleTools.length} ferramenta(s)`}>
+        {!loading && !visibleTools.length ? <div className="table-message">Nenhuma ferramenta encontrada.</div> : null}
+        {visibleTools.length ? <DataTable selectable={false} columns={toolColumns} rows={visibleTools.map((tool) => ({ toolId: tool.toolId, displayName: tool.displayName, enabled: String(tool.enabled), registration: administrativeLabel(tool.administrativeStatus), presence: presenceLabel(tool.presence), presenceValue: tool.presence, version: tool.installedVersion ?? 'Não reportada', compatibility: compatibilityLabel(tool.compatibility), compatibilityValue: tool.compatibility, installations: tool.installationCount, lastActivity: formatDate(tool.lastActivityAt) }))} getRowActions={(row) => ['view', ...(canManageTools ? [row.enabled === 'true' ? 'deactivate' as const : 'activate' as const] : [])]} onAction={(action, row) => { const tool = tools.find((candidate) => candidate.toolId === row.toolId); if (!tool) return; if (action === 'view') { setSelectedToolId(tool.toolId); setActiveTab('Visão geral'); } else void changeEnabled(tool); }} /> : null}
+      </TableCard>
 
       {selectedToolId ? (
         <Panel className="settings-card tool-detail-panel" title={selectedSummary?.displayName ?? 'Ferramenta'}
@@ -263,18 +259,15 @@ export function ToolsPage() {
           ) : null}
 
           {!detailLoading && details && activeTab === 'Instalações' ? (
-            details.installations.length ? <div className="tool-installations-wrap"><table className="tool-installations-table"><thead><tr><th>Instalação</th><th>Registro</th><th>Presença</th><th>Versão</th><th>Compatibilidade</th><th>Vista / atividade</th><th>Capabilities</th>{canManageTools ? <th>Ações</th> : null}</tr></thead><tbody>
-              {details.installations.map((installation) => <tr key={installation.id}>
-                <td><strong>{installation.externalInstallationId.slice(0, 24)}</strong><small>{installation.id.slice(0, 8)}</small></td>
-                <td><Tag tone={installation.registrationStatus === 'registered' ? 'success' : 'neutral'}>{administrativeLabel(installation.registrationStatus)}</Tag></td>
-                <td><Tag tone={presenceTone(installation.presence)}>{presenceLabel(installation.presence)}</Tag></td>
-                <td>{installation.installedVersion ?? '—'}</td>
-                <td><Tag tone={compatibilityTone(installation.compatibility)}>{compatibilityLabel(installation.compatibility)}</Tag></td>
-                <td><span>Vista: {formatDate(installation.lastSeenAt)}</span><small>Atividade: {formatDate(installation.lastActivityAt)}</small></td>
-                <td><div className="tool-capabilities">{installation.reportedCapabilities.length ? installation.reportedCapabilities.map((capability) => <code key={capability}>{capability}</code>) : 'Nenhuma reportada'}</div></td>
-                {canManageTools ? <td><div className="tool-installation-actions"><Button size="sm" variant="secondary" disabled={installation.registrationStatus !== 'registered'} onClick={() => void changeInstallation(installation.id, 'disabled')}>Desabilitar</Button><Button size="sm" variant="danger" disabled={installation.registrationStatus === 'revoked'} onClick={() => void changeInstallation(installation.id, 'revoked')}>Revogar</Button></div></td> : null}
-              </tr>)}
-            </tbody></table></div> : <div className="table-message">Nenhuma instalação física confiável foi registrada. Isso não é apresentado como “online”.</div>
+            details.installations.length ? <DataTable selectable={false} columns={[
+              { key: 'installation', label: 'Instalação', render: (row) => <><strong>{row.externalId}</strong><span>{row.shortId}</span></> },
+              { key: 'registration', label: 'Registro', render: (row) => <Tag tone={row.registrationStatus === 'registered' ? 'success' : 'neutral'}>{row.registration}</Tag> },
+              { key: 'presence', label: 'Presença', render: (row) => <Tag tone={presenceTone(row.presenceValue as ToolPresence)}>{row.presence}</Tag> },
+              { key: 'version', label: 'Versão' },
+              { key: 'compatibility', label: 'Compatibilidade', render: (row) => <Tag tone={compatibilityTone(row.compatibilityValue as ToolCompatibility)}>{row.compatibility}</Tag> },
+              { key: 'activity', label: 'Vista / atividade', render: (row) => <><span>Vista: {row.lastSeen}</span><small>Atividade: {row.lastActivity}</small></> },
+              { key: 'capabilities', label: 'Capabilities', render: (row) => <div className="tool-capabilities">{String(row.capabilities) || 'Nenhuma reportada'}</div> },
+            ]} rows={details.installations.map((installation) => ({ id: installation.id, externalId: installation.externalInstallationId.slice(0, 24), shortId: installation.id.slice(0, 8), registration: administrativeLabel(installation.registrationStatus), registrationStatus: installation.registrationStatus, presence: presenceLabel(installation.presence), presenceValue: installation.presence, version: installation.installedVersion ?? '—', compatibility: compatibilityLabel(installation.compatibility), compatibilityValue: installation.compatibility, lastSeen: formatDate(installation.lastSeenAt), lastActivity: formatDate(installation.lastActivityAt), capabilities: installation.reportedCapabilities.join(', ') }))} getRowActions={(row) => canManageTools ? [...(row.registrationStatus === 'registered' ? ['deactivate' as const] : []), ...(row.registrationStatus !== 'revoked' ? ['revoke' as const] : [])] : []} onAction={(action, row) => void changeInstallation(String(row.id), action === 'revoke' ? 'revoked' : 'disabled')} /> : <div className="table-message">Nenhuma instalação física confiável foi registrada. Isso não é apresentado como “online”.</div>
           ) : null}
 
           {!detailLoading && activeTab === 'Configurações' ? (

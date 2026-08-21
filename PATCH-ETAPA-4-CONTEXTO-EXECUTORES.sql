@@ -85,10 +85,10 @@ CREATE OR REPLACE FUNCTION public.service_executor_member_context(
   p_auth_users_id uuid,p_organizations_id bigint,p_tool_id text
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public,auth AS $$
-DECLARE v_user bigint; v_member public.organization_members%ROWTYPE; v_org public.organizations%ROWTYPE; v_permissions text[]; v_required text;
+DECLARE v_user bigint; v_member_name text; v_member public.organization_members%ROWTYPE; v_org public.organizations%ROWTYPE; v_permissions text[]; v_required text;
 BEGIN
   IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'service_role_required'; END IF;
-  SELECT users_id INTO v_user FROM public.users WHERE auth_user_id=p_auth_users_id AND coalesce(users_is_scope,false)=false;
+  SELECT users_id,coalesce(nullif(trim(users_name),''),'Usuário') INTO v_user,v_member_name FROM public.users WHERE auth_user_id=p_auth_users_id AND coalesce(users_is_scope,false)=false;
   IF v_user IS NULL THEN RAISE EXCEPTION 'executor_user_not_found'; END IF;
   SELECT * INTO v_member FROM public.organization_members
    WHERE organizations_id=p_organizations_id AND users_id=v_user AND status_id=1;
@@ -119,7 +119,7 @@ BEGIN
   RETURN jsonb_build_object(
     'authUserId',p_auth_users_id,'userId',v_user,'organizationId',v_org.organizations_id,
     'organizationName',v_org.organizations_name,'legacyScopeUsersId',v_org.legacy_scope_users_id,
-    'memberId',v_member.organization_members_id,'accessLevel',v_member.access_level,
+    'memberId',v_member.organization_members_id,'memberName',v_member_name,'accessLevel',v_member.access_level,
     'membershipStatusId',v_member.status_id,
     'permissions',to_jsonb(v_permissions),'requiredPermission',v_required
   );
@@ -128,11 +128,11 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.service_executor_eligible_organizations(p_auth_users_id uuid,p_tool_id text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public,auth AS $$
-DECLARE v_user bigint; v_result jsonb;
+DECLARE v_user bigint; v_member_name text; v_result jsonb;
 BEGIN
   IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'service_role_required'; END IF;
-  SELECT users_id INTO v_user FROM public.users WHERE auth_user_id=p_auth_users_id AND coalesce(users_is_scope,false)=false;
-  SELECT coalesce(jsonb_agg(jsonb_build_object('organizationId',m.organizations_id,'organizationName',o.organizations_name,'memberId',m.organization_members_id,'accessLevel',m.access_level) ORDER BY o.organizations_name),'[]'::jsonb)
+  SELECT users_id,coalesce(nullif(trim(users_name),''),'Usuário') INTO v_user,v_member_name FROM public.users WHERE auth_user_id=p_auth_users_id AND coalesce(users_is_scope,false)=false;
+  SELECT coalesce(jsonb_agg(jsonb_build_object('organizationId',m.organizations_id,'organizationName',o.organizations_name,'memberId',m.organization_members_id,'memberName',v_member_name,'accessLevel',m.access_level) ORDER BY o.organizations_name),'[]'::jsonb)
     INTO v_result
     FROM public.organization_members m
     JOIN public.organizations o ON o.organizations_id=m.organizations_id AND o.status_id=1

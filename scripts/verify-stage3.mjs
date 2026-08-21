@@ -98,6 +98,18 @@ for (const rpc of ['list_organization_tools','get_organization_tool_details','ge
 for (const permission of ['tools.manage','settings.view','capture.settings','instagram.settings','whatsapp.settings']) {
   includes(toolsPage, permission, `UI não aplica permissão ${permission}.`);
 }
+for (const [name,file] of [
+  ['Membros','src/pages/OrganizationMembersPage.tsx'],
+  ['Organizações','src/pages/PlatformOrganizationsPage.tsx'],
+  ['Funções','src/pages/OrganizationRolesPage.tsx'],
+  ['Central de Ferramentas','src/pages/ToolsPage.tsx'],
+]) {
+  const source=read(file);
+  for(const component of ['DataTable','TableCard','FiltersBar'])includes(source,component,`${name} não reutiliza ${component}.`);
+  expect(!source.includes('<table'),`${name} voltou a criar tabela HTML própria.`);
+}
+const permanentRules=read('../ESPECIFICACAO/06-REGRAS-NAO-NEGOCIAVEIS.md');
+includes(permanentRules,'Nenhuma nova página CRUD pode definir estrutura visual própria','Regra permanente de consistência CRUD/UI ausente.');
 
 const settingsRepository = read('src/repositories/settings/canonicalSettings.repository.ts');
 const platformConfig = read('src/services/platform-config/platformConfig.service.ts');

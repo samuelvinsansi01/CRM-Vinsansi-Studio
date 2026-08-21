@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Building2, Plus, RefreshCcw } from 'lucide-react';
-import { Button, ConfirmDialog, Drawer, Field, MetricCard, Panel, Tag } from '../design-system/components';
+import { Button, ConfirmDialog, DataTable, Drawer, Field, FiltersBar, MetricCard, RowsPerPageControl, SearchInput, SelectField, TableCard, Tag, type TableColumn } from '../design-system/components';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useNotificationContext } from '../providers/NotificationProvider';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
@@ -26,6 +27,21 @@ export function PlatformOrganizationsPage() {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [toggleTarget, setToggleTarget] = useState<PlatformOrganization | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const visibleItems = useMemo(() => items.filter((item) => {
+    const query = search.trim().toLocaleLowerCase('pt-BR');
+    return (!query || [item.name, item.ownerName, item.ownerEmail].some((value) => String(value ?? '').toLocaleLowerCase('pt-BR').includes(query)))
+      && (statusFilter === 'all' || (statusFilter === 'active' ? item.active : !item.active));
+  }), [items, search, statusFilter]);
+  const pagination = useClientPagination(visibleItems, 20);
+  const columns: TableColumn<Record<string, React.ReactNode>>[] = [
+    { key: 'organization', label: 'Organização', render: (row) => <strong>{row.name}</strong> },
+    { key: 'owner', label: 'Dono', render: (row) => <><strong>{row.ownerName}</strong><span>{row.ownerEmail}</span></> },
+    { key: 'memberCount', label: 'Membros' },
+    { key: 'status', label: 'Status', render: (row) => <Tag tone={row.active === 'true' ? 'success' : 'neutral'}>{row.status}</Tag> },
+    { key: 'createdAt', label: 'Criada em' },
+  ];
 
   const refresh = async () => {
     setLoading(true);
@@ -80,24 +96,16 @@ export function PlatformOrganizationsPage() {
         <MetricCard value={String(items.reduce((sum, item) => sum + item.memberCount, 0))} label="Membros ativos" />
         <MetricCard value={String(items.length)} label="Total cadastrado" />
       </section>
-      <Panel title="Organizações" className="organization-panel">
+      <FiltersBar>
+        <SearchInput value={search} onChange={setSearch} placeholder="Buscar organização ou dono" />
+        <SelectField value={statusFilter} onChange={setStatusFilter} options={[{ label: 'Todos os status', value: 'all' }, { label: 'Ativas', value: 'active' }, { label: 'Inativas', value: 'inactive' }]} />
+      </FiltersBar>
+      <TableCard title="Organizações" footerText={`${visibleItems.length} organização(ões)`} page={pagination.page} totalPages={pagination.totalPages} onPageChange={pagination.setPage} footerLeft={<RowsPerPageControl value={pagination.rowsPerPage} onChange={pagination.setRowsPerPage} />}>
         {error ? <div className="configuration-state configuration-state--error">{error}</div> : null}
         {loading && !items.length ? <div className="configuration-state">Carregando organizações...</div> : null}
-        {items.length ? <div className="organization-table-wrap"><table className="organization-table">
-          <thead><tr><th>Organização</th><th>Dono</th><th>Membros</th><th>Status</th><th>Criada em</th><th>Ações</th></tr></thead>
-          <tbody>{items.map((item) => <tr key={item.id}>
-            <td><strong>{item.name}</strong><span>ID {item.id}</span></td>
-            <td><strong>{item.ownerName || '—'}</strong><span>{item.ownerEmail || '—'}</span></td>
-            <td>{item.memberCount}</td>
-            <td><Tag tone={item.active ? 'success' : 'neutral'}>{item.active ? 'Ativa' : 'Inativa'}</Tag></td>
-            <td>{formatDate(item.createdAt)}</td>
-            <td><div className="organization-table__actions">
-              {item.active ? <Button size="sm" variant="secondary" onClick={() => void switchOrganization(item.id)}>Abrir</Button> : null}
-              <Button size="sm" variant={item.active ? 'danger' : 'ghost'} onClick={() => setToggleTarget(item)}>{item.active ? 'Desativar' : 'Reativar'}</Button>
-            </div></td>
-          </tr>)}</tbody>
-        </table></div> : null}
-      </Panel>
+        {!loading && !visibleItems.length ? <div className="configuration-state">Nenhuma organização encontrada.</div> : null}
+        {visibleItems.length ? <DataTable selectable={false} columns={columns} rows={pagination.pageItems.map((item) => ({ id: item.id, name: item.name, ownerName: item.ownerName || '—', ownerEmail: item.ownerEmail || '—', memberCount: item.memberCount, active: String(item.active), status: item.active ? 'Ativa' : 'Inativa', createdAt: formatDate(item.createdAt) }))} getRowActions={(row) => row.active === 'true' ? ['view', 'deactivate'] : ['activate']} onAction={(action, row) => { const item = items.find((candidate) => candidate.id === row.id); if (!item) return; if (action === 'view') void switchOrganization(item.id); else setToggleTarget(item); }} /> : null}
+      </TableCard>
 
       <Drawer open={createOpen} title="Nova organização" description="A organização nasce isolada, com funções Gestor e SDR predefinidas. Você será o Dono inicial." onClose={() => setCreateOpen(false)} footer={<><Button variant="secondary" onClick={() => setCreateOpen(false)}>Cancelar</Button><Button loading={saving} disabled={!name.trim()} onClick={() => void create()}>Criar organização</Button></>}>
         <div className="organization-form-stack"><Field label="Nome da organização" value={name} onChange={setName} placeholder="Ex.: Prospect Pro" /></div>

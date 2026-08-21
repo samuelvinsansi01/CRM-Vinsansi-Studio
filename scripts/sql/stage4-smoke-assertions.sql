@@ -24,7 +24,9 @@ BEGIN
 
  -- 1) Usuário comum + membership ativa: permitido via auth.users.id -> public.users.users_id.
  ctx:=public.service_executor_member_context('00000000-0000-0000-0000-000000000001',10,'vinsansi_capture');
- IF (ctx->>'userId')::bigint<>2 OR (ctx->>'organizationId')::bigint<>10 OR (ctx->>'memberId')::bigint<>100 OR (ctx->>'membershipStatusId')::bigint<>1 THEN RAISE EXCEPTION 'common_active_membership_context_invalid:%',ctx; END IF;
+ IF (ctx->>'userId')::bigint<>2 OR (ctx->>'organizationId')::bigint<>10 OR (ctx->>'memberId')::bigint<>100 OR ctx->>'memberName'<>'Drew' OR (ctx->>'membershipStatusId')::bigint<>1 THEN RAISE EXCEPTION 'common_active_membership_context_invalid:%',ctx; END IF;
+ ctx:=public.get_organization_context();
+ IF ctx->'member'->>'name'<>'Drew' OR (ctx->'member'->>'id')::bigint<>100 THEN RAISE EXCEPTION 'crm_member_display_name_context_invalid:%',ctx; END IF;
 
  -- 2) Platform Owner + membership ativa: permitido pela membership, não pelo privilégio global.
  INSERT INTO auth.users(id,email) VALUES('00000000-0000-0000-0000-000000000003','platform-member@example.com');
@@ -32,7 +34,7 @@ BEGIN
  INSERT INTO public.platform_owners(users_id) VALUES(999);
  INSERT INTO public.organization_members(organization_members_id,organizations_id,users_id,access_level,organization_roles_id,status_id) VALUES(199,10,999,'member',1000,1);
  ctx:=public.service_executor_member_context('00000000-0000-0000-0000-000000000003',10,'vinsansi_capture');
- IF (ctx->>'memberId')::bigint<>199 OR (ctx->>'userId')::bigint<>999 THEN RAISE EXCEPTION 'platform_owner_active_membership_context_invalid:%',ctx; END IF;
+ IF (ctx->>'memberId')::bigint<>199 OR (ctx->>'userId')::bigint<>999 OR ctx->>'memberName'<>'Platform Member' THEN RAISE EXCEPTION 'platform_owner_active_membership_context_invalid:%',ctx; END IF;
 
  -- 3) Platform Owner sem membership: recusado.
  INSERT INTO auth.users(id,email) VALUES('00000000-0000-0000-0000-000000000004','platform-only@example.com');
@@ -57,7 +59,7 @@ BEGIN
  INSERT INTO public.organization_role_permissions(organization_roles_id,permissions_id) SELECT 1001,permissions_id FROM public.permissions WHERE permissions_key='capture.use';
  INSERT INTO public.organization_members(organization_members_id,organizations_id,users_id,access_level,organization_roles_id,status_id) VALUES(102,11,2,'member',1001,1);
  eligible:=public.service_executor_eligible_organizations('00000000-0000-0000-0000-000000000001','vinsansi_capture');
- IF jsonb_array_length(eligible)<>2 OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(eligible) x WHERE (x->>'organizationId')::bigint=11 AND (x->>'memberId')::bigint=102) THEN RAISE EXCEPTION 'multi_organization_eligibility_invalid:%',eligible; END IF;
+ IF jsonb_array_length(eligible)<>2 OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(eligible) x WHERE (x->>'organizationId')::bigint=11 AND (x->>'memberId')::bigint=102 AND x->>'memberName'='Drew') THEN RAISE EXCEPTION 'multi_organization_eligibility_invalid:%',eligible; END IF;
  ctx:=public.service_executor_member_context('00000000-0000-0000-0000-000000000001',11,'vinsansi_capture');
  IF (ctx->>'organizationId')::bigint<>11 OR (ctx->>'memberId')::bigint<>102 OR (ctx->>'userId')::bigint<>2 THEN RAISE EXCEPTION 'selected_organization_context_invalid:%',ctx; END IF;
 

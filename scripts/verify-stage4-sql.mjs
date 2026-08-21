@@ -18,6 +18,7 @@ const scenarios=[
       'scripts/sql/stage3-smoke-assertions.sql',
       'supabase/migrations/20260822120000_executor_organization_context.sql',
       'PATCH-CORRETIVO-ETAPA-4-CONTEXTO-MEMBERSHIP.sql',
+      'PATCH-CORRETIVO-FINAL-ETAPA-4-IDENTIDADE.sql',
       'scripts/sql/stage4-smoke-assertions.sql',
     ],
   },
