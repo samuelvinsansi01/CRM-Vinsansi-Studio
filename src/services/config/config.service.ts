@@ -309,6 +309,15 @@ function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordI
   const levelId = stringFromInput(raw, ['levelId', 'levels_id'], existing?.levelId ?? '', { required: true });
   const level = stringFromInput(raw, ['levelName', 'level', 'nivel'], existing?.level ?? '');
   const batches = splitList(valueFromInput(raw, ['batches', 'blocks', 'lotes'], existing?.batches ?? []));
+  // Runtime da Evolution e telemetria somente de leitura. Ao editar o mesmo chip,
+  // preservamos a ultima leitura carregada do backend; ao trocar a instancia,
+  // nunca carregamos o estado da instancia anterior para a nova vinculacao.
+  const sameInstance = Boolean(existing && existing.instanceId === instanceId);
+  const operationalState: ChipConfigRecord['operationalState'] = sameInstance
+    ? existing?.operationalState ?? 'unknown'
+    : 'unknown';
+  const sessionSaved = sameInstance ? Boolean(existing?.sessionSaved) : false;
+  const socketConnected = sameInstance ? Boolean(existing?.socketConnected) : false;
 
   return {
     id: String(existing?.id ?? raw.id ?? fallbackId('chips')),
@@ -321,7 +330,16 @@ function normalizeChipInput(input: CreateConfigRecordInput | UpdateConfigRecordI
     url: stringFromInput(raw, ['instanceUrl', 'url', 'base_url', 'evolution_url'], existing?.url ?? ''),
     instance: stringFromInput(raw, ['instanceName', 'instance', 'instance_name'], existing?.instance ?? ''),
     apiKey: stringFromInput(raw, ['apiKey', 'api_key'], existing?.apiKey ?? ''),
-    connectionStatus: stringFromInput(raw, ['connectionStatus', 'connection_status'], existing?.connectionStatus ?? existing?.status ?? ''),
+    connectionStatus: sameInstance
+      ? String(existing?.connectionStatus ?? operationalState)
+      : operationalState,
+    administrativelyActive: active,
+    operationalState,
+    sessionSaved,
+    socketConnected,
+    jid: sameInstance ? String(existing?.jid ?? '') : '',
+    runtimeCheckedAt: sameInstance ? String(existing?.runtimeCheckedAt ?? '') : '',
+    runtimeError: sameInstance ? String(existing?.runtimeError ?? '') : '',
     priority: toInteger(valueFromInput(raw, ['priority', 'prioridade'], existing?.priority ?? 1), existing?.priority ?? 1, 1),
     startTime: stringFromInput(raw, ['startTime', 'horarioInicio'], existing?.startTime ?? ''),
     endTime: stringFromInput(raw, ['endTime', 'horarioFim'], existing?.endTime ?? ''),
