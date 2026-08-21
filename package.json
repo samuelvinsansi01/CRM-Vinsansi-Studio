@@ -7,8 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:syntax": "node scripts/verify-syntax.mjs",
-    "verify:release": "node scripts/verify-release-v1.1.0.mjs && npm run verify:syntax"
+    "verify:release": "node scripts/verify-release-v1.1.0.mjs && node scripts/verify-syntax.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

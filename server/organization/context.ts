@@ -21,11 +21,16 @@ export function organizationHeaderFromHeaders(headers: Record<string, string | s
   return /^\d+$/.test(value.trim()) ? value.trim() : '';
 }
 
-export function organizationScopedAuthHeaders(token: string, headers?: Record<string, string | string[] | undefined>) {
+export function organizationScopedAuthHeaders(
+  token: string,
+  headers?: Record<string, string | string[] | undefined>,
+): Record<string, string> {
+  const scopedHeaders: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
   const organizationId = organizationHeaderFromHeaders(headers);
-  return organizationId
-    ? { Authorization: `Bearer ${token}`, [ORGANIZATION_HEADER]: organizationId }
-    : { Authorization: `Bearer ${token}` };
+  if (organizationId) scopedHeaders[ORGANIZATION_HEADER] = organizationId;
+  return scopedHeaders;
 }
 
 function row(value: unknown): Row {

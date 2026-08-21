@@ -1992,10 +1992,12 @@ BEGIN
   IF to_regprocedure('public.delete_instance_secure_rbac_inner(bigint)') IS NULL THEN
     ALTER FUNCTION public.delete_instance_secure(bigint) RENAME TO delete_instance_secure_rbac_inner;
   END IF;
-  IF to_regprocedure('public.save_apify_account_rbac_inner(bigint,text,text,boolean)') IS NULL THEN
+  IF to_regprocedure('public.save_apify_account_rbac_inner(bigint,text,text,boolean)') IS NULL
+     AND to_regprocedure('public.save_apify_account(bigint,text,text,boolean)') IS NOT NULL THEN
     ALTER FUNCTION public.save_apify_account(bigint,text,text,boolean) RENAME TO save_apify_account_rbac_inner;
   END IF;
-  IF to_regprocedure('public.delete_apify_account_rbac_inner(bigint)') IS NULL THEN
+  IF to_regprocedure('public.delete_apify_account_rbac_inner(bigint)') IS NULL
+     AND to_regprocedure('public.delete_apify_account(bigint)') IS NOT NULL THEN
     ALTER FUNCTION public.delete_apify_account(bigint) RENAME TO delete_apify_account_rbac_inner;
   END IF;
   IF to_regprocedure('public.get_operational_health_rbac_inner()') IS NULL THEN
@@ -2055,12 +2057,38 @@ BEGIN PERFORM public.require_organization_permission('whatsapp.instances.manage'
 CREATE OR REPLACE FUNCTION public.delete_instance_secure(p_instances_id bigint)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $$
 BEGIN PERFORM public.require_organization_permission('whatsapp.instances.manage'); PERFORM public.delete_instance_secure_rbac_inner(p_instances_id); END; $$;
-CREATE OR REPLACE FUNCTION public.save_apify_account(p_apify_accounts_id bigint,p_account_name text,p_token text,p_is_active boolean)
-RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $$
-BEGIN PERFORM public.require_organization_permission('settings.manage'); RETURN public.save_apify_account_rbac_inner(p_apify_accounts_id,p_account_name,p_token,p_is_active); END; $$;
-CREATE OR REPLACE FUNCTION public.delete_apify_account(p_apify_accounts_id bigint)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $$
-BEGIN PERFORM public.require_organization_permission('settings.manage'); PERFORM public.delete_apify_account_rbac_inner(p_apify_accounts_id); END; $$;
+-- Compatibilidade opcional com instalações antigas que ainda conservam as RPCs Apify.
+-- Apify não faz parte do runtime atual e a ausência dessas funções não pode bloquear a migration.
+DO $apify_legacy_wrappers$
+BEGIN
+  IF to_regprocedure('public.save_apify_account_rbac_inner(bigint,text,text,boolean)') IS NOT NULL THEN
+    EXECUTE $sql$
+      CREATE OR REPLACE FUNCTION public.save_apify_account(p_apify_accounts_id bigint,p_account_name text,p_token text,p_is_active boolean)
+      RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $function$
+      BEGIN
+        PERFORM public.require_organization_permission('settings.manage');
+        RETURN public.save_apify_account_rbac_inner(p_apify_accounts_id,p_account_name,p_token,p_is_active);
+      END;
+      $function$
+    $sql$;
+    EXECUTE 'REVOKE ALL ON FUNCTION public.save_apify_account_rbac_inner(bigint,text,text,boolean) FROM PUBLIC,anon,authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.save_apify_account(bigint,text,text,boolean) TO authenticated';
+  END IF;
+  IF to_regprocedure('public.delete_apify_account_rbac_inner(bigint)') IS NOT NULL THEN
+    EXECUTE $sql$
+      CREATE OR REPLACE FUNCTION public.delete_apify_account(p_apify_accounts_id bigint)
+      RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $function$
+      BEGIN
+        PERFORM public.require_organization_permission('settings.manage');
+        PERFORM public.delete_apify_account_rbac_inner(p_apify_accounts_id);
+      END;
+      $function$
+    $sql$;
+    EXECUTE 'REVOKE ALL ON FUNCTION public.delete_apify_account_rbac_inner(bigint) FROM PUBLIC,anon,authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.delete_apify_account(bigint) TO authenticated';
+  END IF;
+END
+$apify_legacy_wrappers$;
 CREATE OR REPLACE FUNCTION public.get_operational_health()
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path TO pg_catalog,public AS $$
 BEGIN PERFORM public.require_organization_permission('monitoring.view'); RETURN public.get_operational_health_rbac_inner(); END; $$;
@@ -2114,8 +2142,6 @@ REVOKE ALL ON FUNCTION public.archive_permanent_record_rbac_inner(bigint,bigint)
 REVOKE ALL ON FUNCTION public.update_permanent_record_metadata_rbac_inner(bigint,text,text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.save_instance_secure_rbac_inner(bigint,text,text,text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.delete_instance_secure_rbac_inner(bigint) FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON FUNCTION public.save_apify_account_rbac_inner(bigint,text,text,boolean) FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON FUNCTION public.delete_apify_account_rbac_inner(bigint) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.get_operational_health_rbac_inner() FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.request_operational_recovery_rbac_inner(text) FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON FUNCTION public.get_user_operational_settings_rbac_inner() FROM PUBLIC,anon,authenticated;
@@ -2135,8 +2161,6 @@ GRANT EXECUTE ON FUNCTION public.archive_permanent_record(bigint,bigint) TO auth
 GRANT EXECUTE ON FUNCTION public.update_permanent_record_metadata(bigint,text,text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.save_instance_secure(bigint,text,text,text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_instance_secure(bigint) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.save_apify_account(bigint,text,text,boolean) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.delete_apify_account(bigint) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_operational_health() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.request_operational_recovery(text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_operational_settings() TO authenticated;

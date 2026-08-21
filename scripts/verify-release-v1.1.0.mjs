@@ -49,6 +49,7 @@ for (const field of ['administrativelyActive','operationalState','sessionSaved',
 
 const provider = read('src/providers/OrganizationProvider.tsx');
 const client = read('src/lib/supabase/client.ts');
+const organizationContext = read('server/organization/context.ts');
 const header = read('src/design-system/layouts/Header.tsx');
 const registry = read('src/pages/pageRegistry.ts');
 const members = read('src/pages/OrganizationMembersPage.tsx');
@@ -56,6 +57,9 @@ const roles = read('src/pages/OrganizationRolesPage.tsx');
 includes(provider, 'switchOrganization', 'Provider sem troca de organização.');
 includes(provider, 'hasPermission', 'Provider sem permission resolver.');
 includes(client, 'ORGANIZATION_HEADER', 'Cliente Supabase sem header organizacional.');
+includes(organizationContext, '): Record<string, string>', 'Headers organizacionais não possuem retorno Record<string,string>.');
+includes(organizationContext, 'const scopedHeaders: Record<string, string>', 'Headers organizacionais ainda permitem valor undefined.');
+expect(!exists('supabase/functions/apify-account-check') && !exists('supabase/functions/apify-google-maps-start') && !exists('supabase/functions/apify-google-maps-sync'), 'Functions Apify obsoletas voltaram ao release.');
 includes(header, 'organization-switcher', 'Header sem seletor de organização.');
 includes(registry, "'organization-members': 'members.view'", 'Gate de membros ausente.');
 includes(registry, "'platform-organizations': 'platform.organizations.manage'", 'Gate de Platform Owner ausente.');
@@ -64,9 +68,6 @@ includes(members, 'transferOrganizationOwnership', 'Transferência de propriedad
 includes(roles, 'saveOrganizationRole', 'Edição de funções ausente.');
 
 for (const [file, permission] of [
-  ['supabase/functions/apify-account-check/index.ts', 'settings.manage'],
-  ['supabase/functions/apify-google-maps-start/index.ts', 'capture.use'],
-  ['supabase/functions/apify-google-maps-sync/index.ts', 'capture.use'],
   ['supabase/functions/evolution-instance-sync/index.ts', 'whatsapp.instances.manage'],
 ]) {
   const source = read(file);

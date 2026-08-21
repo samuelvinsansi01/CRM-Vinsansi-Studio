@@ -16,7 +16,7 @@ CRM central da plataforma Vinsansi para aquisição, qualificação, roteamento,
 
 1. A v1.0.2 corrigida deve estar aplicada e homologada.
 2. Execute `APLICAR-NO-SUPABASE-v1.1.0.sql` no SQL Editor do Supabase.
-3. Atualize as Edge Functions indicadas em `PASSO-A-PASSO-v1.1.0.md`.
+3. Atualize somente a Edge Function `evolution-instance-sync`, conforme `PASSO-A-PASSO-v1.1.0.md`.
 4. Configure as variáveis server-side descritas em `.env.example`.
 5. Publique o CRM.
 6. Execute `npm run build` no ambiente de deploy e faça o checklist de homologação.
