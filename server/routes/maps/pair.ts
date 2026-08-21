@@ -42,7 +42,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     if (action === 'authorize') {
-      const auth = await authenticatedUser(req);
+      const organizationId = Number(input.organizationId);
+      const auth = await authenticatedUser(req, organizationId);
       const pairingId = text(input.pairingId);
       const current = await client.from('maps_extension_pairings').select('*').eq('maps_extension_pairings_id', pairingId).maybeSingle();
       if (current.error || !current.data) throw new Error('pairing_not_found');
@@ -57,6 +58,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         authorized_at: new Date().toISOString(),
       }).eq('maps_extension_pairings_id', pairingId).eq('status', 'pending').select('maps_extension_pairings_id').maybeSingle();
       if (updated.error || !updated.data) throw new Error('pairing_authorization_conflict');
+      console.info('[executor-context] maps-pairing-authorized', JSON.stringify({ pairingId, authUserId: auth.authUserId, organizationId: auth.organizationId, usersId: auth.actorUsersId, memberId: auth.memberId }));
       return send(req, res, 200, { ok: true, pairingId, authorized: true });
     }
 
@@ -70,6 +72,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (current.data.installation_id !== installationId || current.data.pairing_secret_hash !== await sha256(pairingSecret)) throw new Error('pairing_secret_invalid');
       if (Date.parse(String(current.data.expires_at)) <= Date.now()) throw new Error('pairing_expired');
       if (current.data.status !== 'authorized' || !current.data.users_id) return send(req, res, 202, { ok: true, pending: true });
+      if (!current.data.authorized_auth_user_id || !current.data.authorized_actor_users_id || !current.data.authorized_by_member_id || !current.data.organizations_id) throw new Error('pairing_context_incomplete');
+      const issued = await issueExecutorCredentials({client,toolId:'vinsansi_capture',organizationId:Number(current.data.organizations_id),externalInstallationId:installationId,authUserId:String(current.data.authorized_auth_user_id),expectedUsersId:Number(current.data.authorized_actor_users_id),expectedMemberId:Number(current.data.authorized_by_member_id),version:/^\d+\.\d+\.\d+$/.test(installedVersion)?installedVersion:null,capabilities:['capture.maps']});
       const installation = await client.from('maps_extension_installations').upsert({
         users_id: Number(current.data.users_id),
         organizations_id: Number(current.data.organizations_id),
@@ -101,14 +105,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (linked.error) throw new Error(`canonical_installation_link_failed:${linked.error.message}`);
       const consumed = await client.from('maps_extension_pairings').update({ status: 'consumed', consumed_at: new Date().toISOString() }).eq('maps_extension_pairings_id', pairingId).eq('status', 'authorized').select('maps_extension_pairings_id').maybeSingle();
       if (consumed.error || !consumed.data) throw new Error('pairing_exchange_conflict');
-      const issued = await issueExecutorCredentials({client,toolId:'vinsansi_capture',organizationId:Number(current.data.organizations_id),externalInstallationId:installationId,authUserId:String(current.data.authorized_auth_user_id),usersId:Number(current.data.authorized_actor_users_id),memberId:Number(current.data.authorized_by_member_id),version:/^\d+\.\d+\.\d+$/.test(installedVersion)?installedVersion:null,capabilities:['capture.maps']});
+      console.info('[executor-context] maps-pairing-exchanged', JSON.stringify({ pairingId, authUserId: String(current.data.authorized_auth_user_id), organizationId: issued.organizationId, usersId: issued.usersId, memberId: issued.memberId, installationId }));
       return send(req, res, 200, {
         ok: true,
         token: issued.userSession,
         userSession: issued.userSession,
         installationCredential: issued.installationCredential,
-        organizationId: Number(current.data.organizations_id),
-        memberId: Number(current.data.authorized_by_member_id),
+        organizationId: issued.organizationId,
+        memberId: issued.memberId,
         installationId,
         scopes: [...MAPS_EXTENSION_SCOPES],
       });

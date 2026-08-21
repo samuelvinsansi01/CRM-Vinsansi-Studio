@@ -122,7 +122,12 @@ CREATE TABLE public.maps_extension_pairings (
   maps_extension_pairings_id uuid PRIMARY KEY,
   users_id bigint,
   organizations_id bigint NOT NULL,
-  installation_id text NOT NULL
+  installation_id text NOT NULL,
+  pairing_secret_hash text NOT NULL,
+  status text NOT NULL DEFAULT 'pending',
+  expires_at timestamptz NOT NULL,
+  authorized_at timestamptz,
+  consumed_at timestamptz
 );
 INSERT INTO public.maps_extension_installations VALUES(
   '10000000-0000-0000-0000-000000000001',1,10,'google_maps','gmaps-smoke-installation-0001',ARRAY['maps:catalogs:read'],'active',now()-interval '2 minutes',NULL,now()-interval '1 day',now()

@@ -48,9 +48,11 @@ SELECT public.stage3_assert(NOT has_table_privilege('authenticated','public.orga
 INSERT INTO public.users VALUES(3,'Outra Scope',NULL,true),(4,'Outro Dono',gen_random_uuid(),false);
 INSERT INTO public.organizations(organizations_id,organizations_name,legacy_scope_users_id,status_id) VALUES(11,'Outra Organização',3,1);
 INSERT INTO public.organization_members(organization_members_id,organizations_id,users_id,access_level,status_id) VALUES(101,11,4,'owner',1);
-INSERT INTO public.organization_tools(organizations_id,tool_id,enabled) VALUES(11,'vinsansi_capture',true);
+INSERT INTO public.organization_tools(organizations_id,tool_id,enabled) VALUES(11,'vinsansi_capture',true)
+ON CONFLICT(organizations_id,tool_id) DO UPDATE SET enabled=excluded.enabled;
 INSERT INTO public.organization_tool_settings(organizations_id,tool_id,settings,settings_schema_version)
-SELECT 11,tool_id,default_settings,settings_schema_version FROM public.platform_tools WHERE tool_id='vinsansi_capture';
+SELECT 11,tool_id,default_settings,settings_schema_version FROM public.platform_tools WHERE tool_id='vinsansi_capture'
+ON CONFLICT(organizations_id,tool_id) DO NOTHING;
 SET ROLE authenticated;
 SELECT public.stage3_assert((SELECT count(*)=0 FROM public.organization_tool_settings WHERE organizations_id=11),'organization_b_isolated');
 SELECT public.stage3_assert((SELECT count(*)=3 FROM public.organization_tool_settings WHERE organizations_id=10),'organization_a_visible');

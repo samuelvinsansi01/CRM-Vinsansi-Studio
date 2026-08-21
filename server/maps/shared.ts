@@ -1,7 +1,7 @@
 // Server-only Maps infrastructure shared by the two public route entrypoints.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { sha256, type MapsExtensionScope } from './token.js';
-import { ORGANIZATION_HEADER, organizationScopedAuthHeaders, resolveOrganizationContext } from '../organization/context.js';
+import { ORGANIZATION_HEADER } from '../organization/context.js';
 
 export type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 export type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void; end(): void };
@@ -17,24 +17,30 @@ export function setCors(req: ApiRequest, res: ApiResponse) { const origin = head
 export function send(req: ApiRequest, res: ApiResponse, status: number, payload: unknown) { setCors(req, res); return res.status(status).json(payload); }
 export function normalize(value: unknown) { return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' '); }
 
-export async function authenticatedUser(req: ApiRequest) {
+export async function authenticatedUser(req: ApiRequest, organizationId: number) {
   const token = bearer(req);
   if (!token) throw new Error('auth_required');
   const url = text(process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL);
   const key = text(process.env.SUPABASE_ANON_KEY ?? process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY);
   if (!url || !key) throw new Error('supabase_auth_backend_not_configured');
-  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: organizationScopedAuthHeaders(token, req.headers) } });
+  const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   const auth = await client.auth.getUser(token);
   if (auth.error || !auth.data.user) throw new Error('auth_invalid');
-  const organization = await resolveOrganizationContext(client);
-  const allowed = await client.rpc('has_organization_permission', { p_permission_key: 'capture.use' });
-  if (allowed.error || allowed.data !== true) throw new Error('capture_permission_denied');
+  if (!Number.isSafeInteger(organizationId) || organizationId <= 0) throw new Error('organization_id_invalid');
+  const canonical = serviceClient();
+  const resolved = await canonical.rpc('service_executor_member_context', {
+    p_auth_users_id: auth.data.user.id,
+    p_organizations_id: organizationId,
+    p_tool_id: 'vinsansi_capture',
+  });
+  if (resolved.error || !resolved.data) throw new Error(resolved.error?.message ?? 'executor_context_not_found');
+  const organization = resolved.data as Row;
   return {
     authUserId: auth.data.user.id,
-    usersId: organization.scopeUsersId,
-    actorUsersId: organization.actorUsersId,
-    organizationId: organization.organizationId,
-    memberId: organization.memberId,
+    usersId: Number(organization.legacyScopeUsersId),
+    actorUsersId: Number(organization.userId),
+    organizationId: Number(organization.organizationId),
+    memberId: Number(organization.memberId),
   };
 }
 
@@ -42,12 +48,17 @@ export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope
   const raw=bearer(req);if(!raw)throw new Error('token_required');
   const client = serviceClient();
   const cutoff=new Date(Date.now()-30*86_400_000).toISOString();
-  const session=await client.from('tool_user_sessions').select('tool_user_sessions_id,auth_users_id,organization_tool_installations!inner(*)').eq('session_hash',await sha256(raw)).is('revoked_at',null).gt('last_used_at',cutoff).maybeSingle();
+  const session=await client.from('tool_user_sessions').select('tool_user_sessions_id,auth_users_id,users_id,organizations_id,organization_members_id,organization_tool_installations!inner(*)').eq('session_hash',await sha256(raw)).is('revoked_at',null).gt('last_used_at',cutoff).maybeSingle();
   if(session.error||!session.data)throw new Error('token_invalid_or_expired');
   const canonical=(session.data as unknown as {organization_tool_installations:Row}).organization_tool_installations;
   if(canonical.tool_id!=='vinsansi_capture'||canonical.registration_status==='revoked')throw new Error('gmaps_extension_installation_revoked');
   const context=await client.rpc('service_executor_member_context',{p_auth_users_id:session.data.auth_users_id,p_organizations_id:Number(canonical.organizations_id),p_tool_id:'vinsansi_capture'});
   if(context.error)throw new Error(context.error.message);
+  const resolved=context.data as Row;
+  if(Number(session.data.organizations_id)!==Number(resolved.organizationId)||Number(session.data.users_id)!==Number(resolved.userId)||Number(session.data.organization_members_id)!==Number(resolved.memberId)){
+    await client.from('tool_user_sessions').update({revoked_at:new Date().toISOString(),logout_reason:'context_mismatch'}).eq('tool_user_sessions_id',session.data.tool_user_sessions_id);
+    throw new Error('user_session_context_mismatch');
+  }
   const payload={installationId:String(canonical.external_installation_id),scopes:[...scopes]};
   const installation = await client.from('maps_extension_installations').select('maps_extension_installations_id,organizations_id,status,scopes').eq('organizations_id', Number(canonical.organizations_id)).eq('extension_type', 'google_maps').eq('installation_id', payload.installationId).maybeSingle();
   if (installation.error || !installation.data || installation.data.status !== 'active') throw new Error('gmaps_extension_installation_revoked');
@@ -66,14 +77,14 @@ export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope
     p_last_seen_member_id: null,
   });
   if (canonicalTouch.error) throw new Error(`canonical_installation_touch_failed:${canonicalTouch.error.message}`);
-  return { client, usersId: Number((context.data as Row).legacyScopeUsersId),memberId:Number((context.data as Row).memberId),sessionId:String(session.data.tool_user_sessions_id),organizationToolInstallationId:String(canonical.organization_tool_installations_id), organizationId: Number(installation.data.organizations_id), installationId: payload.installationId, installationRowId: String(installation.data.maps_extension_installations_id), token: payload };
+  return { client, usersId: Number(resolved.legacyScopeUsersId),memberId:Number(resolved.memberId),sessionId:String(session.data.tool_user_sessions_id),organizationToolInstallationId:String(canonical.organization_tool_installations_id), organizationId: Number(installation.data.organizations_id), installationId: payload.installationId, installationRowId: String(installation.data.maps_extension_installations_id), token: payload };
 }
 
 export function statusForError(message: string) {
   if (/MAPS_ACTIVE_EXECUTION_LIMIT/.test(message)) return 409;
   if (/gmaps_extension_signing_secret_(?:not_configured|invalid)/.test(message)) return 503;
   if (/auth_required|token_required|token_invalid|token_expired/.test(message)) return 401;
-  if (/scope_required|revoked|not_available|owner_scope/.test(message)) return 403;
+  if (/scope_required|membership|permission|revoked|not_available|owner_scope/.test(message)) return 403;
   if (/not_found/.test(message)) return 404;
   if (/invalid|required|mismatch|divergent/.test(message)) return 400;
   if (/not_configured/.test(message)) return 503;

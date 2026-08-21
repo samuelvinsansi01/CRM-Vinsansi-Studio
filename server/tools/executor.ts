@@ -30,7 +30,9 @@ async function authenticatedAuthUser(req: ApiRequest) {
 async function memberContext(client: SupabaseClient, authUserId: string, organizationId: number, id: ToolId) {
   const result=await client.rpc('service_executor_member_context',{p_auth_users_id:authUserId,p_organizations_id:organizationId,p_tool_id:id});
   if (result.error) throw new Error(result.error.message);
-  return result.data as Record<string, unknown>;
+  const context=result.data as Record<string, unknown>;
+  console.info('[executor-context] resolved',JSON.stringify({authUserId,organizationId:Number(context.organizationId),userId:Number(context.userId),memberId:Number(context.memberId),membershipStatusId:Number(context.membershipStatusId),toolId:id}));
+  return context;
 }
 
 export async function startPairing(req: ApiRequest, input: Record<string, unknown>) {
@@ -66,13 +68,19 @@ export async function exchangePairing(input: Record<string, unknown>) {
   return {toolId:toolId(result.toolId),organizationId:Number(result.organizationId),memberId:Number(result.memberId),organizationToolInstallationId:String(result.organizationToolInstallationId),installationCredential,userSession};
 }
 
-export async function issueExecutorCredentials(input:{client?:SupabaseClient;toolId:ToolId;organizationId:number;externalInstallationId:string;authUserId:string;usersId:number;memberId:number;version?:unknown;capabilities?:unknown}){
+export async function issueExecutorCredentials(input:{client?:SupabaseClient;toolId:ToolId;organizationId:number;externalInstallationId:string;authUserId:string;expectedUsersId?:number;expectedMemberId?:number;version?:unknown;capabilities?:unknown}){
   const client=input.client??serviceClient();
-  await memberContext(client,input.authUserId,input.organizationId,input.toolId);
+  const context=await memberContext(client,input.authUserId,input.organizationId,input.toolId);
+  const usersId=numericId(context.userId,'executor_user_id_invalid');
+  const memberId=numericId(context.memberId,'executor_member_id_invalid');
+  const organizationId=numericId(context.organizationId);
+  if(organizationId!==input.organizationId)throw new Error('executor_organization_context_mismatch');
+  if(input.expectedUsersId!==undefined&&usersId!==input.expectedUsersId)throw new Error('pairing_context_divergent');
+  if(input.expectedMemberId!==undefined&&memberId!==input.expectedMemberId)throw new Error('pairing_context_divergent');
   const registered=await client.rpc('service_register_tool_installation',{
-    p_organizations_id:input.organizationId,p_tool_id:input.toolId,p_external_installation_id:input.externalInstallationId,
+    p_organizations_id:organizationId,p_tool_id:input.toolId,p_external_installation_id:input.externalInstallationId,
     p_installed_version:text(input.version)||null,p_reported_capabilities:capabilities(input.capabilities),
-    p_registered_by_member_id:input.memberId,p_metadata:{pairing:'stage4'},
+    p_registered_by_member_id:memberId,p_metadata:{pairing:'stage4'},
   });
   if (registered.error) throw new Error(`installation_register_failed:${registered.error.message}`);
   const installationCredential=opaqueToken('vic'); const userSession=opaqueToken('vus');
@@ -81,10 +89,12 @@ export async function issueExecutorCredentials(input:{client?:SupabaseClient;too
   });
   if (issue.error) throw new Error(`installation_credential_issue_failed:${issue.error.message}`);
   const session=await client.from('tool_user_sessions').insert({
-    organization_tool_installations_id:registered.data,auth_users_id:input.authUserId,users_id:input.usersId,session_hash:await sha256(userSession),
+    organization_tool_installations_id:registered.data,auth_users_id:input.authUserId,users_id:usersId,
+    organizations_id:organizationId,organization_members_id:memberId,session_hash:await sha256(userSession),
   });
   if (session.error) throw new Error(`user_session_issue_failed:${session.error.message}`);
-  return {installationCredential,userSession,organizationToolInstallationId:String(registered.data)};
+  console.info('[executor-context] session-issued',JSON.stringify({authUserId:input.authUserId,organizationId,usersId,memberId,toolId:input.toolId,externalInstallationId:input.externalInstallationId}));
+  return {installationCredential,userSession,organizationToolInstallationId:String(registered.data),organizationId,usersId,memberId};
 }
 
 export async function installationScope(req: ApiRequest) {
@@ -108,10 +118,15 @@ export async function sessionScope(req: ApiRequest) {
   const organizationId=numericId(header(req,EXECUTOR_ORGANIZATION_HEADER)||installation.organizations_id);
   if (organizationId!==Number(installation.organizations_id)) throw new Error('session_organization_mismatch');
   const context=await memberContext(client,String(row.data.auth_users_id),organizationId,toolId(installation.tool_id));
+  if(Number(row.data.organizations_id)!==organizationId||Number(row.data.users_id)!==Number(context.userId)||Number(row.data.organization_members_id)!==Number(context.memberId)){
+    await client.from('tool_user_sessions').update({revoked_at:new Date().toISOString(),logout_reason:'context_mismatch'}).eq('tool_user_sessions_id',row.data.tool_user_sessions_id);
+    throw new Error('user_session_context_mismatch');
+  }
   await client.from('tool_user_sessions').update({last_used_at:new Date().toISOString()}).eq('tool_user_sessions_id',row.data.tool_user_sessions_id);
   const eligible=await client.rpc('service_executor_eligible_organizations',{p_auth_users_id:row.data.auth_users_id,p_tool_id:installation.tool_id});
   if (eligible.error) throw new Error(`eligible_organizations_failed:${eligible.error.message}`);
-  return {client,sessionId:String(row.data.tool_user_sessions_id),installationId:String(row.data.organization_tool_installations_id),toolId:toolId(installation.tool_id),externalInstallationId:String(installation.external_installation_id),organizationId,context,eligibleOrganizations:eligible.data,installation};
+  console.info('[executor-context] session-recovered',JSON.stringify({authUserId:String(row.data.auth_users_id),organizationId,usersId:Number(row.data.users_id),memberId:Number(row.data.organization_members_id),toolId:String(installation.tool_id),externalInstallationId:String(installation.external_installation_id)}));
+  return {client,sessionId:String(row.data.tool_user_sessions_id),installationId:String(row.data.organization_tool_installations_id),toolId:toolId(installation.tool_id),externalInstallationId:String(installation.external_installation_id),organizationId,memberId:Number(row.data.organization_members_id),context,eligibleOrganizations:eligible.data,installation};
 }
 
 export async function effectiveConfig(client: SupabaseClient, organizationId: number, id: ToolId) {

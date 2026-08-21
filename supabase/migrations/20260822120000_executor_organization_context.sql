@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS public.tool_user_sessions (
   organization_tool_installations_id uuid NOT NULL REFERENCES public.organization_tool_installations(organization_tool_installations_id) ON DELETE CASCADE,
   auth_users_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   users_id bigint NOT NULL REFERENCES public.users(users_id) ON DELETE CASCADE,
+  organizations_id bigint NOT NULL REFERENCES public.organizations(organizations_id) ON DELETE CASCADE,
+  organization_members_id bigint NOT NULL REFERENCES public.organization_members(organization_members_id) ON DELETE CASCADE,
   session_hash text NOT NULL UNIQUE CHECK(length(session_hash)=64),
   created_at timestamptz NOT NULL DEFAULT now(),
   last_used_at timestamptz NOT NULL DEFAULT now(),
@@ -50,6 +52,7 @@ CREATE TABLE IF NOT EXISTS public.tool_user_sessions (
 CREATE INDEX IF NOT EXISTS tool_pairings_expiry_idx ON public.tool_executor_pairings(expires_at) WHERE exchanged_at IS NULL AND revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS tool_credentials_installation_idx ON public.tool_installation_credentials(organization_tool_installations_id) WHERE revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS tool_sessions_lookup_idx ON public.tool_user_sessions(auth_users_id,last_used_at DESC) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS tool_sessions_context_idx ON public.tool_user_sessions(organizations_id,organization_members_id,last_used_at DESC) WHERE revoked_at IS NULL;
 
 CREATE OR REPLACE FUNCTION public.seed_executor_tools_for_organization()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $$
@@ -117,6 +120,7 @@ BEGIN
     'authUserId',p_auth_users_id,'userId',v_user,'organizationId',v_org.organizations_id,
     'organizationName',v_org.organizations_name,'legacyScopeUsersId',v_org.legacy_scope_users_id,
     'memberId',v_member.organization_members_id,'accessLevel',v_member.access_level,
+    'membershipStatusId',v_member.status_id,
     'permissions',to_jsonb(v_permissions),'requiredPermission',v_required
   );
 END;
@@ -145,22 +149,61 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.service_exchange_executor_pairing(p_pairing_code_hash text,p_credential_hash text,p_session_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public,auth AS $$
-DECLARE p public.tool_executor_pairings%ROWTYPE; installation uuid; credential uuid; session_id uuid;
+DECLARE p public.tool_executor_pairings%ROWTYPE; installation uuid; credential uuid; session_id uuid; v_context jsonb;
 BEGIN
   IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'service_role_required'; END IF;
   IF length(p_credential_hash)<>64 OR length(p_session_hash)<>64 THEN RAISE EXCEPTION 'executor_token_hash_invalid'; END IF;
   SELECT * INTO p FROM public.tool_executor_pairings WHERE pairing_code_hash=p_pairing_code_hash AND exchanged_at IS NULL AND revoked_at IS NULL AND expires_at>now() FOR UPDATE;
   IF p.tool_executor_pairings_id IS NULL THEN RAISE EXCEPTION 'pairing_invalid_or_expired'; END IF;
-  PERFORM public.service_executor_member_context(p.auth_users_id,p.organizations_id,p.tool_id);
+  v_context:=public.service_executor_member_context(p.auth_users_id,p.organizations_id,p.tool_id);
+  IF (v_context->>'userId')::bigint<>p.users_id OR (v_context->>'memberId')::bigint<>p.organization_members_id THEN
+    RAISE EXCEPTION 'pairing_context_divergent';
+  END IF;
   installation:=public.service_register_tool_installation(p.organizations_id,p.tool_id,p.external_installation_id,p.requested_version,p.requested_capabilities,p.organization_members_id,jsonb_build_object('pairing','stage4'));
   INSERT INTO public.tool_installation_credentials(organization_tool_installations_id,credential_hash,issued_to_external_installation_id)
   VALUES(installation,p_credential_hash,p.external_installation_id) RETURNING tool_installation_credentials_id INTO credential;
-  INSERT INTO public.tool_user_sessions(organization_tool_installations_id,auth_users_id,users_id,session_hash)
-  VALUES(installation,p.auth_users_id,p.users_id,p_session_hash) RETURNING tool_user_sessions_id INTO session_id;
+  INSERT INTO public.tool_user_sessions(organization_tool_installations_id,auth_users_id,users_id,organizations_id,organization_members_id,session_hash)
+  VALUES(installation,p.auth_users_id,p.users_id,p.organizations_id,p.organization_members_id,p_session_hash) RETURNING tool_user_sessions_id INTO session_id;
   UPDATE public.tool_executor_pairings SET exchanged_at=now() WHERE tool_executor_pairings_id=p.tool_executor_pairings_id;
   RETURN jsonb_build_object('toolId',p.tool_id,'organizationId',p.organizations_id,'memberId',p.organization_members_id,'organizationToolInstallationId',installation,'credentialId',credential,'sessionId',session_id);
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION public.validate_tool_user_session_context()
+RETURNS trigger LANGUAGE plpgsql SET search_path TO pg_catalog,public AS $$
+DECLARE v_installation_org bigint; v_member public.organization_members%ROWTYPE; v_auth_user bigint;
+BEGIN
+  SELECT organizations_id INTO v_installation_org FROM public.organization_tool_installations
+   WHERE organization_tool_installations_id=NEW.organization_tool_installations_id;
+  SELECT * INTO v_member FROM public.organization_members WHERE organization_members_id=NEW.organization_members_id;
+  SELECT users_id INTO v_auth_user FROM public.users
+   WHERE auth_user_id=NEW.auth_users_id AND coalesce(users_is_scope,false)=false;
+  IF v_installation_org IS NULL OR v_installation_org<>NEW.organizations_id
+     OR v_auth_user IS NULL OR v_auth_user<>NEW.users_id
+     OR v_member.organization_members_id IS NULL OR v_member.organizations_id<>NEW.organizations_id OR v_member.users_id<>NEW.users_id OR v_member.status_id<>1 THEN
+    RAISE EXCEPTION 'tool_user_session_context_divergent';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS validate_tool_user_session_context_trigger ON public.tool_user_sessions;
+CREATE TRIGGER validate_tool_user_session_context_trigger
+BEFORE INSERT OR UPDATE OF organization_tool_installations_id,auth_users_id,users_id,organizations_id,organization_members_id ON public.tool_user_sessions
+FOR EACH ROW EXECUTE FUNCTION public.validate_tool_user_session_context();
+
+CREATE OR REPLACE FUNCTION public.revoke_executor_sessions_on_member_change()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $$
+BEGIN
+  IF NEW.status_id<>1 AND OLD.status_id IS DISTINCT FROM NEW.status_id THEN
+    UPDATE public.tool_user_sessions SET revoked_at=coalesce(revoked_at,now()),logout_reason=coalesce(logout_reason,'membership_inactive')
+     WHERE organization_members_id=NEW.organization_members_id AND revoked_at IS NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS revoke_executor_sessions_on_member_change_trigger ON public.organization_members;
+CREATE TRIGGER revoke_executor_sessions_on_member_change_trigger AFTER UPDATE OF status_id ON public.organization_members
+FOR EACH ROW EXECUTE FUNCTION public.revoke_executor_sessions_on_member_change();
 
 CREATE OR REPLACE FUNCTION public.revoke_executor_sessions_on_installation_change()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $$
