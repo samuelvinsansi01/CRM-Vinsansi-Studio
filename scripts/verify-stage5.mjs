@@ -14,6 +14,15 @@ expect(!/RETURNS\s+TABLE/i.test(sql),'Stage5 RPCs must not introduce RETURNS TAB
 const patch=read('PATCH-ETAPA-5-FASE-A-CONVERSAS.sql');expect(patch===sql,'Stage5 incremental patch diverges from migration');
 const consolidated=read('APLICAR-NO-SUPABASE-v1.4.0.sql');for(const token of ['CRM Vinsansi Studio v1.4.0','service_stage5_prepare_manual_message','service_stage5_reconcile_queue_item','conversation-media'])expect(consolidated.includes(token),`Consolidated v1.4.0 missing ${token}`);
 const webhook=read('supabase/functions/evolution-connection-webhook/index.ts');for(const token of ['organizations_id','conversation-media','media_archive_status','payloadWithoutMediaBytes','service_ingest_evolution_message'])expect(webhook.includes(token),`Webhook missing ${token}`);
+const sync=read('supabase/functions/evolution-instance-sync/index.ts');
+const webhookConfig=read('supabase/config.toml');
+const realFixture=JSON.parse(read('supabase/functions/evolution-connection-webhook/fixtures/evolution-go-0.7.2-message.json'));
+expect(realFixture.event==='Message','Evolution Go fixture must use real Message casing');
+expect(realFixture.data?.Info?.ID&&realFixture.data?.Info?.Chat&&realFixture.data?.Info?.IsFromMe===false,'Evolution Go fixture missing Info contract');
+expect(realFixture.instanceId&&realFixture.instanceName==='chip-8457','Evolution Go fixture missing instance identity');
+expect(webhook.includes('service_get_evolution_instances')&&webhook.includes('instanceApiKey'),'Webhook signature must be derived from the canonical instance credential');
+expect(sync.includes('hmacToken(apiKey')&&!sync.includes('EVOLUTION_WEBHOOK_SECRET'),'Instance sync must not depend on an undeployed global webhook secret');
+expect(/\[functions\.evolution-connection-webhook\][\s\S]*verify_jwt\s*=\s*false/.test(webhookConfig),'Evolution webhook must be deployed without Supabase JWT verification');
 const router=read('server/routes/whatsapp/router.ts');for(const route of ['conversations','conversation-messages','conversation-action','conversation-members','conversation-presence','manual-message','conversation-media','queue-operations'])expect(router.includes(route),`WhatsApp router missing ${route}`);
 const runtime=read('server/routes/tools/executor/runtime.ts');expect(runtime.includes('service_stage5_converge_automatic_message'),'Worker runtime allowlist missing Stage5 convergence');
 expect(exists('src/pages/ConversationsPage.tsx'),'CRM ConversationsPage was removed before Phase B approval');

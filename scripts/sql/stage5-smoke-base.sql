@@ -52,8 +52,8 @@ INSERT INTO public.organization_members(organization_members_id,organizations_id
  (101,10,2,2,'owner',1),(102,10,3,2,'member',1),(103,10,4,2,'member',2),(104,10,5,3,'member',1),(201,20,7,2,'owner',1);
 INSERT INTO public.organization_role_permissions(organization_roles_id,permissions_id)
  SELECT 1,permissions_id FROM public.permissions ON CONFLICT DO NOTHING;
-INSERT INTO public.instances(instances_id,users_id,organizations_id,instances_name) VALUES(1001,1,10,'chip-a'),(2001,6,20,'chip-b');
-INSERT INTO public.chips(chips_id,users_id,organizations_id,instances_id,chips_name) VALUES(501,1,10,1001,'Comercial A'),(601,6,20,2001,'Comercial B');
+INSERT INTO public.instances(instances_id,users_id,organizations_id,instances_name) VALUES(1001,1,10,'chip-8457'),(1002,1,10,'chip-8352'),(2001,6,20,'chip-b');
+INSERT INTO public.chips(chips_id,users_id,organizations_id,instances_id,chips_name) VALUES(501,1,10,1001,'chip-8457'),(502,1,10,1002,'chip-8352'),(601,6,20,2001,'Comercial B');
 INSERT INTO public.queue_items(queue_items_id,users_id,organizations_id,queues_id,chips_id,leads_id,status_id,dispatched_by_member_id) VALUES(7001,1,10,1,501,9001,6,101),(7002,1,10,1,501,9002,6,101),(7003,1,10,1,501,9003,6,101);
 INSERT INTO public.worker_batches(worker_batches_id,users_id,organizations_id,channels_id,status_id,worker_batches_total_items) VALUES(8001,1,10,1,3,2);
 INSERT INTO public.conversations(conversations_id,users_id,organizations_id,chips_id,instances_id,remote_jid,contact_phone,contact_name,conversation_status,last_message_at,last_message_preview)

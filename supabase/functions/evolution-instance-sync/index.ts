@@ -140,14 +140,16 @@ function isManagedWebhookUrl(existingValue: string, expectedValue: string) {
   }
 }
 
-async function configureConnectionWebhook(row: Row, supabaseUrl: string, webhookSecret: string) {
+async function configureConnectionWebhook(row: Row, supabaseUrl: string) {
   const instanceId = Number(row.instances_id);
   const instanceName = text(row.instances_name);
   const baseUrl = text(row.instances_url).replace(/\/$/, "");
   const apiKey = text(row.api_key);
   if (!instanceId || !instanceName || !baseUrl || !apiKey) throw new Error("Credenciais da instância incompletas.");
 
-  const token = await hmacToken(webhookSecret, `${instanceId}:${instanceName}`);
+  // A assinatura é derivada da credencial individual da instância. Isso evita
+  // um segredo global de deploy e acompanha automaticamente rotações de token.
+  const token = await hmacToken(apiKey, `${instanceId}:${instanceName}`);
   const webhookUrl = new URL(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/evolution-connection-webhook`);
   webhookUrl.searchParams.set("instance_id", String(instanceId));
 
@@ -259,11 +261,9 @@ Deno.serve(async (request: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SB_PUBLISHABLE_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const webhookSecret = Deno.env.get("EVOLUTION_WEBHOOK_SECRET") ?? "";
   const authorization = request.headers.get("Authorization");
 
   if (!supabaseUrl || !anonKey || !serviceRoleKey) return jsonResponse({ error: "Configuração interna do Supabase ausente." }, 500);
-  if (webhookSecret && webhookSecret.length < 32) return jsonResponse({ error: "EVOLUTION_WEBHOOK_SECRET deve ter no mínimo 32 caracteres." }, 500);
   if (!authorization) return jsonResponse({ error: "Sessão não encontrada." }, 401);
 
   const authClient = createClient(supabaseUrl, anonKey, {
@@ -343,11 +343,8 @@ Deno.serve(async (request: Request) => {
       snapshot = persisted.persistedSnapshot;
 
       if (configureWebhook) {
-        if (!webhookSecret) webhookError = "Secret EVOLUTION_WEBHOOK_SECRET não configurado.";
-        else {
-          try { webhookConfigured = await configureConnectionWebhook(row, supabaseUrl, webhookSecret); }
-          catch (error) { webhookError = messageOf(error); }
-        }
+        try { webhookConfigured = await configureConnectionWebhook(row, supabaseUrl); }
+        catch (error) { webhookError = messageOf(error); }
       }
 
       results.push({

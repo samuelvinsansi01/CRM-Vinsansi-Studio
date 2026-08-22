@@ -55,6 +55,25 @@ UPDATE public.organization_members SET status_id=2 WHERE organization_members_id
 SELECT public.service_stage5_converge_automatic_message(10,7002,'auto-2','5511777777777@s.whatsapp.net','Prospecção','text');
 SELECT public.service_ingest_evolution_message(1001,'messages_upsert','reply-2','5511777777777@s.whatsapp.net',false,'text','Resposta inbound','delivered','Lead',now(),'{}',NULL,NULL,NULL,NULL);
 SELECT public.stage5_assert((SELECT assigned_to_member_id IS NULL FROM public.conversations WHERE remote_jid='5511777777777@s.whatsapp.net'),'inactive_originator_unassigned');
+
+-- Payload real Evolution Go 0.7.2 normalizado pelo Gateway: primeiro inbound,
+-- conversa existente, idempotência, dois chips e mídia. O RPC não depende do
+-- Gerenciador estar aberto e organizations_id vem exclusivamente da instância.
+DO $$DECLARE first jsonb;duplicate jsonb;existing jsonb;second_chip jsonb;media jsonb;listed jsonb;BEGIN
+ first:=public.service_ingest_evolution_message(1001,'messages_upsert','A5BB8F142F9075F7BCDB39834CEB6DD2','5511999990001@s.whatsapp.net',false,'text','[conteúdo removido do fixture]','delivered','Prospect homologação','2026-08-22T13:19:14Z','{"source":"evolution-go-0.7.2"}',NULL,NULL,NULL,NULL);
+ duplicate:=public.service_ingest_evolution_message(1001,'messages_upsert','A5BB8F142F9075F7BCDB39834CEB6DD2','5511999990001@s.whatsapp.net',false,'text','[conteúdo removido do fixture]','delivered','Prospect homologação','2026-08-22T13:19:14Z','{"duplicate":true}',NULL,NULL,NULL,NULL);
+ PERFORM public.stage5_assert((first->>'merged')='false' AND (duplicate->>'merged')='true','real_go_first_insert_then_merge');
+ PERFORM public.stage5_assert((SELECT count(*)=1 FROM public.conversation_messages WHERE organizations_id=10 AND instances_id=1001 AND external_message_id='A5BB8F142F9075F7BCDB39834CEB6DD2'),'real_go_external_id_idempotent');
+ PERFORM public.stage5_assert((SELECT organizations_id=10 AND chips_id=501 AND direction='inbound' AND from_me=false AND executed_by='system' FROM public.conversation_messages WHERE external_message_id='A5BB8F142F9075F7BCDB39834CEB6DD2'),'real_go_tenant_chip_direction');
+ existing:=public.service_ingest_evolution_message(1001,'messages_upsert','REAL-EXISTING-1','5511999999999@s.whatsapp.net',false,'text','Conversa existente','delivered','Lead inicial',now(),'{}',NULL,NULL,NULL,NULL);
+ PERFORM public.stage5_assert((existing->>'conversationId')='1','real_go_existing_conversation');
+ second_chip:=public.service_ingest_evolution_message(1002,'messages_upsert','REAL-CHIP-8352-1','5511888000002@s.whatsapp.net',false,'text','Segundo chip','delivered','Lead B',now(),'{}',NULL,NULL,NULL,NULL);
+ PERFORM public.stage5_assert((SELECT organizations_id=10 AND chips_id=502 AND instances_id=1002 FROM public.conversation_messages WHERE external_message_id='REAL-CHIP-8352-1'),'real_go_second_chip');
+ media:=public.service_ingest_evolution_message(1002,'messages_upsert','REAL-MEDIA-1','5511888000002@s.whatsapp.net',false,'image',NULL,'delivered','Lead B',now(),'{}','https://example.invalid/media.jpg','image/jpeg','media.jpg',NULL);
+ PERFORM public.stage5_assert((SELECT message_type='image' AND media_url='https://example.invalid/media.jpg' AND message_body IS NULL FROM public.conversation_messages WHERE external_message_id='REAL-MEDIA-1'),'real_go_media_placeholder');
+ listed:=public.service_stage5_list_messages(10,102,(first->>'conversationId')::bigint,NULL,NULL,50);
+ PERFORM public.stage5_assert(listed::text LIKE '%A5BB8F142F9075F7BCDB39834CEB6DD2%','real_go_query_returns_message');
+END$$;
 UPDATE public.organization_members SET status_id=1 WHERE organization_members_id=101;
 
 SELECT public.service_stage5_queue_control(10,101,8001,'pause');

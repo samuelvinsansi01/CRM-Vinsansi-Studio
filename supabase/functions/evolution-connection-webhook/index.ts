@@ -303,9 +303,7 @@ Deno.serve(async (request: Request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const webhookSecret = Deno.env.get("EVOLUTION_WEBHOOK_SECRET") ?? "";
-  if (!supabaseUrl || !serviceRoleKey || !webhookSecret) return jsonResponse({ error: "Webhook não configurado." }, 503);
-  if (webhookSecret.length < 32) return jsonResponse({ error: "EVOLUTION_WEBHOOK_SECRET deve ter no mínimo 32 caracteres." }, 503);
+  if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ error: "Webhook não configurado." }, 503);
 
   const url = new URL(request.url);
   const instanceId = Number(url.searchParams.get("instance_id") ?? request.headers.get("x-evolution-instance-id") ?? 0);
@@ -321,7 +319,16 @@ Deno.serve(async (request: Request) => {
   if (instanceError) return jsonResponse({ error: instanceError.message }, 500);
   if (!instanceRow) return jsonResponse({ error: "Instância não encontrada." }, 404);
 
-  const expectedToken = await hmacToken(webhookSecret, `${instanceId}:${text(instanceRow.instances_name)}`);
+  const credentialResult = await admin.rpc("service_get_evolution_instances", {
+    p_users_id: Number(instanceRow.users_id),
+    p_instances_id: instanceId,
+    p_instance_name: null,
+  });
+  if (credentialResult.error) return jsonResponse({ error: credentialResult.error.message }, 500);
+  const credentialRows = Array.isArray(credentialResult.data) ? credentialResult.data : [credentialResult.data];
+  const instanceApiKey = text(row(credentialRows[0]).api_key);
+  if (!instanceApiKey) return jsonResponse({ error: "Credencial da instância indisponível." }, 503);
+  const expectedToken = await hmacToken(instanceApiKey, `${instanceId}:${text(instanceRow.instances_name)}`);
   if (!timingSafeEqual(receivedToken, expectedToken)) return jsonResponse({ error: "Assinatura inválida." }, 401);
 
   const rawBody = await request.text();
