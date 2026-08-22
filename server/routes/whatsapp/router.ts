@@ -8,6 +8,7 @@ import conversationMessages from './conversation-messages.js';
 import conversationAction from './conversation-action.js';
 import conversationMembers from './conversation-members.js';
 import conversationPresence from './conversation-presence.js';
+import conversationChannel from './conversation-channel.js';
 import manualMessage from './manual-message.js';
 import conversationMedia from './conversation-media.js';
 import queueOperations from './queue-operations.js';
@@ -19,6 +20,7 @@ const handlers = {
   'conversation-action': conversationAction,
   'conversation-members': conversationMembers,
   'conversation-presence': conversationPresence,
+  'conversation-channel': conversationChannel,
   'manual-message': manualMessage,
   'conversation-media': conversationMedia,
   'queue-operations': queueOperations,

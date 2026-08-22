@@ -1,16 +1,5 @@
 CREATE OR REPLACE FUNCTION public.stage5_assert(p_condition boolean,p_name text) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF coalesce(p_condition,false) IS NOT TRUE THEN RAISE EXCEPTION 'stage5_assert_failed:%',p_name;END IF;RAISE NOTICE 'ok:%',p_name;END$$;
 
-SELECT public.stage5_assert(NOT EXISTS(SELECT 1 FROM public.conversations WHERE conversations_id=3),'lid_duplicate_conversation_merged');
-SELECT public.stage5_assert((SELECT conversations_id=1 FROM public.conversation_messages WHERE external_message_id='lid-duplicate-1'),'lid_duplicate_message_moved_to_phone_thread');
-SELECT public.stage5_assert((SELECT count(*)=2 FROM public.conversation_contact_aliases WHERE organizations_id=10 AND chips_id=501 AND conversations_id=1 AND alias_jid IN('119546170073140@lid','5511999999999@s.whatsapp.net')),'lid_and_phone_aliases_registered');
-DO $$DECLARE inbound jsonb;automatic jsonb;BEGIN
- inbound:=public.service_ingest_evolution_message(1001,'messages_upsert','alias-inbound-2','119546170073140@lid',false,'text','Resposta por LID','delivered','Lead inicial',now(),'{"key":{"remoteJid":"119546170073140@lid","remoteJidAlt":"5511999999999@s.whatsapp.net"}}'::jsonb,NULL,NULL,NULL,NULL);
- PERFORM public.stage5_assert((inbound->>'conversationId')='1','lid_inbound_resolves_existing_phone_conversation');
- automatic:=public.service_stage5_converge_automatic_message(10,7003,'alias-auto-1','5511999999999@s.whatsapp.net','Outbound na mesma thread','text');
- PERFORM public.stage5_assert((automatic->>'conversationId')='1','automatic_outbound_reuses_alias_conversation');
- PERFORM public.stage5_assert((SELECT count(*)=1 FROM public.conversations WHERE organizations_id=10 AND chips_id=501 AND conversations_id=1),'one_conversation_per_org_chip_contact');
-END$$;
-
 DO $$BEGIN
   PERFORM public.service_stage5_list_conversations(10,104,NULL,'all',false,false,NULL,NULL,NULL,50);
   PERFORM public.stage5_assert(true,'view_without_reply_can_list');

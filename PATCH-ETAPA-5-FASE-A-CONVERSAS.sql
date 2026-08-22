@@ -377,7 +377,8 @@ DECLARE v_c public.conversations%ROWTYPE;v_existing public.conversation_messages
 BEGIN
   PERFORM public.stage5_require_member(p_organizations_id,p_organization_members_id,'whatsapp.reply');
   IF p_client_idempotency_key IS NULL THEN RAISE EXCEPTION 'manual_message_idempotency_key_required'; END IF;
-  IF coalesce(p_message_type,'text')='text' AND nullif(trim(coalesce(p_message_body,'')),'') IS NULL THEN RAISE EXCEPTION 'manual_message_body_required'; END IF;
+  IF lower(coalesce(nullif(trim(p_message_type),''),'text'))<>'text' OR p_media_storage_path IS NOT NULL OR p_media_mime_type IS NOT NULL OR p_media_file_name IS NOT NULL OR p_media_size_bytes IS NOT NULL THEN RAISE EXCEPTION 'media_disabled_text_only'; END IF;
+  IF nullif(trim(coalesce(p_message_body,'')),'') IS NULL THEN RAISE EXCEPTION 'manual_message_body_required'; END IF;
   SELECT * INTO v_existing FROM public.conversation_messages WHERE organizations_id=p_organizations_id AND client_idempotency_key=p_client_idempotency_key;
   IF v_existing.conversation_messages_id IS NOT NULL THEN
     IF v_existing.conversations_id<>p_conversations_id OR v_existing.sent_by_member_id<>p_organization_members_id THEN RAISE EXCEPTION 'manual_message_idempotency_conflict'; END IF;
@@ -552,6 +553,13 @@ BEGIN
      WHERE conversation_messages_id=v_message.conversation_messages_id RETURNING * INTO v_message;
     RETURN jsonb_build_object('ignored',false,'merged',true,'conversationId',v_message.conversations_id,'messageId',v_message.conversation_messages_id);
   END IF;
+  -- Somente uma mensagem inbound nova reabre uma conversa arquivada. Retries/duplicatas
+  -- já mesclados acima não alteram o estado da conversa.
+  IF NOT p_from_me AND v_conversation.conversation_status='archived' THEN
+    UPDATE public.conversations SET conversation_status='open',conversation_version=conversation_version+1,conversations_updated_at=now()
+     WHERE organizations_id=v_instance.organizations_id AND conversations_id=v_conversation.conversations_id
+     RETURNING * INTO v_conversation;
+  END IF;
   IF p_from_me AND to_regclass('public.queue_item_dispatch_parts') IS NOT NULL THEN
     BEGIN
       EXECUTE 'SELECT queue_items_id FROM public.queue_item_dispatch_parts WHERE external_id=$1 ORDER BY queue_item_dispatch_parts_id DESC LIMIT 1' INTO v_queue USING p_external_message_id;
@@ -634,6 +642,8 @@ RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $$
 DECLARE v_q record;v_chip record;v_scope bigint;v_c public.conversations%ROWTYPE;v_m public.conversation_messages%ROWTYPE;
 BEGIN
+  IF lower(coalesce(nullif(trim(p_message_type),''),'text'))<>'text' THEN RAISE EXCEPTION 'media_disabled_text_only'; END IF;
+  IF nullif(trim(coalesce(p_message_body,'')),'') IS NULL THEN RAISE EXCEPTION 'automatic_message_body_required'; END IF;
   SELECT qi.queue_items_id,qi.organizations_id,qi.chips_id,qi.leads_id,qi.dispatched_by_member_id INTO v_q
    FROM public.queue_items qi WHERE qi.queue_items_id=p_queue_items_id AND qi.organizations_id=p_organizations_id;
   IF v_q.queue_items_id IS NULL THEN RAISE EXCEPTION 'automatic_message_queue_item_not_found'; END IF;

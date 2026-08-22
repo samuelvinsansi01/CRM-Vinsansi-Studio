@@ -1,3 +1,7 @@
+## v1.4.1 — fechamento da Etapa 5 (texto-only)
+
+Esta release bloqueia mídia na resposta manual e no endpoint de mídia, mantém somente texto/caption no webhook sem armazenar bytes/arquivos, expõe o canal seguro usado pelo Gerenciador para presença `composing/paused` e reabre conversas arquivadas apenas quando chega uma mensagem inbound nova. Aplique `APLICAR-NO-SUPABASE-v1.4.1.sql` sobre a base atual ou o patch corretivo v1.4.1 quando a v1.4.0 já estiver instalada.
+
 # CRM - Vinsansi Studio v1.2.0
 
 CRM central da plataforma Vinsansi para aquisição, qualificação, roteamento, filas multicanal e gestão organizacional.

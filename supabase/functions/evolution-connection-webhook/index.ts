@@ -156,7 +156,7 @@ function messageBody(item: Row) {
   const template = row(message.templateButtonReplyMessage);
   return text(
     (typeof message.conversation === "string" ? message.conversation : "") ||
-      extended.text || image.caption || video.caption || document.caption || document.fileName ||
+      extended.text || image.caption || video.caption || document.caption ||
       buttons.selectedDisplayText || buttons.selectedButtonId ||
       row(list.singleSelectReply).selectedRowId || template.selectedDisplayText || template.selectedId ||
       item.text || item.body || item.messageText || item.caption,
@@ -184,32 +184,6 @@ function payloadWithoutMediaBytes(value: unknown): unknown {
   return Object.fromEntries(Object.entries(value as Row).map(([key,item]) =>
     /^(base64|mediaData|fileData)$/i.test(key) ? [key,"[archived]"] : [key,payloadWithoutMediaBytes(item)]
   ));
-}
-
-function safeMediaName(value: string, fallback: string) {
-  const cleaned = value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,120);
-  return cleaned || fallback;
-}
-
-async function mediaBytes(base64: string, url: string) {
-  if (base64) {
-    const encoded = base64.includes(",") ? base64.slice(base64.indexOf(",") + 1) : base64;
-    const binary = atob(encoded);
-    if (binary.length > 26_214_400) throw new Error("media_archive_size_exceeded");
-    return Uint8Array.from(binary, char => char.charCodeAt(0));
-  }
-  if (!/^https:\/\//i.test(url)) return null;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(),12_000);
-  try {
-    const response = await fetch(url,{signal:controller.signal,redirect:"follow"});
-    if (!response.ok) throw new Error(`media_archive_fetch_http_${response.status}`);
-    const length = Number(response.headers.get("content-length") ?? 0);
-    if (length > 26_214_400) throw new Error("media_archive_size_exceeded");
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > 26_214_400) throw new Error("media_archive_size_exceeded");
-    return bytes;
-  } finally { clearTimeout(timeout); }
 }
 
 function quotedMessageId(item: Row) {
@@ -409,49 +383,31 @@ Deno.serve(async (request: Request) => {
         const jid = remoteJid(item);
         if (!externalId || !jid) { ignored += 1; continue; }
         const fromMe = event === "send_message" ? true : messageFromMe(item);
+        const detectedType = messageType(item);
+        const bodyText = messageBody(item);
+        if (!bodyText) { ignored += 1; continue; }
         const media = mediaMetadata(item);
+        const hadMedia = Boolean(media.base64 || media.url || media.mimeType || media.fileName) || !["text","conversation","extendedtext","extended_text"].includes(detectedType);
+        const rawPayload = hadMedia ? { textOnly: true, originalMessageType: detectedType } : payloadWithoutMediaBytes(item);
         const { data, error } = await admin.rpc("service_ingest_evolution_message", {
           p_instances_id: instanceId,
           p_event_type: event,
           p_external_message_id: externalId,
           p_remote_jid: jid,
           p_from_me: fromMe,
-          p_message_type: messageType(item),
-          p_message_body: messageBody(item) || null,
+          p_message_type: "text",
+          p_message_body: bodyText,
           p_message_status: statusFromItem(item, event, fromMe),
           p_contact_name: contactName(item) || null,
           p_provider_timestamp: providerTimestamp(item),
-          p_raw_payload: payloadWithoutMediaBytes(item),
-          p_media_url: media.url || null,
-          p_media_mime_type: media.mimeType || null,
-          p_media_file_name: media.fileName || null,
+          p_raw_payload: rawPayload,
+          p_media_url: null,
+          p_media_mime_type: null,
+          p_media_file_name: null,
           p_quoted_external_message_id: quotedMessageId(item) || null,
         });
         if (error) throw new Error(error.message);
         const result = row(data);
-        const messageId = Number(result.messageId ?? 0);
-        const conversationId = Number(result.conversationId ?? 0);
-        if (messageId > 0 && conversationId > 0 && (media.base64 || media.url)) {
-          try {
-            const bytes = await mediaBytes(media.base64,media.url);
-            if (bytes) {
-              const fileName = safeMediaName(media.fileName,`${externalId}.bin`);
-              const storagePath = `${Number(instanceRow.organizations_id)}/${conversationId}/${messageId}/${fileName}`;
-              const uploaded = await admin.storage.from("conversation-media").upload(storagePath,bytes,{
-                contentType:media.mimeType || "application/octet-stream",upsert:false,
-              });
-              if (uploaded.error && uploaded.error.message.toLowerCase().includes("already exists") === false) throw new Error(uploaded.error.message);
-              const archived = await admin.from("conversation_messages").update({
-                media_storage_path:storagePath,media_size_bytes:bytes.byteLength,media_archive_status:"archived",media_archive_error:null,
-              }).eq("organizations_id",Number(instanceRow.organizations_id)).eq("conversation_messages_id",messageId);
-              if (archived.error) throw new Error(archived.error.message);
-            }
-          } catch (archiveError) {
-            await admin.from("conversation_messages").update({
-              media_archive_status:"failed",media_archive_error:archiveError instanceof Error ? archiveError.message.slice(0,500) : "media_archive_failed",
-            }).eq("organizations_id",Number(instanceRow.organizations_id)).eq("conversation_messages_id",messageId);
-          }
-        }
         if (result.ignored) ignored += 1; else processed += 1;
       }
     } else if (STATUS_EVENTS.has(event)) {
