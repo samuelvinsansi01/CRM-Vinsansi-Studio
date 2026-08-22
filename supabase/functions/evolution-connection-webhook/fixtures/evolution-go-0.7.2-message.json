@@ -1,0 +1,22 @@
+{
+  "event": "Message",
+  "data": {
+    "Info": {
+      "Chat": "119546170073140@lid",
+      "ChatAlt": "5511999990001@s.whatsapp.net",
+      "Sender": "119546170073140@lid",
+      "SenderAlt": "5511999990001@s.whatsapp.net",
+      "IsFromMe": false,
+      "IsGroup": false,
+      "ID": "A5BB8F142F9075F7BCDB39834CEB6DD2",
+      "PushName": "Prospect homologação",
+      "Timestamp": "2026-08-22T13:19:14Z"
+    },
+    "Message": {
+      "conversation": "[conteúdo removido do fixture]"
+    }
+  },
+  "instanceToken": "[redacted]",
+  "instanceId": "98614f99-0cc6-4139-acf1-68ac1a15bca5",
+  "instanceName": "chip-8457"
+}
