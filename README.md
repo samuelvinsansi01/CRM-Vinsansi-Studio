@@ -1,3 +1,13 @@
+## v1.4.3 — Identidade canônica das Conversas
+
+Use `PATCH-ETAPA-5-IDENTIDADE-CONVERSAS-v1.4.3.sql` sobre a base v1.4.2. Depois republique a Edge Function `evolution-connection-webhook`, porque ela agora entende diretamente o contrato Evolution Go com `Info.ChatAlt`/`Info.SenderAlt` e prefere o JID telefônico ao LID. O patch também repara threads antigas quando o payload histórico contém essa relação, sempre preservando a separação entre chips.
+
+Para instalação limpa, use `APLICAR-NO-SUPABASE-v1.4.3.sql`.
+
+## v1.4.2 — Supabase Realtime para Conversas
+
+Esta release habilita `conversations` e `conversation_messages` no `supabase_realtime`, mantendo RLS por organização e somente leitura para o papel `authenticated`. Use `PATCH-ETAPA-5-REALTIME-v1.4.2.sql` sobre a base v1.4.1. Para instalação consolidada, use `APLICAR-NO-SUPABASE-v1.4.2.sql`. Não há mudança no Worker, Gateway, Evolution Go ou política text-only.
+
 ## v1.4.1 — fechamento da Etapa 5 (texto-only)
 
 Esta release bloqueia mídia na resposta manual e no endpoint de mídia, mantém somente texto/caption no webhook sem armazenar bytes/arquivos, expõe o canal seguro usado pelo Gerenciador para presença `composing/paused` e reabre conversas arquivadas apenas quando chega uma mensagem inbound nova. Aplique `APLICAR-NO-SUPABASE-v1.4.1.sql` sobre a base atual ou o patch corretivo v1.4.1 quando a v1.4.0 já estiver instalada.

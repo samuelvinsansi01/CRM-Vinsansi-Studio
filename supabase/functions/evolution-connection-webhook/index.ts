@@ -106,35 +106,48 @@ function payloadInstanceName(payload: Row) {
   );
 }
 
+function evolutionInfo(item: Row) {
+  const data = row(item.data);
+  return row(item.Info ?? item.info ?? data.Info ?? data.info);
+}
+
 function messageKey(item: Row) {
-  const message = row(item.message);
+  const message = row(item.message ?? item.Message);
   return row(item.key ?? message.key ?? row(item.data).key);
 }
 
 function messagePayload(item: Row) {
-  const candidate = item.message;
+  const candidate = item.message ?? item.Message;
   if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) return row(candidate);
-  const dataMessage = row(item.data).message;
-  return row(dataMessage);
+  const data = row(item.data);
+  return row(data.message ?? data.Message);
 }
 
 function externalMessageId(item: Row) {
   const key = messageKey(item);
-  return text(key.id ?? item.messageId ?? item.message_id ?? item.id ?? row(item.update).id);
+  const info = evolutionInfo(item);
+  return text(key.id ?? key.ID ?? info.ID ?? info.Id ?? info.id ?? item.messageId ?? item.message_id ?? item.id ?? row(item.update).id);
 }
 
 function remoteJid(item: Row) {
   const key = messageKey(item);
   const chat = row(item.chat);
-  const primary = text(key.remoteJid ?? key.remote_jid ?? item.remoteJid ?? item.remote_jid ?? item.jid ?? item.id ?? chat.remoteJid ?? chat.id);
-  const alternate = text(key.remoteJidAlt ?? key.remote_jid_alt ?? item.remoteJidAlt ?? item.remote_jid_alt ?? chat.remoteJidAlt);
-  const isPhoneJid = (value: string) => /@(s\.whatsapp\.net|c\.us)$/i.test(value);
-  return isPhoneJid(primary) ? primary : isPhoneJid(alternate) ? alternate : primary || alternate;
+  const info = evolutionInfo(item);
+  const candidates = [
+    key.remoteJidAlt,key.remote_jid_alt,item.remoteJidAlt,item.remote_jid_alt,chat.remoteJidAlt,
+    info.ChatAlt,info.chatAlt,info.SenderAlt,info.senderAlt,
+    key.remoteJid,key.remote_jid,item.remoteJid,item.remote_jid,item.jid,chat.remoteJid,chat.id,
+    info.Chat,info.chat,info.Sender,info.sender,item.id,
+  ].map(text).filter(Boolean);
+  const phone = candidates.find((value) => /@(s\.whatsapp\.net|c\.us)$/i.test(value));
+  if (phone) return `${phone.split("@")[0].replace(/\D/g, "")}@s.whatsapp.net`;
+  return candidates[0] ?? "";
 }
 
 function messageFromMe(item: Row) {
   const key = messageKey(item);
-  return booleanOf(key.fromMe ?? key.from_me ?? item.fromMe ?? item.from_me);
+  const info = evolutionInfo(item);
+  return booleanOf(key.fromMe ?? key.from_me ?? item.fromMe ?? item.from_me ?? info.IsFromMe ?? info.isFromMe);
 }
 
 function messageType(item: Row) {
@@ -199,7 +212,9 @@ function quotedMessageId(item: Row) {
 
 function contactName(item: Row) {
   const contact = row(item.contact);
-  return text(item.pushName ?? item.notifyName ?? item.verifiedBizName ?? item.name ?? item.contactName ?? contact.pushName ?? contact.name);
+  const info = evolutionInfo(item);
+  const value = text(item.pushName ?? item.notifyName ?? item.verifiedBizName ?? item.name ?? item.contactName ?? contact.pushName ?? contact.name ?? info.PushName ?? info.pushName);
+  return /[\p{L}\p{N}]/u.test(value) ? value : "";
 }
 
 function contactAvatar(item: Row) {
@@ -213,7 +228,8 @@ function unreadCount(item: Row) {
 }
 
 function providerTimestamp(item: Row) {
-  const raw = item.messageTimestamp ?? item.timestamp ?? item.time ?? item.date ?? row(item.update).messageTimestamp;
+  const info = evolutionInfo(item);
+  const raw = item.messageTimestamp ?? item.timestamp ?? item.time ?? item.date ?? row(item.update).messageTimestamp ?? info.Timestamp ?? info.timestamp;
   if (typeof raw === "number" || /^\d+(?:\.\d+)?$/.test(text(raw))) {
     const value = Number(raw);
     if (!Number.isFinite(value)) return null;
@@ -315,7 +331,8 @@ Deno.serve(async (request: Request) => {
     return jsonResponse({ error: "O nome da instância não corresponde ao webhook configurado." }, 409);
   }
 
-  const event = normalized(payload.event ?? payload.type ?? payload.eventType);
+  const rawEvent = normalized(payload.event ?? payload.type ?? payload.eventType);
+  const event = rawEvent === "message" ? "messages_upsert" : rawEvent === "sendmessage" ? "send_message" : rawEvent;
   if (!event) return jsonResponse({ error: "Evento ausente." }, 422);
   const payloadHash = await sha256(rawBody);
   let receiptId = 0;
