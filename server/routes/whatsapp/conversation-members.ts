@@ -1,0 +1,2 @@
+import { failure,humanScope,rpc,send,type Stage5Request,type Stage5Response } from '../../whatsapp/stage5.js';
+export default async function handler(req:Stage5Request,res:Stage5Response){if(req.method!=='GET')return send(res,405,{ok:false,error:'method_not_allowed'});try{const scope=await humanScope(req,'whatsapp.view');return send(res,200,{ok:true,items:await rpc(scope,'service_stage5_transfer_members',{})});}catch(error){return failure(res,error);}}

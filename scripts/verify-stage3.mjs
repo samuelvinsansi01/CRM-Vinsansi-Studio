@@ -11,7 +11,7 @@ const expect = (condition, message) => { if (!condition) failures.push(message);
 const includes = (source, value, message = value) => expect(source.includes(value), message);
 
 const pkg = JSON.parse(read('package.json'));
-expect(['1.2.0','1.3.0'].includes(pkg.version), `package.version esperado 1.2.0+; recebido ${pkg.version}`);
+expect(/^1\.(?:[2-9]|\d{2,})\.\d+$/.test(pkg.version), `package.version esperado 1.2.0+; recebido ${pkg.version}`);
 expect(exists('APLICAR-NO-SUPABASE-v1.2.0.sql'), 'SQL consolidado v1.2.0 ausente.');
 expect(exists('PASSO-A-PASSO-v1.2.0.md'), 'Passo a passo v1.2.0 ausente.');
 expect(exists('CHANGELOG-v1.2.0.md'), 'Changelog v1.2.0 ausente.');
@@ -109,7 +109,7 @@ for (const [name,file] of [
   expect(!source.includes('<table'),`${name} voltou a criar tabela HTML própria.`);
 }
 const permanentRules=read('../ESPECIFICACAO/06-REGRAS-NAO-NEGOCIAVEIS.md');
-includes(permanentRules,'Nenhuma nova página CRUD pode definir estrutura visual própria','Regra permanente de consistência CRUD/UI ausente.');
+includes(permanentRules,'Consistência de UI/CRUD é obrigatória','Regra permanente de consistência CRUD/UI ausente.');
 
 const settingsRepository = read('src/repositories/settings/canonicalSettings.repository.ts');
 const platformConfig = read('src/services/platform-config/platformConfig.service.ts');

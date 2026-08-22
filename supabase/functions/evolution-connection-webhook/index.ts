@@ -174,7 +174,42 @@ function mediaMetadata(item: Row) {
     url: text(source.url ?? source.mediaUrl ?? source.media_url ?? item.mediaUrl ?? item.media_url),
     mimeType: text(source.mimetype ?? source.mimeType ?? source.mime_type ?? item.mimetype),
     fileName: text(source.fileName ?? source.filename ?? source.file_name ?? item.fileName),
+    base64: text(source.base64 ?? source.data ?? item.base64 ?? row(item.media).base64),
   };
+}
+
+function payloadWithoutMediaBytes(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(payloadWithoutMediaBytes);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value as Row).map(([key,item]) =>
+    /^(base64|mediaData|fileData)$/i.test(key) ? [key,"[archived]"] : [key,payloadWithoutMediaBytes(item)]
+  ));
+}
+
+function safeMediaName(value: string, fallback: string) {
+  const cleaned = value.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,120);
+  return cleaned || fallback;
+}
+
+async function mediaBytes(base64: string, url: string) {
+  if (base64) {
+    const encoded = base64.includes(",") ? base64.slice(base64.indexOf(",") + 1) : base64;
+    const binary = atob(encoded);
+    if (binary.length > 26_214_400) throw new Error("media_archive_size_exceeded");
+    return Uint8Array.from(binary, char => char.charCodeAt(0));
+  }
+  if (!/^https:\/\//i.test(url)) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(),12_000);
+  try {
+    const response = await fetch(url,{signal:controller.signal,redirect:"follow"});
+    if (!response.ok) throw new Error(`media_archive_fetch_http_${response.status}`);
+    const length = Number(response.headers.get("content-length") ?? 0);
+    if (length > 26_214_400) throw new Error("media_archive_size_exceeded");
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > 26_214_400) throw new Error("media_archive_size_exceeded");
+    return bytes;
+  } finally { clearTimeout(timeout); }
 }
 
 function quotedMessageId(item: Row) {
@@ -280,7 +315,7 @@ Deno.serve(async (request: Request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: instanceRow, error: instanceError } = await admin
     .from("instances")
-    .select("instances_id,users_id,status_id,instances_name")
+    .select("instances_id,users_id,organizations_id,status_id,instances_name")
     .eq("instances_id", instanceId)
     .maybeSingle();
   if (instanceError) return jsonResponse({ error: instanceError.message }, 500);
@@ -305,6 +340,7 @@ Deno.serve(async (request: Request) => {
   let receiptId = 0;
   const receiptInsert = await admin.from("evolution_webhook_receipts").insert({
     users_id: Number(instanceRow.users_id),
+    organizations_id: Number(instanceRow.organizations_id),
     instances_id: instanceId,
     event_type: event,
     external_event_id: text(payload.id ?? payload.eventId) || null,
@@ -336,7 +372,7 @@ Deno.serve(async (request: Request) => {
       const currentResult = await admin.from("instance_runtime_states")
         .select("session_saved,jid")
         .eq("instances_id", instanceId)
-        .eq("users_id", instanceRow.users_id)
+        .eq("organizations_id", instanceRow.organizations_id)
         .maybeSingle();
       if (currentResult.error) throw new Error(currentResult.error.message);
       const runtime = connectionRuntimeSnapshot(payload, row(currentResult.data));
@@ -344,6 +380,7 @@ Deno.serve(async (request: Request) => {
       const { error } = await admin.from("instance_runtime_states").upsert({
         instances_id: instanceId,
         users_id: Number(instanceRow.users_id),
+        organizations_id: Number(instanceRow.organizations_id),
         provider: "evolution-go",
         operational_state: runtime.operationalState,
         session_saved: runtime.sessionSaved,
@@ -377,14 +414,38 @@ Deno.serve(async (request: Request) => {
           p_message_status: statusFromItem(item, event, fromMe),
           p_contact_name: contactName(item) || null,
           p_provider_timestamp: providerTimestamp(item),
-          p_raw_payload: item,
+          p_raw_payload: payloadWithoutMediaBytes(item),
           p_media_url: media.url || null,
           p_media_mime_type: media.mimeType || null,
           p_media_file_name: media.fileName || null,
           p_quoted_external_message_id: quotedMessageId(item) || null,
         });
         if (error) throw new Error(error.message);
-        if (row(data).ignored) ignored += 1; else processed += 1;
+        const result = row(data);
+        const messageId = Number(result.messageId ?? 0);
+        const conversationId = Number(result.conversationId ?? 0);
+        if (messageId > 0 && conversationId > 0 && (media.base64 || media.url)) {
+          try {
+            const bytes = await mediaBytes(media.base64,media.url);
+            if (bytes) {
+              const fileName = safeMediaName(media.fileName,`${externalId}.bin`);
+              const storagePath = `${Number(instanceRow.organizations_id)}/${conversationId}/${messageId}/${fileName}`;
+              const uploaded = await admin.storage.from("conversation-media").upload(storagePath,bytes,{
+                contentType:media.mimeType || "application/octet-stream",upsert:false,
+              });
+              if (uploaded.error && uploaded.error.message.toLowerCase().includes("already exists") === false) throw new Error(uploaded.error.message);
+              const archived = await admin.from("conversation_messages").update({
+                media_storage_path:storagePath,media_size_bytes:bytes.byteLength,media_archive_status:"archived",media_archive_error:null,
+              }).eq("organizations_id",Number(instanceRow.organizations_id)).eq("conversation_messages_id",messageId);
+              if (archived.error) throw new Error(archived.error.message);
+            }
+          } catch (archiveError) {
+            await admin.from("conversation_messages").update({
+              media_archive_status:"failed",media_archive_error:archiveError instanceof Error ? archiveError.message.slice(0,500) : "media_archive_failed",
+            }).eq("organizations_id",Number(instanceRow.organizations_id)).eq("conversation_messages_id",messageId);
+          }
+        }
+        if (result.ignored) ignored += 1; else processed += 1;
       }
     } else if (STATUS_EVENTS.has(event)) {
       for (const item of eventRows(payload)) {

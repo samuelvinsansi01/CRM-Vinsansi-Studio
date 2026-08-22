@@ -5,6 +5,7 @@
 @import './settings.css';
 @import './config.css';
 @import './audit.css';
+@import './organization.css';
 
 @import './chat.css';
 .maps-pairing-page {
@@ -39,5 +40,3 @@
 .maps-history-coverage-button:hover { border-color: var(--border-strong); background: var(--surface-secondary); }
 .maps-history-coverage-button span { color: var(--text-muted); font-size: 12px; }
 .maps-history-back { margin: 0 0 12px; border: 0; background: transparent; color: var(--text-link); cursor: pointer; font-weight: 600; padding: 4px 0; }
-
-@import './organization.css';
