@@ -1,9 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../maps/shared.js';
 import { sha256, type MapsExtensionScope } from '../../maps/token.js';
 
-const EXTENSION_VERSION = '1.0.1';
-const DEFAULT_BRANCH_TARGET_WHATSAPP = 1000;
-const DEFAULT_BRANCH_TARGET_INSTAGRAM = 500;
+const EXTENSION_VERSION = '1.0.2';
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -127,23 +125,15 @@ function nonnegativeInteger(value: unknown, fallback: number) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-function branchAcquisitionTargets(categories: unknown) {
-  const metadata = metadataObject(categories);
-  const whatsapp = nonnegativeInteger(
-    metadata.stockTargetWhatsapp ?? metadata.stock_target_whatsapp ?? metadata.targetWhatsapp ?? metadata.target_whatsapp,
-    DEFAULT_BRANCH_TARGET_WHATSAPP,
-  );
-  const instagram = nonnegativeInteger(
-    metadata.stockTargetInstagram ?? metadata.stock_target_instagram ?? metadata.targetInstagram ?? metadata.target_instagram,
-    DEFAULT_BRANCH_TARGET_INSTAGRAM,
-  );
-  return { whatsapp, instagram, unique: whatsapp + instagram };
+function branchAcquisitionTargets(_categories: unknown) {
+  // v1.0.2: metas por canal foram aposentadas. A quantidade da execução é a única meta.
+  return { whatsapp: 0, instagram: 0, unique: 0 };
 }
 
 async function acquisitionTargets(client: ReturnType<typeof import('../../maps/shared.js').serviceClient>, usersId: number, branchesId: number) {
-  const result = await client.from('branches').select('branches_id,branches_categories').eq('branches_id', branchesId).eq('users_id', usersId).eq('status_id', 1).maybeSingle();
+  const result = await client.from('branches').select('branches_id').eq('branches_id', branchesId).eq('users_id', usersId).eq('status_id', 1).maybeSingle();
   if (result.error || !result.data) throw new Error('maps_branch_not_available');
-  return branchAcquisitionTargets(result.data.branches_categories);
+  return { whatsapp: 0, instagram: 0, unique: 0 };
 }
 
 function mapsRating(raw: Row) {
@@ -177,6 +167,7 @@ function bucketDeficit(target: number, count: number) {
 }
 
 function chooseAcquisitionBucket(effective: ReturnType<typeof effectiveCandidate>, execution: Row, counts: { whatsapp: number; instagram: number }) {
+  if ((execution.runner_strategy as Row | null)?.reviewBeforeImport === true) return null;
   const hasWhatsappPool = Boolean(effective.phone || effective.whatsapp);
   const hasInstagram = Boolean(effective.instagram);
   const targetWhatsapp = Number(execution.target_phone_whatsapp || 0);
@@ -194,6 +185,7 @@ function chooseAcquisitionBucket(effective: ReturnType<typeof effectiveCandidate
 function acquisitionTargetsReached(execution: Row, counts: Row) {
   const desiredCompanyCount = Math.max(0, Number((execution.runner_strategy as Row | null)?.desiredCompanyCount || 0));
   if (desiredCompanyCount > 0) return Number(counts.unique_count || 0) >= desiredCompanyCount;
+  // Fallback somente para execuções históricas criadas antes da v1.0.2.
   const targetWhatsapp = Number(execution.target_phone_whatsapp || 0);
   const targetInstagram = Number(execution.target_instagram || 0);
   const targetUnique = Number(execution.target_unique || targetWhatsapp + targetInstagram);
@@ -429,17 +421,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return send(req, res, 200, { ok: true, cities: cities.data ?? [] });
     }
     if (action === 'targets') {
-      const targets = await acquisitionTargets(client, usersId, integer(input.branchesId, 1));
-      return send(req, res, 200, {
-        ok: true,
-        targets: {
-          whatsapp: { target: targets.whatsapp, capacity: targets.whatsapp, usefulStock: null, needed: targets.whatsapp },
-          instagram: { target: targets.instagram, capacity: targets.instagram, usefulStock: null, needed: targets.instagram },
-          unique: targets.unique,
-          source: 'branch_stock_target',
-          strategy: 'additive_execution_target',
-        },
-      });
+      await acquisitionTargets(client, usersId, integer(input.branchesId, 1));
+      return send(req, res, 200, { ok: true, deprecated: true, targets: { whatsapp: { target: 0, capacity: 0, usefulStock: null, needed: 0 }, instagram: { target: 0, capacity: 0, usefulStock: null, needed: 0 }, unique: 0, source: 'desired_companies_only', strategy: 'operator_defined_company_limit' } });
     }
     if (action === 'active_executions') {
       const activeCount = await activeExecutionCount(client, usersId);
@@ -452,18 +435,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const cityMode = input.cityMode === 'manual' ? 'manual' : 'automatic';
       const requestedCitiesId = cityMode === 'manual' ? integer(input.citiesId, 1) : null;
       const extractionMode = input.extractionMode === 'quick' ? 'quick' : 'complete';
-      const desiredCompanies = integer(input.desiredCompanies ?? 50, 1, 500);
-      const [{ branch, terms }, state, defaults] = await Promise.all([
+      const desiredCompanies = integer(input.desiredCompanies ?? 50, 1, 5000);
+      const [{ branch, terms }, state] = await Promise.all([
         branchTerms(client, usersId, branchesId),
         client.from('states').select('states_id,states_name,states_code').eq('states_id', statesId).maybeSingle(),
-        acquisitionTargets(client, usersId, branchesId),
       ]);
       if (state.error || !state.data) throw new Error('maps_state_not_found');
       if (!terms.length) throw new Error('maps_search_terms_required');
-      const targetWhatsapp = input.targetWhatsapp == null ? defaults.whatsapp : integer(input.targetWhatsapp, 0, 1_000_000);
-      const targetInstagram = input.targetInstagram == null ? defaults.instagram : integer(input.targetInstagram, 0, 1_000_000);
-      if (targetWhatsapp <= 0 && targetInstagram <= 0) throw new Error('maps_targets_required');
-      const targetSource = input.targetWhatsapp == null && input.targetInstagram == null ? 'branch_default' : 'execution_override';
+      // O schema histórico exige campos de target por canal. Na v1.0.2 eles são apenas
+      // compatibilidade de armazenamento e NÃO controlam seleção, término ou roteamento.
+      const targetWhatsapp = desiredCompanies;
+      const targetInstagram = 0;
+      const targetSource = 'desired_company_limit_compat';
       if (requestedCitiesId) {
         const city = await client.from('cities').select('cities_id').eq('cities_id', requestedCitiesId).eq('states_id', statesId).maybeSingle();
         if (city.error || !city.data) throw new Error('maps_city_state_mismatch');
@@ -485,7 +468,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         p_target_source: targetSource,
         p_extension_version: text(input.extensionVersion) || EXTENSION_VERSION,
         p_search_terms_snapshot: terms,
-        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies },
+        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies },
       });
       if (inserted.error) {
         const message = text(inserted.error.message);
@@ -660,7 +643,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     if (action === 'candidates_list') {
       await ownedExecution(client, usersId, text(input.executionId));
-      const candidates = await client.from('maps_search_candidates').select('*,branches:branches_id(branches_name),states:states_id(states_name,states_code),cities:cities_id(cities_name)').eq('users_id', usersId).eq('maps_search_executions_id', text(input.executionId)).neq('eligibility_status', 'closed_business').order('created_at');
+      const candidates = await client.from('maps_search_candidates').select('*,branches:branches_id(branches_name),states:states_id(states_name,states_code),cities:cities_id(cities_name)').eq('users_id', usersId).eq('maps_search_executions_id', text(input.executionId)).order('created_at');
       if (candidates.error) throw new Error(candidates.error.message);
       return send(req, res, 200, { ok: true, candidates: candidates.data ?? [] });
     }
@@ -697,7 +680,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const closed = isClosedBusiness(text(current.data.business_status));
         const bucket = closed ? null : chooseAcquisitionBucket(effective, execution, allocationCounts);
         patch = { effective_phone: effective.phone, effective_whatsapp: effective.whatsapp, effective_instagram: effective.instagram, effective_website: effective.website, website_classification: effective.websiteClassification, acquisition_bucket: bucket, eligibility_status: closed ? 'closed_business' : effective.eligibilityStatus, eligibility_reason: closed ? current.data.business_status : effective.eligibilityReason, edited_by_user: true, updated_at: new Date().toISOString() };
-      } else patch = { excluded_by_user: action === 'candidate_exclude', updated_at: new Date().toISOString() };
+      } else {
+        if (current.data.promoted_leads_id && action === 'candidate_exclude') throw new Error('maps_candidate_already_promoted');
+        patch = { excluded_by_user: action === 'candidate_exclude', updated_at: new Date().toISOString() };
+      }
       const updated = await client.from('maps_search_candidates').update(patch).eq('maps_search_candidates_id', candidateId).eq('users_id', usersId).select('*').single();
       if (updated.error) throw new Error(updated.error.message);
       const counts = await executionSummary(client, execution);
@@ -706,16 +692,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (action === 'leads_promote') {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
       const selectedIds = Array.isArray(input.candidateIds) ? [...new Set(input.candidateIds.map(text).filter(Boolean))] : [];
+      if (!selectedIds.length) throw new Error('maps_leads_promote_selection_required');
       if (selectedIds.length > 25) throw new Error('maps_leads_promote_batch_too_large');
-      const selected = selectedIds.length ? new Set(selectedIds) : null;
+      const selected = new Set(selectedIds);
       let candidatesQuery = client
         .from('maps_search_candidates')
         .select('*')
         .eq('users_id', usersId)
         .eq('maps_search_executions_id', execution.maps_search_executions_id)
         .eq('excluded_by_user', false)
-        .eq('eligibility_status', 'ready_to_save');
-      if (selectedIds.length) candidatesQuery = candidatesQuery.in('maps_search_candidates_id', selectedIds);
+        .in('maps_search_candidates_id', selectedIds);
       const candidates = await candidatesQuery;
       if (candidates.error) throw new Error(candidates.error.message);
       const channels = await channelIds(client);
@@ -734,6 +720,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           await client.from('maps_search_candidates').update({ promoted_leads_id: existingLead.data.leads_id, promoted_at: new Date().toISOString() }).eq('maps_search_candidates_id', candidateId);
           alreadyPromoted += 1; continue;
         }
+        if (candidate.eligibility_status === 'closed_business') { failures.push({ candidateId, code: 'closed_business' }); continue; }
         const phoneWhatsapp = text(candidate.effective_phone || candidate.effective_whatsapp);
         const instagram = normalizeInstagram(candidate.effective_instagram);
         if (!phoneWhatsapp && !instagram) { failures.push({ candidateId, code: 'no_supported_contact' }); continue; }

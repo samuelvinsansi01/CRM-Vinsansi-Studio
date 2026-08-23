@@ -95,3 +95,11 @@ export function mergeBranchAcquisitionTargets(value: unknown, whatsapp: unknown,
 export function mergeBranchAcquisitionTargetsJson(value: string, whatsapp: unknown, instagram: unknown) {
   return formatCategoriesJson(mergeBranchAcquisitionTargets(parseCategoriesJson(value), whatsapp, instagram));
 }
+
+export function removeLegacyBranchAcquisitionTargets(value: unknown) {
+  const next: Record<string, unknown> = isPlainObject(value)
+    ? { ...value }
+    : { associatedCategories: categoriesFromValue(value) };
+  for (const key of ['stockTargetWhatsapp','stock_target_whatsapp','targetWhatsapp','target_whatsapp','stockTargetInstagram','stock_target_instagram','targetInstagram','target_instagram']) delete next[key];
+  return next;
+}

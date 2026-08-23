@@ -11,6 +11,7 @@ type DisplayRow = Record<string, ReactNode>;
 
 const statusTone = (status: string) => status === 'completed' ? 'success' : status === 'error' ? 'danger' : status === 'paused' ? 'warning' : 'neutral';
 const normalize = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+const desiredCompanyCount = (row: Record<string, unknown>) => Math.max(0, Number((row.runner_strategy as Record<string, unknown> | null)?.desiredCompanyCount || row.target_unique || 0));
 
 function candidateBelongsToCoverage(candidate: CandidateRow, coverage: CoverageRow) {
   const ids = Array.isArray(candidate.coverage_ids_found) ? candidate.coverage_ids_found.map(String) : [];
@@ -77,8 +78,8 @@ export function MapsSearchesPage() {
     branch_name: row.branch_name,
     state: String((row.states as Record<string, unknown> | null)?.states_code || '—'),
     city: String((row.cities as Record<string, unknown> | null)?.cities_name || 'Automático'),
-    target: `${row.target_phone_whatsapp || 0} WA + ${row.target_instagram || 0} IG`,
-    allocated: `${row.whatsapp_bucket_count || 0} WA + ${row.instagram_bucket_count || 0} IG`,
+    target: `${desiredCompanyCount(row)} empresas`,
+    allocated: String(row.unique_count || 0),
     found_count: String(row.found_count || 0),
     eligible_count: String(row.eligible_count || 0),
     promoted_leads_count: String(row.promoted_leads_count || 0),
@@ -91,7 +92,7 @@ export function MapsSearchesPage() {
     { key: 'state', label: 'Estado' },
     { key: 'city', label: 'Cidade' },
     { key: 'target', label: 'Meta' },
-    { key: 'allocated', label: 'Alocados' },
+    { key: 'allocated', label: 'Capturadas' },
     { key: 'found_count', label: 'Encontrados' },
     { key: 'eligible_count', label: 'Candidatos' },
     { key: 'promoted_leads_count', label: 'Leads salvos' },
@@ -120,19 +121,19 @@ export function MapsSearchesPage() {
       <Drawer open={Boolean(selected)} title={selectedCoverage ? `${selectedCoverage.search_term}` : selected?.branch_name || 'Pesquisa Google Maps'} description={selectedCoverage ? `${selectedCoverage.city_name}${selectedCoverage.state_code ? ` / ${selectedCoverage.state_code}` : ''}` : selected ? `${new Date(selected.created_at).toLocaleString('pt-BR')} • ${selected.status}` : ''} size="wide" onClose={() => { setSelected(null); setSelectedCoverage(null); }}>
         {!detail ? <p>Carregando…</p> : null}
         {detail && !selectedCoverage ? <div className="maps-history-list">
-          <article><strong>Resumo da execução</strong><span>{`${selected?.target_phone_whatsapp || 0} WA + ${selected?.target_instagram || 0} IG = ${selected?.target_unique || Number(selected?.target_phone_whatsapp || 0) + Number(selected?.target_instagram || 0)} leads únicos alvo`}</span></article>
+          <article><strong>Resumo da execução</strong><span>{`Meta: ${selected ? desiredCompanyCount(selected) : 0} empresas • capturadas: ${selected?.unique_count || 0} • salvas no CRM: ${selected?.promoted_leads_count || 0}`}</span></article>
           {coverageByCity.map(([cityName, coverages]) => <section key={cityName} className="maps-history-city">
             <h3>{cityName}</h3>
             {coverages.map((coverage) => <button type="button" className="maps-history-coverage-button" key={coverage.maps_search_coverage_id} onClick={() => openCoverage(coverage)}>
               <strong>{coverage.search_term}</strong>
-              <span>{`${coverage.status} • ${coverage.found_count || 0} encontrados • ${coverage.eligible_count || 0} elegíveis`}</span>
+              <span>{`${coverage.status} • ${coverage.found_count || 0} mapeados • ${coverage.unique_count || coverage.eligible_count || 0} capturados`}</span>
             </button>)}
           </section>)}
         </div> : null}
         {detail && selectedCoverage ? <>
           <button type="button" className="maps-history-back" onClick={() => { setSelectedCoverage(null); setCoverageSnapshots(null); }}>← Voltar para cobertura</button>
           <div className="maps-history-list">
-            <article><strong>Status</strong><span>{`${selectedCoverage.status} • ${selectedCoverage.found_count || 0} encontrados • ${selectedCoverage.duplicate_count || 0} duplicados • ${selectedCoverage.rejected_count || 0} rejeitados`}</span></article>
+            <article><strong>Status</strong><span>{`${selectedCoverage.status} • ${selectedCoverage.found_count || 0} mapeados • ${selectedCoverage.unique_count || selectedCoverage.eligible_count || 0} capturados • ${selectedCoverage.duplicate_count || 0} repetidos na busca`}</span></article>
             <article><strong>Encerramento</strong><span>{String(selectedCoverage.termination_reason || selectedCoverage.last_error || 'em andamento')}</span></article>
           </div>
           <SegmentedControl items={['Resultados', 'JSON']} active={coverageTab} onChange={(nextTab) => void changeCoverageTab(nextTab)} />

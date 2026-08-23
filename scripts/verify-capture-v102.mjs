@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const source = fs.readFileSync(new URL('../server/routes/maps/extension.ts', import.meta.url), 'utf8');
+const executor = fs.readFileSync(new URL('../server/tools/executor.ts', import.meta.url), 'utf8');
+const mapsPage = fs.readFileSync(new URL('../src/pages/MapsSearchesPage.tsx', import.meta.url), 'utf8');
+const configPage = fs.readFileSync(new URL('../src/pages/ConfigTablePage.tsx', import.meta.url), 'utf8');
+assert.match(source, /desiredCompanies = integer\(input\.desiredCompanies \?\? 50, 1, 5000\)/);
+assert.match(source, /reviewBeforeImport: true/);
+assert.match(source, /additiveTargets: false/);
+assert.match(source, /maps_leads_promote_selection_required/);
+assert.match(source, /const EXTENSION_VERSION = '1\.0\.2'/);
+assert.doesNotMatch(source, /DEFAULT_BRANCH_TARGET_WHATSAPP|DEFAULT_BRANCH_TARGET_INSTAGRAM/);
+assert.match(executor, /operator_defined_company_limit/);
+assert.match(executor, /reviewBeforeImport:true/);
+assert.doesNotMatch(configPage, /Estoque alvo WhatsApp|Estoque alvo Instagram/);
+assert.match(mapsPage, /desiredCompanyCount/);
+assert.doesNotMatch(mapsPage, /WA \+.*IG/);
+console.log('CRM R6: Captura 1.0.2 usa quantidade única e revisão manual antes da importação.');

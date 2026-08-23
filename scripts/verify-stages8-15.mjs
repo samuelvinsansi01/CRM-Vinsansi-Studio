@@ -16,7 +16,7 @@ const checks=[
 ];
 for(const [label,file,tokens] of checks){const sql=read(file);expect(sql.trim().startsWith('BEGIN;'),`${label}: transação ausente`);expect(sql.trim().endsWith('COMMIT;'),`${label}: COMMIT ausente`);expect(sql.includes('$stage_preflight$'),`${label}: preflight ausente`);for(const token of tokens)expect(sql.includes(token),`${label}: contrato ausente: ${token}`);}
 const instagram=read('server/routes/instagram/extension.ts');expect(instagram.includes("instagram_recover_stale_items_v2"),'Instagram ainda usa recovery legado');expect(instagram.includes('scope.organizationId'),'Instagram recovery sem tenant scope');
-const maps=read('server/routes/maps/extension.ts');expect(maps.includes('candidateIds'),'Captura não retorna candidatos do batch incremental');expect(maps.includes("action === 'leads_promote'"),'Captura sem promoção incremental');
+const maps=read('server/routes/maps/extension.ts');expect(maps.includes('candidateIds'),'Captura não retorna candidatos do batch incremental');expect(maps.includes("action === 'leads_promote'")&&maps.includes('maps_leads_promote_selection_required'),'Captura sem promoção manual explícita');
 const schema=read('server/routes/system/schema-health.ts');expect(schema.includes('platform_schema_health'),'Route schema health ausente');
 const hom=read('src/pages/HomologationPage.tsx');expect(hom.includes('Promover Stable'),'UI não expõe promoção Stable controlada');
 const pkg=JSON.parse(read('package.json'));expect(pkg.version==='2.4.0',`CRM final deveria ser 2.4.0; recebido ${pkg.version}`);
