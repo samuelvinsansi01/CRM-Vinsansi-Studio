@@ -446,7 +446,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       // compatibilidade de armazenamento e NÃO controlam seleção, término ou roteamento.
       const targetWhatsapp = desiredCompanies;
       const targetInstagram = 0;
-      const targetSource = 'desired_company_limit_compat';
+      const targetSource = 'execution_override'; // valor legado aceito pelo CHECK; a meta real vive em runner_strategy.desiredCompanyCount
       if (requestedCitiesId) {
         const city = await client.from('cities').select('cities_id').eq('cities_id', requestedCitiesId).eq('states_id', statesId).maybeSingle();
         if (city.error || !city.data) throw new Error('maps_city_state_mismatch');
