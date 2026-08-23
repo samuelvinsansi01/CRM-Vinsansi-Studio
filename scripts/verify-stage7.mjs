@@ -77,7 +77,7 @@ for (const token of ["digits.startsWith('00')", "digits.startsWith('55')", 'digi
 }
 
 const pkg = JSON.parse(read('package.json'));
-expect(pkg.version === '1.6.0', `package.json não está em v1.6.0; recebido ${pkg.version}.`);
+{ const [major,minor]=pkg.version.split('.').map(Number); expect(major>1 || (major===1 && minor>=6), `package.json deve preservar a Etapa 7 (v1.6.0+); recebido ${pkg.version}.`); }
 expect(String(pkg.scripts?.['verify:release'] ?? '').includes('verify-stage7.mjs'), 'verify:release não inclui Etapa 7.');
 
 if (failures.length) {

@@ -16,7 +16,8 @@ import { QueuePage } from './pages/QueuePage';
 import { ValidationRoutingPage } from './pages/ValidationRoutingPage';
 import { ToolsPage } from './pages/ToolsPage';
 import { MonitoringPage } from './pages/MonitoringPage';
-import { MapsExtensionAuthorizePage } from './pages/MapsExtensionAuthorizePage';
+import { HomologationPage } from './pages/HomologationPage';
+import { ToolBrowserAuthorizePage } from './pages/ToolBrowserAuthorizePage';
 import { MapsSearchesPage } from './pages/MapsSearchesPage';
 import { OrganizationMembersPage } from './pages/OrganizationMembersPage';
 import { OrganizationRolesPage } from './pages/OrganizationRolesPage';
@@ -124,8 +125,8 @@ export function App() {
     );
   }
 
-  const mapsPairingId = new URLSearchParams(window.location.search).get('maps_pairing');
-  if (mapsPairingId) return <MapsExtensionAuthorizePage pairingId={mapsPairingId} />;
+  const toolPairingId = new URLSearchParams(window.location.search).get('tool_pairing');
+  if (toolPairingId) return <ToolBrowserAuthorizePage pairingId={toolPairingId} />;
 
   return (
     <DashboardLayout activePage={activePage} onNavigate={setActivePage}>
@@ -167,6 +168,7 @@ export function App() {
       {activePage === 'tools' ? <ToolsPage /> : null}
       {activePage === 'monitoring' ? <MonitoringPage /> : null}
       {activePage === 'audit' ? <AuditPage /> : null}
+      {activePage === 'homologation' ? <HomologationPage /> : null}
     </DashboardLayout>
   );
 }

@@ -48,6 +48,7 @@ export type BaseFilters = {
   city?: string;
   destination?: string;
   status?: string;
+  outcome?: string;
 };
 
 export type BaseSummary = {

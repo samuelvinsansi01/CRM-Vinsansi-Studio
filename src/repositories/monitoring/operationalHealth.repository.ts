@@ -1,18 +1,23 @@
 import { getSupabaseClient } from '../../lib/supabase';
 
+export type RuntimeComponent = { type:string; key:string; version?:string|null; status:string; lastSeenAt?:string; lastActivityAt?:string|null; metrics?:Record<string,unknown>; metadata?:Record<string,unknown> };
+
 export type OperationalHealth = {
   checkedAt: string;
+  organizationId?: number;
+  components: RuntimeComponent[];
   workers: { online: number; stale: number };
   queues: { pending: number; processing: number; staleProcessing: number; errors: number };
   reconciliation: { whatsapp: number; instagram: number };
   batches: { active: number; stale: number };
+  tools: { registered:number; stale:number };
   alerts: { open: number; critical: number };
   latestRecovery?: Record<string, unknown> | null;
 };
 
 const empty: OperationalHealth = {
-  checkedAt: '', workers: { online: 0, stale: 0 }, queues: { pending: 0, processing: 0, staleProcessing: 0, errors: 0 },
-  reconciliation: { whatsapp: 0, instagram: 0 }, batches: { active: 0, stale: 0 }, alerts: { open: 0, critical: 0 }, latestRecovery: null,
+  checkedAt: '', components: [], workers: { online: 0, stale: 0 }, queues: { pending: 0, processing: 0, staleProcessing: 0, errors: 0 },
+  reconciliation: { whatsapp: 0, instagram: 0 }, batches: { active: 0, stale: 0 }, tools: { registered: 0, stale: 0 }, alerts: { open: 0, critical: 0 }, latestRecovery: null,
 };
 
 export async function getOperationalHealth(): Promise<OperationalHealth> {
@@ -23,7 +28,7 @@ export async function getOperationalHealth(): Promise<OperationalHealth> {
     ...empty, ...value,
     workers: { ...empty.workers, ...(value.workers ?? {}) }, queues: { ...empty.queues, ...(value.queues ?? {}) },
     reconciliation: { ...empty.reconciliation, ...(value.reconciliation ?? {}) }, batches: { ...empty.batches, ...(value.batches ?? {}) },
-    alerts: { ...empty.alerts, ...(value.alerts ?? {}) },
+    tools: { ...empty.tools, ...(value.tools ?? {}) }, alerts: { ...empty.alerts, ...(value.alerts ?? {}) }, components: Array.isArray(value.components) ? value.components : [],
   };
 }
 

@@ -1,3 +1,11 @@
+# CRM - Vinsansi Studio v2.4.0 — Release Candidate das Etapas 1–15
+
+Esta árvore contém a implementação completa das Etapas 8–15 sobre a base homologada das Etapas 1–7. A v2.4.0 é **Release Candidate** até a checklist persistente da Etapa 15 ser aprovada. A migration final não promove Stable sozinha; a promoção exige uma rodada aprovada, schema saudável, ausência de alerta crítico e Platform Owner.
+
+Componentes coordenados: Gerenciador 1.3.0, Worker 3.13.0, Gateway 1.2.7, Evolution Go 0.7.2, Vinsansi Captura 1.0.0 e Vinsansi Instagram 2.0.0. WhatsApp permanece texto-only.
+
+Use `PASSO-A-PASSO-ETAPAS-8-A-15.md` e `ETAPAS-8-A-15-IMPLEMENTADAS.md`.
+
 ## v1.6.0 — Etapa 7: identidade canônica + deduplicação transversal
 
 Esta release consolida a identidade dos leads por **organização**, não por usuário legado. Telefone, Instagram, domínio e Maps passam a usar registry canônico tenant-aware; referências canônicas não podem cruzar organizações e leads finalizados alimentam a supressão persistente que já é consultada pela importação. A Etapa 7 também audita deduplicações/supressões e permite restaurar para `importado` um lead marcado automaticamente como duplicado quando a identidade conflitante é corrigida.

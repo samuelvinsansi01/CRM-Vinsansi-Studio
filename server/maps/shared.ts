@@ -46,38 +46,23 @@ export async function authenticatedUser(req: ApiRequest, organizationId: number)
 
 export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope[]) {
   const raw=bearer(req);if(!raw)throw new Error('token_required');
-  const client = serviceClient();
-  const cutoff=new Date(Date.now()-30*86_400_000).toISOString();
+  const client=serviceClient();const cutoff=new Date(Date.now()-30*86_400_000).toISOString();
   const session=await client.from('tool_user_sessions').select('tool_user_sessions_id,auth_users_id,users_id,organizations_id,organization_members_id,organization_tool_installations!inner(*)').eq('session_hash',await sha256(raw)).is('revoked_at',null).gt('last_used_at',cutoff).maybeSingle();
   if(session.error||!session.data)throw new Error('token_invalid_or_expired');
   const canonical=(session.data as unknown as {organization_tool_installations:Row}).organization_tool_installations;
-  if(canonical.tool_id!=='vinsansi_capture'||canonical.registration_status==='revoked')throw new Error('gmaps_extension_installation_revoked');
+  if(canonical.tool_id!=='vinsansi_capture'||canonical.registration_status!=='registered')throw new Error('capture_installation_revoked');
+  const reported=new Set(Array.isArray(canonical.reported_capabilities)?canonical.reported_capabilities.map(String):[]);
+  // Os escopos legados da rota ficam apenas como compatibilidade interna; a instalação canônica precisa declarar capture.maps.
+  if(!reported.has('capture.maps'))throw new Error('capture_capability_revoked');
   const context=await client.rpc('service_executor_member_context',{p_auth_users_id:session.data.auth_users_id,p_organizations_id:Number(canonical.organizations_id),p_tool_id:'vinsansi_capture'});
-  if(context.error)throw new Error(context.error.message);
-  const resolved=context.data as Row;
+  if(context.error||!context.data)throw new Error(context.error?.message??'executor_context_not_found');const resolved=context.data as Row;
   if(Number(session.data.organizations_id)!==Number(resolved.organizationId)||Number(session.data.users_id)!==Number(resolved.userId)||Number(session.data.organization_members_id)!==Number(resolved.memberId)){
-    await client.from('tool_user_sessions').update({revoked_at:new Date().toISOString(),logout_reason:'context_mismatch'}).eq('tool_user_sessions_id',session.data.tool_user_sessions_id);
-    throw new Error('user_session_context_mismatch');
+    await client.from('tool_user_sessions').update({revoked_at:new Date().toISOString(),logout_reason:'context_mismatch'}).eq('tool_user_sessions_id',session.data.tool_user_sessions_id);throw new Error('user_session_context_mismatch');
   }
-  const payload={installationId:String(canonical.external_installation_id),scopes:[...scopes]};
-  const installation = await client.from('maps_extension_installations').select('maps_extension_installations_id,organizations_id,status,scopes').eq('organizations_id', Number(canonical.organizations_id)).eq('extension_type', 'google_maps').eq('installation_id', payload.installationId).maybeSingle();
-  if (installation.error || !installation.data || installation.data.status !== 'active') throw new Error('gmaps_extension_installation_revoked');
-  const installationScopes = new Set(Array.isArray(installation.data.scopes) ? installation.data.scopes.map(String) : []);
-  if (scopes.some((scope) => !installationScopes.has(scope))) throw new Error('gmaps_extension_scope_revoked');
   await client.from('tool_user_sessions').update({last_used_at:new Date().toISOString()}).eq('tool_user_sessions_id',session.data.tool_user_sessions_id);
-  await client.from('maps_extension_installations').update({ last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_extension_installations_id', installation.data.maps_extension_installations_id);
-  const canonicalTouch = await client.rpc('service_touch_tool_installation', {
-    p_organizations_id: Number(installation.data.organizations_id),
-    p_tool_id: 'vinsansi_capture',
-    p_external_installation_id: payload.installationId,
-    p_seen: true,
-    p_meaningful_activity: false,
-    p_installed_version: null,
-    p_reported_capabilities: null,
-    p_last_seen_member_id: null,
-  });
-  if (canonicalTouch.error) throw new Error(`canonical_installation_touch_failed:${canonicalTouch.error.message}`);
-  return { client, usersId: Number(resolved.legacyScopeUsersId),memberId:Number(resolved.memberId),sessionId:String(session.data.tool_user_sessions_id),organizationToolInstallationId:String(canonical.organization_tool_installations_id), organizationId: Number(installation.data.organizations_id), installationId: payload.installationId, installationRowId: String(installation.data.maps_extension_installations_id), token: payload };
+  const touched=await client.rpc('service_touch_tool_installation',{p_organizations_id:Number(canonical.organizations_id),p_tool_id:'vinsansi_capture',p_external_installation_id:String(canonical.external_installation_id),p_seen:true,p_meaningful_activity:false,p_installed_version:null,p_reported_capabilities:null,p_last_seen_member_id:Number(resolved.memberId)});
+  if(touched.error)throw new Error(`canonical_installation_touch_failed:${touched.error.message}`);
+  return {client,usersId:Number(resolved.legacyScopeUsersId),memberId:Number(resolved.memberId),sessionId:String(session.data.tool_user_sessions_id),organizationToolInstallationId:String(canonical.organization_tool_installations_id),organizationId:Number(canonical.organizations_id),installationId:String(canonical.external_installation_id),installationRowId:String(canonical.organization_tool_installations_id),token:{installationId:String(canonical.external_installation_id),scopes:[...scopes]}};
 }
 
 export function statusForError(message: string) {

@@ -63,7 +63,7 @@ includes(page, 'Rastro ', 'Tela não exibe rastreabilidade do request_id.');
 includes(page, 'máquina de estados', 'Descrição da Etapa 6 ausente na tela de Auditoria.');
 
 const pkg = JSON.parse(read('package.json'));
-expect(/^1\.(?:[5-9]|[1-9]\d+)\.\d+$/.test(pkg.version), `package.json deve preservar a Etapa 6 (v1.5.0+); recebido ${pkg.version}.`);
+{ const [major,minor]=pkg.version.split('.').map(Number); expect(major>1 || (major===1 && minor>=5), `package.json deve preservar a Etapa 6 (v1.5.0+); recebido ${pkg.version}.`); }
 expect(String(pkg.scripts?.['verify:release'] ?? '').includes('verify-stage6.mjs'), 'verify:release não inclui Etapa 6.');
 
 if (failures.length) {

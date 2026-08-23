@@ -16,8 +16,10 @@ export interface BaseRepository {
     cities: string[];
     destinations: string[];
     statuses: string[];
+    outcomes: string[];
   }>;
   listFinalIdentities(): Promise<FinalLeadIdentities>;
   listByIds(ids: string[]): Promise<BaseLead[]>;
   compareAndArchive(id: string, expectedStatus: Exclude<BaseFinalStatusId, 8>): Promise<BaseLead | null>;
+  updateMetadata(id: string, outcome: string, notes: string): Promise<void>;
 }

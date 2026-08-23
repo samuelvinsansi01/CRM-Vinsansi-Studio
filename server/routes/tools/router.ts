@@ -7,8 +7,10 @@ import pairExchange from './executor/pair-exchange.js';
 import pairStart from './executor/pair-start.js';
 import runtime from './executor/runtime.js';
 import switchOrganization from './executor/switch.js';
+import browserPair from './browser-pair.js';
 
 const handlers = {
+  'browser-pair': browserPair,
   'executor/config': config,
   'executor/context': context,
   'executor/heartbeat': heartbeat,

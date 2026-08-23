@@ -32,6 +32,7 @@ const columns: TableColumn<Row>[] = [
   { key: 'channel', label: 'Canal final', width: '10%' },
   { key: 'contact', label: 'Contato', width: '14%' },
   { key: 'history', label: 'Histórico', width: '10%' },
+  { key: 'outcome', label: 'Resultado', width: '12%' },
   { key: 'status', label: 'Status final', width: '12%' },
 ];
 
@@ -43,15 +44,17 @@ function statusTag(lead: BaseLead) {
 export function BasePage() {
   const { hasPermission } = useOrganizationContext();
   const canArchive = hasPermission('leads.delete');
+  const canEdit = hasPermission('leads.edit');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('Todos');
   const [channel, setChannel] = useState('Todos');
+  const [outcome, setOutcome] = useState('Todos');
   const filters = useMemo(() => ({
     search,
     status: status === 'Todos' ? 'Todos' : ({ Enviado: 'enviado', Inválido: 'invalido', Duplicado: 'duplicado', Arquivado: 'arquivado' } as Record<string, string>)[status],
-    origin: channel,
-  }), [search, status, channel]);
-  const { records, summary, loading, saving, error, refresh, archiveMany } = useBaseRecords(filters);
+    origin: channel, outcome,
+  }), [search, status, channel, outcome]);
+  const { records, summary, options, loading, saving, error, refresh, archiveMany, updateMetadata } = useBaseRecords(filters);
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -64,8 +67,9 @@ export function BasePage() {
     channel: <Tag tone={lead.origin === 'Instagram' ? 'primary' : 'success'}>{lead.origin}</Tag>,
     contact: lead.origin === 'Instagram' ? (lead.instagram || '-') : (lead.phone || '-'),
     history: <span>{lead.totalLeads ?? 1} lead(s) · {lead.totalDispatches ?? 0} envio(s){lead.suppressed ? ' · suprimido' : ''}</span>,
+    outcome: canEdit ? <div className="base-outcome-editor"><select className="base-outcome-select" value={lead.commercialOutcome || ''} disabled={saving} onChange={(event) => void updateMetadata(lead.id,event.target.value,lead.operatorNotes || '')}><option value="">Sem resultado</option><option value="no_response">Sem resposta</option><option value="responded">Respondeu</option><option value="interested">Interessado</option><option value="not_interested">Não interessado</option><option value="client">Cliente</option><option value="wrong_contact">Contato incorreto</option><option value="closed_business">Empresa fechada</option><option value="do_not_contact">Não contatar</option></select><button type="button" className="base-notes-button" title={lead.operatorNotes || 'Adicionar observação'} onClick={() => { const notes=window.prompt('Observações comerciais desta empresa:',lead.operatorNotes || ''); if(notes!==null) void updateMetadata(lead.id,lead.commercialOutcome || '',notes); }}>Notas</button></div> : <span>{lead.commercialOutcome || 'Sem resultado'}{lead.operatorNotes ? ` · ${lead.operatorNotes}` : ''}</span>,
     status: statusTag(lead),
-  })), [records]);
+  })), [canEdit, records, saving, updateMetadata]);
 
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
   const selectedIds = selectedRows.map((index) => pageItems[index]?.id).filter(Boolean);
@@ -119,6 +123,7 @@ export function BasePage() {
       <FiltersBar>
         <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Arquivado']} placeholder="Status final" onChange={(value) => { setStatus(value); resetPage(); setSelectedRows([]); }} />
         <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal final" onChange={(value) => { setChannel(value); resetPage(); setSelectedRows([]); }} />
+        <SelectField value={outcome} options={options.outcomes} placeholder="Resultado comercial" onChange={(value) => { setOutcome(value); resetPage(); setSelectedRows([]); }} />
         <SearchInput value={search} onChange={(value) => { setSearch(value); resetPage(); setSelectedRows([]); }} placeholder="Buscar empresa ou contato" />
       </FiltersBar>
 

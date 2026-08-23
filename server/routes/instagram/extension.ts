@@ -7,7 +7,7 @@ type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): voi
 type RecordValue = Record<string, unknown>;
 type QueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'error' | 'invalid';
 type InstagramStep = 'queued' | 'claimed' | 'profile_opened' | 'following' | 'followed' | 'dm_opened' | 'messages_sending' | 'media_sending' | 'sent' | 'invalid' | 'error' | 'reconciliation_required';
-type TokenScope = { organizationId: number; memberId: number; legacyScopeUsersId: number; profile: string; client: SupabaseClient };
+type TokenScope = { organizationId: number; memberId: number; legacyScopeUsersId: number; profile: string; client: SupabaseClient; installationId: string };
 declare const process: { env: Record<string, string | undefined> };
 
 const CATALOG = {
@@ -52,7 +52,7 @@ async function tokenScope(req: ApiRequest): Promise<TokenScope> {
   const metadata=(scope.installation.metadata??{}) as RecordValue;
   const profile=normalizeInstagramUsername(metadata.instagramProfile);
   if(!profile)throw new Error('instagram_profile_not_bound');
-  return {organizationId:scope.organizationId,memberId:Number(scope.context.memberId),legacyScopeUsersId:Number(scope.context.legacyScopeUsersId),profile,client:scope.client};
+  return {organizationId:scope.organizationId,memberId:Number(scope.context.memberId),legacyScopeUsersId:Number(scope.context.legacyScopeUsersId),profile,client:scope.client,installationId:scope.installationId};
 }
 
 async function catalog(client: SupabaseClient) {
@@ -180,11 +180,13 @@ async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, 
   if (!itemBeforeClaim) return null;
   if (!itemBeforeClaim.instagram_username) throw new Error('invalid_instagram_recipient_contract');
   const social = await socialForScope(client, scope);
-  const response = await client.rpc('instagram_claim_queue_item', {
-    p_users_id: scope.legacyScopeUsersId,
+  const response = await client.rpc('instagram_claim_queue_item_v2', {
+    p_organizations_id: scope.organizationId,
     p_queue_item_id: Number(id),
     p_socials_id: Number(social.socials_id),
-    p_consumer_id: consumerId || 'instagram-extension',
+    p_consumer_id: consumerId || 'vinsansi-instagram',
+    p_installation_id: scope.installationId,
+    p_member_id: scope.memberId,
   });
   if (response.error) {
     if (/not_claimable|not_pending/i.test(response.error.message)) return null;
@@ -201,8 +203,8 @@ async function transition(client: SupabaseClient, scope: TokenScope, body: Recor
   const step = text(body.step ?? body.target_status) as InstagramStep;
   const claimToken = text(body.claim_token);
   if (!claimToken) throw new Error('instagram_claim_token_required');
-  const response = await client.rpc('instagram_update_queue_progress', {
-    p_users_id: scope.legacyScopeUsersId,
+  const response = await client.rpc('instagram_update_queue_progress_v2', {
+    p_organizations_id: scope.organizationId,
     p_queue_item_id: Number(id),
     p_claim_token: claimToken,
     p_step: step,
@@ -224,7 +226,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (normalizeInstagramUsername(body.profile_username) !== scope.profile) throw new Error('profile_scope_mismatch');
     const client = scope.client;
     const consumerId = text(body.consumer_id) || text(body.browser_id) || 'instagram-extension';
-    if (action === 'queue') await client.rpc('instagram_recover_stale_items', { p_stale_before: new Date(Date.now() - 15 * 60 * 1000).toISOString() });
+    if (action === 'queue') await client.rpc('instagram_recover_stale_items_v2', { p_organizations_id: scope.organizationId, p_stale_before: new Date(Date.now() - 15 * 60 * 1000).toISOString() });
     if (action === 'queue') return send(req, res, 200, { ok: true, request_id: requestId, items: await loadItems(client, scope, text(body.scheduled_date)) });
     if (action === 'claim_next') {
       const items = await loadItems(client, scope, text(body.scheduled_date));

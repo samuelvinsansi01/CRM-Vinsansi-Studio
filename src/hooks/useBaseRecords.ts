@@ -9,6 +9,7 @@ type BaseOptions = {
   cities: string[];
   destinations: string[];
   statuses: string[];
+  outcomes: string[];
 };
 
 const emptySummary: BaseSummary = {
@@ -28,6 +29,7 @@ const emptyOptions: BaseOptions = {
   cities: ['Todos'],
   destinations: ['Todos'],
   statuses: ['Todos'],
+  outcomes: ['Todos'],
 };
 
 export function useBaseRecords(filters: BaseFilters) {
@@ -87,5 +89,7 @@ export function useBaseRecords(filters: BaseFilters) {
     }
   }, [refresh]);
 
-  return { records, summary, options, loading, saving, error, refresh, archiveMany };
+  const updateMetadata = useCallback(async (id:string,outcome:string,notes:string) => { setSaving(true); try { await baseService.updateMetadata(id,outcome,notes); refresh(); } finally { setSaving(false); } }, [refresh]);
+
+  return { records, summary, options, loading, saving, error, refresh, archiveMany, updateMetadata };
 }

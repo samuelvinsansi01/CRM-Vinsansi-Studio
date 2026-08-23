@@ -32,6 +32,11 @@ export const baseService = {
     return repositories.base.listFinalIdentities();
   },
 
+  async updateMetadata(id: string, outcome: string, notes: string) {
+    await repositories.base.updateMetadata(id,outcome,notes);
+    eventBus.emit('base:changed',{action:'metadata'});
+  },
+
   async archiveMany(ids: string[]): Promise<BaseArchiveResult> {
     const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
     if (!uniqueIds.length) throw new Error('Selecione pelo menos um lead finalizado.');

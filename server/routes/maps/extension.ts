@@ -381,7 +381,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const input = body(req);
     const action = text(input.action);
     const scope = await extensionScope(req, requiredScope(action));
-    const { client, usersId } = scope;
+    const { client, usersId, organizationId } = scope;
     if (['search_create','batch_sync','coverage_transition','execution_transition','candidate_update','candidate_exclude','candidate_restore','leads_promote'].includes(action)) {
       const activityTouch = await client.rpc('service_touch_tool_installation', {
         p_organizations_id: scope.organizationId,
@@ -391,7 +391,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         p_meaningful_activity: true,
         p_installed_version: null,
         p_reported_capabilities: null,
-        p_last_seen_member_id: null,
+        p_last_seen_member_id: scope.memberId,
       });
       if (activityTouch.error) throw new Error(`canonical_installation_activity_failed:${activityTouch.error.message}`);
     }
@@ -516,12 +516,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         if (existingBatch.data.payload_hash !== payloadHash) throw new Error('maps_batch_payload_divergent');
         if (existingBatch.data.status === 'confirmed') return send(req, res, 200, existingBatch.data.response_payload);
       } else {
-        const created = await client.from('maps_search_batches').insert({ users_id: usersId, maps_search_executions_id: execution.maps_search_executions_id, batch_id: batchId, payload_hash: payloadHash, status: 'processing' });
+        const created = await client.from('maps_search_batches').insert({ users_id: usersId, organizations_id: organizationId, maps_search_executions_id: execution.maps_search_executions_id, batch_id: batchId, payload_hash: payloadHash, status: 'processing' });
         if (created.error) throw new Error(`maps_batch_create_failed:${created.error.message}`);
       }
       const coverage = await client.from('maps_search_coverage').select('*').eq('maps_search_coverage_id', coverageId).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('users_id', usersId).maybeSingle();
       if (coverage.error || !coverage.data) throw new Error('maps_coverage_not_found');
-      let accepted = 0; let duplicates = 0; let rejected = 0;
+      let accepted = 0; let duplicates = 0; let rejected = 0; const candidateIds: string[] = [];
       const startingCounts = await executionSummary(client, execution);
       const allocationCounts = {
         whatsapp: Number(startingCounts.whatsapp_bucket_count || 0),
@@ -550,6 +550,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const reviews = mapsReviewsCount(raw);
         const inserted = await client.from('maps_search_candidates').insert({
           users_id: usersId,
+          organizations_id: organizationId,
           maps_search_executions_id: execution.maps_search_executions_id,
           branches_id: execution.branches_id,
           states_id: coverage.data.states_id,
@@ -575,6 +576,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           collected_at: text(raw.extractedAt) || new Date().toISOString(),
         });
         if (inserted.error) throw new Error(`maps_candidate_create_failed:${inserted.error.message}`);
+        const createdCandidate = await client.from('maps_search_candidates').select('maps_search_candidates_id').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('dedupe_key', dedupeKey).maybeSingle();
+        if (createdCandidate.data?.maps_search_candidates_id) candidateIds.push(text(createdCandidate.data.maps_search_candidates_id));
         if (bucket === 'whatsapp') allocationCounts.whatsapp += 1;
         if (bucket === 'instagram') allocationCounts.instagram += 1;
         accepted += 1;
@@ -588,6 +591,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         accepted,
         duplicates,
         rejected,
+        candidateIds,
         counts,
         targetsReached: acquisitionTargetsReached(execution, counts),
       };
@@ -730,6 +734,26 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const phoneWhatsapp = text(candidate.effective_phone || candidate.effective_whatsapp);
         const instagram = normalizeInstagram(candidate.effective_instagram);
         if (!phoneWhatsapp && !instagram) { failures.push({ candidateId, code: 'no_supported_contact' }); continue; }
+        const identityGate = await client.rpc('service_capture_identity_gate', {
+          p_organizations_id: organizationId,
+          p_phone: phoneWhatsapp || null,
+          p_instagram: instagram || null,
+          p_domain: text(candidate.effective_website) || null,
+          p_maps: text(candidate.maps_url) || null,
+        });
+        if (identityGate.error) { failures.push({ candidateId, code: `identity_gate_failed:${identityGate.error.message}` }); continue; }
+        const gate = (identityGate.data ?? {}) as Row;
+        if (gate.decision === 'suppressed' || gate.decision === 'duplicate') {
+          await client.from('maps_search_candidates').update({
+            identity_decision: text(gate.decision), suppression_match: gate.decision === 'suppressed',
+            dedup_match_leads_id: gate.canonicalLeadId ? Number(gate.canonicalLeadId) : null,
+            updated_at: new Date().toISOString(),
+          }).eq('maps_search_candidates_id', candidateId);
+          await client.from('capture_execution_events').insert({ organizations_id: organizationId, maps_search_executions_id: execution.maps_search_executions_id, organization_tool_installations_id: scope.organizationToolInstallationId, organization_members_id: scope.memberId, event_type: text(gate.decision), payload: { candidateId, ...gate } });
+          if (gate.decision === 'duplicate' && gate.canonicalLeadId) await client.rpc('service_record_capture_memory', { p_organizations_id: organizationId, p_canonical_lead_id: Number(gate.canonicalLeadId), p_payload: { candidateId, executionId: execution.maps_search_executions_id, source: 'vinsansi_capture' } });
+          failures.push({ candidateId, code: text(gate.decision) });
+          continue;
+        }
         // Instagram válido tem prioridade operacional mesmo quando também existe
         // telefone/WhatsApp. A origem comercial permanece compatível com a regra
         // anterior: se havia telefone, conserva sem_site/dominio_proprio/agregador;
@@ -742,6 +766,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const reviews = candidate.maps_reviews_count == null ? mapsReviewsCount((candidate.raw_payload as Row) || {}) : mapsReviewsCount({ reviewCount: candidate.maps_reviews_count });
         const inserted = await client.from('leads').insert({
           users_id: usersId,
+          organizations_id: organizationId,
           branches_id: execution.branches_id,
           countries_id: country.data.countries_id,
           states_id: candidate.states_id,
@@ -763,7 +788,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           maps_search_candidates_id: candidateId,
         }).select('leads_id').single();
         if (inserted.error) { failures.push({ candidateId, code: `lead_insert_failed:${inserted.error.message}` }); continue; }
-        await client.from('maps_search_candidates').update({ promoted_leads_id: inserted.data.leads_id, promoted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_candidates_id', candidateId);
+        await client.from('maps_search_candidates').update({ promoted_leads_id: inserted.data.leads_id, promoted_at: new Date().toISOString(), identity_decision: 'accepted', updated_at: new Date().toISOString() }).eq('maps_search_candidates_id', candidateId);
+        await client.from('capture_execution_events').insert({ organizations_id: organizationId, maps_search_executions_id: execution.maps_search_executions_id, organization_tool_installations_id: scope.organizationToolInstallationId, organization_members_id: scope.memberId, event_type: 'imported', payload: { candidateId, leadId: inserted.data.leads_id } });
         promoted += 1;
       }
       if (input.summarizeExecution !== false) await executionSummary(client, execution);

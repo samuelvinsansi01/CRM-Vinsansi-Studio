@@ -39,7 +39,8 @@ export function MonitoringPage() {
     finally { setRecovering(false); }
   };
 
-  const healthy = Boolean(health && health.workers.online > 0 && health.workers.stale === 0 && health.queues.staleProcessing === 0 && health.alerts.critical === 0);
+  const healthy = Boolean(health && health.workers.online > 0 && health.workers.stale === 0 && health.queues.staleProcessing === 0 && health.alerts.critical === 0 && health.tools.stale === 0);
+  const componentLabel:Record<string,string>={worker:'Worker',manager:'Gerenciador',gateway:'Gateway',evolution:'Evolution Go',capture:'Vinsansi Captura',instagram:'Vinsansi Instagram',realtime:'Realtime'};
   return (
     <div className="monitoring-page">
       <PageHeader title="Monitoramento" description="Acompanhe Workers, filas travadas, reconciliações e solicitações de recuperação."
@@ -59,6 +60,11 @@ export function MonitoringPage() {
           <div><strong>Worker</strong><span>Online: {health?.workers.online ?? 0} · Sem heartbeat: {health?.workers.stale ?? 0}</span></div>
           <div><strong>Última leitura</strong><span>{dateTime(health?.checkedAt)}</span></div>
         </div>
+      </Panel>
+      <Panel title="Componentes em tempo real">
+        {!health?.components.length ? <div className="audit-state"><Server size={22}/><strong>Nenhum heartbeat recebido ainda.</strong><span>Os componentes aparecerão aqui após a primeira comunicação.</span></div> : (
+          <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>Componente</th><th>Estado</th><th>Versão</th><th>Último heartbeat</th></tr></thead><tbody>{health.components.map((component) => <tr key={`${component.type}:${component.key}`}><td><strong>{componentLabel[component.type] ?? component.type}</strong><span>{component.key}</span></td><td><Tag tone={component.status==='online'?'success':component.status==='degraded'?'warning':'danger'}>{component.status}</Tag></td><td>{component.version || '—'}</td><td>{dateTime(component.lastSeenAt)}</td></tr>)}</tbody></table></div>
+        )}
       </Panel>
       <Panel title="Alertas abertos">
         {!alerts.length ? <div className="audit-state audit-state--success"><CheckCircle2 size={22}/><strong>Nenhum alerta aberto.</strong></div> : (

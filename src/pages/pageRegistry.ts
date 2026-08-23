@@ -28,7 +28,8 @@ export type PageId =
   | 'account'
   | 'tools'
   | 'monitoring'
-  | 'audit';
+  | 'audit'
+  | 'homologation';
 
 export type NavItem = {
   id: PageId;
@@ -122,6 +123,7 @@ export const navGroups: readonly NavGroup[] = [
         items: [
           { id: 'tools', label: 'Ferramentas' },
           { id: 'monitoring', label: 'Monitoramento' },
+          { id: 'homologation', label: 'Homologação final' },
         ],
       },
       {
@@ -166,6 +168,7 @@ export const pageTitles: Record<PageId, string> = {
   tools: 'Ferramentas',
   monitoring: 'Monitoramento',
   audit: 'Auditoria',
+  homologation: 'Homologação final',
 };
 
 export const pagePermissions: Partial<Record<PageId, string>> = {
@@ -197,4 +200,5 @@ export const pagePermissions: Partial<Record<PageId, string>> = {
   tools: 'tools.view',
   monitoring: 'monitoring.view',
   audit: 'audit.view',
+  homologation: 'monitoring.view',
 };
