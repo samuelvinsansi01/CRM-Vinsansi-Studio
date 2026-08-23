@@ -25,6 +25,7 @@ expect(functions.length <= 8, `Vercel Hobby excedido: ${functions.length} Functi
 expect(JSON.stringify(functions) === JSON.stringify(expectedFunctions), `Superfície Vercel divergente: ${functions.join(', ')}.`);
 
 const domains = [
+  { entrypoint: 'tools', source: '/api/tools/browser-pair', destination: '/api/tools?route=browser-pair', routes: ['browser-pair'] },
   { entrypoint: 'tools', source: '/api/tools/executor/:action', destination: '/api/tools?route=executor/:action', routes: ['executor/config','executor/context','executor/heartbeat','executor/logout','executor/pair-exchange','executor/pair-start','executor/runtime','executor/switch'] },
   { entrypoint: 'maps', source: '/api/maps/:action', destination: '/api/maps?route=:action', routes: ['extension','pair'] },
   { entrypoint: 'instagram', source: '/api/instagram/:action', destination: '/api/instagram?route=:action', routes: ['extension','pair'] },
@@ -83,7 +84,7 @@ try {
       publicRoutes.push(publicPath);
     }
   }
-  expect(publicRoutes.length === 28, `Matriz pública incompleta: ${publicRoutes.length}/28.`);
+  expect(publicRoutes.length === 29, `Matriz pública incompleta: ${publicRoutes.length}/29.`);
 
   const contextWithoutSession = await invoke('tools', 'executor/context', 'GET');
   expect(contextWithoutSession.status === 401 && contextWithoutSession.body?.error === 'user_session_required', 'Contexto executor não preservou autenticação humana.');
@@ -99,4 +100,4 @@ try {
   fs.rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`Vercel Hobby: ${functions.length} Functions e 28 rotas públicas consolidadas; smoke local aprovado.`);
+console.log(`Vercel Hobby: ${functions.length} Functions e 29 rotas públicas consolidadas; smoke local aprovado.`);
