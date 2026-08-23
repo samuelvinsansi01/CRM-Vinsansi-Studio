@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../maps/shared.js';
 import { sha256, type MapsExtensionScope } from '../../maps/token.js';
 
-const EXTENSION_VERSION = '0.18.0';
+const EXTENSION_VERSION = '1.0.1';
 const DEFAULT_BRANCH_TARGET_WHATSAPP = 1000;
 const DEFAULT_BRANCH_TARGET_INSTAGRAM = 500;
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
@@ -192,6 +192,8 @@ function chooseAcquisitionBucket(effective: ReturnType<typeof effectiveCandidate
 }
 
 function acquisitionTargetsReached(execution: Row, counts: Row) {
+  const desiredCompanyCount = Math.max(0, Number((execution.runner_strategy as Row | null)?.desiredCompanyCount || 0));
+  if (desiredCompanyCount > 0) return Number(counts.unique_count || 0) >= desiredCompanyCount;
   const targetWhatsapp = Number(execution.target_phone_whatsapp || 0);
   const targetInstagram = Number(execution.target_instagram || 0);
   const targetUnique = Number(execution.target_unique || targetWhatsapp + targetInstagram);
@@ -450,6 +452,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const cityMode = input.cityMode === 'manual' ? 'manual' : 'automatic';
       const requestedCitiesId = cityMode === 'manual' ? integer(input.citiesId, 1) : null;
       const extractionMode = input.extractionMode === 'quick' ? 'quick' : 'complete';
+      const desiredCompanies = integer(input.desiredCompanies ?? 50, 1, 500);
       const [{ branch, terms }, state, defaults] = await Promise.all([
         branchTerms(client, usersId, branchesId),
         client.from('states').select('states_id,states_name,states_code').eq('states_id', statesId).maybeSingle(),
@@ -482,7 +485,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         p_target_source: targetSource,
         p_extension_version: text(input.extensionVersion) || EXTENSION_VERSION,
         p_search_terms_snapshot: terms,
-        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: true, maxConcurrentPerUser: 5 },
+        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies },
       });
       if (inserted.error) {
         const message = text(inserted.error.message);
