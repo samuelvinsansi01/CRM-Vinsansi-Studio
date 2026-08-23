@@ -1,3 +1,15 @@
+## v1.6.0 — Etapa 7: identidade canônica + deduplicação transversal
+
+Esta release consolida a identidade dos leads por **organização**, não por usuário legado. Telefone, Instagram, domínio e Maps passam a usar registry canônico tenant-aware; referências canônicas não podem cruzar organizações e leads finalizados alimentam a supressão persistente que já é consultada pela importação. A Etapa 7 também audita deduplicações/supressões e permite restaurar para `importado` um lead marcado automaticamente como duplicado quando a identidade conflitante é corrigida.
+
+Para atualizar a base v1.5.0, use `PATCH-ETAPA-7-IDENTIDADE-DEDUP-SUPRESSAO-v1.6.0.sql`. Para instalação limpa, use `APLICAR-NO-SUPABASE-v1.6.0.sql`. Esta etapa não exige alteração no Gerenciador, Worker, Gateway ou Evolution Go. Consulte `PASSO-A-PASSO-v1.6.0.md`.
+
+## v1.5.0 — Etapa 6: auditoria persistente + máquina de estados
+
+Esta release endurece a auditoria como histórico **append-only** no PostgreSQL e move a validação das transições críticas de leads e itens de fila para a camada de banco. O registro passa a validar organização/ator/entidade no momento da inserção, preserva `request_id` para rastreabilidade e bloqueia `UPDATE`/`DELETE` sobre eventos de auditoria.
+
+Para atualizar a base v1.4.3, use `PATCH-ETAPA-6-AUDITORIA-ESTADOS-v1.5.0.sql`. Para instalação limpa, use `APLICAR-NO-SUPABASE-v1.5.0.sql`. Esta etapa não exige alteração no Gerenciador, Worker, Gateway ou Evolution Go. Consulte `PASSO-A-PASSO-v1.5.0.md`.
+
 ## v1.4.3 — Identidade canônica das Conversas
 
 Use `PATCH-ETAPA-5-IDENTIDADE-CONVERSAS-v1.4.3.sql` sobre a base v1.4.2. Depois republique a Edge Function `evolution-connection-webhook`, porque ela agora entende diretamente o contrato Evolution Go com `Info.ChatAlt`/`Info.SenderAlt` e prefere o JID telefônico ao LID. O patch também repara threads antigas quando o payload histórico contém essa relação, sempre preservando a separação entre chips.

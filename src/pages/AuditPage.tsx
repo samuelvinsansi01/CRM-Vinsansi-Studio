@@ -93,7 +93,7 @@ export function AuditPage() {
     <div className="audit-page">
       <PageHeader
         title="Auditoria"
-        description="Detecte inconsistências entre leads e filas e aplique reparos com proteção concorrente."
+        description="Auditoria append-only, máquina de estados e reconciliação operacional por organização."
         action={(
           <div className="audit-page__actions">
             <Button iconLeft={RefreshCcw} variant="secondary" loading={refreshing} onClick={refresh}>Atualizar</Button>
@@ -203,7 +203,7 @@ export function AuditPage() {
 
       <Panel
         className="audit-panel"
-        title="Histórico persistente"
+        title="Histórico persistente · append-only"
         actions={<Button iconLeft={RefreshCcw} variant="secondary" loading={auditHistory.loading} onClick={() => void auditHistory.refresh()}>Atualizar histórico</Button>}
       >
         {auditHistory.error ? <div className="audit-state audit-state--error">{auditHistory.error}</div> : null}
@@ -222,7 +222,7 @@ export function AuditPage() {
                     <td><strong>{event.action}</strong></td>
                     <td>{event.queueItemId ? `Fila ${event.queueItemId}` : event.leadId ? `Lead ${event.leadId}` : String(event.metadata?.entity_type ?? 'Sistema')}</td>
                     <td>{String(event.metadata?.previous_status_id ?? '—')} → {String(event.metadata?.target_status_id ?? event.status ?? '—')}</td>
-                    <td><span>{event.message || String(event.metadata?.company_name ?? event.metadata?.reason ?? '') || '—'}</span></td>
+                    <td><span>{event.message || String(event.metadata?.company_name ?? event.metadata?.reason ?? '') || '—'}</span>{event.metadata?.request_id ? <small>Rastro {String(event.metadata.request_id).slice(0, 8)}</small> : null}</td>
                   </tr>
                 ))}
               </tbody>
