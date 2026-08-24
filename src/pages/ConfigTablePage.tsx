@@ -36,6 +36,7 @@ import type {
   TemplateConfigRecord,
   TemplateType,
 } from '../services/config/types';
+import { assertTemplateMessagesForChannel, type TemplateMessageChannel } from '../services/templates/templateContract';
 
 type DrawerMode = 'create' | 'view' | 'edit';
 type SelectOption = { label: string; value: string };
@@ -239,10 +240,10 @@ function makeScreen(kind: ConfigKind, options: ConfigModalOptions): ScreenDefini
         { key: 'branchId', label: 'Ramo', type: 'select', options: branchSelectOptions },
         { key: 'templateChannelId', label: 'Canal de template', type: 'select', options: recordOptions(options.templateChannels, 'Cadastre um canal de template primeiro') },
         { key: 'templateTypeId', label: 'Tipo de template', type: 'select', options: recordOptions(options.templateTypes, 'Cadastre um tipo de template primeiro') },
-        { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1, description: 'As quatro mensagens são obrigatórias e serão congeladas na fila.' },
-        { key: 'message2', label: 'Mensagem 2', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_2 },
-        { key: 'message3', label: 'Mensagem 3', type: 'textarea', placeholder: 'Digite a terceira mensagem' },
-        { key: 'message4', label: 'Mensagem 4', type: 'textarea', placeholder: 'Digite a quarta mensagem' },
+        { key: 'message1', label: 'Mensagem 1', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_1, description: 'Obrigatória em todos os canais. Mensagens 2 a 4 são opcionais e devem ser preenchidas em sequência.' },
+        { key: 'message2', label: 'Mensagem 2', type: 'textarea', placeholder: DEFAULT_TEMPLATE_MESSAGE_2, description: 'Opcional em todos os canais.' },
+        { key: 'message3', label: 'Mensagem 3', type: 'textarea', placeholder: 'Digite a terceira mensagem', description: 'Opcional em todos os canais. Requer Mensagem 2 preenchida.' },
+        { key: 'message4', label: 'Mensagem 4', type: 'textarea', placeholder: 'Digite a quarta mensagem', description: 'Opcional em todos os canais. Requer Mensagens 2 e 3 preenchidas.' },
         { key: 'active', label: 'Status', type: 'select', options: activeOptions },
       ],
     };
@@ -631,9 +632,17 @@ export function ConfigTablePage({ kind }: { kind: ConfigKind }) {
       if (!form.branchId) throw new Error('Selecione o ramo do template.');
       if (!form.templateChannelId) throw new Error('Selecione o canal canônico do template.');
       if (!form.templateTypeId) throw new Error('Selecione o tipo canônico do template.');
-      [form.message1, form.message2, form.message3, form.message4].forEach((message, index) => {
-        if (!message?.trim()) throw new Error(`A Mensagem ${index + 1} é obrigatória.`);
-      });
+      const selectedChannelName = modalOptions.templateChannels.find((record) => record.id === form.templateChannelId)?.name ?? 'WhatsApp';
+      const normalizedChannel = selectedChannelName.toLowerCase();
+      const messageChannel: TemplateMessageChannel = normalizedChannel.includes('instagram')
+        ? 'Instagram'
+        : normalizedChannel.includes('geral') ? 'Geral' : 'WhatsApp';
+      assertTemplateMessagesForChannel({
+        message1: form.message1,
+        message2: form.message2,
+        message3: form.message3,
+        message4: form.message4,
+      }, messageChannel);
       return;
     }
 

@@ -1,0 +1,12 @@
+import fs from 'node:fs';
+const read=(p)=>fs.readFileSync(new URL('../'+p, import.meta.url),'utf8');
+const contract=read('src/services/templates/templateContract.ts');
+const guards=read('src/services/whatsapp-queue/whatsappQueue.guards.ts');
+const ui=read('src/pages/ConfigTablePage.tsx');
+if(!contract.includes("A Mensagem 1 é obrigatória.")) throw new Error('message1_required_missing');
+if(contract.includes('As quatro mensagens são obrigatórias')) throw new Error('legacy_four_required_present');
+if(!contract.includes('As mensagens devem ser preenchidas em sequência')) throw new Error('sequence_contract_missing');
+if(!guards.includes("if (!messages[0]) fields.push('message_1')")) throw new Error('whatsapp_message1_guard_missing');
+if(guards.includes("if (!text(lead.message_4")) throw new Error('whatsapp_message4_still_required');
+if(!ui.includes('Obrigatória em todos os canais')) throw new Error('ui_global_rule_missing');
+console.log('R14 global template messages: OK');

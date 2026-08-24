@@ -3714,7 +3714,7 @@ $stage_preflight$;
 UPDATE public.platform_tools
 SET display_name='Vinsansi Instagram',
     description='Executor oficial outbound Instagram com fila canonica, claim transacional, progresso por etapa, idempotencia, limites e recuperacao segura.',
-    latest_version='2.0.0',minimum_supported_version='2.0.0',settings_schema_version=2,
+    latest_version='2.0.2',minimum_supported_version='2.0.0',settings_schema_version=2,
     capability_catalog=ARRAY['settings.read','presence.heartbeat','activity.report','organization.context','member.context','instagram.queue.execute','instagram.dm.send','instagram.media.send','instagram.result.report','instagram.checkpoint','instagram.profile.bound'],
     settings_schema='{"type":"object","required":["instagram"]}'::jsonb,
     updated_at=now()
@@ -4637,12 +4637,12 @@ GRANT ALL ON public.platform_release_channels TO service_role;
 INSERT INTO public.platform_release_channels(component_key,display_name,latest_version,minimum_supported_version,stable_version,release_channel,update_required,notes,metadata)
 VALUES
  ('crm','CRM - Vinsansi Studio','2.3.0','2.3.0',NULL,'preview',true,'Release da Etapa 14; a Stable é promovida somente na Etapa 15.',jsonb_build_object('stage',14)),
- ('manager','CRM - Gerenciador de Disparos','1.3.0','1.3.0',NULL,'preview',true,'Inclui instalador NSIS, atualização gerenciada e backup/restore portátil com volumes Docker.',jsonb_build_object('stage',14)),
- ('worker','Worker WhatsApp','3.13.0','3.13.0',NULL,'preview',true,'Worker organizacional com observabilidade e orquestração.',jsonb_build_object('stage',13)),
+ ('manager','CRM - Gerenciador de Disparos','1.3.1','1.3.0',NULL,'preview',true,'Inclui instalador NSIS, atualização gerenciada e backup/restore portátil com volumes Docker.',jsonb_build_object('stage',14)),
+ ('worker','Worker WhatsApp','3.13.1','3.13.0',NULL,'preview',true,'Worker organizacional com observabilidade e orquestração.',jsonb_build_object('stage',13)),
  ('gateway','Vinsansi WhatsApp Gateway','1.2.7','1.2.7','1.2.7','stable',false,'Gateway texto-only homologado na Etapa 5.',jsonb_build_object('stage',5)),
  ('evolution','Evolution Go','0.7.2','0.7.2','0.7.2','stable',false,'Provider WhatsApp fixado; nunca usar latest.',jsonb_build_object('stage',5)),
  ('capture','Vinsansi Captura','1.0.0','1.0.0',NULL,'preview',true,'Executor Google Maps oficial da Etapa 8.',jsonb_build_object('stage',8)),
- ('instagram','Vinsansi Instagram','2.0.0','2.0.0',NULL,'preview',true,'Executor outbound Instagram oficial da Etapa 9.',jsonb_build_object('stage',9))
+ ('instagram','Vinsansi Instagram','2.0.2','2.0.0',NULL,'preview',true,'Executor outbound Instagram oficial da Etapa 9.',jsonb_build_object('stage',9))
 ON CONFLICT(component_key) DO UPDATE SET display_name=excluded.display_name,latest_version=excluded.latest_version,minimum_supported_version=excluded.minimum_supported_version,stable_version=excluded.stable_version,release_channel=excluded.release_channel,update_required=excluded.update_required,notes=excluded.notes,metadata=excluded.metadata,updated_at=now();
 
 CREATE OR REPLACE FUNCTION public.platform_semver_parts(p_version text)

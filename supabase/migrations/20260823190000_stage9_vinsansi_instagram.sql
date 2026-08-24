@@ -13,7 +13,7 @@ $stage_preflight$;
 UPDATE public.platform_tools
 SET display_name='Vinsansi Instagram',
     description='Executor oficial outbound Instagram com fila canonica, claim transacional, progresso por etapa, idempotencia, limites e recuperacao segura.',
-    latest_version='2.0.0',minimum_supported_version='2.0.0',settings_schema_version=2,
+    latest_version='2.0.2',minimum_supported_version='2.0.0',settings_schema_version=2,
     capability_catalog=ARRAY['settings.read','presence.heartbeat','activity.report','organization.context','member.context','instagram.queue.execute','instagram.dm.send','instagram.media.send','instagram.result.report','instagram.checkpoint','instagram.profile.bound'],
     settings_schema='{"type":"object","required":["instagram"]}'::jsonb,
     updated_at=now()

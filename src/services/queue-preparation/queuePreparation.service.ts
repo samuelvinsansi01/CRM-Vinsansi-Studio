@@ -18,7 +18,7 @@ import { normalizePhone } from '../import/importValidation';
 import { isValidInstagram, normalizeInstagramUsername } from '../instagram/instagram.utils';
 import { getEffectiveWhatsAppPhone } from '../leads/leadContact';
 import { renderLeadMessages } from '../templates/templateVariables';
-import { missingTemplateMessageNumbers } from '../templates/templateContract';
+import { templateMessageContractIssue } from '../templates/templateContract';
 import { settingsService } from '../settings/settings.service';
 import { selectTemplateForLead, templateTypeForLead } from '../templates/templateSelector';
 import { loadCurrentWhatsAppValidationProofs, prepareQueueItems } from '../../repositories/queueSchema';
@@ -207,10 +207,17 @@ function preparationReason(
 
   const context = leadContext(row, channel);
   const selection = selectTemplateForLead(context, templates);
-  if (!selection) return `Nenhum template ${channel} compatível com o ramo e o tipo ${templateTypeForLead(context)}.`;
+  if (!selection) {
+    const structuralSelection = selectTemplateForLead(context, templates, { requireMessages: false });
+    if (!structuralSelection) return `Nenhum template ${channel} compatível com o ramo e o tipo ${templateTypeForLead(context)}.`;
+    const structuralMessages = renderLeadMessages(context, structuralSelection.template);
+    const messageIssue = templateMessageContractIssue(structuralMessages, channel);
+    if (messageIssue) return messageIssue;
+    return `O template ${channel} compatível não está pronto para uso.`;
+  }
   const messages = renderLeadMessages(context, selection.template);
-  const missingMessages = missingTemplateMessageNumbers(messages);
-  if (missingMessages.length) return `O template precisa ter as 4 mensagens. Ausentes: ${missingMessages.join(', ')}.`;
+  const messageIssue = templateMessageContractIssue(messages, channel);
+  if (messageIssue) return messageIssue;
 
   const branch = findBranch(row, branches);
   if (branch?.imageRequired && !String(branch.imageName ?? '').trim()) {

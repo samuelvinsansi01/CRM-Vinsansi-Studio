@@ -140,7 +140,7 @@ function sourceLeadId(lead: WhatsAppQueueLead) {
 
 function assertTemplateReady(leads: WhatsAppQueueLead[]) {
   const missing = leads.find((lead) => !hasAllTemplateMessages(lead) || lead.message1.toLowerCase().includes('template nao configurado'));
-  if (missing) throw new Error(`Template valido ausente para WhatsApp / ${missing.branch} / ${missing.type}.`);
+  if (missing) throw new Error(`Template WhatsApp ausente ou sem Mensagem 1/sequência válida para ${missing.branch} / ${missing.type}.`);
 }
 
 function assertWorkerContractReady(leads: WhatsAppQueueLead[]) {

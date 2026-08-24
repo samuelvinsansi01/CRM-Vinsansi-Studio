@@ -5,6 +5,7 @@ import type {
   InstagramConfigRecord,
   TemplateConfigRecord,
 } from './types';
+import { assertTemplateMessagesForChannel, hasRequiredTemplateMessages } from '../templates/templateContract';
 
 const SAFE_INSTAGRAM_USERNAME = /^[a-z0-9._]{1,30}$/;
 const ACTIVE_CONFIG_STATUSES = new Set(['ativo', 'active']);
@@ -42,9 +43,9 @@ function assertTemplate(record: TemplateConfigRecord, records: ConfigRecord[], e
   if (!branch) throw new Error('O ramo selecionado nao existe.');
   if (record.active && !isActive(branch)) throw new Error('Nao e possivel ativar um template de ramo inativo.');
 
+  assertTemplateMessagesForChannel(record, record.channel);
   [record.message1, record.message2, record.message3, record.message4].forEach((message, index) => {
     const text = message.trim();
-    if (!text) throw new Error(`A Mensagem ${index + 1} e obrigatoria.`);
     if (text.length > 4000) throw new Error(`A Mensagem ${index + 1} excede 4000 caracteres.`);
   });
 
@@ -116,13 +117,13 @@ export type OperationalReadiness = {
 
 export function buildOperationalReadiness(records: ConfigRecord[]): OperationalReadiness {
   const activeBranches = records.filter((item) => item.kind === 'branches' && isActive(item)).length;
-  const activeTemplates = records.filter((item) => item.kind === 'templates' && isActive(item)).length;
+  const activeTemplates = records.filter((item) => item.kind === 'templates' && isActive(item) && hasRequiredTemplateMessages(item, item.channel)).length;
   const activeChips = records.filter((item) => item.kind === 'chips' && isActive(item)).length;
   const activeInstagramProfiles = records.filter((item) => item.kind === 'instagram' && isActive(item)).length;
   const issues: string[] = [];
 
   if (!activeBranches) issues.push('Nenhum ramo ativo.');
-  if (!activeTemplates) issues.push('Nenhum template ativo com quatro mensagens.');
+  if (!activeTemplates) issues.push('Nenhum template ativo e pronto para uso.');
   if (!activeChips) issues.push('Nenhum chip WhatsApp ativo e configurado.');
   if (!activeInstagramProfiles) issues.push('Nenhum perfil Instagram ativo.');
 

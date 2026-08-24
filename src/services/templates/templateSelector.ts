@@ -1,5 +1,5 @@
 import type { TemplateChannel, TemplateConfigRecord, TemplateType } from '../config/types';
-import { hasAllTemplateMessages } from './templateContract';
+import { hasRequiredTemplateMessages } from './templateContract';
 
 type LeadTemplateContext = {
   branch?: string;
@@ -39,8 +39,7 @@ function normalize(value: unknown) {
 function isActiveTemplate(template: TemplateConfigRecord) {
   return Boolean(template.active) &&
     template.status !== 'Arquivado' &&
-    template.status !== 'deleted' &&
-    hasAllTemplateMessages(template);
+    template.status !== 'deleted';
 }
 
 function isEmptySiteValue(value: unknown) {
@@ -138,8 +137,10 @@ function chooseRandom<T>(items: T[]) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
-function compatibleTemplates(templates: TemplateConfigRecord[]) {
-  return templates.filter(isActiveTemplate);
+function compatibleTemplates(templates: TemplateConfigRecord[], channel: LeadTemplateContext['channel'], requireMessages = true) {
+  return templates.filter((template) =>
+    isActiveTemplate(template) && (!requireMessages || hasRequiredTemplateMessages(template, channel)),
+  );
 }
 
 /**
@@ -156,8 +157,9 @@ function compatibleTemplates(templates: TemplateConfigRecord[]) {
 export function selectTemplateForLead(
   lead: LeadTemplateContext,
   templates: TemplateConfigRecord[],
+  options: { requireMessages?: boolean } = {},
 ): TemplateSelection | undefined {
-  const active = compatibleTemplates(templates);
+  const active = compatibleTemplates(templates, lead.channel, options.requireMessages !== false);
   const expectedType = templateTypeForLead(lead);
   const specificBranch = active.filter((template) => matchesBranch(template, lead));
   const globalBranch = active.filter((template) => isGlobalBranch(template));

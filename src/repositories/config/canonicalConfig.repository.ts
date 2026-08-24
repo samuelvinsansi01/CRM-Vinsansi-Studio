@@ -20,6 +20,7 @@ import {
   normalizeCatalogName,
 } from '../schemaCatalog';
 import type { ConfigRepository } from './config.repository';
+import { assertTemplateMessagesForChannel, type TemplateMessageChannel } from '../../services/templates/templateContract';
 
 type Row = Record<string, unknown>;
 
@@ -127,6 +128,13 @@ async function templateCatalogs(userId: number) {
 function templateType(value: unknown): TemplateType {
   const normalized = normalizeCatalogName(value);
   return normalized.includes('com site') || normalized.includes('agreg') ? 'com-site' : 'sem-site';
+}
+
+function templateMessageChannel(value: unknown): TemplateMessageChannel {
+  const normalized = normalizeCatalogName(value);
+  if (normalized.includes('instagram')) return 'Instagram';
+  if (normalized.includes('geral')) return 'Geral';
+  return 'WhatsApp';
 }
 
 async function listTemplates(userId: number): Promise<TemplateConfigRecord[]> {
@@ -294,7 +302,9 @@ async function createRecord(kind: ConfigKind, input: Record<string, unknown>): P
     const message2 = String(input.message2 ?? '').trim();
     const message3 = String(input.message3 ?? '').trim();
     const message4 = String(input.message4 ?? '').trim();
-    if (![message1, message2, message3, message4].every(Boolean)) throw new Error('As quatro mensagens do template sao obrigatorias.');
+    const catalogs = await templateCatalogs(userId);
+    const channelName = catalogs.channelById.get(String(templateChannelId)) ?? 'WhatsApp';
+    assertTemplateMessagesForChannel({ message1, message2, message3, message4 }, templateMessageChannel(channelName));
     const response = await client.from('templates').insert({
       users_id: userId,
       branches_id: branchId,
@@ -371,14 +381,21 @@ async function updateRecord(kind: ConfigKind, id: string, input: Record<string, 
     const templateTypeId = Number(input.templateTypeId ?? current.templateTypeId);
     if (!Number.isSafeInteger(templateChannelId)) throw new Error('Selecione um canal de template valido.');
     if (!Number.isSafeInteger(templateTypeId)) throw new Error('Selecione um tipo de template valido.');
+    const message1 = String(input.message1 ?? current.message1).trim();
+    const message2 = String(input.message2 ?? current.message2).trim();
+    const message3 = String(input.message3 ?? current.message3).trim();
+    const message4 = String(input.message4 ?? current.message4).trim();
+    const catalogs = await templateCatalogs(userId);
+    const channelName = catalogs.channelById.get(String(templateChannelId)) ?? current.templateChannelName ?? 'WhatsApp';
+    assertTemplateMessagesForChannel({ message1, message2, message3, message4 }, templateMessageChannel(channelName));
     const response = await client.from('templates').update({
       branches_id: Number(input.branchId ?? current.branchId),
       status_id: statusId,
       templates_name: String(input.name ?? current.name).trim(),
-      templates_message_1: String(input.message1 ?? current.message1),
-      templates_message_2: String(input.message2 ?? current.message2),
-      templates_message_3: String(input.message3 ?? current.message3),
-      templates_message_4: String(input.message4 ?? current.message4),
+      templates_message_1: message1,
+      templates_message_2: message2,
+      templates_message_3: message3,
+      templates_message_4: message4,
       template_channels_id: templateChannelId,
       template_types_id: templateTypeId,
       templates_updated_at: nowIso(),

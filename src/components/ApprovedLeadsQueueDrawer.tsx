@@ -73,7 +73,12 @@ export function ApprovedLeadsQueueDrawer({
     template: lead.templateType === 'com-site' ? 'Com site' : 'Sem site',
     readiness: lead.ready
       ? <Tag tone="success">Pronto</Tag>
-      : <span title={lead.blockReason}><Tag tone="warning">Bloqueado</Tag></span>,
+      : (
+        <div title={lead.blockReason}>
+          <Tag tone="warning">Bloqueado</Tag>
+          {lead.blockReason ? <div style={{ marginTop: 4, fontSize: 11, lineHeight: 1.3, color: 'var(--text-muted)' }}>{lead.blockReason}</div> : null}
+        </div>
+      ),
   })), [snapshot?.leads]);
 
   const {

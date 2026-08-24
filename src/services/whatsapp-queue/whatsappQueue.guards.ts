@@ -14,10 +14,16 @@ export function missingWhatsAppWorkerFields(lead: WhatsAppQueueLead) {
   if (!text(lead.chip_instance || lead.chip)) fields.push('chip_instance');
   if (!text(lead.scheduled_date)) fields.push('scheduled_date');
   if (!text(lead.template_id)) fields.push('template_id');
-  if (!text(lead.message_1 || lead.message1)) fields.push('message_1');
-  if (!text(lead.message_2 || lead.message2)) fields.push('message_2');
-  if (!text(lead.message_3 || lead.message3)) fields.push('message_3');
-  if (!text(lead.message_4 || lead.message4)) fields.push('message_4');
+  const messages = [
+    text(lead.message_1 || lead.message1),
+    text(lead.message_2 || lead.message2),
+    text(lead.message_3 || lead.message3),
+    text(lead.message_4 || lead.message4),
+  ];
+  if (!messages[0]) fields.push('message_1');
+  for (let index = 1; index < messages.length; index += 1) {
+    if (!messages[index] && messages.slice(index + 1).some(Boolean)) fields.push(`message_${index + 1}`);
+  }
   if (!text(lead.phone_normalized || lead.phone)) fields.push('phone');
   return fields;
 }
