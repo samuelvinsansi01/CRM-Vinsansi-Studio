@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../maps/shared.js';
 import { sha256, type MapsExtensionScope } from '../../maps/token.js';
 
-const EXTENSION_VERSION = '1.0.2';
+const EXTENSION_VERSION = '1.0.3';
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -126,7 +126,7 @@ function nonnegativeInteger(value: unknown, fallback: number) {
 }
 
 function branchAcquisitionTargets(_categories: unknown) {
-  // v1.0.2: metas por canal foram aposentadas. A quantidade da execução é a única meta.
+  // v1.0.3: metas por canal permanecem aposentadas. A quantidade da execução é a única meta.
   return { whatsapp: 0, instagram: 0, unique: 0 };
 }
 
@@ -442,7 +442,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       ]);
       if (state.error || !state.data) throw new Error('maps_state_not_found');
       if (!terms.length) throw new Error('maps_search_terms_required');
-      // O schema histórico exige campos de target por canal. Na v1.0.2 eles são apenas
+      // O schema histórico exige campos de target por canal. Na v1.0.3 eles são apenas
       // compatibilidade de armazenamento e NÃO controlam seleção, término ou roteamento.
       const targetWhatsapp = desiredCompanies;
       const targetInstagram = 0;
@@ -608,15 +608,27 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }
       const counts = await executionSummary(client, execution);
       const targetsReached = acquisitionTargetsReached(execution, counts);
+      const desiredLimitReported = text(input.terminationReason) === 'desired_company_count_reached';
+      if (desiredLimitReported && !targetsReached) {
+        // Nunca abra outra cobertura quando a extensão informou que bateu a meta
+        // mas a mesa de revisão ainda não recebeu todos os candidatos. Nesse caso
+        // a única ação segura é pausar e exigir que o staging termine.
+        await client.from('maps_search_executions').update({
+          status: 'paused',
+          termination_reason: 'review_sync_incomplete',
+          last_error: 'maps_desired_limit_not_synced',
+          updated_at: new Date().toISOString(),
+        }).eq('maps_search_executions_id', execution.maps_search_executions_id);
+        throw new Error(`maps_desired_limit_not_synced:${Number(counts.unique_count || 0)}`);
+      }
       let next = null;
       if (status === 'error') {
         await client.from('maps_search_executions').update({ status: 'error', last_error: patch.last_error, updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
       } else if (TERMINAL_COVERAGE.has(status)) {
-        // A meta é um mínimo. O termo/cobertura já iniciado termina e preserva
-        // o excedente, mas depois de atingir todos os buckets não nasce outro
-        // subramo nem outra cidade.
+        // v1.0.3: a quantidade digitada é limite duro. Após todos os candidatos
+        // estarem persistidos na Revisão, nenhuma nova cobertura pode nascer.
         if (targetsReached) {
-          await client.from('maps_search_executions').update({ status: 'completed', termination_reason: 'candidate_targets_reached', finished_at: new Date().toISOString(), last_heartbeat_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
+          await client.from('maps_search_executions').update({ status: 'completed', termination_reason: 'desired_company_count_reached', finished_at: new Date().toISOString(), last_heartbeat_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
         } else {
           next = await nextCoverage(client, execution);
           if (!next.coverage) await client.from('maps_search_executions').update({ status: 'exhausted', termination_reason: 'available_coverage_exhausted', finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
