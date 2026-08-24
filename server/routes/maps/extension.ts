@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../maps/shared.js';
 import { sha256, type MapsExtensionScope } from '../../maps/token.js';
 
-const EXTENSION_VERSION = '1.0.3';
+const EXTENSION_VERSION = '1.0.6';
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -147,6 +147,35 @@ function mapsReviewsCount(raw: Row) {
   if (typeof direct === 'number' && Number.isFinite(direct) && direct >= 0) return Math.trunc(direct);
   const digitsOnly = text(direct).replace(/[^0-9]/g, '');
   return digitsOnly ? nonnegativeInteger(digitsOnly, 0) : null;
+}
+
+type GlobalQualityCriteria = { minRating: number; minReviews: number; scope: 'global' };
+
+function normalizedQualityCriteria(value: unknown): GlobalQualityCriteria {
+  const row = metadataObject(value);
+  const rawRating = Number(row.minRating);
+  const rawReviews = Math.trunc(Number(row.minReviews));
+  return {
+    minRating: Number.isFinite(rawRating) && rawRating >= 0 && rawRating <= 5 ? Math.round(rawRating * 100) / 100 : 4,
+    minReviews: Number.isSafeInteger(rawReviews) && rawReviews >= 0 ? rawReviews : 10,
+    scope: 'global',
+  };
+}
+
+async function globalQualityCriteria(client: ReturnType<typeof import('../../maps/shared.js').serviceClient>, organizationId: number): Promise<GlobalQualityCriteria> {
+  const result = await client.from('organization_tool_settings').select('settings').eq('organizations_id', organizationId).eq('tool_id', 'vinsansi_capture').maybeSingle();
+  if (result.error) throw new Error(`maps_quality_settings_query_failed:${result.error.message}`);
+  return normalizedQualityCriteria(result.data?.settings ?? {});
+}
+
+function executionQualityCriteria(execution: Row): GlobalQualityCriteria {
+  return normalizedQualityCriteria((execution.runner_strategy as Row | null)?.qualityCriteria ?? {});
+}
+
+function meetsGlobalQuality(raw: Row, criteria: GlobalQualityCriteria) {
+  const rating = mapsRating(raw);
+  const reviews = mapsReviewsCount(raw);
+  return rating != null && reviews != null && rating >= criteria.minRating && reviews >= criteria.minReviews;
 }
 
 function businessStatus(raw: Row): 'open' | 'temporarily_closed' | 'permanently_closed' | 'unknown' {
@@ -398,13 +427,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return send(req, res, 200, { ok: true, revoked: true });
     }
     if (action === 'catalogs') {
-      const [branches, states] = await Promise.all([
+      const [branches, states, qualityCriteria] = await Promise.all([
         client.from('branches').select('branches_id,branches_name,branches_categories').eq('users_id', usersId).eq('status_id', 1).order('branches_name'),
         client.from('states').select('states_id,states_name,states_code').order('states_name'),
+        globalQualityCriteria(client, organizationId),
       ]);
       if (branches.error || states.error) throw new Error('maps_catalogs_query_failed');
       return send(req, res, 200, {
         ok: true,
+        qualityCriteria,
         branches: (branches.data ?? []).map((row) => ({
           id: row.branches_id,
           name: row.branches_name,
@@ -436,9 +467,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const requestedCitiesId = cityMode === 'manual' ? integer(input.citiesId, 1) : null;
       const extractionMode = input.extractionMode === 'quick' ? 'quick' : 'complete';
       const desiredCompanies = integer(input.desiredCompanies ?? 50, 1, 5000);
-      const [{ branch, terms }, state] = await Promise.all([
+      const [{ branch, terms }, state, qualityCriteria] = await Promise.all([
         branchTerms(client, usersId, branchesId),
         client.from('states').select('states_id,states_name,states_code').eq('states_id', statesId).maybeSingle(),
+        globalQualityCriteria(client, organizationId),
       ]);
       if (state.error || !state.data) throw new Error('maps_state_not_found');
       if (!terms.length) throw new Error('maps_search_terms_required');
@@ -468,7 +500,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         p_target_source: targetSource,
         p_extension_version: text(input.extensionVersion) || EXTENSION_VERSION,
         p_search_terms_snapshot: terms,
-        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies },
+        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies, qualityCriteria },
       });
       if (inserted.error) {
         const message = text(inserted.error.message);
@@ -508,6 +540,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const coverage = await client.from('maps_search_coverage').select('*').eq('maps_search_coverage_id', coverageId).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('users_id', usersId).maybeSingle();
       if (coverage.error || !coverage.data) throw new Error('maps_coverage_not_found');
       let accepted = 0; let duplicates = 0; let rejected = 0; const candidateIds: string[] = [];
+      const qualityCriteria = executionQualityCriteria(execution);
       const startingCounts = await executionSummary(client, execution);
       const allocationCounts = {
         whatsapp: Number(startingCounts.whatsapp_bucket_count || 0),
@@ -516,6 +549,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       for (const raw of items) {
         const dedupeKey = itemKey(raw);
         if (!dedupeKey) { rejected += 1; continue; }
+        if (!meetsGlobalQuality(raw, qualityCriteria)) { rejected += 1; continue; }
         const current = await client.from('maps_search_candidates').select('maps_search_candidates_id,search_terms_found,coverage_ids_found').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('dedupe_key', dedupeKey).maybeSingle();
         if (current.error) throw new Error(current.error.message);
         if (current.data) {
