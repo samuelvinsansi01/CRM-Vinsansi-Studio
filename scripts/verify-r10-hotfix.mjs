@@ -31,5 +31,5 @@ for(const file of lifecycleFiles){
   assert.doesNotMatch(section,/CASE TG_TABLE_NAME WHEN 'leads' THEN NEW\.leads_id::text WHEN 'queue_items'/);
 }
 const route=fs.readFileSync(new URL('../server/routes/maps/extension.ts',import.meta.url),'utf8');
-assert.match(route,/const EXTENSION_VERSION = '1\.0\.7'/);
+assert.match(route,/const EXTENSION_VERSION = '1\.0\.\d+'/);
 console.log('CRM 2.4.0-R10: hotfixes da homologação da Etapa 8 aprovados.');

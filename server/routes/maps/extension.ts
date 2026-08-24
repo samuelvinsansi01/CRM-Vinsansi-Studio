@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../maps/shared.js';
 import { sha256, type MapsExtensionScope } from '../../maps/token.js';
 
-const EXTENSION_VERSION = '1.0.8';
+const EXTENSION_VERSION = '1.0.9';
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -623,6 +623,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const coverage = await client.from('maps_search_coverage').select('*').eq('maps_search_coverage_id', coverageId).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('users_id', usersId).maybeSingle();
       if (coverage.error || !coverage.data) throw new Error('maps_coverage_not_found');
       let accepted = 0; let duplicates = 0; let rejected = 0; let blockedCrm = 0; let blockedReview = 0; let blockedRejected = 0; let suppressed = 0; const candidateIds: string[] = [];
+      const rejectionBreakdown = { invalidIdentity: 0, quality: 0, closedBusiness: 0, noSupportedContact: 0, suppressed: 0 };
       const batchDecisions = await captureBatchDecisions(client, organizationId, items);
       const qualityCriteria = executionQualityCriteria(execution);
       const startingCounts = await executionSummary(client, execution);
@@ -635,13 +636,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       let overflowAvailable = 0;
       for (const raw of items) {
         const dedupeKey = itemKey(raw);
-        if (!dedupeKey) { rejected += 1; continue; }
-        if (!meetsGlobalQuality(raw, qualityCriteria)) { rejected += 1; continue; }
+        if (!dedupeKey) { rejected += 1; rejectionBreakdown.invalidIdentity += 1; continue; }
+        if (!meetsGlobalQuality(raw, qualityCriteria)) { rejected += 1; rejectionBreakdown.quality += 1; continue; }
         const gateDecision = batchDecisions.get(dedupeKey) || 'available';
         if (gateDecision === 'exists_in_crm') { blockedCrm += 1; continue; }
         if (gateDecision === 'in_review') { blockedReview += 1; continue; }
         if (gateDecision === 'rejected_recently') { blockedRejected += 1; continue; }
-        if (gateDecision === 'suppressed') { suppressed += 1; continue; }
+        if (gateDecision === 'suppressed') { suppressed += 1; rejectionBreakdown.suppressed += 1; continue; }
         if (accepted >= remainingNeeded) { overflowAvailable += 1; continue; }
         const current = await client.from('maps_search_candidates').select('maps_search_candidates_id,search_terms_found,coverage_ids_found').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('dedupe_key', dedupeKey).maybeSingle();
         if (current.error) throw new Error(current.error.message);
@@ -656,9 +657,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const effective = effectiveCandidate(raw);
         const status = businessStatus(raw);
         const closed = isClosedBusiness(status);
-        const bucket = closed ? null : chooseAcquisitionBucket(effective, execution, allocationCounts);
-        const eligibilityStatus = closed ? 'closed_business' : effective.eligibilityStatus;
-        const eligibilityReason = closed ? status : effective.eligibilityReason;
+        if (closed) { rejected += 1; rejectionBreakdown.closedBusiness += 1; continue; }
+        if (effective.eligibilityStatus !== 'ready_to_save') { rejected += 1; rejectionBreakdown.noSupportedContact += 1; continue; }
+        const bucket = chooseAcquisitionBucket(effective, execution, allocationCounts);
+        const eligibilityStatus = 'ready_to_save';
+        const eligibilityReason = null;
         const rating = mapsRating(raw);
         const reviews = mapsReviewsCount(raw);
         const inserted = await client.from('maps_search_candidates').insert({
@@ -686,19 +689,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           website_classification: effective.websiteClassification,
           eligibility_status: eligibilityStatus,
           eligibility_reason: eligibilityReason,
-          review_state: ['closed_business','no_supported_contact'].includes(eligibilityStatus) ? 'invalid' : 'pending',
+          review_state: 'pending',
           review_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          excluded_by_user: ['closed_business','no_supported_contact'].includes(eligibilityStatus),
+          excluded_by_user: false,
           collected_at: text(raw.extractedAt) || new Date().toISOString(),
         });
         if (inserted.error) throw new Error(`maps_candidate_create_failed:${inserted.error.message}`);
         const createdCandidate = await client.from('maps_search_candidates').select('maps_search_candidates_id').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('dedupe_key', dedupeKey).maybeSingle();
         if (createdCandidate.data?.maps_search_candidates_id) candidateIds.push(text(createdCandidate.data.maps_search_candidates_id));
-        if (eligibilityStatus === 'ready_to_save') {
-          if (bucket === 'whatsapp') allocationCounts.whatsapp += 1;
-          if (bucket === 'instagram') allocationCounts.instagram += 1;
-          accepted += 1;
-        } else { rejected += 1; }
+        if (bucket === 'whatsapp') allocationCounts.whatsapp += 1;
+        if (bucket === 'instagram') allocationCounts.instagram += 1;
+        accepted += 1;
       }
       const counts = await executionSummary(client, execution);
       const response = {
@@ -713,6 +714,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         blockedReview,
         blockedRejected,
         suppressed,
+        rejectionBreakdown,
         overflowAvailable,
         candidateIds,
         counts,

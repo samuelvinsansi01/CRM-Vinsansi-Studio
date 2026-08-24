@@ -1,10 +1,10 @@
 # CRM - Vinsansi Studio v2.4.0 — Release Candidate das Etapas 1–15
 
-**Revisão atual do pacote: R11.** Correções da homologação real da Etapa 8 em `CORRECAO-CRM-2.4.0-R11.md`.
+**Revisão atual do pacote: R12.** Ajustes finais de telemetria e fila manual da Etapa 8 em `CORRECAO-CRM-2.4.0-R12.md`.
 
 Esta árvore contém a implementação completa das Etapas 8–15 sobre a base homologada das Etapas 1–7. A v2.4.0 é **Release Candidate** até a checklist persistente da Etapa 15 ser aprovada. A migration final não promove Stable sozinha; a promoção exige uma rodada aprovada, schema saudável, ausência de alerta crítico e Platform Owner.
 
-Componentes coordenados: Gerenciador 1.3.0, Worker 3.13.0, Gateway 1.2.7, Evolution Go 0.7.2, Vinsansi Captura 1.0.3 e Vinsansi Instagram 2.0.0. WhatsApp permanece texto-only.
+Componentes coordenados: Gerenciador 1.3.0, Worker 3.13.0, Gateway 1.2.7, Evolution Go 0.7.2, Vinsansi Captura 1.0.9 e Vinsansi Instagram 2.0.0. WhatsApp permanece texto-only.
 
 Use `PASSO-A-PASSO-ETAPAS-8-A-15.md` e `ETAPAS-8-A-15-IMPLEMENTADAS.md`.
 
