@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../maps/shared.js';
 import { sha256, type MapsExtensionScope } from '../../maps/token.js';
 
-const EXTENSION_VERSION = '1.0.6';
+const EXTENSION_VERSION = '1.0.8';
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -176,6 +176,89 @@ function meetsGlobalQuality(raw: Row, criteria: GlobalQualityCriteria) {
   const rating = mapsRating(raw);
   const reviews = mapsReviewsCount(raw);
   return rating != null && reviews != null && rating >= criteria.minRating && reviews >= criteria.minReviews;
+}
+
+
+type CaptureReviewDecision = 'available' | 'exists_in_crm' | 'in_review' | 'rejected_recently' | 'suppressed';
+type CaptureIdentity = { key: string; phone: string; instagram: string; domain: string; maps: string };
+
+function normalizeDomainIdentity(value: unknown) {
+  let v = text(value).toLowerCase().replace(/^https?:\/\//i, '').replace(/^www\./i, '');
+  v = v.split('/')[0].split('?')[0].split('#')[0];
+  const blocked = new Set(['','google.com','google.com.br','instagram.com','facebook.com','fb.com','wa.me','whatsapp.com','bit.ly','tinyurl.com','goo.gl','t.co','linktr.ee']);
+  return blocked.has(v) ? '' : v;
+}
+function normalizeMapsIdentity(value: unknown) { return text(value).toLowerCase().replace(/\/+$/, ''); }
+function captureIdentity(raw: Row): CaptureIdentity {
+  return {
+    key: itemKey(raw),
+    phone: (() => { const p = plausiblePhone(raw.phone || raw.whatsapp || raw.whatsappUrl); return p && !p.startsWith('55') && [10,11].includes(p.length) ? `55${p}` : p; })(),
+    instagram: normalizeInstagram(raw.instagram),
+    domain: normalizeDomainIdentity(raw.website),
+    maps: normalizeMapsIdentity(raw.googleMapsUrl || raw.mapsUrl),
+  };
+}
+function identityMatches(identity: CaptureIdentity, type: string, value: unknown) {
+  const v = text(value);
+  return (type === 'phone' && identity.phone && identity.phone === v)
+    || (type === 'instagram' && identity.instagram && identity.instagram === v)
+    || (type === 'domain' && identity.domain && identity.domain === v)
+    || (type === 'maps' && identity.maps && identity.maps === v);
+}
+
+async function captureBatchDecisions(client: ReturnType<typeof import('../../maps/shared.js').serviceClient>, organizationId: number, raws: Row[]) {
+  const identities = raws.map(captureIdentity);
+  const decisions = new Map<string, CaptureReviewDecision>();
+  const values = (type: keyof Omit<CaptureIdentity,'key'>) => [...new Set(identities.map((i) => i[type]).filter(Boolean))];
+  const registryRows: Row[] = [];
+  for (const type of ['phone','instagram','domain','maps'] as const) {
+    const list = values(type);
+    if (!list.length) continue;
+    const q = await client.from('lead_identity_registry').select('identity_type,identity_value,canonical_lead_id').eq('organizations_id', organizationId).eq('identity_type', type).in('identity_value', list);
+    if (q.error) throw new Error(`maps_identity_batch_failed:${q.error.message}`);
+    registryRows.push(...(q.data ?? []));
+  }
+  for (const identity of identities) {
+    if (registryRows.some((r) => identityMatches(identity, text(r.identity_type), r.identity_value))) decisions.set(identity.key, 'exists_in_crm');
+  }
+  const now = new Date().toISOString();
+  const activeReview = await client.from('maps_search_candidates')
+    .select('dedupe_key,effective_phone,effective_whatsapp,effective_instagram,effective_website,maps_url,review_state,review_expires_at')
+    .eq('organizations_id', organizationId)
+    .in('review_state', ['pending','rejected','invalid'])
+    .gt('review_expires_at', now);
+  if (activeReview.error) throw new Error(`maps_review_batch_failed:${activeReview.error.message}`);
+  for (const identity of identities) {
+    if (decisions.has(identity.key)) continue;
+    const matched = (activeReview.data ?? []).find((r) => {
+      if (text(r.dedupe_key) && text(r.dedupe_key) === identity.key) return true;
+      const rowIdentity: CaptureIdentity = {
+        key: text(r.dedupe_key),
+        phone: (() => { const p = plausiblePhone(r.effective_phone || r.effective_whatsapp); return p && !p.startsWith('55') && [10,11].includes(p.length) ? `55${p}` : p; })(),
+        instagram: normalizeInstagram(r.effective_instagram),
+        domain: normalizeDomainIdentity(r.effective_website),
+        maps: normalizeMapsIdentity(r.maps_url),
+      };
+      return Boolean((identity.phone && rowIdentity.phone === identity.phone)
+        || (identity.instagram && rowIdentity.instagram === identity.instagram)
+        || (identity.domain && rowIdentity.domain === identity.domain)
+        || (identity.maps && rowIdentity.maps === identity.maps));
+    });
+    if (matched) decisions.set(identity.key, ['rejected','invalid'].includes(text(matched.review_state)) ? 'rejected_recently' : 'in_review');
+  }
+  const suppressions: Row[] = [];
+  for (const type of ['phone','instagram','domain','maps'] as const) {
+    const list = values(type);
+    if (!list.length) continue;
+    const q = await client.from('contact_suppressions').select('identity_type,identity_value').eq('organizations_id', organizationId).eq('is_active', true).eq('identity_type', type).in('identity_value', list).or(`expires_at.is.null,expires_at.gt.${now}`);
+    if (q.error) throw new Error(`maps_suppression_batch_failed:${q.error.message}`);
+    suppressions.push(...(q.data ?? []));
+  }
+  for (const identity of identities) {
+    if (!decisions.has(identity.key) && suppressions.some((r) => identityMatches(identity, text(r.identity_type), r.identity_value))) decisions.set(identity.key, 'suppressed');
+    if (!decisions.has(identity.key)) decisions.set(identity.key, 'available');
+  }
+  return decisions;
 }
 
 function businessStatus(raw: Row): 'open' | 'temporarily_closed' | 'permanently_closed' | 'unknown' {
@@ -391,7 +474,7 @@ function requiredScope(action: string): MapsExtensionScope[] {
   if (['search_get','next_search','history','history_detail','active_executions'].includes(action)) return ['maps:searches:read'];
   if (['search_create','coverage_transition','execution_transition','execution_heartbeat','batch_sync'].includes(action)) return ['maps:searches:write'];
   if (['candidates_list'].includes(action)) return ['maps:candidates:read'];
-  if (['candidate_update','candidate_exclude','candidate_restore','candidate_provenance'].includes(action)) return ['maps:candidates:write'];
+  if (['candidate_update','candidate_exclude','candidate_restore','candidate_provenance','review_queue_clear'].includes(action)) return ['maps:candidates:write'];
   if (action === 'leads_promote') return ['maps:leads:promote'];
   if (['session_refresh','session_revoke'].includes(action)) return [];
   throw new Error('maps_action_invalid');
@@ -405,7 +488,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const action = text(input.action);
     const scope = await extensionScope(req, requiredScope(action));
     const { client, usersId, organizationId } = scope;
-    if (['search_create','batch_sync','coverage_transition','execution_transition','candidate_update','candidate_exclude','candidate_restore','leads_promote'].includes(action)) {
+    if (['search_create','batch_sync','coverage_transition','execution_transition','candidate_update','candidate_exclude','candidate_restore','review_queue_clear','leads_promote'].includes(action)) {
       const activityTouch = await client.rpc('service_touch_tool_installation', {
         p_organizations_id: scope.organizationId,
         p_tool_id: 'vinsansi_capture',
@@ -500,7 +583,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         p_target_source: targetSource,
         p_extension_version: text(input.extensionVersion) || EXTENSION_VERSION,
         p_search_terms_snapshot: terms,
-        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies, qualityCriteria },
+        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies, qualityCriteria, reviewTtlHours: 24, validationBatchPercent: 50, validationBatchMin: 5, validationBatchMax: 50 },
       });
       if (inserted.error) {
         const message = text(inserted.error.message);
@@ -526,7 +609,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const batchId = text(input.batchId);
       const coverageId = text(input.coverageId);
       const items = Array.isArray(input.items) ? input.items as Row[] : [];
-      if (!batchId || !coverageId || !items.length || items.length > 25) throw new Error('maps_batch_invalid');
+      if (!batchId || !coverageId || !items.length || items.length > 50) throw new Error('maps_batch_invalid');
       const payloadHash = await sha256(JSON.stringify({ coverageId, items }));
       const existingBatch = await client.from('maps_search_batches').select('*').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('batch_id', batchId).maybeSingle();
       if (existingBatch.error) throw new Error(existingBatch.error.message);
@@ -539,17 +622,27 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }
       const coverage = await client.from('maps_search_coverage').select('*').eq('maps_search_coverage_id', coverageId).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('users_id', usersId).maybeSingle();
       if (coverage.error || !coverage.data) throw new Error('maps_coverage_not_found');
-      let accepted = 0; let duplicates = 0; let rejected = 0; const candidateIds: string[] = [];
+      let accepted = 0; let duplicates = 0; let rejected = 0; let blockedCrm = 0; let blockedReview = 0; let blockedRejected = 0; let suppressed = 0; const candidateIds: string[] = [];
+      const batchDecisions = await captureBatchDecisions(client, organizationId, items);
       const qualityCriteria = executionQualityCriteria(execution);
       const startingCounts = await executionSummary(client, execution);
       const allocationCounts = {
         whatsapp: Number(startingCounts.whatsapp_bucket_count || 0),
         instagram: Number(startingCounts.instagram_bucket_count || 0),
       };
+      const desiredCompanyCount = Math.max(0, Number((execution.runner_strategy as Row | null)?.desiredCompanyCount || 0));
+      const remainingNeeded = desiredCompanyCount > 0 ? Math.max(0, desiredCompanyCount - Number(startingCounts.unique_count || 0)) : Number.MAX_SAFE_INTEGER;
+      let overflowAvailable = 0;
       for (const raw of items) {
         const dedupeKey = itemKey(raw);
         if (!dedupeKey) { rejected += 1; continue; }
         if (!meetsGlobalQuality(raw, qualityCriteria)) { rejected += 1; continue; }
+        const gateDecision = batchDecisions.get(dedupeKey) || 'available';
+        if (gateDecision === 'exists_in_crm') { blockedCrm += 1; continue; }
+        if (gateDecision === 'in_review') { blockedReview += 1; continue; }
+        if (gateDecision === 'rejected_recently') { blockedRejected += 1; continue; }
+        if (gateDecision === 'suppressed') { suppressed += 1; continue; }
+        if (accepted >= remainingNeeded) { overflowAvailable += 1; continue; }
         const current = await client.from('maps_search_candidates').select('maps_search_candidates_id,search_terms_found,coverage_ids_found').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('dedupe_key', dedupeKey).maybeSingle();
         if (current.error) throw new Error(current.error.message);
         if (current.data) {
@@ -593,14 +686,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           website_classification: effective.websiteClassification,
           eligibility_status: eligibilityStatus,
           eligibility_reason: eligibilityReason,
+          review_state: ['closed_business','no_supported_contact'].includes(eligibilityStatus) ? 'invalid' : 'pending',
+          review_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          excluded_by_user: ['closed_business','no_supported_contact'].includes(eligibilityStatus),
           collected_at: text(raw.extractedAt) || new Date().toISOString(),
         });
         if (inserted.error) throw new Error(`maps_candidate_create_failed:${inserted.error.message}`);
         const createdCandidate = await client.from('maps_search_candidates').select('maps_search_candidates_id').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('dedupe_key', dedupeKey).maybeSingle();
         if (createdCandidate.data?.maps_search_candidates_id) candidateIds.push(text(createdCandidate.data.maps_search_candidates_id));
-        if (bucket === 'whatsapp') allocationCounts.whatsapp += 1;
-        if (bucket === 'instagram') allocationCounts.instagram += 1;
-        accepted += 1;
+        if (eligibilityStatus === 'ready_to_save') {
+          if (bucket === 'whatsapp') allocationCounts.whatsapp += 1;
+          if (bucket === 'instagram') allocationCounts.instagram += 1;
+          accepted += 1;
+        } else { rejected += 1; }
       }
       const counts = await executionSummary(client, execution);
       const response = {
@@ -611,6 +709,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         accepted,
         duplicates,
         rejected,
+        blockedCrm,
+        blockedReview,
+        blockedRejected,
+        suppressed,
+        overflowAvailable,
         candidateIds,
         counts,
         targetsReached: acquisitionTargetsReached(execution, counts),
@@ -688,10 +791,32 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return send(req, res, 200, { ok: true, execution: updated.data, active: true });
     }
     if (action === 'candidates_list') {
-      await ownedExecution(client, usersId, text(input.executionId));
-      const candidates = await client.from('maps_search_candidates').select('*,branches:branches_id(branches_name),states:states_id(states_name,states_code),cities:cities_id(cities_name)').eq('users_id', usersId).eq('maps_search_executions_id', text(input.executionId)).order('created_at');
+      const now = new Date().toISOString();
+      const expired = await client.from('maps_search_candidates').update({ review_state: 'expired', updated_at: now }).eq('organizations_id', organizationId).in('review_state', ['pending','rejected','invalid']).lte('review_expires_at', now);
+      if (expired.error) throw new Error(`maps_review_expire_failed:${expired.error.message}`);
+      const candidates = await client.from('maps_search_candidates')
+        .select('*,branches:branches_id(branches_name),states:states_id(states_name,states_code),cities:cities_id(cities_name),execution:maps_search_executions_id(created_at,status)')
+        .eq('organizations_id', organizationId)
+        .in('review_state', ['pending','rejected','invalid'])
+        .gt('review_expires_at', now)
+        .order('created_at');
       if (candidates.error) throw new Error(candidates.error.message);
-      return send(req, res, 200, { ok: true, candidates: candidates.data ?? [] });
+      const rows = candidates.data ?? [];
+      return send(req, res, 200, { ok: true, candidates: rows, stats: {
+        pending: rows.filter((r) => text(r.review_state) === 'pending').length,
+        rejectedInvalid: rows.filter((r) => ['rejected','invalid'].includes(text(r.review_state))).length,
+      }});
+    }
+    if (action === 'review_queue_clear') {
+      const now = new Date().toISOString();
+      const active = await client.from('maps_search_candidates').select('maps_search_candidates_id').eq('organizations_id', organizationId).in('review_state', ['pending','rejected','invalid']).gt('review_expires_at', now);
+      if (active.error) throw new Error(`maps_review_clear_query_failed:${active.error.message}`);
+      const ids = (active.data ?? []).map((r) => text(r.maps_search_candidates_id)).filter(Boolean);
+      if (ids.length) {
+        const cleared = await client.from('maps_search_candidates').update({ review_state: 'expired', review_cleared_at: now, review_expires_at: now, updated_at: now }).in('maps_search_candidates_id', ids).eq('organizations_id', organizationId);
+        if (cleared.error) throw new Error(`maps_review_clear_failed:${cleared.error.message}`);
+      }
+      return send(req, res, 200, { ok: true, cleared: ids.length });
     }
     if (action === 'candidate_provenance') {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
@@ -728,7 +853,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         patch = { effective_phone: effective.phone, effective_whatsapp: effective.whatsapp, effective_instagram: effective.instagram, effective_website: effective.website, website_classification: effective.websiteClassification, acquisition_bucket: bucket, eligibility_status: closed ? 'closed_business' : effective.eligibilityStatus, eligibility_reason: closed ? current.data.business_status : effective.eligibilityReason, edited_by_user: true, updated_at: new Date().toISOString() };
       } else {
         if (current.data.promoted_leads_id && action === 'candidate_exclude') throw new Error('maps_candidate_already_promoted');
-        patch = { excluded_by_user: action === 'candidate_exclude', updated_at: new Date().toISOString() };
+        patch = action === 'candidate_exclude'
+          ? { excluded_by_user: true, review_state: 'rejected', review_decided_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+          : { excluded_by_user: false, review_state: 'pending', review_decided_at: null, updated_at: new Date().toISOString() };
       }
       const updated = await client.from('maps_search_candidates').update(patch).eq('maps_search_candidates_id', candidateId).eq('users_id', usersId).select('*').single();
       if (updated.error) throw new Error(updated.error.message);
@@ -736,7 +863,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return send(req, res, 200, { ok: true, candidate: updated.data, counts, targetsReached: acquisitionTargetsReached(execution, counts) });
     }
     if (action === 'leads_promote') {
-      const execution = await ownedExecution(client, usersId, text(input.executionId));
       const selectedIds = Array.isArray(input.candidateIds) ? [...new Set(input.candidateIds.map(text).filter(Boolean))] : [];
       if (!selectedIds.length) throw new Error('maps_leads_promote_selection_required');
       if (selectedIds.length > 25) throw new Error('maps_leads_promote_batch_too_large');
@@ -745,7 +871,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         .from('maps_search_candidates')
         .select('*')
         .eq('users_id', usersId)
-        .eq('maps_search_executions_id', execution.maps_search_executions_id)
+        .eq('organizations_id', organizationId)
         .eq('excluded_by_user', false)
         .in('maps_search_candidates_id', selectedIds);
       const candidates = await candidatesQuery;
@@ -758,6 +884,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       let promoted = 0; let alreadyPromoted = 0; const failures: Array<{ candidateId: string; code: string }> = [];
       for (const candidate of candidates.data ?? []) {
         const candidateId = text(candidate.maps_search_candidates_id);
+        const execution = await ownedExecution(client, usersId, text(candidate.maps_search_executions_id));
         if (selected && !selected.has(candidateId)) continue;
         if (candidate.promoted_leads_id) { alreadyPromoted += 1; continue; }
         const existingLead = await client.from('leads').select('leads_id').eq('users_id', usersId).eq('maps_search_candidates_id', candidateId).maybeSingle();
@@ -781,7 +908,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const gate = (identityGate.data ?? {}) as Row;
         if (gate.decision === 'suppressed' || gate.decision === 'duplicate') {
           await client.from('maps_search_candidates').update({
-            identity_decision: text(gate.decision), suppression_match: gate.decision === 'suppressed',
+            identity_decision: text(gate.decision), review_state: gate.decision === 'suppressed' ? 'suppressed' : 'duplicate', review_decided_at: new Date().toISOString(), suppression_match: gate.decision === 'suppressed',
             dedup_match_leads_id: gate.canonicalLeadId ? Number(gate.canonicalLeadId) : null,
             updated_at: new Date().toISOString(),
           }).eq('maps_search_candidates_id', candidateId);
@@ -824,11 +951,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           maps_search_candidates_id: candidateId,
         }).select('leads_id').single();
         if (inserted.error) { failures.push({ candidateId, code: `lead_insert_failed:${inserted.error.message}` }); continue; }
-        await client.from('maps_search_candidates').update({ promoted_leads_id: inserted.data.leads_id, promoted_at: new Date().toISOString(), identity_decision: 'accepted', updated_at: new Date().toISOString() }).eq('maps_search_candidates_id', candidateId);
+        await client.from('maps_search_candidates').update({ promoted_leads_id: inserted.data.leads_id, promoted_at: new Date().toISOString(), identity_decision: 'accepted', review_state: 'saved', review_decided_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_candidates_id', candidateId);
         await client.from('capture_execution_events').insert({ organizations_id: organizationId, maps_search_executions_id: execution.maps_search_executions_id, organization_tool_installations_id: scope.organizationToolInstallationId, organization_members_id: scope.memberId, event_type: 'imported', payload: { candidateId, leadId: inserted.data.leads_id } });
         promoted += 1;
       }
-      if (input.summarizeExecution !== false) await executionSummary(client, execution);
+      // Cada candidato pode vir de uma execução diferente; os resumos são recalculados sob demanda pelas próprias execuções.
       return send(req, res, failures.length ? 207 : 200, { ok: failures.length === 0, promoted, alreadyPromoted, failures });
     }
     if (action === 'history') {

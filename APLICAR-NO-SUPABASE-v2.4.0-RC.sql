@@ -3618,7 +3618,7 @@ BEGIN
     RETURN jsonb_build_object('decision','suppressed','suppressed',true,'duplicate',false,'suppressionId',v_suppression,'identityType',v_type,'identityValue',v_value);
   END IF;
 
-  SELECT coalesce(r.canonical_lead_id,r.leads_id),r.identity_type,r.identity_value
+  SELECT r.canonical_lead_id,r.identity_type,r.identity_value
     INTO v_lead,v_type,v_value
   FROM public.lead_identity_registry r
   WHERE r.organizations_id=p_organizations_id
@@ -4577,14 +4577,14 @@ REVOKE ALL ON FUNCTION public.service_orchestrate_ready_leads(bigint,integer) FR
 -- Timeline automática para os principais estados do ciclo.
 CREATE OR REPLACE FUNCTION public.record_lead_lifecycle_event()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $$
-DECLARE v_lead bigint;v_org bigint;v_event text;v_channel text;
+DECLARE v_lead bigint;v_org bigint;v_event text;v_channel text;v_entity_id text;
 BEGIN
- IF TG_TABLE_NAME='leads' THEN v_lead:=NEW.leads_id;v_org:=NEW.organizations_id;v_event:=CASE WHEN TG_OP='INSERT' THEN 'lead:captured' ELSE 'lead:status_changed' END;v_channel:=CASE NEW.channels_id WHEN 1 THEN 'whatsapp' WHEN 2 THEN 'instagram' ELSE NULL END;
- ELSIF TG_TABLE_NAME='queue_items' THEN v_lead:=NEW.leads_id;v_org:=NEW.organizations_id;v_event:=CASE NEW.status_id WHEN 3 THEN 'queue:queued' WHEN 4 THEN 'queue:processing' WHEN 5 THEN 'queue:completed' WHEN 6 THEN 'queue:error' ELSE 'queue:changed' END;
- ELSIF TG_TABLE_NAME='sents' THEN v_lead:=NEW.leads_id;v_org:=NEW.organizations_id;v_event:=CASE WHEN NEW.sents_sent_at IS NOT NULL THEN 'dispatch:sent' WHEN NEW.status_id=6 THEN 'dispatch:error' ELSE 'dispatch:changed' END;v_channel:=CASE NEW.channels_id WHEN 1 THEN 'whatsapp' WHEN 2 THEN 'instagram' ELSE NULL END;
- ELSIF TG_TABLE_NAME='conversation_messages' THEN v_lead:=NEW.leads_id;v_org:=NEW.organizations_id;v_event:=CASE WHEN NEW.direction='inbound' THEN 'conversation:inbound' ELSE 'conversation:outbound' END;v_channel:='whatsapp';
+ IF TG_TABLE_NAME='leads' THEN v_lead:=NEW.leads_id;v_org:=NEW.organizations_id;v_event:=CASE WHEN TG_OP='INSERT' THEN 'lead:captured' ELSE 'lead:status_changed' END;v_channel:=CASE NEW.channels_id WHEN 1 THEN 'whatsapp' WHEN 2 THEN 'instagram' ELSE NULL END;v_entity_id:=NEW.leads_id::text;
+ ELSIF TG_TABLE_NAME='queue_items' THEN v_lead:=NEW.leads_id;v_org:=NEW.organizations_id;v_event:=CASE NEW.status_id WHEN 3 THEN 'queue:queued' WHEN 4 THEN 'queue:processing' WHEN 5 THEN 'queue:completed' WHEN 6 THEN 'queue:error' ELSE 'queue:changed' END;v_entity_id:=NEW.queue_items_id::text;
+ ELSIF TG_TABLE_NAME='sents' THEN v_lead:=NEW.leads_id;v_org:=NEW.organizations_id;v_event:=CASE WHEN NEW.sents_sent_at IS NOT NULL THEN 'dispatch:sent' WHEN NEW.status_id=6 THEN 'dispatch:error' ELSE 'dispatch:changed' END;v_channel:=CASE NEW.channels_id WHEN 1 THEN 'whatsapp' WHEN 2 THEN 'instagram' ELSE NULL END;v_entity_id:=NEW.sents_id::text;
+ ELSIF TG_TABLE_NAME='conversation_messages' THEN v_lead:=NEW.leads_id;v_org:=NEW.organizations_id;v_event:=CASE WHEN NEW.direction='inbound' THEN 'conversation:inbound' ELSE 'conversation:outbound' END;v_channel:='whatsapp';v_entity_id:=NEW.conversation_messages_id::text;
  END IF;
- IF v_lead IS NOT NULL AND v_org IS NOT NULL THEN INSERT INTO public.lead_lifecycle_events(organizations_id,leads_id,event_type,channel,entity_type,entity_id,payload) VALUES(v_org,v_lead,v_event,v_channel,TG_TABLE_NAME,CASE TG_TABLE_NAME WHEN 'leads' THEN NEW.leads_id::text WHEN 'queue_items' THEN NEW.queue_items_id::text WHEN 'sents' THEN NEW.sents_id::text WHEN 'conversation_messages' THEN NEW.conversation_messages_id::text ELSE NULL END,to_jsonb(NEW));END IF;
+ IF v_lead IS NOT NULL AND v_org IS NOT NULL THEN INSERT INTO public.lead_lifecycle_events(organizations_id,leads_id,event_type,channel,entity_type,entity_id,payload) VALUES(v_org,v_lead,v_event,v_channel,TG_TABLE_NAME,v_entity_id,to_jsonb(NEW));END IF;
  RETURN NEW;
 END; $$;
 DROP TRIGGER IF EXISTS lead_lifecycle_leads ON public.leads;CREATE TRIGGER lead_lifecycle_leads AFTER INSERT OR UPDATE OF lead_status_id,channels_id ON public.leads FOR EACH ROW EXECUTE FUNCTION public.record_lead_lifecycle_event();

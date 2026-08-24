@@ -147,7 +147,7 @@ BEGIN
     RETURN jsonb_build_object('decision','suppressed','suppressed',true,'duplicate',false,'suppressionId',v_suppression,'identityType',v_type,'identityValue',v_value);
   END IF;
 
-  SELECT coalesce(r.canonical_lead_id,r.leads_id),r.identity_type,r.identity_value
+  SELECT r.canonical_lead_id,r.identity_type,r.identity_value
     INTO v_lead,v_type,v_value
   FROM public.lead_identity_registry r
   WHERE r.organizations_id=p_organizations_id
