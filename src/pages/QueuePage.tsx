@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bug, Calendar, CheckSquare, ChevronDown, ChevronUp, Eye, Flag, List, ListPlus, Pause, Play, RefreshCcw, Send, Square, Users, X } from 'lucide-react';
+import { Bug, Calendar, CheckSquare, ChevronDown, ChevronUp, Eye, Flag, List, Pause, Play, RefreshCcw, Send, Square, Users, X } from 'lucide-react';
 import { Button, ConfirmDialog, Drawer, Field, MetricCard, Pagination, RowsPerPageControl, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
-import { ApprovedLeadsQueueDrawer } from '../components/ApprovedLeadsQueueDrawer';
+import { QueueReviewPanel } from '../components/QueueReviewPanel';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useInstagramQueue } from '../hooks/useInstagramQueue';
 import { useWhatsAppQueue } from '../hooks/useWhatsAppQueue';
@@ -97,7 +97,6 @@ function WhatsAppQueuePage() {
   const [confirmLead, setConfirmLead] = useState<WhatsAppQueueLead | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [saving, setSaving] = useState(false);
-  const [approvedDrawerOpen, setApprovedDrawerOpen] = useState(false);
 
   const { chips, batches, summary, batchState, loading, refreshing, error, refresh, updateLead, startBatch, pauseBatch, resumeBatch, stopBatch, reprocess, invalidate } = useWhatsAppQueue(activeChip, scheduledDate);
   const {
@@ -297,7 +296,6 @@ function WhatsAppQueuePage() {
       <div className="queue-topline queue-topline--actions">
         <div className="queue-controls">
           <SelectField className="queue-inline-filter" options={chipFilterOptions} value={activeChip} onChange={setActiveChip} placeholder="Todos os chips" />
-          {canPrepare ? <Button variant="secondary" iconLeft={ListPlus} disabled={loading || running} onClick={() => setApprovedDrawerOpen(true)}>Puxar aprovados</Button> : null}
           {canControl ? <>
             <Button variant="danger" iconLeft={Square} disabled={!running && batchState.status !== 'paused'} onClick={handleStop}>Parar</Button>
             {running ? (
@@ -310,6 +308,16 @@ function WhatsAppQueuePage() {
           </> : null}
         </div>
       </div>
+
+      <QueueReviewPanel
+        channel="WhatsApp"
+        scheduledDate={scheduledDate}
+        preferredResourceId={activeChip}
+        canPrepare={canPrepare && !running}
+        canInvalidate={canInvalidate}
+        onQueueChanged={refresh}
+        onToast={(title, description, tone) => pushToast({ title, description, tone })}
+      />
 
       <section className="queue-list-card">
         <div className="queue-list-card__header">
@@ -351,15 +359,6 @@ function WhatsAppQueuePage() {
         ) : null}
       </section>
 
-      <ApprovedLeadsQueueDrawer
-        open={canPrepare && approvedDrawerOpen}
-        channel="WhatsApp"
-        scheduledDate={scheduledDate}
-        preferredResourceId={activeChip}
-        onClose={() => setApprovedDrawerOpen(false)}
-        onPrepared={refresh}
-        onToast={(title, description, tone) => pushToast({ title, description, tone })}
-      />
       <QueueLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} canEdit={canEditLead} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
         open={canInvalidate && Boolean(confirmLead)}
@@ -553,7 +552,6 @@ function InstagramQueuePage() {
   const [saving, setSaving] = useState(false);
   const [pairing, setPairing] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
-  const [approvedDrawerOpen, setApprovedDrawerOpen] = useState(false);
 
   const { profiles, batches, summary, loading, refreshing, error, refresh, updateLead, invalidate, reprocess } = useInstagramQueue(activeProfile, scheduledDate);
   const {
@@ -677,11 +675,19 @@ function InstagramQueuePage() {
       <div className="queue-topline queue-topline--actions">
         <div className="queue-controls">
           <SelectField className="queue-inline-filter" options={profileFilterOptions} value={activeProfile} onChange={setActiveProfile} placeholder="Todos os perfis" />
-          {canPrepare ? <Button variant="secondary" iconLeft={ListPlus} disabled={loading} onClick={() => setApprovedDrawerOpen(true)}>Puxar aprovados</Button> : null}
           {canControl ? <Button variant="secondary" iconLeft={RefreshCcw} loading={reprocessing} disabled={loading || reprocessing} onClick={handleReprocessErrors}>Reprocessar erros</Button> : null}
           {canUseInstagram ? <Button iconLeft={Send} loading={pairing} disabled={loading || pairing} onClick={handlePairExtension}>Vincular extensão</Button> : null}
         </div>
       </div>
+      <QueueReviewPanel
+        channel="Instagram"
+        scheduledDate={scheduledDate}
+        preferredResourceId={activeProfile}
+        canPrepare={canPrepare}
+        canInvalidate={canInvalidate}
+        onQueueChanged={refresh}
+        onToast={(title, description, tone) => pushToast({ title, description, tone })}
+      />
       <section className="queue-list-card">
         <div className="queue-list-card__header">
           <h2>Listagem de disparos - {scopeLabel}</h2>
@@ -714,15 +720,6 @@ function InstagramQueuePage() {
         ) : null}
       </section>
 
-      <ApprovedLeadsQueueDrawer
-        open={canPrepare && approvedDrawerOpen}
-        channel="Instagram"
-        scheduledDate={scheduledDate}
-        preferredResourceId={activeProfile}
-        onClose={() => setApprovedDrawerOpen(false)}
-        onPrepared={refresh}
-        onToast={(title, description, tone) => pushToast({ title, description, tone })}
-      />
       <InstagramLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} canEdit={canEditLead} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
         open={canInvalidate && Boolean(confirmLead)}

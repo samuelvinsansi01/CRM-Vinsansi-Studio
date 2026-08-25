@@ -22,6 +22,8 @@ export type LeadCycleLead = {
   status: LeadStatusName;
   createdAt: string;
   updatedAt: string;
+  rating: number;
+  reviews: number;
 };
 
 export type LeadCycleDetailsInput = {

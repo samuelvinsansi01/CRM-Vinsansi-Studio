@@ -63,7 +63,7 @@ function activeQueueStatus(status: unknown) {
 }
 
 function rowBranch(row: LeadDatabaseRow) {
-  return one(row.branches)?.branches_name ?? row.leads_categories?.[0] ?? '';
+  return one(row.branches)?.branches_name ?? '';
 }
 
 function rowCity(row: LeadDatabaseRow) {
@@ -194,8 +194,9 @@ function preparationReason(
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
   hasWhatsAppProof = true,
+  expectedStatus: number = LEAD_STATUS.VALIDATED,
 ) {
-  if (row.lead_status_id !== LEAD_STATUS.VALIDATED) return 'O lead não está mais no status Validado.';
+  if (row.lead_status_id !== expectedStatus) return expectedStatus === LEAD_STATUS.PRE_SEND ? 'O lead não está mais na revisão aberta.' : 'O lead não está mais no status Validado.';
   if (Number(row.channels_id) !== expectedChannelId) return 'O canal do lead foi alterado.';
   if (channel === 'WhatsApp' && !hasWhatsAppProof) return 'Prova de validação WhatsApp ausente para o telefone atual.';
   if (channel === 'WhatsApp' && normalizePhone(getEffectiveWhatsAppPhone(row)).length < 10) return 'Telefone inválido para WhatsApp.';
@@ -431,8 +432,46 @@ async function enqueueValidated(
   return result;
 }
 
+
+
+async function buildReviewLockItems(channel: QueuePreparationChannel, ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (!uniqueIds.length) return { items: [] as Array<{ leadId: string; templateId: string }>, failures: [] as QueuePreparationFailure[] };
+  const config = await loadConfiguration();
+  const expectedChannelId = Number(await channelId(channel));
+  const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
+  const byId = new Map(rows.map((row) => [String(row.leads_id), row]));
+  const proofs = channel === 'WhatsApp' ? await loadCurrentWhatsAppValidationProofs(uniqueIds) : new Set(uniqueIds);
+  const items: Array<{ leadId: string; templateId: string }> = [];
+  const failures: QueuePreparationFailure[] = [];
+
+  for (const id of uniqueIds) {
+    const row = byId.get(id);
+    if (!row) {
+      failures.push({ id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
+      continue;
+    }
+    const reason = preparationReason(
+      row,
+      channel,
+      expectedChannelId,
+      config.branches,
+      config.templates,
+      proofs.has(id),
+      LEAD_STATUS.PRE_SEND,
+    );
+    if (reason) {
+      failures.push({ id, company: row.leads_name, reason });
+      continue;
+    }
+    items.push({ leadId: id, templateId: templateIdForLead(row, channel, config.templates) });
+  }
+  return { items, failures };
+}
+
 export const queuePreparationService = {
   snapshot,
   enqueueValidated,
+  buildReviewLockItems,
   effectiveScheduleDate,
 };

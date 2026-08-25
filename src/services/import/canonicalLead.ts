@@ -12,7 +12,7 @@ export type CanonicalLeadLookup = {
   countryId: number;
   stateId: number | null;
   cityId: number | null;
-  channelId: number;
+  channelId: number | null;
   contactSourceId: number;
 };
 
@@ -26,12 +26,13 @@ export type ExistingLeadInsert = {
   countries_id: number;
   states_id: number | null;
   cities_id: number | null;
-  channels_id: number;
+  channels_id: number | null;
   lead_status_id: LeadStatusId;
   contact_sources_id: number;
   apify_import_jobs_id: number | null;
   leads_name: string;
   leads_phone: string | null;
+  leads_whatsapp: string | null;
   leads_instagram: string | null;
   leads_website: string | null;
   leads_maps: string | null;
@@ -116,21 +117,30 @@ function commonPayload(
   const instagram = String(lead.instagram_url ?? lead.instagram ?? '').trim();
   const maps = String(lead.normalizedMapsUrl ?? '').trim();
 
+  const statusId = canonicalStatusId(lead.status);
+  if (statusId !== LEAD_STATUS.IMPORTED && (!lookup.channelId || lookup.channelId <= 0)) {
+    throw new Error(`O lead “${lead.empresa.trim()}” precisa de um canal antes de sair de Importado.`);
+  }
+
   return {
     branches_id: lookup.branchId,
     countries_id: lookup.countryId,
     states_id: lookup.stateId,
     cities_id: lookup.cityId,
-    channels_id: lookup.channelId,
-    lead_status_id: canonicalStatusId(lead.status),
+    channels_id: statusId === LEAD_STATUS.IMPORTED ? null : lookup.channelId,
+    lead_status_id: statusId,
     contact_sources_id: lookup.contactSourceId,
     apify_import_jobs_id: options.apifyImportJobId ?? null,
     leads_name: lead.empresa.trim(),
     leads_phone: String(lead.whatsapp ?? '').trim() || null,
+    leads_whatsapp: String(lead.whatsapp ?? '').trim() || null,
     leads_instagram: instagram || null,
     leads_website: website || null,
     leads_maps: maps || null,
-    leads_categories: compactCategories([lead.ramo, lead.subcategoria]),
+    // Ramo principal e sempre resolvido por branches_id. Aqui ficam apenas os termos
+    // de origem/match (sub-ramo/categoria) para auditoria; renomear o ramo pai nao
+    // torna o lead dependente de um texto antigo.
+    leads_categories: compactCategories([lead.subcategoria]),
     leads_score: normalizeGoogleRating(lead.rating),
     leads_reviews_count: Math.max(0, Math.trunc(Number(lead.reviews ?? 0) || 0)),
     leads_priority_score: calculateLeadPriorityScore(lead),

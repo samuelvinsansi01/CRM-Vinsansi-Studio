@@ -106,16 +106,6 @@ function effectiveCandidate(raw: Row) {
   };
 }
 
-async function channelIds(client: ReturnType<typeof import('../../maps/shared.js').serviceClient>) {
-  const result = await client.from('channels').select('channels_id,channels_name');
-  if (result.error) throw new Error(`channels_query_failed:${result.error.message}`);
-  const find = (name: string) => Number((result.data ?? []).find((row) => normalize(row.channels_name) === name)?.channels_id);
-  const whatsapp = find('whatsapp');
-  const instagram = find('instagram');
-  if (!Number.isSafeInteger(whatsapp) || !Number.isSafeInteger(instagram)) throw new Error('channels_catalog_invalid');
-  return { whatsapp, instagram };
-}
-
 function metadataObject(value: unknown): Row {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};
 }
@@ -878,7 +868,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         .in('maps_search_candidates_id', selectedIds);
       const candidates = await candidatesQuery;
       if (candidates.error) throw new Error(candidates.error.message);
-      const channels = await channelIds(client);
       const sources = await client.from('contact_sources').select('contact_sources_id,contact_sources_key').eq('users_id', usersId).eq('status_id', 1);
       const country = await client.from('countries').select('countries_id').eq('countries_code', 'BR').maybeSingle();
       if (sources.error || country.error || !country.data) throw new Error('maps_lead_catalogs_invalid');
@@ -923,7 +912,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         // telefone/WhatsApp. A origem comercial permanece compatível com a regra
         // anterior: se havia telefone, conserva sem_site/dominio_proprio/agregador;
         // Instagram só vira origem quando ele é o único contato suportado.
-        const destination = instagram ? 'instagram' : 'whatsapp';
         const sourceKey = phoneWhatsapp ? text(candidate.website_classification || 'sem_site') : 'instagram';
         const sourceId = sourceByKey.get(sourceKey);
         if (!sourceId) throw new Error(`maps_contact_source_not_found:${sourceKey}`);
@@ -936,7 +924,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           countries_id: country.data.countries_id,
           states_id: candidate.states_id,
           cities_id: candidate.cities_id,
-          channels_id: destination === 'whatsapp' ? channels.whatsapp : channels.instagram,
+          channels_id: null,
           lead_status_id: 1,
           contact_sources_id: sourceId,
           leads_name: candidate.candidate_name,
@@ -948,7 +936,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           leads_score: rating,
           leads_reviews_count: reviews,
           leads_priority_score: leadPriorityScore(candidate as Row, rating, reviews),
-          leads_categories: strings([execution.branch_name, candidate.maps_category, candidate.search_terms_found]),
+          // O ramo principal e a FK branches_id. Categoria/sub-ramo ficam apenas como
+          // contexto de origem, sem duplicar o nome mutavel do ramo pai.
+          leads_categories: strings([candidate.maps_category, candidate.search_terms_found]),
           leads_origin: 'google_maps',
           maps_search_candidates_id: candidateId,
         }).select('leads_id').single();

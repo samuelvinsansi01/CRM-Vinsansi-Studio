@@ -5,6 +5,7 @@ import { normalizeBrazilState } from '../../services/geo/brazilState';
 import {
   buildExistingLeadInsert,
   buildExistingLeadUpdate,
+  canonicalStatusId,
   leadIdentityValues,
   mergePersistedLead,
   type CanonicalLeadLookup,
@@ -45,6 +46,7 @@ const NORMALIZED_LEADS_SELECT = `
   apify_import_jobs_id,
   leads_name,
   leads_phone,
+  leads_whatsapp,
   leads_instagram,
   leads_website,
   leads_maps,
@@ -113,12 +115,16 @@ function rowToImportLead(row: LeadDatabaseRow): ImportLead {
         ? 'Com site'
         : 'WhatsApp';
 
+  const categories = (row.leads_categories ?? []).map(String).map((value) => value.trim()).filter(Boolean);
+  const normalizedParent = normalizeComparable(mapped.branch);
+  const matchedCategory = categories.find((value) => normalizeComparable(value) !== normalizedParent) ?? categories[0] ?? '';
+
   return {
     id: mapped.id,
     empresa: mapped.company,
     ramo: mapped.branch,
     branch_id: mapped.branch_id,
-    subcategoria: row.leads_categories?.[1] ?? row.leads_categories?.[0] ?? mapped.branch,
+    subcategoria: matchedCategory,
     destino: destination,
     original_destination: originalDestination,
     destination,
@@ -274,6 +280,7 @@ async function resolveLookups(leads: ImportLead[]): Promise<Map<string, Canonica
   const result = new Map<string, CanonicalLeadLookup>();
 
   const channelFor = (lead: ImportLead) => {
+    if (canonicalStatusId(lead.status) === LEAD_STATUS.IMPORTED) return null;
     const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
     const target = destination === 'Instagram' ? 'instagram' : 'whatsapp';
     const row = channels.find((channel) => normalizeComparable(channel.channels_name).includes(target));
@@ -580,9 +587,6 @@ export const supabaseImportRepository: ImportRepository = {
     const currentRow = await getLeadRow(id);
     const current = rowToImportLead(currentRow);
     const updated = { id, ...normalizeLeadInput({ ...current, ...input }) } as ImportLead;
-    const whatsappDestination = !updated.send_instagram && (updated.destination ?? updated.destino) !== 'Instagram';
-    if (whatsappDestination && isStatusGroup(updated.status, 'approved')) updated.status = 'review';
-
     const otherLeads = (await allLeads(ALL_LEAD_STATUS_IDS))
       .filter((lead) => lead.id !== id && isOperationalStoredLead(lead));
     if (duplicateId(buildIdentityIndex(otherLeads), updated)) {

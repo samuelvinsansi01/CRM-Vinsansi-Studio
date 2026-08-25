@@ -661,9 +661,9 @@ function approveDraft(
   reason: string,
   sourceDestination: ImportLeadDestination = destination,
 ) {
-  // WhatsApp aguarda a confirmação persistida da Evolution; os demais destinos
-  // preservam a revisão operacional existente.
-  draft.status = destination === 'WhatsApp' ? 'review' : 'pending';
+  // R23: todo lead aceito entra apenas como Importado. O canal operacional só é
+  // escolhido quando o operador usa Puxar WhatsApp/Instagram.
+  draft.status = 'pending';
   draft.destino = destination;
   draft.original_destination = draft.original_destination && draft.original_destination !== 'Recusado'
     ? draft.original_destination

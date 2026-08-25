@@ -28,7 +28,6 @@ import { useImportSettings } from '../hooks/useImportSettings';
 import { isValidInstagram, normalizeInstagramUsername } from '../services/instagram/instagram.utils';
 import { permissionsFor } from '../services/permissions';
 import { isStatusGroup } from '../services/status/status.mapper';
-import { whatsappValidationService } from '../services/whatsapp-validation/whatsappValidation.service';
 import type { ImportLead, ImportLeadDestination, ImportLeadInput, ImportLeadStatus, ImportParseResult } from '../services/import/types';
 
 type ImportPageProps = {
@@ -54,8 +53,6 @@ type ManualLeadForm = {
   whatsapp: string;
   instagram: string;
 };
-
-const destinationOptions: ImportLeadDestination[] = ['WhatsApp', 'Com site', 'Agregadores', 'Instagram'];
 
 const emptyLeadForm: LeadForm = {
   empresa: '',
@@ -116,21 +113,6 @@ function destinationLabel(value?: string | null) {
   if (normalized.includes('banco')) return 'Já no banco';
   if (normalized.includes('recus')) return 'Recusado';
   return 'WhatsApp';
-}
-
-function destinationTone(value?: string | null): 'neutral' | 'success' | 'warning' | 'danger' | 'primary' {
-  const label = destinationLabel(value);
-  if (label === 'WhatsApp') return 'success';
-  if (label === 'Instagram') return 'primary';
-  if (label === 'Com site') return 'neutral';
-  if (label === 'Agregadores') return 'warning';
-  if (label === 'Recusado') return 'danger';
-  return 'warning';
-}
-
-function DestinationTextBadge({ value }: { value?: string | null }) {
-  const label = destinationLabel(value);
-  return <Tag tone={destinationTone(value)}>{label}</Tag>;
 }
 
 function SubcategoryTooltip({ value }: { value?: string | null }) {
@@ -389,7 +371,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         destination_override: undefined,
         send_instagram: false,
         instagram_url: instagram,
-        status: destination === 'Instagram' ? 'pending' : 'review',
+        status: 'pending',
         whatsapp,
         instagram,
         site: '',
@@ -405,33 +387,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       setPage(1);
       setSelectedRows([]);
 
-      if (destination === 'WhatsApp' && whatsapp && createResult.lead) {
-        try {
-          const validation = await whatsappValidationService.validateInitial([createResult.lead.id]);
-          if (validation.approved > 0) {
-            pushToast({ title: 'Lead adicionado', description: 'WhatsApp confirmado pela Evolution e resultado persistido.', tone: 'success' });
-          } else if (validation.redirectedToInstagram > 0) {
-            pushToast({ title: 'Lead adicionado', description: 'WhatsApp não encontrado; o lead voltou para Importado no destino Instagram e exige revisão/aprovação manual.', tone: 'warning' });
-          } else if (validation.invalidated > 0) {
-            pushToast({ title: 'Lead adicionado', description: 'A Evolution não confirmou o WhatsApp e o resultado inválido foi persistido.', tone: 'warning' });
-          } else {
-            pushToast({
-              title: 'Lead adicionado; validação pendente',
-              description: validation.failures[0]?.reason ?? 'A Evolution não confirmou um resultado persistido para este lead.',
-              tone: 'warning',
-            });
-          }
-        } catch (validationError) {
-          pushToast({
-            title: 'Lead adicionado; validação pendente',
-            description: validationError instanceof Error ? validationError.message : 'Não foi possível consultar a Evolution.',
-            tone: 'warning',
-          });
-        }
-        return;
-      }
-
-      pushToast({ title: 'Lead adicionado', description: 'Instagram validado por formato e lead salvo para revisão.', tone: 'success' });
+      pushToast({ title: 'Lead adicionado', description: 'Lead salvo como Importado. O destino será definido somente ao puxar uma fila.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Não foi possível adicionar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
@@ -455,16 +411,16 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         return;
       }
       if (!persistence.created.length) {
-        pushToast({ title: 'Nenhum lead elegível', description: 'Nao ha aprovados ou leads em aguarde novos para mandar ao Inicio.', tone: 'warning' });
+        pushToast({ title: 'Nenhum lead elegível', description: 'Não há novos leads elegíveis para importar.', tone: 'warning' });
         return;
       }
       pushToast({
-        title: 'Leads enviados ao Início',
-        description: `${persistence.created.length} lead(s) aprovado(s) ou em aguarde enviado(s) ao Início.`,
+        title: 'Leads importados',
+        description: `${persistence.created.length} lead(s) salvo(s) como Importado(s) e disponível(is) no Início.`,
         tone: 'success',
       });
     } catch (err) {
-      pushToast({ title: 'Erro ao aprovar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      pushToast({ title: 'Erro ao importar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     } finally {
       setIsImporting(false);
     }
@@ -544,15 +500,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       width: '23%',
       render: (lead) => <SubcategoryTooltip value={lead.subcategoria} />,
     },
-    {
-      key: 'destino',
-      label: 'Destino',
-      width: '16%',
-      render: (lead) => {
-        const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
-        return <DestinationTextBadge value={destination} />;
-      },
-    },
   ];
 
   return (
@@ -610,7 +557,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         <summary>Importar backup JSON (diagnóstico)</summary>
         <section className="import-grid import-grid--manual">
           <Panel title="JSON de backup/diagnóstico" className="import-json">
-            <p>Cole o JSON exportado pela extensão Google Maps. A extensão fornece candidatos; as regras canônicas, a barreira de simulação e a validação posterior de WhatsApp continuam sob responsabilidade da plataforma.</p>
+            <p>Cole o JSON exportado pela extensão Google Maps. A extensão fornece candidatos; as regras canônicas e a barreira de simulação continuam sob responsabilidade da plataforma. O canal só será escolhido quando a fila for puxada.</p>
             <Field
               as="textarea"
               className="json-dropzone"
@@ -620,7 +567,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
             />
             <div className="import-json__actions">
               <Button variant="secondary" onClick={() => { setJsonText(''); setLastImport(null); clearSession(); setPage(1); }}>Limpar importação</Button>
-              <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>{simulateImport ? 'Executar simulação' : 'Aprovar leads'}</Button>
+              <Button iconLeft={Database} loading={isImporting} disabled={!jsonText.trim() || isPreviewing} onClick={approveLeads}>{simulateImport ? 'Executar simulação' : 'Importar leads'}</Button>
             </div>
           </Panel>
         </section>
@@ -676,7 +623,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         open={drawerOpen}
         title={drawerMode === 'edit' ? 'Editar lead' : 'Detalhes do lead'}
         description={editingLead && /^\d+$/.test(editingLead.id)
-          ? 'Edite somente campos físicos de public.leads; o ramo é gravado por branches_id e o destino resolve channels_id/contact_sources_id.'
+          ? 'Edite somente os dados do lead. Leads Importados permanecem sem destino até serem puxados para uma fila.'
           : 'Item ainda não persistido: as alterações afetam somente a prévia desta sessão.'}
         onClose={closeDrawer}
         footer={
@@ -712,10 +659,6 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
                 }}
               />
             )}
-          </label>
-          <label className="drawer-field">
-            <span>Destino</span>
-            {drawerMode === 'view' ? <Field value={leadForm.destino} readOnly /> : <SelectField value={leadForm.destino} options={destinationOptions} onChange={(value) => updateForm('destino', value)} />}
           </label>
           <Field label="WhatsApp" value={leadForm.whatsapp} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('whatsapp', value)} />
           <Field label="Instagram" value={leadForm.instagram} readOnly={drawerMode === 'view'} onChange={(value) => updateForm('instagram', value)} />

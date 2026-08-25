@@ -61,7 +61,7 @@ export function mapLead(row: LeadDatabaseRow): BaseLead {
   return {
     id: String(row.leads_id),
     company: row.leads_name,
-    branch: branch?.branches_name ?? row.leads_categories?.[0] ?? '',
+    branch: branch?.branches_name ?? '',
     branch_id: String(row.branches_id),
     state: normalizeBrazilState(state?.states_code ?? state?.states_name ?? ''),
     city: city?.cities_name ?? '',

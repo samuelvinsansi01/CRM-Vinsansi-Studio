@@ -3,7 +3,6 @@ export type PageId =
   | 'import-approved'
   | 'import-rejected'
   | 'maps-searches'
-  | 'validation-routing'
   | 'base'
   | 'whatsapp'
   | 'instagram'
@@ -57,7 +56,6 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { id: 'import-approved', label: 'Importação' },
       { id: 'maps-searches', label: 'Pesquisas Google Maps' },
-      { id: 'validation-routing', label: 'Validação e roteamento' },
       { id: 'base', label: 'Base Permanente' },
     ],
   },
@@ -142,7 +140,6 @@ export const pageTitles: Record<PageId, string> = {
   'import-approved': 'Importação',
   'import-rejected': 'Importação',
   'maps-searches': 'Pesquisas Google Maps',
-  'validation-routing': 'Validação e roteamento',
   base: 'Base Permanente',
   whatsapp: 'Fila WhatsApp',
   instagram: 'Fila Instagram',
@@ -175,7 +172,6 @@ export const pagePermissions: Partial<Record<PageId, string>> = {
   'import-approved': 'leads.view',
   'import-rejected': 'leads.view',
   'maps-searches': 'capture.use',
-  'validation-routing': 'leads.validate',
   base: 'leads.view',
   whatsapp: 'queues.view',
   instagram: 'queues.view',

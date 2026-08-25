@@ -34,7 +34,7 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
   return {
     id: String(row.leads_id),
     company: row.leads_name,
-    branch: branch?.branches_name ?? row.leads_categories?.[0] ?? '',
+    branch: branch?.branches_name ?? '',
     state: state?.states_code ?? state?.states_name ?? '',
     city: city?.cities_name ?? '',
     phone: getEffectiveWhatsAppPhone(row),
@@ -51,6 +51,8 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
     status: (status?.lead_status_name ?? '') as LeadStatusName,
     createdAt: row.leads_created_at,
     updatedAt: row.leads_updated_at ?? row.leads_created_at,
+    rating: Number(row.leads_score ?? 0),
+    reviews: Number(row.leads_reviews_count ?? 0),
   };
 }
 

@@ -13,7 +13,6 @@ import { HomePage } from './pages/HomePage';
 import { ImportPage } from './pages/ImportPage';
 import { LoginPage } from './pages/LoginPage';
 import { QueuePage } from './pages/QueuePage';
-import { ValidationRoutingPage } from './pages/ValidationRoutingPage';
 import { ToolsPage } from './pages/ToolsPage';
 import { MonitoringPage } from './pages/MonitoringPage';
 import { HomologationPage } from './pages/HomologationPage';
@@ -31,18 +30,18 @@ import { syncEvolutionInstances } from './services/evolution-instances/evolution
 const ACTIVE_PAGE_STORAGE_KEY = 'painel:active-page';
 const validPageIds = new Set<PageId>(Object.keys(pageTitles) as PageId[]);
 const legacyPageMap: Record<string, PageId> = {
-  valid: 'validation-routing',
-  'pre-send': 'validation-routing',
+  valid: 'home',
+  'pre-send': 'home',
   chips: 'sender-chips',
   'instagram-settings': 'sender-instagram',
   branches: 'message-branches',
   templates: 'message-templates',
   'import-settings': 'config-import-rules',
   'config-import-apify': 'config-import-rules',
-  'config-validation-rules': 'validation-routing',
-  'validation-rules': 'validation-routing',
-  'validation-settings': 'validation-routing',
-  'validation-rules-settings': 'validation-routing',
+  'config-validation-rules': 'home',
+  'validation-rules': 'home',
+  'validation-settings': 'home',
+  'validation-rules-settings': 'home',
 };
 
 function initialPage(): PageId {
@@ -138,7 +137,6 @@ export function App() {
         />
       ) : null}
       {activePage === 'maps-searches' ? <MapsSearchesPage /> : null}
-      {activePage === 'validation-routing' ? <ValidationRoutingPage /> : null}
       {activePage === 'base' ? <BasePage /> : null}
       {activePage === 'whatsapp' ? <QueuePage channel="whatsapp" /> : null}
       {activePage === 'instagram' ? <QueuePage channel="instagram" /> : null}
