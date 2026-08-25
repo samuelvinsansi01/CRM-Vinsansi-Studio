@@ -1,6 +1,16 @@
-# CRM - Vinsansi Studio v2.4.0-R24
+# CRM - Vinsansi Studio v2.4.0-R25
 
-Release incremental sobre a R23.
+Release incremental sobre a R24.
+
+## R25 — links, Site e validação por chip
+
+- A Home passa a exibir **Site** em Sim/Não e o card **Com site**.
+- Empresa abre o perfil do **Google Maps** quando a origem possui `leads_maps`.
+- Os `Sim` de Número, Instagram, WhatsApp e Site são acionáveis e abrem seus respectivos destinos.
+- A revisão antes do disparo foi reorganizada em colunas separadas de Estado/Cidade e inclui Site.
+- **Puxar WhatsApp exige um chip selecionado**; não existe mais fallback silencioso para o primeiro chip disponível.
+- Ao puxar, a revisão WhatsApp aberta também é revalidada com o chip escolhido.
+- Para eliminar falsos positivos de existência no WhatsApp, use em conjunto o **Gerenciador v1.3.4 / Gateway v1.2.8 / Worker v3.13.3**.
 
 ## Fluxo operacional mantido
 

@@ -32,6 +32,7 @@ export type QueueReviewItem = {
   whatsapp: string;
   instagram: string;
   website: string;
+  mapsUrl: string;
   rating: number;
   reviews: number;
 };

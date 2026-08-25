@@ -1,4 +1,4 @@
-import { Instagram, MessageCircle, RefreshCcw, Users } from 'lucide-react';
+import { Globe2, Instagram, MessageCircle, RefreshCcw, Users } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -27,6 +27,8 @@ import type { BranchConfigRecord } from '../services/config/types';
 import type { LeadCycleLead } from '../services/lead-cycle/types';
 import { queueReviewService } from '../services/queue-review';
 import { toLocalDateInputValue } from '../utils/date';
+import { externalHttpHref, instagramHref, mapsHref, phoneHref } from '../utils/externalLinks';
+import type { QueuePreparationResource } from '../services/queue-preparation';
 
 type Row = Record<string, ReactNode> & { id: string };
 
@@ -58,13 +60,23 @@ const columns: TableColumn<Row>[] = [
   { key: 'rating', label: 'Nota', width: '6%' },
   { key: 'reviews', label: 'Avaliações', width: '8%' },
   { key: 'number', label: 'Número', width: '8%' },
-  { key: 'instagram', label: 'Instagram', width: '8%' },
-  { key: 'status', label: 'Status', width: '9%' },
+  { key: 'instagram', label: 'Instagram', width: '7%' },
+  { key: 'site', label: 'Site', width: '7%' },
+  { key: 'status', label: 'Status', width: '8%' },
 ];
 
-function availabilityTag(available: boolean) {
-  return <Tag tone={available ? 'success' : 'neutral'}>{available ? 'Sim' : 'Não'}</Tag>;
+function availabilityTag(available: boolean, href?: string, title?: string) {
+  const tag = <Tag tone={available ? 'success' : 'neutral'}>{available ? 'Sim' : 'Não'}</Tag>;
+  if (!available || !href) return tag;
+  return <a className="availability-link" href={href} target="_blank" rel="noreferrer" title={title}>{tag}</a>;
 }
+
+function companyCell(lead: LeadCycleLead) {
+  const href = mapsHref(lead.mapsUrl);
+  if (!href) return <strong>{lead.company}</strong>;
+  return <a className="company-map-link" href={href} target="_blank" rel="noreferrer" title="Abrir perfil da empresa no Google Maps"><strong>{lead.company}</strong></a>;
+}
+
 
 function toEditForm(lead: LeadCycleLead): LeadEditForm {
   return {
@@ -90,6 +102,8 @@ export function HomePage() {
   const [pulling, setPulling] = useState<'WhatsApp' | 'Instagram' | ''>('');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [branches, setBranches] = useState<BranchConfigRecord[]>([]);
+  const [whatsappResources, setWhatsappResources] = useState<QueuePreparationResource[]>([]);
+  const [whatsappResourceId, setWhatsappResourceId] = useState('');
   const [editingLead, setEditingLead] = useState<LeadCycleLead | null>(null);
   const [editForm, setEditForm] = useState<LeadEditForm>(emptyEditForm);
   const [invalidatingLead, setInvalidatingLead] = useState<LeadCycleLead | null>(null);
@@ -101,13 +115,18 @@ export function HomePage() {
   };
 
   useEffect(() => {
-    void configService.list('branches').then((records) => {
+    void Promise.all([
+      configService.list('branches'),
+      canPrepare ? queueReviewService.resources('WhatsApp', toLocalDateInputValue()) : Promise.resolve([]),
+    ]).then(([records, resources]) => {
       setBranches(records.filter((record): record is BranchConfigRecord => record.kind === 'branches' && record.active));
+      setWhatsappResources(resources);
+      setWhatsappResourceId((current) => current && resources.some((resource) => resource.id === current) ? current : '');
     }).catch((error) => {
-      toast('Não foi possível carregar os ramos', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
+      toast('Não foi possível carregar os dados operacionais', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canPrepare]);
 
   const branchOptions = useMemo(() => {
     const unique = new Map<string, BranchConfigRecord>();
@@ -135,18 +154,24 @@ export function HomePage() {
     );
   }, [branch, search, sorted, state]);
 
-  const rows = useMemo<Row[]>(() => visible.map((lead) => ({
-    id: lead.id,
-    company: <strong>{lead.company}</strong>,
-    branch: lead.branch || '—',
-    state: lead.state || '—',
-    city: lead.city || '—',
-    rating: lead.rating.toFixed(1),
-    reviews: lead.reviews.toLocaleString('pt-BR'),
-    number: availabilityTag(Boolean((lead.whatsapp || lead.rawPhone).replace(/\D/g, ''))),
-    instagram: availabilityTag(Boolean(lead.instagram.trim())),
-    status: <Tag tone="neutral">Importado</Tag>,
-  })), [visible]);
+  const rows = useMemo<Row[]>(() => visible.map((lead) => {
+    const phone = lead.rawPhone || lead.phone;
+    const instagram = instagramHref(lead.instagram);
+    const website = externalHttpHref(lead.website);
+    return {
+      id: lead.id,
+      company: companyCell(lead),
+      branch: lead.branch || '—',
+      state: lead.state || '—',
+      city: lead.city || '—',
+      rating: lead.rating.toFixed(1),
+      reviews: lead.reviews.toLocaleString('pt-BR'),
+      number: availabilityTag(Boolean(String(phone).replace(/\D/g, '')), phoneHref(phone), 'Abrir contato'),
+      instagram: availabilityTag(Boolean(lead.instagram.trim()), instagram, 'Abrir Instagram'),
+      site: availabilityTag(Boolean(lead.website.trim()), website, 'Abrir site'),
+      status: <Tag tone="neutral">Importado</Tag>,
+    };
+  }), [visible]);
 
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
 
@@ -154,8 +179,16 @@ export function HomePage() {
     if (!canPrepare) return;
     setPulling(channel);
     try {
-      const result = await queueReviewService.pullToCapacity(channel, toLocalDateInputValue());
+      if (channel === 'WhatsApp' && !whatsappResourceId) {
+        toast('Selecione um chip', 'Escolha o chip que será usado para validar e preparar essa fila.', 'warning');
+        return;
+      }
+      const result = await queueReviewService.pullToCapacity(channel, toLocalDateInputValue(), channel === 'WhatsApp' ? whatsappResourceId : '');
       await imported.refresh();
+      if (channel === 'WhatsApp') {
+        const resources = await queueReviewService.resources('WhatsApp', toLocalDateInputValue());
+        setWhatsappResources(resources);
+      }
       resetPage();
       const details = `${result.batch.openCount}/${result.batch.targetCount} lead(s) prontos para revisão em ${result.resource.label}.`;
       toast(`Fila ${channel} preparada`, details + (result.exhausted ? ' A base elegível acabou antes do limite.' : ''), result.errors ? 'warning' : 'success');
@@ -209,6 +242,13 @@ export function HomePage() {
 
   const whatsappCount = sorted.filter((lead) => (lead.whatsapp || lead.rawPhone).replace(/\D/g, '').length >= 10).length;
   const instagramCount = sorted.filter((lead) => Boolean(lead.instagram.trim())).length;
+  const siteCount = sorted.filter((lead) => Boolean(lead.website.trim())).length;
+  const whatsappResourceOptions = whatsappResources.length
+    ? whatsappResources.map((resource) => ({
+      label: `${resource.label} · ${resource.available} disponível(is)`,
+      value: resource.id,
+    }))
+    : [{ label: 'Nenhum chip operacional', value: '' }];
 
   return (
     <div className="dashboard-table-page lead-list-page home-leads-page">
@@ -218,16 +258,18 @@ export function HomePage() {
         action={(
           <div className="home-leads-actions">
             <Button variant="secondary" iconLeft={RefreshCcw} disabled={imported.loading || Boolean(pulling)} onClick={() => void imported.refresh()}>Atualizar</Button>
-            {canPrepare ? <Button iconLeft={MessageCircle} loading={pulling === 'WhatsApp'} disabled={Boolean(pulling)} onClick={() => void pull('WhatsApp')}>Puxar WhatsApp</Button> : null}
+            {canPrepare ? <SelectField className="home-chip-select" options={whatsappResourceOptions} value={whatsappResourceId} placeholder="Selecione o chip" onChange={setWhatsappResourceId} /> : null}
+            {canPrepare ? <Button iconLeft={MessageCircle} loading={pulling === 'WhatsApp'} disabled={Boolean(pulling) || !whatsappResourceId} onClick={() => void pull('WhatsApp')}>Puxar WhatsApp</Button> : null}
             {canPrepare ? <Button iconLeft={Instagram} loading={pulling === 'Instagram'} disabled={Boolean(pulling)} onClick={() => void pull('Instagram')}>Puxar Instagram</Button> : null}
           </div>
         )}
       />
 
-      <section className="metric-grid metric-grid--3">
+      <section className="metric-grid metric-grid--4">
         <MetricCard icon={Users} value={String(sorted.length)} label="Importados" tone="neutral" />
         <MetricCard icon={MessageCircle} value={String(whatsappCount)} label="Com número" tone="success" />
         <MetricCard icon={Instagram} value={String(instagramCount)} label="Com Instagram" tone="primary" />
+        <MetricCard icon={Globe2} value={String(siteCount)} label="Com site" tone="warning" />
       </section>
 
       <FiltersBar>

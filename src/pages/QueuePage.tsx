@@ -15,6 +15,7 @@ import type { WhatsAppQueueBatch, WhatsAppQueueLead, WhatsAppQueueStatus } from 
 import { toLocalDateInputValue } from '../utils/date';
 import { hasWebsiteForTemplate } from '../services/templates/templateSelector';
 import { instagramExtensionGateway } from '../services/instagram-extension';
+import { mapsHref } from '../utils/externalLinks';
 
 type QueuePageProps = {
   channel: 'whatsapp' | 'instagram';
@@ -419,7 +420,9 @@ function WhatsAppBatch({
             <div className={`batch-row ${openRow === lead.id ? 'batch-row--open' : ''}`} key={lead.id}>
               <div className="batch-row__summary">
                 <span className="batch-row__company">
-                  {lead.company}
+                  {mapsHref(lead.mapsUrl) ? (
+                    <a href={mapsHref(lead.mapsUrl)} target="_blank" rel="noreferrer" title="Abrir perfil da empresa no Google Maps">{lead.company}</a>
+                  ) : lead.company}
                 </span>
                 <span>{lead.phone}</span>
                 <span className="batch-row__tags">
@@ -782,11 +785,9 @@ function InstagramBatch({
             <div className={`batch-row ${openRow === lead.id ? 'batch-row--open' : ''}`} key={lead.id}>
               <div className="batch-row__summary batch-row__summary--instagram">
                 <span className="batch-row__company">
-                  {instagramHref(lead) ? (
-                    <a href={instagramHref(lead)} target="_blank" rel="noreferrer">{lead.company}</a>
-                  ) : (
-                    lead.company
-                  )}
+                  {mapsHref(lead.mapsUrl) ? (
+                    <a href={mapsHref(lead.mapsUrl)} target="_blank" rel="noreferrer" title="Abrir perfil da empresa no Google Maps">{lead.company}</a>
+                  ) : lead.company}
                 </span>
                 <span className="batch-row__tags">
                   <Tag>{lead.branch}</Tag>

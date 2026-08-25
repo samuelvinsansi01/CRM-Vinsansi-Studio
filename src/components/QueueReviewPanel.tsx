@@ -2,10 +2,26 @@ import { LockKeyhole, RefreshCcw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Tag, type ToastItem } from '../design-system/components';
 import { queueReviewService, type QueueReviewBatch, type QueueReviewChannel, type QueueReviewItem } from '../services/queue-review';
+import { externalHttpHref, instagramHref, mapsHref, whatsappHref } from '../utils/externalLinks';
 
-function contactFor(item: QueueReviewItem, channel: QueueReviewChannel) {
-  if (channel === 'Instagram') return item.instagram ? `@${item.instagram.replace(/^@/, '')}` : '-';
-  return item.whatsapp || item.phone || '-';
+function availabilityTag(available: boolean, href?: string, title?: string) {
+  const tag = <Tag tone={available ? 'success' : 'neutral'}>{available ? 'Sim' : 'Não'}</Tag>;
+  if (!available || !href) return tag;
+  return <a className="availability-link" href={href} target="_blank" rel="noreferrer" title={title}>{tag}</a>;
+}
+
+function companyLink(item: QueueReviewItem) {
+  const href = mapsHref(item.mapsUrl);
+  if (!href) return <strong>{item.company}</strong>;
+  return <a className="company-map-link" href={href} target="_blank" rel="noreferrer" title="Abrir perfil da empresa no Google Maps"><strong>{item.company}</strong></a>;
+}
+
+function channelAvailability(item: QueueReviewItem, channel: QueueReviewChannel) {
+  if (channel === 'Instagram') {
+    return availabilityTag(Boolean(item.instagram.trim()), instagramHref(item.instagram), 'Abrir Instagram');
+  }
+  const phone = item.whatsapp || item.phone;
+  return availabilityTag(Boolean(String(phone).replace(/\D/g, '')), whatsappHref(phone), 'Abrir WhatsApp');
 }
 
 export function QueueReviewPanel({
@@ -46,6 +62,10 @@ export function QueueReviewPanel({
 
   const pull = async () => {
     if (!canPrepare) return;
+    if (channel === 'WhatsApp' && !preferredResourceId) {
+      onToast('Selecione um chip', 'Escolha um chip específico no filtro acima. A validação WhatsApp sempre usa o chip selecionado.', 'warning');
+      return;
+    }
     setPulling(true);
     try {
       const result = await queueReviewService.pullToCapacity(channel, scheduledDate, preferredResourceId);
@@ -102,7 +122,7 @@ export function QueueReviewPanel({
         </div>
         <div className="queue-review-card__actions">
           <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || pulling} onClick={() => void refresh()}>Atualizar</Button>
-          {canPrepare ? <Button loading={pulling} disabled={loading || pulling} onClick={() => void pull()}>Puxar {channel}</Button> : null}
+          {canPrepare ? <Button loading={pulling} disabled={loading || pulling || (channel === 'WhatsApp' && !preferredResourceId)} onClick={() => void pull()}>{channel === 'WhatsApp' ? (preferredResourceId ? 'Puxar WhatsApp com chip selecionado' : 'Selecione um chip para puxar') : `Puxar ${channel}`}</Button> : null}
         </div>
       </div>
 
@@ -122,17 +142,31 @@ export function QueueReviewPanel({
           </div>
           <div className="queue-review-table-wrap">
             <table className="queue-review-table">
-              <thead><tr><th>#</th><th>Empresa</th><th>Ramo</th><th>Localização</th><th>Nota</th><th>Avaliações</th><th>Contato</th><th></th></tr></thead>
+              <colgroup>
+                <col className="queue-review-col--position" />
+                <col className="queue-review-col--company" />
+                <col className="queue-review-col--branch" />
+                <col className="queue-review-col--state" />
+                <col className="queue-review-col--city" />
+                <col className="queue-review-col--rating" />
+                <col className="queue-review-col--reviews" />
+                <col className="queue-review-col--channel" />
+                <col className="queue-review-col--site" />
+                <col className="queue-review-col--actions" />
+              </colgroup>
+              <thead><tr><th>#</th><th>Empresa</th><th>Ramo</th><th>Estado</th><th>Cidade</th><th>Nota</th><th>Avaliações</th><th>{channel}</th><th>Site</th><th>Ações</th></tr></thead>
               <tbody>
                 {batch.items.map((item) => (
                   <tr key={item.reviewItemId}>
                     <td>{item.position}</td>
-                    <td><strong>{item.company}</strong></td>
-                    <td>{item.branch || '-'}</td>
-                    <td>{[item.city, item.state].filter(Boolean).join(' / ') || '-'}</td>
+                    <td className="queue-review-table__company">{companyLink(item)}</td>
+                    <td className="queue-review-table__wrap">{item.branch || '-'}</td>
+                    <td>{item.state || '-'}</td>
+                    <td className="queue-review-table__wrap">{item.city || '-'}</td>
                     <td>{item.rating.toFixed(1)}</td>
                     <td>{item.reviews.toLocaleString('pt-BR')}</td>
-                    <td>{contactFor(item, channel)}</td>
+                    <td>{channelAvailability(item, channel)}</td>
+                    <td>{availabilityTag(Boolean(item.website.trim()), externalHttpHref(item.website), 'Abrir site')}</td>
                     <td className="queue-review-table__action">
                       {canInvalidate ? (
                         <button className="queue-review-invalidate" type="button" title="Invalidar lead" disabled={workingItem === item.reviewItemId || Boolean(lockingBatch)} onClick={() => void invalidate(item)}>

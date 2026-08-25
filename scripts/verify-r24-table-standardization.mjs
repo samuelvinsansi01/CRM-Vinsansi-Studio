@@ -19,8 +19,8 @@ const repoTypes = read('src/repositories/lead-cycle/leadCycle.repository.ts');
 for (const label of ['Empresa', 'Ramo', 'Estado', 'Cidade', 'Nota', 'Avaliações', 'Número', 'Instagram', 'Status']) {
   ok(home.includes(`label: '${label}'`), `Home sem coluna ${label}`);
 }
-ok(home.includes("availabilityTag(Boolean((lead.whatsapp || lead.rawPhone)"), 'Home não padroniza Número em Sim/Não');
-ok(home.includes("availabilityTag(Boolean(lead.instagram.trim()))"), 'Home não padroniza Instagram em Sim/Não');
+ok(home.includes('number: availabilityTag('), 'Home não padroniza Número em Sim/Não');
+ok(home.includes('instagram: availabilityTag(Boolean(lead.instagram.trim())'), 'Home não padroniza Instagram em Sim/Não');
 ok(home.includes('<Tag tone="neutral">Importado</Tag>'), 'Home sem status Importado padronizado');
 ok(home.includes("'edit' as const"), 'Home sem ação Editar');
 ok(home.includes("'invalidate' as const"), 'Home sem ação Invalidar');

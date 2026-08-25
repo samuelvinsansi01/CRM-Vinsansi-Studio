@@ -89,7 +89,21 @@ async function resources(channel: QueueReviewChannel, scheduledDate: string) {
   return snapshot.resources;
 }
 
-async function fillBatch(channel: QueueReviewChannel, resource: QueuePreparationResource, scheduledDate: string): Promise<QueueReviewPullResult> {
+async function openReviewLeadIds(batchId: string, channel: QueueReviewChannel) {
+  const { data, error } = await getSupabaseClient().rpc('list_open_queue_review', { p_channel: channelKey(channel) });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<{ batch_id?: number | string; lead_id?: number | string }>)
+    .filter((row) => String(row.batch_id ?? '') === batchId)
+    .map((row) => String(row.lead_id ?? ''))
+    .filter(Boolean);
+}
+
+async function fillBatch(
+  channel: QueueReviewChannel,
+  resource: QueuePreparationResource,
+  scheduledDate: string,
+  options: { revalidateExisting?: boolean } = {},
+): Promise<QueueReviewPullResult> {
   let batch = await openBatch(channel, resource.id, scheduledDate);
   let added = 0;
   let invalidatedByProvider = 0;
@@ -97,6 +111,21 @@ async function fillBatch(channel: QueueReviewChannel, resource: QueuePreparation
   let errors = 0;
   let exhausted = false;
   let guard = 0;
+
+  if (channel === 'WhatsApp' && options.revalidateExisting && batch.openCount > 0) {
+    const existingIds = await openReviewLeadIds(batch.batchId, channel);
+    if (existingIds.length) {
+      const validation = await whatsappValidationService.validateInitialWithChip(existingIds, resource.id);
+      await restoreWhatsAppValid(batch.batchId, validation.approvedIds);
+      const retryable = Array.from(new Set([...validation.errorIds, ...validation.conflictIds]));
+      await release(batch.batchId, retryable);
+      invalidatedByProvider += validation.invalidated;
+      redirectedToInstagram += validation.redirectedToInstagram;
+      errors += validation.errors + validation.failed;
+      await prune(batch.batchId);
+      batch = await openBatch(channel, resource.id, scheduledDate);
+    }
+  }
 
   while (batch.missingCount > 0 && guard < 100) {
     guard += 1;
@@ -138,12 +167,18 @@ async function fillBatch(channel: QueueReviewChannel, resource: QueuePreparation
 
 async function pullToCapacity(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId = '') {
   const availableResources = await resources(channel, scheduledDate);
-  const resource = availableResources.find((item) => (item.id === preferredResourceId || item.label === preferredResourceId || item.aliases?.includes(preferredResourceId)) && item.available > 0)
-    ?? availableResources.find((item) => item.available > 0)
-    ?? availableResources[0];
-  if (!resource) throw new Error(channel === 'WhatsApp' ? 'Nenhum chip operacional disponível.' : 'Nenhum perfil Instagram operacional disponível.');
+  const matchesPreferred = (item: QueuePreparationResource) => item.id === preferredResourceId || item.label === preferredResourceId || item.aliases?.includes(preferredResourceId);
+  const resource = channel === 'WhatsApp'
+    ? (() => {
+      if (!preferredResourceId) throw new Error('Selecione um chip específico antes de puxar e validar a fila WhatsApp.');
+      return availableResources.find(matchesPreferred);
+    })()
+    : availableResources.find((item) => matchesPreferred(item) && item.available > 0)
+      ?? availableResources.find((item) => item.available > 0)
+      ?? availableResources[0];
+  if (!resource) throw new Error(channel === 'WhatsApp' ? 'O chip selecionado não está operacional.' : 'Nenhum perfil Instagram operacional disponível.');
   if (resource.available <= 0) throw new Error('O recurso selecionado não possui capacidade disponível.');
-  return fillBatch(channel, resource, scheduledDate);
+  return fillBatch(channel, resource, scheduledDate, { revalidateExisting: channel === 'WhatsApp' });
 }
 
 async function list(channel: QueueReviewChannel): Promise<QueueReviewBatch[]> {
@@ -170,9 +205,18 @@ async function list(channel: QueueReviewChannel): Promise<QueueReviewBatch[]> {
     whatsapp: String(row.whatsapp ?? ''),
     instagram: String(row.instagram ?? ''),
     website: String(row.website ?? ''),
+    mapsUrl: '',
     rating: Number(row.rating ?? 0),
     reviews: Number(row.reviews ?? 0),
   }));
+
+  const leadIds = Array.from(new Set(rows.map((row) => Number(row.leadId)).filter((id) => Number.isSafeInteger(id) && id > 0)));
+  if (leadIds.length) {
+    const mapsResponse = await getSupabaseClient().from('leads').select('leads_id,leads_maps').in('leads_id', leadIds);
+    if (mapsResponse.error) throw new Error(mapsResponse.error.message);
+    const mapsByLeadId = new Map(((mapsResponse.data ?? []) as Array<{ leads_id?: number | string; leads_maps?: string | null }>).map((row) => [String(row.leads_id ?? ''), String(row.leads_maps ?? '')]));
+    rows.forEach((row) => { row.mapsUrl = mapsByLeadId.get(row.leadId) ?? ''; });
+  }
 
   const grouped = new Map<string, QueueReviewBatch>();
   for (const item of rows) {

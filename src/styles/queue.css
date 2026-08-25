@@ -537,3 +537,43 @@ button.batch__header {
 .queue-review-batch__meta{padding:12px 14px;background:var(--surface-subtle)}.queue-review-batch__meta>div{display:flex;flex-direction:column;gap:2px}.queue-review-batch__meta span{font-size:12px;color:var(--text-muted)}
 .queue-review-table-wrap{overflow:auto}.queue-review-table{width:100%;border-collapse:collapse;font-size:13px}.queue-review-table th,.queue-review-table td{padding:10px 12px;border-top:1px solid var(--border-color);text-align:left;white-space:nowrap}.queue-review-table th{color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}.queue-review-table__action{text-align:right!important}.queue-review-invalidate{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--danger);cursor:pointer}.queue-review-invalidate:hover{background:var(--danger-soft)}.queue-review-invalidate:disabled{opacity:.45;cursor:not-allowed}
 @media(max-width:900px){.queue-review-card__header,.queue-review-batch__meta{align-items:flex-start;flex-direction:column}.queue-review-card__actions{width:100%}}
+
+/* R25: revisão compacta, alinhada às tabelas do CRM */
+.queue-review-table {
+  min-width: 1080px;
+  table-layout: fixed;
+}
+
+.queue-review-col--position { width: 52px; }
+.queue-review-col--company { width: 30%; }
+.queue-review-col--branch { width: 15%; }
+.queue-review-col--state { width: 78px; }
+.queue-review-col--city { width: 13%; }
+.queue-review-col--rating { width: 70px; }
+.queue-review-col--reviews { width: 92px; }
+.queue-review-col--channel { width: 96px; }
+.queue-review-col--site { width: 76px; }
+.queue-review-col--actions { width: 68px; }
+
+.queue-review-table th,
+.queue-review-table td {
+  vertical-align: middle;
+}
+
+.queue-review-table__company,
+.queue-review-table__wrap {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+
+.queue-review-table__company {
+  line-height: 1.35;
+}
+
+.queue-review-table__company strong {
+  font-weight: 650;
+}
+
+.queue-review-table__action {
+  padding-right: 14px !important;
+}

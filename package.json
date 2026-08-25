@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "node scripts/verify-syntax.mjs && node scripts/verify-r23-open-queue-review.mjs && node scripts/verify-r24-table-standardization.mjs",
+    "verify:release": "node scripts/verify-syntax.mjs && node scripts/verify-r23-open-queue-review.mjs && node scripts/verify-r24-table-standardization.mjs && node scripts/verify-r25-clickable-contacts-chip-validation.mjs",
     "verify:stage3:sql": "node scripts/verify-stage3-sql.mjs",
     "verify:stage4:sql": "node scripts/verify-stage4-sql.mjs",
     "verify:stage5:sql": "node scripts/verify-stage5-sql.mjs",
@@ -23,7 +23,8 @@
     "verify:r22": "node scripts/verify-r22-current-installations.mjs",
     "test:stage11": "node scripts/test-r21-stage11-postgres.mjs && node scripts/test-r22-stage11-postgres.mjs",
     "verify:r23": "node scripts/verify-r23-open-queue-review.mjs",
-    "verify:r24": "node scripts/verify-r24-table-standardization.mjs"
+    "verify:r24": "node scripts/verify-r24-table-standardization.mjs",
+    "verify:r25": "node scripts/verify-r25-clickable-contacts-chip-validation.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
