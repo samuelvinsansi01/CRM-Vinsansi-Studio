@@ -65,7 +65,7 @@ BEGIN
  (v_org,v_run,'capture_dedup','Vinsansi Captura','Duplicados e suprimidos são bloqueados antes da reentrada',40),
  (v_org,v_run,'instagram_pairing','Vinsansi Instagram','Perfil vinculado à organização e fila canônica carregada',50),
  (v_org,v_run,'instagram_resume','Vinsansi Instagram','Pausa/restart continua do checkpoint sem repetir DM',60),
- (v_org,v_run,'instagram_limits','Vinsansi Instagram','Limites, janela e capacidade por perfil respeitados',70),
+ (v_org,v_run,'instagram_limits','Vinsansi Instagram','Limites e capacidade por perfil respeitados',70),
  (v_org,v_run,'permanent_memory','Base Permanente','Uma identidade comercial concentra histórico, canais e resultado',80),
  (v_org,v_run,'suppression_reentry','Base Permanente','Supressão e cooldown de reentrada validados',90),
  (v_org,v_run,'whatsapp_text','WhatsApp','Envio/recebimento texto, realtime e status entregue/lido validados',100),

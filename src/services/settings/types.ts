@@ -3,15 +3,12 @@ import type { ChipLevelPreset } from '../config/chipOperational';
 export type ChipLevelPresetConfig = Partial<ChipLevelPreset>;
 
 export type DispatchChannelSettings = {
-  startTime: string;
-  endTime: string;
   delayMinSeconds: number;
   delayMaxSeconds: number;
   perBatch: number;
   batches: number;
   batchDelayMinutes: number;
   dailyLimit: number;
-  activeDays: string[];
   batchBehavior: string;
 };
 

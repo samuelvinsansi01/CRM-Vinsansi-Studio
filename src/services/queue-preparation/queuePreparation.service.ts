@@ -157,8 +157,6 @@ function buildResources(
           batchSize: Math.max(1, Number(chip.blockSize || 1)),
           used,
           available: Math.max(0, limit - used),
-          startTime: chip.startTime,
-          endTime: chip.endTime,
         };
       });
   }
@@ -178,8 +176,6 @@ function buildResources(
         batchSize: Math.max(1, Number(instagramDefaults.perBatch || 1)),
         used,
         available: Math.max(0, limit - used),
-        startTime: instagramDefaults.startTime,
-        endTime: instagramDefaults.endTime,
       };
     });
 }
@@ -300,8 +296,7 @@ async function snapshot(
   resourceId?: string,
 ): Promise<QueuePreparationSnapshot> {
   const config = await loadConfiguration();
-  const activeDays = channel === 'WhatsApp' ? config.settings.whatsapp.activeDays : config.settings.instagram.activeDays;
-  const date = effectiveScheduleDate(requestedDate, activeDays);
+  const date = effectiveScheduleDate(requestedDate);
   const resolvedChannelId = Number(await channelId(channel));
   const [usage, rows] = await Promise.all([
     queueUsage(channel, date.effectiveDate),
@@ -338,8 +333,7 @@ async function enqueueValidated(
   if (!uniqueIds.length) throw new Error('Selecione pelo menos um lead validado.');
 
   const config = await loadConfiguration();
-  const activeDays = channel === 'WhatsApp' ? config.settings.whatsapp.activeDays : config.settings.instagram.activeDays;
-  const date = effectiveScheduleDate(requestedDate, activeDays);
+  const date = effectiveScheduleDate(requestedDate);
   const result: QueuePreparationResult = {
     channel,
     requested: uniqueIds.length,

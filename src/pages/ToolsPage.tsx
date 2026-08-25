@@ -29,7 +29,7 @@ const settingsPermissions: Record<ToolId, string> = {
 
 const labels: Record<string, string> = {
   whatsapp: 'WhatsApp', instagram: 'Instagram', chipLevels: 'Níveis dos chips', operationalTimezone: 'Fuso operacional',
-  operationalCutoffHour: 'Hora limite operacional', minRating: 'Avaliação mínima', minReviews: 'Avaliações mínimas',
+  minRating: 'Avaliação mínima', minReviews: 'Avaliações mínimas',
   safeMode: 'Modo seguro', simulationMode: 'Modo de simulação', instagramLowRating: 'Instagram para avaliação baixa',
   enabled: 'Habilitado', maxRatingExclusive: 'Avaliação máxima (exclusiva)', branchRules: 'Regras por ramo',
   deduplication: 'Deduplicação', byPhone: 'Por telefone', bySite: 'Por site', blockBasePermanent: 'Bloquear Base Permanente',
@@ -37,9 +37,9 @@ const labels: Record<string, string> = {
   ownSite: 'Site próprio', aggregators: 'Agregadores', blockFacebookAsSite: 'Não tratar Facebook como site',
   requireConfiguredCategory: 'Exigir categoria configurada', rejectOutOfProfile: 'Rejeitar fora do perfil', logs: 'Logs',
   logRejected: 'Registrar rejeitados', logRejectionReason: 'Registrar motivo da rejeição', profile: 'Perfil', profiles: 'Perfis',
-  startTime: 'Início', endTime: 'Fim', delayMinSeconds: 'Atraso mínimo (segundos)', delayMaxSeconds: 'Atraso máximo (segundos)',
+  delayMinSeconds: 'Atraso mínimo (segundos)', delayMaxSeconds: 'Atraso máximo (segundos)',
   perBatch: 'Itens por lote', batches: 'Lotes', batchDelayMinutes: 'Intervalo entre lotes (minutos)', delayMinutes: 'Intervalo (minutos)',
-  dailyLimit: 'Limite diário', activeDays: 'Dias ativos', batchBehavior: 'Comportamento dos lotes',
+  dailyLimit: 'Limite diário', batchBehavior: 'Comportamento dos lotes',
 };
 
 function labelFor(key: string) { return labels[key] ?? key.replace(/([a-z])([A-Z])/g, '$1 $2'); }
@@ -53,10 +53,13 @@ function updatePath(root: Record<string, unknown>, path: string[], value: unknow
   return next;
 }
 
+const hiddenDispatchSettingKeys = new Set(['startTime', 'endTime', 'activeDays', 'operationalCutoffHour']);
+
 function SettingsFields({ value, path = [], onChange }: { value: Record<string, unknown>; path?: string[]; onChange: (path: string[], value: unknown) => void }) {
   return (
     <div className={`tool-settings-fields ${path.length ? 'tool-settings-fields--nested' : ''}`}>
       {Object.entries(value).map(([key, fieldValue]) => {
+        if (hiddenDispatchSettingKeys.has(key)) return null;
         const fieldPath = [...path, key];
         if (fieldValue && typeof fieldValue === 'object' && !Array.isArray(fieldValue)) {
           return (
