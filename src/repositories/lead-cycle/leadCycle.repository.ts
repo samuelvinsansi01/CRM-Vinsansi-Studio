@@ -1,7 +1,8 @@
 import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
 
 export type LeadCycleTransitionPatch = Partial<{
-  channels_id: number;
+  branches_id: number;
+  channels_id: number | null;
   lead_status_id: LeadStatusId;
   leads_name: string;
   leads_phone: string | null;

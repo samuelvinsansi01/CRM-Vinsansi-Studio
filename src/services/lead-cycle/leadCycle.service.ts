@@ -29,11 +29,12 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
   const city = one(row.cities);
   const source = one(row.contact_sources);
   const status = one(row.lead_status);
-  const resolvedChannelId = Number(row.channels_id ?? whatsappId);
+  const resolvedChannelId = row.channels_id == null ? null : Number(row.channels_id);
 
   return {
     id: String(row.leads_id),
     company: row.leads_name,
+    branchId: String(row.branches_id),
     branch: branch?.branches_name ?? '',
     state: state?.states_code ?? state?.states_name ?? '',
     city: city?.cities_name ?? '',
@@ -44,7 +45,7 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
     website: row.leads_website ?? '',
     mapsUrl: row.leads_maps ?? '',
     channelId: resolvedChannelId,
-    channel: resolvedChannelId === instagramId ? 'Instagram' : 'WhatsApp',
+    channel: resolvedChannelId == null ? null : resolvedChannelId === instagramId ? 'Instagram' : 'WhatsApp',
     contactSourceId: row.contact_sources_id,
     contactSource: source?.contact_sources_name ?? '',
     statusId: row.lead_status_id,
@@ -212,6 +213,9 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
   const company = input.company.trim();
   if (!company) throw new Error('Informe o nome da empresa.');
 
+  const branchId = Number(input.branchId);
+  if (!Number.isSafeInteger(branchId) || branchId <= 0) throw new Error('Selecione um ramo válido.');
+
   const rawPhone = normalizeEditedPhone(input.rawPhone);
   const whatsapp = normalizeEditedPhone(input.whatsapp);
   const instagram = normalizeInstagramUsername(input.instagram);
@@ -222,14 +226,17 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
     throw new Error('Mantenha pelo menos um contato: telefone, WhatsApp ou Instagram.');
   }
 
-  if (input.channel === 'Instagram' && (!instagram || !isValidInstagram(instagram))) {
-    throw new Error('Para usar Instagram como destino, informe um Instagram válido.');
-  }
-  if (input.channel === 'WhatsApp' && (whatsapp || rawPhone).length < 10) {
-    throw new Error('Para usar WhatsApp como destino, informe um telefone ou WhatsApp válido.');
-  }
-  if (lead.statusId === LEAD_STATUS.PRE_SEND && input.channel !== lead.channel) {
-    throw new Error('O destino não pode ser alterado enquanto o lead estiver aguardando validação.');
+  if (lead.statusId !== LEAD_STATUS.IMPORTED) {
+    if (!input.channel) throw new Error('Informe o canal do lead.');
+    if (input.channel === 'Instagram' && (!instagram || !isValidInstagram(instagram))) {
+      throw new Error('Para usar Instagram como destino, informe um Instagram válido.');
+    }
+    if (input.channel === 'WhatsApp' && (whatsapp || rawPhone).length < 10) {
+      throw new Error('Para usar WhatsApp como destino, informe um telefone ou WhatsApp válido.');
+    }
+    if (lead.statusId === LEAD_STATUS.PRE_SEND && input.channel !== lead.channel) {
+      throw new Error('O destino não pode ser alterado enquanto o lead estiver aguardando validação.');
+    }
   }
 
   const before = (await supabaseLeadCycleRepository.listByIds([lead.id]))[0];
@@ -239,8 +246,14 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
   }
 
   const [whatsappId, instagramId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]);
-  const targetChannelId = input.channel === 'Instagram' ? Number(instagramId) : Number(whatsappId);
+  const targetChannelId = lead.statusId === LEAD_STATUS.IMPORTED
+    ? null
+    : input.channel === 'Instagram'
+      ? Number(instagramId)
+      : Number(whatsappId);
+
   const updated = await supabaseLeadCycleRepository.compareAndSet(lead.id, lead.statusId, {
+    branches_id: branchId,
     leads_name: company,
     leads_phone: rawPhone || null,
     leads_whatsapp: whatsapp || null,
@@ -248,24 +261,26 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
     leads_website: input.website.trim() || null,
     leads_maps: input.mapsUrl.trim() || null,
     channels_id: targetChannelId,
-  }, Number(before.channels_id));
+  }, before.channels_id == null ? undefined : Number(before.channels_id));
   if (!updated) throw new Error('O lead foi alterado por outra operação. Atualize a página e tente novamente.');
 
   try {
     await repositories.events.append({
       source: 'lead-routing',
       action: 'edit-details',
-      channel: input.channel.toLowerCase() as 'whatsapp' | 'instagram',
+      channel: targetChannelId == null ? undefined : (input.channel?.toLowerCase() as 'whatsapp' | 'instagram' | undefined),
       leadId: lead.id,
       status: String(updated.lead_status_id),
       metadata: {
         company_name: updated.leads_name,
+        previous_branch_id: before.branches_id,
+        target_branch_id: branchId,
         previous_phone: before.leads_phone,
         previous_whatsapp: before.leads_whatsapp,
         previous_instagram: before.leads_instagram,
         previous_channel_id: before.channels_id,
         target_channel_id: targetChannelId,
-        flow: 'F04',
+        flow: lead.statusId === LEAD_STATUS.IMPORTED ? 'R24_HOME_IMPORTED_EDIT' : 'F04',
       },
     });
   } catch {
