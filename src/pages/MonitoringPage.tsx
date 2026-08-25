@@ -24,7 +24,10 @@ export function MonitoringPage() {
   const refresh = useCallback(async () => {
     setLoading(true); setError('');
     try {
-      const [nextHealth, nextAlerts] = await Promise.all([getOperationalHealth(), listOperationalAlerts()]);
+      // getOperationalHealth também materializa/resOLVE os alertas derivados.
+      // A leitura precisa ocorrer depois para não exibir o estado anterior por uma corrida.
+      const nextHealth = await getOperationalHealth();
+      const nextAlerts = await listOperationalAlerts();
       setHealth(nextHealth); setAlerts(nextAlerts);
     } catch (err) { setError(err instanceof Error ? err.message : 'Falha ao carregar monitoramento.'); }
     finally { setLoading(false); }

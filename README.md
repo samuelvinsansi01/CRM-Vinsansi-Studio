@@ -1,4 +1,8 @@
-# CRM - Vinsansi Studio v2.4.0-R19
+# CRM - Vinsansi Studio v2.4.0-R21
+
+## R21 — homologação técnica da Etapa 11
+
+Saúde e alertas agora são atualizados na própria leitura tenant-aware, os contratos de `worker_batches.status_id` foram corrigidos contra o schema canônico e os recoveries de WhatsApp/Instagram são idempotentes. Checkpoints seguros do Instagram são preservados; passos com possível efeito externo entram em reconciliação. A migration incremental é `supabase/migrations/20260825170000_r21_stage11_observability_recovery_hardening.sql`.
 
 ## R19 — Base Permanente = destino final
 
@@ -69,3 +73,6 @@ CRM central da plataforma Vinsansi para aquisição, qualificação, roteamento,
 5. Execute `npm run verify:release`, `npm run verify:stage3:sql` e `npm run build`.
 
 Consulte `PASSO-A-PASSO-v1.2.0.md` para a ordem exata.
+
+## R20 — correção da Etapa 11
+A observabilidade e a recuperação de lotes usam `worker_batches.status_id`; a coluna legada `worker_batches_status` foi removida dos SQLs ativos.

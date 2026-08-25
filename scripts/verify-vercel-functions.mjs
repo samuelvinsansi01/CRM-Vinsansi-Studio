@@ -79,7 +79,8 @@ try {
   for (const domain of domains) {
     for (const route of domain.routes) {
       const state = await invoke(domain.entrypoint, route, 'TRACE');
-      expect(state.status === 405, `Smoke local não alcançou ${domain.entrypoint}:${route}; status ${state.status}.`);
+      const deprecatedPair = route === 'pair' && ['maps','instagram'].includes(domain.entrypoint);
+      expect(state.status === (deprecatedPair ? 410 : 405), `Smoke local não alcançou ${domain.entrypoint}:${route}; status ${state.status}.`);
       const publicPath = domain.source.replace(':action', route.split('/').at(-1));
       publicRoutes.push(publicPath);
     }
@@ -91,7 +92,7 @@ try {
   const heartbeatWithoutCredential = await invoke('tools', 'executor/heartbeat', 'POST', { version: 'test', capabilities: [] });
   expect(heartbeatWithoutCredential.status === 401 && heartbeatWithoutCredential.body?.error === 'installation_credential_required', 'Heartbeat não preservou credencial técnica.');
   const instagramPairWithoutSession = await invoke('instagram', 'pair', 'POST', { profile_username: 'homologacao', organizationId: 1 });
-  expect(instagramPairWithoutSession.status === 401 && instagramPairWithoutSession.body?.error === 'auth_required', 'Pairing Instagram não preservou autenticação humana.');
+  expect(instagramPairWithoutSession.status === 410 && instagramPairWithoutSession.body?.error === 'instagram_legacy_pair_removed', 'Pairing Instagram legado não permaneceu desativado.');
   const instagramContextWithoutSession = await invoke('instagram', 'extension', 'POST', { action: 'queue', profile_username: 'homologacao' });
   expect(instagramContextWithoutSession.status === 401 && instagramContextWithoutSession.body?.error === 'user_session_required', 'Runtime Instagram não preservou contexto/sessão humana.');
   const conversationsWithoutSession = await invoke('whatsapp', 'conversations', 'GET');

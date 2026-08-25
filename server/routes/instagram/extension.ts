@@ -131,9 +131,9 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
     const progress = progressMap.get(String(item.queue_items_id)) ?? {};
     const queueStatus = semanticStatus(statusMap.get(String(item.status_id)) ?? item.status_id);
     const progressStep = text(progress.step);
-    // Reprocessamento operacional pode devolver queue_items para pendente antes de uma nova claim.
-    // Nessa situação, o status canônico da fila prevalece sobre um progress.step='error' antigo.
-    const status = queueStatus === 'queued' && progressStep === 'error' ? 'queued' : (progressStep || queueStatus);
+    // Recovery devolve a fila para pendente sem apagar o checkpoint. O status da
+    // fila mantém o item reclamável; resume_step informa de onde continuar.
+    const status = queueStatus === 'queued' ? 'queued' : (progressStep || queueStatus);
     const instagramRecipient = text(snapshotRecipient.instagram ?? snapshotLead.instagram ?? lead.leads_instagram);
     const instagramUsername = normalizeInstagramUsername(instagramRecipient);
     const website = text(snapshotLead.site ?? lead.leads_website);
@@ -148,6 +148,8 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
       position,
       status,
       claim_token: text(progress.claim_token),
+      resume_step: text(progress.step) || 'claimed',
+      progress_metadata: bodyRecord(progress.metadata),
       progress_attempts: Number(progress.attempts ?? 0),
       progress_error: text(progress.error_message),
       last_heartbeat_at: text(progress.last_heartbeat_at),
@@ -195,7 +197,12 @@ async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, 
   const claimed = Array.isArray(response.data) ? response.data[0] : response.data;
   await client.from('queue_items').update({dispatched_by_member_id:scope.memberId}).eq('organizations_id',scope.organizationId).eq('queue_items_id',Number(id)).is('dispatched_by_member_id',null);
   const item = (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
-  return item ? { ...item, claim_token: text((claimed as RecordValue)?.claim_token), status: 'claimed' } : null;
+  return item ? {
+    ...item,
+    claim_token: text((claimed as RecordValue)?.claim_token),
+    status: 'claimed',
+    resume_step: text((claimed as RecordValue)?.step ?? item.resume_step) || 'claimed',
+  } : null;
 }
 
 async function transition(client: SupabaseClient, scope: TokenScope, body: RecordValue) {

@@ -239,7 +239,7 @@ BEGIN
      v_recovered:=v_recovered+1;
    END IF;
  END LOOP;
- UPDATE public.worker_batches SET worker_batches_next_run_at=now(),worker_batches_heartbeat_at=now(),worker_batches_updated_at=now() WHERE organizations_id=p_organizations_id AND worker_batches_status='running' AND worker_batches_heartbeat_at<p_stale_before;
+ UPDATE public.worker_batches SET worker_batches_next_run_at=now(),worker_batches_heartbeat_at=now(),worker_batches_updated_at=now() WHERE organizations_id=p_organizations_id AND status_id=4 AND worker_batches_heartbeat_at<p_stale_before;
  RETURN jsonb_build_object('recovered_items',v_recovered,'reconciliation_items',v_reconciliation);
 END; $$;
 REVOKE ALL ON FUNCTION public.worker_recover_stale_whatsapp_v2(bigint,timestamptz) FROM PUBLIC,anon,authenticated;GRANT EXECUTE ON FUNCTION public.worker_recover_stale_whatsapp_v2(bigint,timestamptz) TO service_role;
@@ -290,8 +290,8 @@ BEGIN
       'instagram',(SELECT count(*) FROM public.instagram_queue_progress WHERE organizations_id=v_org AND canonical_step='reconciliation_required')
     ),
     'batches',jsonb_build_object(
-      'active',(SELECT count(*) FROM public.worker_batches WHERE organizations_id=v_org AND worker_batches_status IN('queued','running','paused')),
-      'stale',(SELECT count(*) FROM public.worker_batches WHERE organizations_id=v_org AND worker_batches_status='running' AND worker_batches_heartbeat_at<now()-interval '15 minutes')
+      'active',(SELECT count(*) FROM public.worker_batches WHERE organizations_id=v_org AND status_id IN(3,4,8)),
+      'stale',(SELECT count(*) FROM public.worker_batches WHERE organizations_id=v_org AND status_id=4 AND worker_batches_heartbeat_at<now()-interval '15 minutes')
     ),
     'tools',jsonb_build_object(
       'registered',(SELECT count(*) FROM public.organization_tool_installations WHERE organizations_id=v_org AND registration_status='registered'),
