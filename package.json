@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "node scripts/verify-release-v1.1.0.mjs && node scripts/verify-stage5.mjs && node scripts/verify-stage6.mjs && node scripts/verify-stage7.mjs && node scripts/verify-stages8-15.mjs && node scripts/verify-vercel-functions.mjs && node scripts/verify-syntax.mjs && node scripts/verify-r14-global-template-messages.mjs && node scripts/verify-r16-no-dispatch-windows.mjs && node scripts/verify-r17-instagram-sents-memory.mjs && node scripts/verify-r18-permanent-never-contact.mjs && node scripts/verify-r19-permanent-read-only.mjs && node scripts/verify-r20-stage11-worker-batches.mjs && node scripts/verify-r21-stage11-contracts.mjs",
+    "verify:release": "node scripts/verify-release-v1.1.0.mjs && node scripts/verify-stage5.mjs && node scripts/verify-stage6.mjs && node scripts/verify-stage7.mjs && node scripts/verify-stages8-15.mjs && node scripts/verify-vercel-functions.mjs && node scripts/verify-syntax.mjs && node scripts/verify-r14-global-template-messages.mjs && node scripts/verify-r16-no-dispatch-windows.mjs && node scripts/verify-r17-instagram-sents-memory.mjs && node scripts/verify-r18-permanent-never-contact.mjs && node scripts/verify-r19-permanent-read-only.mjs && node scripts/verify-r20-stage11-worker-batches.mjs && node scripts/verify-r21-stage11-contracts.mjs && node scripts/verify-r22-current-installations.mjs",
     "verify:stage3:sql": "node scripts/verify-stage3-sql.mjs",
     "verify:stage4:sql": "node scripts/verify-stage4-sql.mjs",
     "verify:stage5:sql": "node scripts/verify-stage5-sql.mjs",
@@ -20,7 +20,8 @@
     "verify:r19": "node scripts/verify-r19-permanent-read-only.mjs",
     "verify:r20": "node scripts/verify-r20-stage11-worker-batches.mjs",
     "verify:r21": "node scripts/verify-r21-stage11-contracts.mjs",
-    "test:stage11": "node scripts/test-r21-stage11-postgres.mjs"
+    "verify:r22": "node scripts/verify-r22-current-installations.mjs",
+    "test:stage11": "node scripts/test-r21-stage11-postgres.mjs && node scripts/test-r22-stage11-postgres.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

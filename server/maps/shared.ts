@@ -50,7 +50,7 @@ export async function extensionScope(req: ApiRequest, scopes: MapsExtensionScope
   const session=await client.from('tool_user_sessions').select('tool_user_sessions_id,auth_users_id,users_id,organizations_id,organization_members_id,organization_tool_installations!inner(*)').eq('session_hash',await sha256(raw)).is('revoked_at',null).gt('last_used_at',cutoff).maybeSingle();
   if(session.error||!session.data)throw new Error('token_invalid_or_expired');
   const canonical=(session.data as unknown as {organization_tool_installations:Row}).organization_tool_installations;
-  if(canonical.tool_id!=='vinsansi_capture'||canonical.registration_status!=='registered')throw new Error('capture_installation_revoked');
+  if(canonical.tool_id!=='vinsansi_capture'||canonical.registration_status!=='registered'||canonical.is_current!==true)throw new Error('capture_installation_revoked');
   const reported=new Set(Array.isArray(canonical.reported_capabilities)?canonical.reported_capabilities.map(String):[]);
   // Os escopos legados da rota ficam apenas como compatibilidade interna; a instalação canônica precisa declarar capture.maps.
   if(!reported.has('capture.maps'))throw new Error('capture_capability_revoked');

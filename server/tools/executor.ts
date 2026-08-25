@@ -68,7 +68,7 @@ export async function exchangePairing(input: Record<string, unknown>) {
   return {toolId:toolId(result.toolId),organizationId:Number(result.organizationId),memberId:Number(result.memberId),organizationToolInstallationId:String(result.organizationToolInstallationId),installationCredential,userSession};
 }
 
-export async function issueExecutorCredentials(input:{client?:SupabaseClient;toolId:ToolId;organizationId:number;externalInstallationId:string;authUserId:string;expectedUsersId?:number;expectedMemberId?:number;version?:unknown;capabilities?:unknown}){
+export async function issueExecutorCredentials(input:{client?:SupabaseClient;toolId:ToolId;organizationId:number;externalInstallationId:string;authUserId:string;expectedUsersId?:number;expectedMemberId?:number;version?:unknown;capabilities?:unknown;metadata?:unknown}){
   const client=input.client??serviceClient();
   const context=await memberContext(client,input.authUserId,input.organizationId,input.toolId);
   const usersId=numericId(context.userId,'executor_user_id_invalid');
@@ -80,7 +80,7 @@ export async function issueExecutorCredentials(input:{client?:SupabaseClient;too
   const registered=await client.rpc('service_register_tool_installation',{
     p_organizations_id:organizationId,p_tool_id:input.toolId,p_external_installation_id:input.externalInstallationId,
     p_installed_version:text(input.version)||null,p_reported_capabilities:capabilities(input.capabilities),
-    p_registered_by_member_id:memberId,p_metadata:{pairing:'stage4'},
+    p_registered_by_member_id:memberId,p_metadata:{pairing:'stage4',...(input.metadata&&typeof input.metadata==='object'&&!Array.isArray(input.metadata)?input.metadata as Record<string,unknown>:{})},
   });
   if (registered.error) throw new Error(`installation_register_failed:${registered.error.message}`);
   const installationCredential=opaqueToken('vic'); const userSession=opaqueToken('vus');
@@ -104,6 +104,7 @@ export async function installationScope(req: ApiRequest) {
   if (row.error||!row.data) throw new Error('installation_credential_invalid');
   const installation=(row.data as unknown as {organization_tool_installations: Record<string,unknown>}).organization_tool_installations;
   if (installation.registration_status==='revoked') throw new Error('installation_revoked');
+  if (installation.is_current!==true) throw new Error('installation_superseded');
   await client.from('tool_installation_credentials').update({last_used_at:new Date().toISOString()}).eq('tool_installation_credentials_id',row.data.tool_installation_credentials_id);
   await client.from('organization_tool_installations').update({last_seen_at:new Date().toISOString()}).eq('organization_tool_installations_id',row.data.organization_tool_installations_id);
   return {client,credentialId:String(row.data.tool_installation_credentials_id),installationId:String(row.data.organization_tool_installations_id),organizationId:Number(installation.organizations_id),toolId:toolId(installation.tool_id),externalInstallationId:String(installation.external_installation_id),installation};
@@ -115,6 +116,7 @@ export async function sessionScope(req: ApiRequest) {
   const row=await client.from('tool_user_sessions').select('*,organization_tool_installations!inner(*)').eq('session_hash',await sha256(raw)).is('revoked_at',null).gt('last_used_at',cutoff).maybeSingle();
   if (row.error||!row.data) throw new Error('user_session_invalid_or_expired');
   const installation=(row.data as unknown as {organization_tool_installations: Record<string,unknown>}).organization_tool_installations;
+  if(installation.is_current!==true)throw new Error('installation_superseded');
   const organizationId=numericId(header(req,EXECUTOR_ORGANIZATION_HEADER)||installation.organizations_id);
   if (organizationId!==Number(installation.organizations_id)) throw new Error('session_organization_mismatch');
   const context=await memberContext(client,String(row.data.auth_users_id),organizationId,toolId(installation.tool_id));

@@ -1,4 +1,8 @@
-# CRM - Vinsansi Studio v2.4.0-R21
+# CRM - Vinsansi Studio v2.4.0-R22
+
+## R22 — lifecycle de instalações no Monitoramento
+
+O inventário histórico foi separado da saúde operacional por slot. Reinstalações preservam IDs/versões anteriores como histórico, revogam seus acessos e somente a instalação corrente participa de heartbeat, componentes e alertas. A migration incremental é `supabase/migrations/20260825203000_r22_current_tool_installation_lifecycle.sql`.
 
 ## R21 — homologação técnica da Etapa 11
 
@@ -19,7 +23,7 @@ Na Etapa 10, qualquer empresa presente em `permanent_records` é terminal para p
 
 Esta árvore contém a implementação completa das Etapas 8–15 sobre a base homologada das Etapas 1–7. A v2.4.0 é **Release Candidate** até a checklist persistente da Etapa 15 ser aprovada. A migration final não promove Stable sozinha; a promoção exige uma rodada aprovada, schema saudável, ausência de alerta crítico e Platform Owner.
 
-Componentes coordenados: Gerenciador 1.3.0, Worker 3.13.0, Gateway 1.2.7, Evolution Go 0.7.2, Vinsansi Captura 1.0.10 e Vinsansi Instagram 2.0.1. WhatsApp permanece texto-only.
+Componentes coordenados: Gerenciador 1.3.3, Worker 3.13.2, Gateway 1.2.7, Evolution Go 0.7.2, Vinsansi Captura 1.0.10 e Vinsansi Instagram 2.0.5. WhatsApp permanece texto-only.
 
 Use `PASSO-A-PASSO-ETAPAS-8-A-15.md` e `ETAPAS-8-A-15-IMPLEMENTADAS.md`.
 

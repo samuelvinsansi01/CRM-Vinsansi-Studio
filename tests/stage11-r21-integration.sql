@@ -1,12 +1,14 @@
 \set ON_ERROR_STOP on
 
 INSERT INTO public.organizations VALUES (1,101,1),(2,202,1);
-INSERT INTO public.organization_tools VALUES
+INSERT INTO public.organization_tools(organizations_id,tool_id,enabled) VALUES
   (1,'vinsansi_whatsapp_manager',true),(2,'vinsansi_whatsapp_manager',true);
-INSERT INTO public.organization_tool_installations VALUES
-  ('00000000-0000-0000-0000-000000000011',1,'vinsansi_instagram','registered',now()),
-  ('00000000-0000-0000-0000-000000000012',1,'vinsansi_capture','registered',now()),
-  ('00000000-0000-0000-0000-000000000021',2,'vinsansi_instagram','registered',now());
+INSERT INTO public.platform_tools(tool_id) VALUES
+  ('vinsansi_capture'),('vinsansi_instagram'),('vinsansi_whatsapp_manager');
+INSERT INTO public.organization_tool_installations(organization_tool_installations_id,organizations_id,tool_id,external_installation_id,registration_status,last_seen_at) VALUES
+  ('00000000-0000-0000-0000-000000000011',1,'vinsansi_instagram','instagram-org1','registered',now()),
+  ('00000000-0000-0000-0000-000000000012',1,'vinsansi_capture','capture-org1','registered',now()),
+  ('00000000-0000-0000-0000-000000000021',2,'vinsansi_instagram','instagram-org2','registered',now());
 INSERT INTO public.organization_members VALUES (11,1,1),(21,2,1);
 INSERT INTO public.socials VALUES (11,1,'org1',1),(21,2,'org2',1);
 
