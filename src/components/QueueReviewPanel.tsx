@@ -1,6 +1,7 @@
-import { LockKeyhole, RefreshCcw, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { Button, Tag, type ToastItem } from '../design-system/components';
+import { Check, RefreshCcw, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Button, Pagination, RowsPerPageControl, Tag, type ToastItem } from '../design-system/components';
+import { useClientPagination } from '../hooks/useClientPagination';
 import { queueReviewService, type QueueReviewBatch, type QueueReviewChannel, type QueueReviewItem } from '../services/queue-review';
 import { externalHttpHref, instagramHref, mapsHref, whatsappHref } from '../utils/externalLinks';
 
@@ -45,42 +46,71 @@ export function QueueReviewPanel({
   const [loading, setLoading] = useState(true);
   const [pulling, setPulling] = useState(false);
   const [workingItem, setWorkingItem] = useState('');
-  const [lockingBatch, setLockingBatch] = useState('');
 
   const refresh = useCallback(async () => {
+    if (!preferredResourceId) {
+      setBatches([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      setBatches(await queueReviewService.list(channel));
+      setBatches(await queueReviewService.list(channel, preferredResourceId, scheduledDate));
     } catch (error) {
       onToast('Não foi possível carregar a revisão', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {
       setLoading(false);
     }
-  }, [channel, onToast]);
+  }, [channel, onToast, preferredResourceId, scheduledDate]);
 
   useEffect(() => { void refresh(); }, [refresh, scheduledDate]);
 
+  const currentBatch = batches[0];
+  const reviewItems = useMemo(() => currentBatch?.items ?? [], [currentBatch]);
+  const {
+    page,
+    setPage,
+    rowsPerPage,
+    setRowsPerPage,
+    totalPages,
+    pageItems,
+    resetPage,
+  } = useClientPagination(reviewItems, 20);
+
+  useEffect(() => { resetPage(); }, [preferredResourceId, scheduledDate, resetPage]);
+
   const pull = async () => {
-    if (!canPrepare) return;
-    if (channel === 'WhatsApp' && !preferredResourceId) {
-      onToast('Selecione um chip', 'Escolha um chip específico no filtro acima. A validação WhatsApp sempre usa o chip selecionado.', 'warning');
-      return;
-    }
+    if (!canPrepare || !preferredResourceId) return;
     setPulling(true);
     try {
       const result = await queueReviewService.pullToCapacity(channel, scheduledDate, preferredResourceId);
       await refresh();
       const details = [
-        `${result.batch.openCount}/${result.batch.targetCount} na revisão`,
+        `${result.batch.openCount}/${result.batch.targetCount} em revisão`,
         result.invalidatedByProvider ? `${result.invalidatedByProvider} sem WhatsApp` : '',
         result.redirectedToInstagram ? `${result.redirectedToInstagram} liberado(s) para Instagram` : '',
         result.exhausted ? 'base elegível esgotada' : '',
       ].filter(Boolean).join(' · ');
-      onToast(`Revisão ${channel} atualizada`, details || 'Os melhores leads disponíveis foram puxados.', result.errors ? 'warning' : 'success');
+      onToast(`Revisão ${channel} atualizada`, details || 'A revisão já está na capacidade correta.', result.errors ? 'warning' : 'success');
     } catch (error) {
       onToast(`Não foi possível puxar ${channel}`, error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {
       setPulling(false);
+    }
+  };
+
+  const approve = async (item: QueueReviewItem) => {
+    if (!canPrepare) return;
+    setWorkingItem(item.reviewItemId);
+    try {
+      await queueReviewService.approve(item, channel);
+      await refresh();
+      onQueueChanged();
+      onToast('Lead aprovado', 'O lead entrou na Fila final e o pipeline canônico de snapshot foi preservado.', 'success');
+    } catch (error) {
+      onToast('Não foi possível aprovar', error instanceof Error ? error.message : 'Revise o lead e tente novamente.', 'danger');
+    } finally {
+      setWorkingItem('');
     }
   };
 
@@ -90,26 +120,12 @@ export function QueueReviewPanel({
     try {
       await queueReviewService.invalidate(item, channel);
       await refresh();
-      onToast('Lead invalidado', 'A vaga foi liberada e o CRM buscou automaticamente o próximo melhor lead.', 'warning');
+      onQueueChanged();
+      onToast('Lead invalidado', 'A vaga foi liberada e o próximo melhor lead voltou para a etapa de revisão.', 'warning');
     } catch (error) {
       onToast('Não foi possível invalidar', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {
       setWorkingItem('');
-    }
-  };
-
-  const lock = async (batch: QueueReviewBatch) => {
-    if (!canPrepare || !batch.items.length) return;
-    setLockingBatch(batch.batchId);
-    try {
-      await queueReviewService.lock(batch);
-      await refresh();
-      onQueueChanged();
-      onToast('Fila trancada', `${batch.items.length} lead(s) foram congelados no snapshot e liberados para execução.`, 'success');
-    } catch (error) {
-      onToast('Não foi possível trancar a fila', error instanceof Error ? error.message : 'Revise os leads e tente novamente.', 'danger');
-    } finally {
-      setLockingBatch('');
     }
   };
 
@@ -118,27 +134,25 @@ export function QueueReviewPanel({
       <div className="queue-review-card__header">
         <div>
           <h2>Revisão antes do disparo</h2>
-          <p>Os leads abaixo ainda não possuem snapshot. Invalide o que não fizer sentido e trave a fila quando terminar.</p>
+          <p>Aprove cada lead individualmente. Só depois da aprovação ele entra na Fila final.</p>
         </div>
         <div className="queue-review-card__actions">
-          <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || pulling} onClick={() => void refresh()}>Atualizar</Button>
-          {canPrepare ? <Button loading={pulling} disabled={loading || pulling || (channel === 'WhatsApp' && !preferredResourceId)} onClick={() => void pull()}>{channel === 'WhatsApp' ? (preferredResourceId ? 'Puxar WhatsApp com chip selecionado' : 'Selecione um chip para puxar') : `Puxar ${channel}`}</Button> : null}
+          <Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || pulling || !preferredResourceId} onClick={() => void refresh()}>Atualizar</Button>
+          {canPrepare ? <Button loading={pulling} disabled={loading || pulling || !preferredResourceId} onClick={() => void pull()}>{preferredResourceId ? `Puxar ${channel}` : `Selecione ${channel === 'WhatsApp' ? 'um chip' : 'um perfil'}`}</Button> : null}
         </div>
       </div>
 
-      {loading && !batches.length ? <div className="table-message">Carregando revisão...</div> : null}
-      {!loading && !batches.length ? <div className="table-message">Nenhuma fila aberta para revisão.</div> : null}
+      {!preferredResourceId ? <div className="table-message">Selecione {channel === 'WhatsApp' ? 'um chip' : 'um perfil'} para revisar a fila.</div> : null}
+      {preferredResourceId && loading && !batches.length ? <div className="table-message">Carregando revisão...</div> : null}
+      {preferredResourceId && !loading && !batches.length ? <div className="table-message">Nenhum lead aguardando revisão para este recurso.</div> : null}
 
-      {batches.map((batch) => (
-        <div key={batch.batchId} className="queue-review-batch">
+      {currentBatch ? (
+        <div className="queue-review-batch">
           <div className="queue-review-batch__meta">
             <div>
-              <strong>{batch.resourceLabel}</strong>
-              <span>{batch.items.length}/{batch.targetCount} lead(s) · {batch.scheduledDate}</span>
+              <strong>{currentBatch.resourceLabel}</strong>
+              <span>{currentBatch.items.length}/{currentBatch.targetCount} lead(s) aguardando aprovação · {currentBatch.scheduledDate}</span>
             </div>
-            <Button iconLeft={LockKeyhole} loading={lockingBatch === batch.batchId} disabled={!batch.items.length || Boolean(lockingBatch)} onClick={() => void lock(batch)}>
-              Trancar fila
-            </Button>
           </div>
           <div className="queue-review-table-wrap">
             <table className="queue-review-table">
@@ -156,9 +170,9 @@ export function QueueReviewPanel({
               </colgroup>
               <thead><tr><th>#</th><th>Empresa</th><th>Ramo</th><th>Estado</th><th>Cidade</th><th>Nota</th><th>Avaliações</th><th>{channel}</th><th>Site</th><th>Ações</th></tr></thead>
               <tbody>
-                {batch.items.map((item) => (
+                {pageItems.map((item, index) => (
                   <tr key={item.reviewItemId}>
-                    <td>{item.position}</td>
+                    <td>{(page - 1) * rowsPerPage + index + 1}</td>
                     <td className="queue-review-table__company">{companyLink(item)}</td>
                     <td className="queue-review-table__wrap">{item.branch || '-'}</td>
                     <td>{item.state || '-'}</td>
@@ -168,19 +182,33 @@ export function QueueReviewPanel({
                     <td>{channelAvailability(item, channel)}</td>
                     <td>{availabilityTag(Boolean(item.website.trim()), externalHttpHref(item.website), 'Abrir site')}</td>
                     <td className="queue-review-table__action">
-                      {canInvalidate ? (
-                        <button className="queue-review-invalidate" type="button" title="Invalidar lead" disabled={workingItem === item.reviewItemId || Boolean(lockingBatch)} onClick={() => void invalidate(item)}>
-                          <Trash2 size={16} aria-hidden="true" />
-                        </button>
-                      ) : <Tag tone="neutral">Revisão</Tag>}
+                      <div className="queue-review-actions">
+                        {canPrepare ? (
+                          <button className="queue-review-approve" type="button" title="Aprovar e enviar para a Fila final" disabled={workingItem === item.reviewItemId} onClick={() => void approve(item)}>
+                            <Check size={16} aria-hidden="true" />
+                          </button>
+                        ) : null}
+                        {canInvalidate ? (
+                          <button className="queue-review-invalidate" type="button" title="Invalidar lead" disabled={workingItem === item.reviewItemId} onClick={() => void invalidate(item)}>
+                            <Trash2 size={16} aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <div className="queue-list-card__footer queue-review-card__footer">
+            <div className="queue-list-card__footer-left">
+              <RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} />
+              <small>Mostrando {pageItems.length} de {reviewItems.length} lead(s)</small>
+            </div>
+            <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+          </div>
         </div>
-      ))}
+      ) : null}
     </section>
   );
 }

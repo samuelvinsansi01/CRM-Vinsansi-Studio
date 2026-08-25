@@ -111,6 +111,8 @@ export type CanonicalQueueRow = {
   social?: Row;
   template?: Row;
   branch?: Row;
+  city?: Row;
+  state?: Row;
   statusName: string;
 };
 
@@ -145,7 +147,11 @@ export async function loadCanonicalQueue(channel: QueueChannel): Promise<Canonic
     queueStatusNameMap(),
   ]);
   const instances = await rowsByIds('instances', 'instances_id', ids(chips, 'instances_id'));
-  const branches = await rowsByIds('branches', 'branches_id', ids(leads, 'branches_id'));
+  const [branches, cities, states] = await Promise.all([
+    rowsByIds('branches', 'branches_id', ids(leads, 'branches_id')),
+    rowsByIds('cities', 'cities_id', ids(leads, 'cities_id')),
+    rowsByIds('states', 'states_id', ids(leads, 'states_id')),
+  ]);
   const queueMap = new Map(queues.map((row) => [String(row.queues_id), row]));
   const leadMap = new Map(leads.map((row) => [String(row.leads_id), row]));
   const chipMap = new Map(chips.map((row) => [String(row.chips_id), row]));
@@ -153,6 +159,8 @@ export async function loadCanonicalQueue(channel: QueueChannel): Promise<Canonic
   const socialMap = new Map(socials.map((row) => [String(row.socials_id), row]));
   const templateMap = new Map(templates.map((row) => [String(row.templates_id), row]));
   const branchMap = new Map(branches.map((row) => [String(row.branches_id), row]));
+  const cityMap = new Map(cities.map((row) => [String(row.cities_id), row]));
+  const stateMap = new Map(states.map((row) => [String(row.states_id), row]));
 
   return items.map((item) => {
     const lead = leadMap.get(String(item.leads_id)) ?? {};
@@ -166,6 +174,8 @@ export async function loadCanonicalQueue(channel: QueueChannel): Promise<Canonic
       social: socialMap.get(String(item.socials_id)),
       template: templateMap.get(String(item.templates_id)),
       branch: branchMap.get(String(lead.branches_id)),
+      city: cityMap.get(String(lead.cities_id)),
+      state: stateMap.get(String(lead.states_id)),
       statusName: statuses.get(String(item.status_id)) ?? String(item.status_id ?? ''),
     };
   });

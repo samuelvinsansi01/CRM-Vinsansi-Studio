@@ -33,11 +33,12 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
 
       try {
         const nextProfiles = await instagramQueueService.listProfiles();
-        const scopedFilters = profile ? { profile, scheduledDate } : { scheduledDate };
-        const [nextBatches, nextSummary] = await Promise.all([
-          instagramQueueService.listBatches(scopedFilters),
-          instagramQueueService.summary(scopedFilters),
-        ]);
+        const [nextBatches, nextSummary] = profile
+          ? await Promise.all([
+              instagramQueueService.listBatches({ profile, scheduledDate }),
+              instagramQueueService.summary({ profile, scheduledDate }),
+            ])
+          : [[], emptySummary];
 
         if (!active) return;
         setProfiles(nextProfiles);

@@ -105,12 +105,13 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
 
       try {
         const nextChips = await whatsappQueueService.listChips();
-        const scopedFilters = chip ? { chip, scheduledDate } : { scheduledDate };
-        const [nextBatches, nextSummary, nextBatchState] = await Promise.all([
-          whatsappQueueService.listBatches(scopedFilters),
-          whatsappQueueService.summary(scopedFilters),
-          batchStatusForScope(chip, nextChips),
-        ]);
+        const [nextBatches, nextSummary, nextBatchState] = chip
+          ? await Promise.all([
+              whatsappQueueService.listBatches({ chip, scheduledDate }),
+              whatsappQueueService.summary({ chip, scheduledDate }),
+              batchStatusForScope(chip, nextChips),
+            ])
+          : [[], emptySummary, idleBatchState];
 
         if (!active) return;
         setChips(nextChips);

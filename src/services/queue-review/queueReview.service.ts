@@ -166,25 +166,23 @@ async function fillBatch(
 }
 
 async function pullToCapacity(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId = '') {
+  if (!preferredResourceId) {
+    throw new Error(channel === 'WhatsApp'
+      ? 'Selecione um chip específico antes de puxar e validar a fila WhatsApp.'
+      : 'Selecione um perfil específico antes de puxar a fila Instagram.');
+  }
   const availableResources = await resources(channel, scheduledDate);
   const matchesPreferred = (item: QueuePreparationResource) => item.id === preferredResourceId || item.label === preferredResourceId || item.aliases?.includes(preferredResourceId);
-  const resource = channel === 'WhatsApp'
-    ? (() => {
-      if (!preferredResourceId) throw new Error('Selecione um chip específico antes de puxar e validar a fila WhatsApp.');
-      return availableResources.find(matchesPreferred);
-    })()
-    : availableResources.find((item) => matchesPreferred(item) && item.available > 0)
-      ?? availableResources.find((item) => item.available > 0)
-      ?? availableResources[0];
-  if (!resource) throw new Error(channel === 'WhatsApp' ? 'O chip selecionado não está operacional.' : 'Nenhum perfil Instagram operacional disponível.');
-  if (resource.available <= 0) throw new Error('O recurso selecionado não possui capacidade disponível.');
+  const resource = availableResources.find(matchesPreferred);
+  if (!resource) throw new Error(channel === 'WhatsApp' ? 'O chip selecionado não está operacional.' : 'O perfil Instagram selecionado não está operacional.');
   return fillBatch(channel, resource, scheduledDate, { revalidateExisting: channel === 'WhatsApp' });
 }
 
-async function list(channel: QueueReviewChannel): Promise<QueueReviewBatch[]> {
+async function list(channel: QueueReviewChannel, preferredResourceId = '', scheduledDate = ''): Promise<QueueReviewBatch[]> {
+  const resourceDate = scheduledDate || new Date().toISOString().slice(0, 10);
   const [{ data, error }, availableResources] = await Promise.all([
     getSupabaseClient().rpc('list_open_queue_review', { p_channel: channelKey(channel) }),
-    resources(channel, new Date().toISOString().slice(0, 10)),
+    resources(channel, resourceDate),
   ]);
   if (error) throw new Error(error.message);
   const rows = ((data ?? []) as Array<Record<string, unknown>>).map<QueueReviewItem>((row) => ({
@@ -236,7 +234,34 @@ async function list(channel: QueueReviewChannel): Promise<QueueReviewBatch[]> {
     }
     batch.items.push(item);
   }
-  return Array.from(grouped.values());
+  const result = Array.from(grouped.values())
+    .filter((batch) => !scheduledDate || batch.scheduledDate === scheduledDate);
+  if (!preferredResourceId) return result;
+  return result.filter((batch) => {
+    const resource = availableResources.find((entry) => entry.id === batch.resourceId);
+    return batch.resourceId === preferredResourceId
+      || batch.resourceLabel === preferredResourceId
+      || resource?.label === preferredResourceId
+      || resource?.aliases?.includes(preferredResourceId);
+  });
+}
+
+async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
+  const prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
+  if (prepared.failures.length) {
+    const first = prepared.failures[0];
+    throw new Error(`${first.company ? `${first.company}: ` : ''}${first.reason}`);
+  }
+  const preparedItem = prepared.items[0];
+  if (!preparedItem) throw new Error('O lead não está pronto para aprovação.');
+  const { data, error } = await getSupabaseClient().rpc('approve_queue_review_item', {
+    p_review_item_id: Number(item.reviewItemId),
+    p_template_id: Number(preparedItem.templateId),
+  });
+  if (error) throw new Error(error.message);
+  eventBus.emit('import:changed', { source: 'move' });
+  eventBus.emit(channel === 'WhatsApp' ? 'whatsapp-queue:changed' : 'instagram-queue:changed', { action: 'update' });
+  return data;
 }
 
 async function invalidate(item: QueueReviewItem, channel: QueueReviewChannel) {
@@ -266,4 +291,4 @@ async function lock(batch: QueueReviewBatch) {
   return data;
 }
 
-export const queueReviewService = { resources, openBatch, pullToCapacity, fillBatch, list, invalidate, lock };
+export const queueReviewService = { resources, openBatch, pullToCapacity, fillBatch, list, approve, invalidate };

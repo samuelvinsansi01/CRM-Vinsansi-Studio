@@ -45,6 +45,8 @@ export type InstagramQueueLead = {
   image_id?: string;
   city?: string;
   state?: string;
+  rating?: number;
+  reviews?: number;
   phone?: string;
   site?: string;
   mapsUrl?: string;

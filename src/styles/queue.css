@@ -577,3 +577,135 @@ button.batch__header {
 .queue-review-table__action {
   padding-right: 14px !important;
 }
+
+/* R26: revisão incremental + fila final tabular */
+.queue-tabs {
+  display: flex;
+  justify-content: flex-start;
+  margin: 0 0 var(--space-16);
+}
+
+.queue-tabs .segmented {
+  min-width: 280px;
+}
+
+.queue-review-actions,
+.queue-final-table__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-08);
+}
+
+.queue-review-approve,
+.queue-review-invalidate,
+.queue-table-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, opacity .15s ease;
+}
+
+.queue-review-approve {
+  color: var(--action-success, #22c55e);
+}
+
+.queue-review-approve:hover {
+  background: color-mix(in srgb, var(--action-success, #22c55e) 14%, transparent);
+}
+
+.queue-review-invalidate,
+.queue-table-action--danger {
+  color: var(--action-danger);
+}
+
+.queue-review-invalidate:hover,
+.queue-table-action--danger:hover {
+  background: color-mix(in srgb, var(--action-danger) 14%, transparent);
+}
+
+.queue-table-action--view {
+  color: var(--action-primary);
+}
+
+.queue-table-action--view:hover {
+  background: color-mix(in srgb, var(--action-primary) 14%, transparent);
+}
+
+.queue-review-approve:disabled,
+.queue-review-invalidate:disabled,
+.queue-table-action:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+.queue-review-card__footer {
+  margin: 0;
+  padding: var(--space-16) var(--space-12) 0;
+}
+
+.queue-final-table-wrap {
+  overflow-x: auto;
+}
+
+.queue-final-table {
+  width: 100%;
+  min-width: 1220px;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.queue-final-table th,
+.queue-final-table td {
+  padding: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.queue-final-table th {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.queue-final-table tbody tr:hover {
+  background: color-mix(in srgb, var(--color-pure-white) 2.5%, transparent);
+}
+
+.queue-final-col--position { width: 52px; }
+.queue-final-col--company { width: 25%; }
+.queue-final-col--branch { width: 13%; }
+.queue-final-col--state { width: 70px; }
+.queue-final-col--city { width: 11%; }
+.queue-final-col--rating { width: 66px; }
+.queue-final-col--reviews { width: 88px; }
+.queue-final-col--channel { width: 94px; }
+.queue-final-col--site { width: 72px; }
+.queue-final-col--status { width: 122px; }
+.queue-final-col--actions { width: 86px; }
+
+.queue-final-table__company,
+.queue-final-table__wrap {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+}
+
+.queue-final-table__company {
+  line-height: 1.35;
+}
+
+.queue-final-table__actions {
+  padding-right: 14px !important;
+}

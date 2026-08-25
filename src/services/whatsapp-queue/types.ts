@@ -50,6 +50,8 @@ export type WhatsAppQueueLead = {
   image_id?: string;
   city?: string;
   state?: string;
+  rating?: number;
+  reviews?: number;
   site?: string;
   instagram?: string;
   mapsUrl?: string;

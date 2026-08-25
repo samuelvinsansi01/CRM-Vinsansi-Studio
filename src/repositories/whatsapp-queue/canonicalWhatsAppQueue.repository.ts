@@ -22,6 +22,8 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): W
   const chip = row.chip ?? {};
   const instance = row.instance ?? {};
   const branch = row.branch ?? {};
+  const city = row.city ?? {};
+  const state = row.state ?? {};
   const snapshot = queuePayloadSnapshot(item.queue_items_payload_snapshot);
   const snapshotLead = queueSnapshotPart(snapshot, 'lead');
   const snapshotRecipient = queueSnapshotPart(snapshot, 'recipient');
@@ -86,6 +88,10 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): W
     imageRequired,
     image_url: imageName,
     image_id: String(snapshotMedia.sha256 ?? ''),
+    city: String(snapshotLead.city ?? city.cities_name ?? ''),
+    state: String(snapshotLead.state ?? state.states_code ?? state.states_name ?? ''),
+    rating: Number(lead.leads_score ?? 0),
+    reviews: Number(lead.leads_reviews_count ?? 0),
     site: website,
     instagram,
     mapsUrl,
@@ -206,5 +212,13 @@ export const canonicalWhatsAppQueueRepository: WhatsAppQueueRepository = {
     }).eq('users_id', userId).in('queue_items_id', ids.map(Number));
     if (response.error) throw new Error(response.error.message);
   },
-  async invalidate(id) { await updateQueueItemStatus([id], 'invalid'); },
+  async invalidate(id) {
+    const numeric = Number(id);
+    if (!Number.isSafeInteger(numeric) || numeric <= 0) throw new Error('Item WhatsApp inválido.');
+    const response = await getSupabaseClient().rpc('invalidate_final_queue_item', {
+      p_queue_item_id: numeric,
+      p_reason: 'invalidado pelo operador',
+    });
+    if (response.error) throw new Error(response.error.message);
+  },
 };

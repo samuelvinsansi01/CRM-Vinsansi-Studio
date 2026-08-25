@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Bug, Calendar, CheckSquare, ChevronDown, ChevronUp, Eye, Flag, List, Pause, Play, RefreshCcw, Send, Square, Users, X } from 'lucide-react';
-import { Button, ConfirmDialog, Drawer, Field, MetricCard, Pagination, RowsPerPageControl, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
+import { Button, ConfirmDialog, Drawer, Field, MetricCard, SegmentedControl, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { QueueReviewPanel } from '../components/QueueReviewPanel';
+import { QueueFinalTable } from '../components/QueueFinalTable';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useInstagramQueue } from '../hooks/useInstagramQueue';
 import { useWhatsAppQueue } from '../hooks/useWhatsAppQueue';
@@ -16,6 +17,7 @@ import { toLocalDateInputValue } from '../utils/date';
 import { hasWebsiteForTemplate } from '../services/templates/templateSelector';
 import { instagramExtensionGateway } from '../services/instagram-extension';
 import { mapsHref } from '../utils/externalLinks';
+import { queueReviewService } from '../services/queue-review';
 
 type QueuePageProps = {
   channel: 'whatsapp' | 'instagram';
@@ -90,6 +92,7 @@ function WhatsAppQueuePage() {
   const canEditLead = hasPermission('leads.edit');
   const canInvalidate = hasPermission('leads.validate');
   const [activeChip, setActiveChip] = useState('');
+  const [activeTab, setActiveTab] = useState<'Revisão' | 'Fila final'>('Revisão');
   const [scheduledDate, setScheduledDate] = useState(todayInputValue);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [starting, setStarting] = useState(false);
@@ -112,9 +115,11 @@ function WhatsAppQueuePage() {
   const running = batchState.enabled && batchState.status === 'running';
 
   useEffect(() => {
-    if (activeChip && !chips.includes(activeChip)) {
-      setActiveChip('');
+    if (!chips.length) {
+      if (activeChip) setActiveChip('');
+      return;
     }
+    if (!activeChip || !chips.includes(activeChip)) setActiveChip(chips[0]);
   }, [activeChip, chips]);
 
   useEffect(() => {
@@ -189,7 +194,7 @@ function WhatsAppQueuePage() {
     }
   };
 
-  const targetChips = () => activeChip ? [activeChip] : Array.from(new Set(batches.map((batch) => batch.chip).filter(Boolean)));
+  const targetChips = () => activeChip ? [activeChip] : [];
 
   const handlePause = async () => {
     if (!canControl) return;
@@ -265,23 +270,29 @@ function WhatsAppQueuePage() {
   };
 
   const handleInvalidate = async () => {
-    if (!canInvalidate) return;
-    if (!confirmLead) return;
-    await invalidate(confirmLead);
-    setConfirmLead(null);
-    setSelectedIds((current) => current.filter((id) => id !== confirmLead.id));
-    pushToast({ title: 'Lead invalidado', description: `${confirmLead.company} saiu da fila ativa.`, tone: 'warning' });
+    if (!canInvalidate || !confirmLead) return;
+    const lead = confirmLead;
+    try {
+      await invalidate(lead);
+      if (activeChip) await queueReviewService.pullToCapacity('WhatsApp', scheduledDate, activeChip).catch(() => undefined);
+      setConfirmLead(null);
+      setSelectedIds((current) => current.filter((id) => id !== lead.id));
+      pushToast({ title: 'Lead invalidado', description: `${lead.company} saiu da Fila final. Uma nova vaga foi enviada para Revisão.`, tone: 'warning' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível invalidar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
   };
 
-  const chipFilterOptions = [{ label: 'Todos os chips', value: '' }, ...chips.map((chip) => ({ label: chip, value: chip }))];
-  const scopeLabel = activeChip || 'Todos os chips';
+  const chipFilterOptions = chips.map((chip) => ({ label: chip, value: chip }));
+  const scopeLabel = activeChip || 'Selecione um chip';
+  const finalLeads = useMemo(() => batches.flatMap((batch) => batch.leads), [batches]);
   const startButtonLabel = starting
     ? 'Iniciando...'
     : running
       ? 'Em execução'
       : activeChip
         ? `Iniciar ${activeChip}`
-        : 'Iniciar lotes visíveis';
+        : 'Selecione um chip';
 
   return (
     <div className="queue-page queue-page--whatsapp">
@@ -296,7 +307,7 @@ function WhatsAppQueuePage() {
 
       <div className="queue-topline queue-topline--actions">
         <div className="queue-controls">
-          <SelectField className="queue-inline-filter" options={chipFilterOptions} value={activeChip} onChange={setActiveChip} placeholder="Todos os chips" />
+          <SelectField className="queue-inline-filter" options={chipFilterOptions} value={activeChip} onChange={setActiveChip} placeholder="Selecione um chip" />
           {canControl ? <>
             <Button variant="danger" iconLeft={Square} disabled={!running && batchState.status !== 'paused'} onClick={handleStop}>Parar</Button>
             {running ? (
@@ -310,16 +321,19 @@ function WhatsAppQueuePage() {
         </div>
       </div>
 
-      <QueueReviewPanel
-        channel="WhatsApp"
-        scheduledDate={scheduledDate}
-        preferredResourceId={activeChip}
-        canPrepare={canPrepare && !running}
-        canInvalidate={canInvalidate}
-        onQueueChanged={refresh}
-        onToast={(title, description, tone) => pushToast({ title, description, tone })}
-      />
+      <div className="queue-tabs"><SegmentedControl items={['Revisão', 'Fila final']} active={activeTab} onChange={(item) => setActiveTab(item as 'Revisão' | 'Fila final')} /></div>
 
+      {activeTab === 'Revisão' ? (
+        <QueueReviewPanel
+          channel="WhatsApp"
+          scheduledDate={scheduledDate}
+          preferredResourceId={activeChip}
+          canPrepare={canPrepare && !running}
+          canInvalidate={canInvalidate}
+          onQueueChanged={refresh}
+          onToast={(title, description, tone) => pushToast({ title, description, tone })}
+        />
+      ) : (
       <section className="queue-list-card">
         <div className="queue-list-card__header">
           <h2>Listagem de disparos - {scopeLabel}</h2>
@@ -334,37 +348,24 @@ function WhatsAppQueuePage() {
         </div>
         {refreshing && running && batches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
         {error ? <div className="table-message">{error}</div> : null}
-        {!error && loading && !batches.length ? <div className="table-message">Carregando fila WhatsApp...</div> : null}
-        {!error && !loading && !refreshing && !batches.length ? <div className="table-message">Nenhum lote WhatsApp disponivel.</div> : null}
-        <div className="batch-list">
-          {!error ? pagedBatches.map((batch, index) => (
-            <WhatsAppBatch
-              key={batch.id}
-              batch={batch}
-              showScope={!activeChip}
-              defaultExpanded={index === 0}
-              onEdit={(lead) => { setEditingLead(lead); setDrawerMode('view'); }}
-              onInvalidate={setConfirmLead}
-              canInvalidate={canInvalidate}
-            />
-          )) : null}
-        </div>
-        {batches.length ? (
-          <div className="queue-list-card__footer">
-            <div className="queue-list-card__footer-left">
-              <RowsPerPageControl value={batchesPerPage} onChange={setBatchesPerPage} />
-              <small>Mostrando {pagedBatches.length} de {batches.length} lote(s)</small>
-            </div>
-            <Pagination page={batchPage} totalPages={batchTotalPages} onPageChange={setBatchPage} />
-          </div>
+        {!error && loading && !finalLeads.length ? <div className="table-message">Carregando Fila final...</div> : null}
+        {!error && !loading ? (
+          <QueueFinalTable
+            channel="WhatsApp"
+            leads={finalLeads}
+            canInvalidate={canInvalidate}
+            onView={(lead) => { setEditingLead(lead as WhatsAppQueueLead); setDrawerMode('view'); }}
+            onInvalidate={(lead) => setConfirmLead(lead as WhatsAppQueueLead)}
+          />
         ) : null}
       </section>
+      )}
 
       <QueueLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} canEdit={canEditLead} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
         open={canInvalidate && Boolean(confirmLead)}
         title="Invalidar lead da fila?"
-        description="Essa ação marca o lead como inválido localmente e remove da execução do lote."
+        description="Essa ação invalida o lead, remove da Fila final e libera uma vaga para um novo lead entrar em Revisão."
         confirmLabel="Invalidar"
         danger
         onClose={() => setConfirmLead(null)}
@@ -547,6 +548,7 @@ function InstagramQueuePage() {
   const canInvalidate = hasPermission('leads.validate');
   const canUseInstagram = hasPermission('instagram.use');
   const [activeProfile, setActiveProfile] = useState('');
+  const [activeTab, setActiveTab] = useState<'Revisão' | 'Fila final'>('Revisão');
   const [scheduledDate, setScheduledDate] = useState(todayInputValue);
   const [editingLead, setEditingLead] = useState<InstagramQueueLead | null>(null);
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit'>('view');
@@ -568,9 +570,11 @@ function InstagramQueuePage() {
   } = useClientPagination(batches, 10);
 
   useEffect(() => {
-    if (activeProfile && !profiles.includes(activeProfile)) {
-      setActiveProfile('');
+    if (!profiles.length) {
+      if (activeProfile) setActiveProfile('');
+      return;
     }
+    if (!activeProfile || !profiles.includes(activeProfile)) setActiveProfile(profiles[0]);
   }, [activeProfile, profiles]);
 
   useEffect(() => {
@@ -607,11 +611,16 @@ function InstagramQueuePage() {
   };
 
   const handleInvalidate = async () => {
-    if (!canInvalidate) return;
-    if (!confirmLead) return;
-    await invalidate(confirmLead);
-    setConfirmLead(null);
-    pushToast({ title: 'Lead invalidado', description: `${confirmLead.instagram} saiu da fila ativa.`, tone: 'warning' });
+    if (!canInvalidate || !confirmLead) return;
+    const lead = confirmLead;
+    try {
+      await invalidate(lead);
+      if (activeProfile) await queueReviewService.pullToCapacity('Instagram', scheduledDate, activeProfile).catch(() => undefined);
+      setConfirmLead(null);
+      pushToast({ title: 'Lead invalidado', description: `${lead.company} saiu da Fila final. Uma nova vaga foi enviada para Revisão.`, tone: 'warning' });
+    } catch (err) {
+      pushToast({ title: 'Não foi possível invalidar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+    }
   };
 
   const handlePairExtension = async () => {
@@ -662,8 +671,9 @@ function InstagramQueuePage() {
     }
   };
 
-  const profileFilterOptions = [{ label: 'Todos os perfis', value: '' }, ...profiles.map((profile) => ({ label: profile, value: profile }))];
-  const scopeLabel = activeProfile || 'Todos os perfis';
+  const profileFilterOptions = profiles.map((profile) => ({ label: profile, value: profile }));
+  const scopeLabel = activeProfile || 'Selecione um perfil';
+  const finalLeads = useMemo(() => batches.flatMap((batch) => batch.leads), [batches]);
 
   return (
     <div className="queue-page queue-page--instagram">
@@ -677,57 +687,45 @@ function InstagramQueuePage() {
       </section>
       <div className="queue-topline queue-topline--actions">
         <div className="queue-controls">
-          <SelectField className="queue-inline-filter" options={profileFilterOptions} value={activeProfile} onChange={setActiveProfile} placeholder="Todos os perfis" />
+          <SelectField className="queue-inline-filter" options={profileFilterOptions} value={activeProfile} onChange={setActiveProfile} placeholder="Selecione um perfil" />
           {canControl ? <Button variant="secondary" iconLeft={RefreshCcw} loading={reprocessing} disabled={loading || reprocessing} onClick={handleReprocessErrors}>Reprocessar erros</Button> : null}
           {canUseInstagram ? <Button iconLeft={Send} loading={pairing} disabled={loading || pairing} onClick={handlePairExtension}>Vincular extensão</Button> : null}
         </div>
       </div>
-      <QueueReviewPanel
-        channel="Instagram"
-        scheduledDate={scheduledDate}
-        preferredResourceId={activeProfile}
-        canPrepare={canPrepare}
-        canInvalidate={canInvalidate}
-        onQueueChanged={refresh}
-        onToast={(title, description, tone) => pushToast({ title, description, tone })}
-      />
-      <section className="queue-list-card">
-        <div className="queue-list-card__header">
-          <h2>Listagem de disparos - {scopeLabel}</h2>
-        </div>
-        {refreshing && visibleBatches.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila sem interromper os lotes...</small> : null}
-        {error ? <div className="table-message">{error}</div> : null}
-        {!error && loading && !visibleBatches.length ? <div className="table-message">Carregando fila Instagram...</div> : null}
-        {!error && !loading && !refreshing && !visibleBatches.length ? <div className="table-message">Nenhum lote Instagram disponivel.</div> : null}
-        <div className="batch-list">
-          {!error ? pagedBatches.map((batch, index) => (
-            <InstagramBatch
-              key={batch.id}
-              batch={batch}
-              showScope={!activeProfile}
-              defaultExpanded={index === 0}
-              onEdit={(lead) => { setEditingLead(lead); setDrawerMode('view'); }}
-              onInvalidate={setConfirmLead}
+      <div className="queue-tabs"><SegmentedControl items={['Revisão', 'Fila final']} active={activeTab} onChange={(item) => setActiveTab(item as 'Revisão' | 'Fila final')} /></div>
+      {activeTab === 'Revisão' ? (
+        <QueueReviewPanel
+          channel="Instagram"
+          scheduledDate={scheduledDate}
+          preferredResourceId={activeProfile}
+          canPrepare={canPrepare}
+          canInvalidate={canInvalidate}
+          onQueueChanged={refresh}
+          onToast={(title, description, tone) => pushToast({ title, description, tone })}
+        />
+      ) : (
+        <section className="queue-list-card">
+          <div className="queue-list-card__header"><h2>Listagem de disparos - {scopeLabel}</h2></div>
+          {refreshing && finalLeads.length ? <small className="queue-refresh-indicator" role="status">Atualizando fila...</small> : null}
+          {error ? <div className="table-message">{error}</div> : null}
+          {!error && loading && !finalLeads.length ? <div className="table-message">Carregando Fila final...</div> : null}
+          {!error && !loading ? (
+            <QueueFinalTable
+              channel="Instagram"
+              leads={finalLeads}
               canInvalidate={canInvalidate}
+              onView={(lead) => { setEditingLead(lead as InstagramQueueLead); setDrawerMode('view'); }}
+              onInvalidate={(lead) => setConfirmLead(lead as InstagramQueueLead)}
             />
-          )) : null}
-        </div>
-        {visibleBatches.length ? (
-          <div className="queue-list-card__footer">
-            <div className="queue-list-card__footer-left">
-              <RowsPerPageControl value={batchesPerPage} onChange={setBatchesPerPage} />
-              <small>Mostrando {pagedBatches.length} de {visibleBatches.length} lote(s)</small>
-            </div>
-            <Pagination page={batchPage} totalPages={batchTotalPages} onPageChange={setBatchPage} />
-          </div>
-        ) : null}
-      </section>
+          ) : null}
+        </section>
+      )}
 
       <InstagramLeadDrawer lead={editingLead} mode={drawerMode} saving={saving} canEdit={canEditLead} onModeChange={setDrawerMode} onClose={() => { setEditingLead(null); setDrawerMode('view'); }} onSave={handleSaveLead} />
       <ConfirmDialog
         open={canInvalidate && Boolean(confirmLead)}
         title="Invalidar lead do Instagram?"
-        description="Essa ação marca o lead como inválido localmente e remove da execução do lote."
+        description="Essa ação invalida o lead, remove da Fila final e libera uma vaga para um novo lead entrar em Revisão."
         confirmLabel="Invalidar"
         danger
         onClose={() => setConfirmLead(null)}

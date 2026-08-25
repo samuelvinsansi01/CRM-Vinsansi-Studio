@@ -35,6 +35,8 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], pr
   const template = row.template ?? {};
   const social = row.social ?? {};
   const branch = row.branch ?? {};
+  const city = row.city ?? {};
+  const state = row.state ?? {};
   const snapshot = queuePayloadSnapshot(item.queue_items_payload_snapshot);
   const snapshotLead = queueSnapshotPart(snapshot, 'lead');
   const snapshotRecipient = queueSnapshotPart(snapshot, 'recipient');
@@ -93,6 +95,10 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], pr
     imageRequired,
     image_url: imageName,
     image_id: String(snapshotMedia.sha256 ?? ''),
+    city: String(snapshotLead.city ?? city.cities_name ?? ''),
+    state: String(snapshotLead.state ?? state.states_code ?? state.states_name ?? ''),
+    rating: Number(lead.leads_score ?? 0),
+    reviews: Number(lead.leads_reviews_count ?? 0),
     phone,
     site: website,
     mapsUrl,
@@ -212,7 +218,7 @@ export const canonicalInstagramQueueRepository: InstagramQueueRepository = {
   async invalidate(id) {
     const numeric = Number(id);
     if (!Number.isSafeInteger(numeric) || numeric <= 0) throw new Error('Item Instagram inválido.');
-    const response = await getSupabaseClient().rpc('instagram_invalidate_queue_item', {
+    const response = await getSupabaseClient().rpc('invalidate_final_queue_item', {
       p_queue_item_id: numeric,
       p_reason: 'invalidado pelo operador',
     });
