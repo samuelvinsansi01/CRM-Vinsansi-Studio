@@ -10,13 +10,9 @@ import {
   RowsPerPageControl,
   TableCard,
   Tag,
-  ToastViewport,
-  type TableAction,
   type TableColumn,
-  type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
-import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { useBaseRecords } from '../hooks/useBaseRecords';
 import { useClientPagination } from '../hooks/useClientPagination';
 import type { BaseLead } from '../services/base/types';
@@ -25,15 +21,15 @@ const STATUS_LABEL = { 5: 'Enviado', 6: 'Inválido', 7: 'Duplicado', 8: 'Arquiva
 
 type Row = Record<string, ReactNode> & { id: string };
 const columns: TableColumn<Row>[] = [
-  { key: 'company', label: 'Nome da empresa', width: '24%' },
-  { key: 'branch', label: 'Ramo', width: '15%' },
-  { key: 'state', label: 'Estado', width: '9%' },
+  { key: 'company', label: 'Nome da empresa', width: '22%' },
+  { key: 'branch', label: 'Ramo', width: '14%' },
+  { key: 'state', label: 'Estado', width: '8%' },
   { key: 'city', label: 'Cidade', width: '12%' },
   { key: 'channel', label: 'Canal final', width: '10%' },
   { key: 'contact', label: 'Contato', width: '14%' },
   { key: 'history', label: 'Histórico', width: '10%' },
-  { key: 'outcome', label: 'Resultado', width: '12%' },
-  { key: 'status', label: 'Status final', width: '12%' },
+  { key: 'lastSent', label: 'Último envio', width: '12%' },
+  { key: 'status', label: 'Status final', width: '10%' },
 ];
 
 function statusTag(lead: BaseLead) {
@@ -41,74 +37,45 @@ function statusTag(lead: BaseLead) {
   return <Tag tone={tone}>{STATUS_LABEL[lead.statusId]}</Tag>;
 }
 
+function formatDateTime(value?: string) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
+}
+
 export function BasePage() {
-  const { hasPermission } = useOrganizationContext();
-  const canArchive = hasPermission('leads.delete');
-  const canEdit = hasPermission('leads.edit');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('Todos');
   const [channel, setChannel] = useState('Todos');
-  const [outcome, setOutcome] = useState('Todos');
   const filters = useMemo(() => ({
     search,
     status: status === 'Todos' ? 'Todos' : ({ Enviado: 'enviado', Inválido: 'invalido', Duplicado: 'duplicado', Arquivado: 'arquivado' } as Record<string, string>)[status],
-    origin: channel, outcome,
-  }), [search, status, channel, outcome]);
-  const { records, summary, options, loading, saving, error, refresh, archiveMany, updateMetadata } = useBaseRecords(filters);
-  const [selectedRows, setSelectedRows] = useState<number[]>([]);
-  const [toasts, setToasts] = useState<ToastItem[]>([]);
+    origin: channel,
+  }), [search, status, channel]);
+  const { records, summary, loading, error, refresh } = useBaseRecords(filters);
 
   const rows = useMemo<Row[]>(() => records.map((lead) => ({
     id: lead.id,
     company: lead.company,
-    branch: lead.branch || '-',
-    state: lead.state || '-',
-    city: lead.city || '-',
+    branch: lead.branch || '—',
+    state: lead.state || '—',
+    city: lead.city || '—',
     channel: <Tag tone={lead.origin === 'Instagram' ? 'primary' : 'success'}>{lead.origin}</Tag>,
-    contact: lead.origin === 'Instagram' ? (lead.instagram || '-') : (lead.phone || '-'),
-    history: <span>{lead.totalLeads ?? 1} lead(s) · {lead.totalDispatches ?? 0} envio(s){lead.suppressed ? ' · suprimido' : ''}</span>,
-    outcome: canEdit ? <div className="base-outcome-editor"><select className="base-outcome-select" value={lead.commercialOutcome || ''} disabled={saving} onChange={(event) => void updateMetadata(lead.id,event.target.value,lead.operatorNotes || '')}><option value="">Sem resultado</option><option value="no_response">Sem resposta</option><option value="responded">Respondeu</option><option value="interested">Interessado</option><option value="not_interested">Não interessado</option><option value="client">Cliente</option><option value="wrong_contact">Contato incorreto</option><option value="closed_business">Empresa fechada</option><option value="do_not_contact">Não contatar</option></select><button type="button" className="base-notes-button" title={lead.operatorNotes || 'Adicionar observação'} onClick={() => { const notes=window.prompt('Observações comerciais desta empresa:',lead.operatorNotes || ''); if(notes!==null) void updateMetadata(lead.id,lead.commercialOutcome || '',notes); }}>Notas</button></div> : <span>{lead.commercialOutcome || 'Sem resultado'}{lead.operatorNotes ? ` · ${lead.operatorNotes}` : ''}</span>,
+    contact: lead.origin === 'Instagram' ? (lead.instagram || '—') : (lead.phone || '—'),
+    history: <span>{lead.totalLeads ?? 1} lead(s) · {lead.totalDispatches ?? 0} envio(s)</span>,
+    lastSent: formatDateTime(lead.lastSentAt),
     status: statusTag(lead),
-  })), [canEdit, records, saving, updateMetadata]);
+  })), [records]);
 
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
-  const selectedIds = selectedRows.map((index) => pageItems[index]?.id).filter(Boolean);
-  const toast = (title: string, description: string, tone: ToastItem['tone'] = 'success') => {
-    const id = crypto.randomUUID?.() ?? String(Date.now());
-    setToasts((current) => [...current, { id, title, description, tone }].slice(-4));
-    window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 3600);
-  };
-
-  const archive = async (ids: string[]) => {
-    if (!canArchive) return;
-    try {
-      const result = await archiveMany(ids);
-      setSelectedRows([]);
-      const detail = [
-        result.succeeded ? `${result.succeeded} arquivado(s)` : '',
-        result.unchanged ? `${result.unchanged} já arquivado(s)` : '',
-        result.failed ? `${result.failed} falha(s)` : '',
-      ].filter(Boolean).join(', ');
-      toast(
-        result.failed ? 'Arquivamento concluído com ressalvas' : 'Base Permanente atualizada',
-        detail || 'Nenhuma alteração necessária.',
-        result.failed ? 'warning' : 'success',
-      );
-    } catch (err) {
-      toast('Não foi possível arquivar', err instanceof Error ? err.message : 'Tente novamente.', 'danger');
-    }
-  };
-
-  const handleAction = async (action: TableAction, row: Row) => {
-    if (action === 'archive') await archive([row.id]);
-  };
 
   return (
     <div className="dashboard-table-page lead-list-page">
       <PageHeader
         title="Base Permanente"
-        description="Memória consolidada por identidade canônica, com histórico de contatos, supressão e prova de envio."
-        action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading || saving} onClick={refresh}>Atualizar</Button>}
+        description="Destino final dos leads processados. Registros somente para consulta e bloqueio definitivo de nova prospecção."
+        action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading} onClick={refresh}>Atualizar</Button>}
       />
 
       <section className="metric-grid metric-grid--6">
@@ -121,35 +88,26 @@ export function BasePage() {
       </section>
 
       <FiltersBar>
-        <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Arquivado']} placeholder="Status final" onChange={(value) => { setStatus(value); resetPage(); setSelectedRows([]); }} />
-        <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal final" onChange={(value) => { setChannel(value); resetPage(); setSelectedRows([]); }} />
-        <SelectField value={outcome} options={options.outcomes} placeholder="Resultado comercial" onChange={(value) => { setOutcome(value); resetPage(); setSelectedRows([]); }} />
-        <SearchInput value={search} onChange={(value) => { setSearch(value); resetPage(); setSelectedRows([]); }} placeholder="Buscar empresa ou contato" />
+        <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Arquivado']} placeholder="Status final" onChange={(value) => { setStatus(value); resetPage(); }} />
+        <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal final" onChange={(value) => { setChannel(value); resetPage(); }} />
+        <SearchInput value={search} onChange={(value) => { setSearch(value); resetPage(); }} placeholder="Buscar empresa ou contato" />
       </FiltersBar>
 
       <TableCard
-        title="Empresas consolidadas"
+        title="Empresas finalizadas"
         footerText={loading ? 'Carregando...' : `Mostrando ${pageItems.length} de ${rows.length} empresa(s).`}
-        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setSelectedRows([]); }} />}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} />}
         page={page}
         totalPages={totalPages}
-        onPageChange={(nextPage) => { setPage(nextPage); setSelectedRows([]); }}
+        onPageChange={setPage}
       >
-        {canArchive && selectedIds.length ? (
-          <div className="lead-bulk-actions">
-            <span>{selectedIds.length} selecionado(s)</span>
-            <Button size="sm" variant="secondary" iconLeft={Archive} disabled={saving} onClick={() => void archive(selectedIds)}>Arquivar</Button>
-          </div>
-        ) : null}
         {error ? <div className="table-message">{error}</div> : null}
         {!error && loading ? <div className="table-message">Carregando Base Permanente...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead finalizado.</div> : null}
         {!error && !loading && rows.length ? (
-          <DataTable columns={columns} rows={pageItems} actions={canArchive ? ['archive'] : []} selectable={canArchive} selectedRows={selectedRows} onSelectedRowsChange={setSelectedRows} onAction={canArchive ? handleAction : undefined} />
+          <DataTable columns={columns} rows={pageItems} selectable={false} />
         ) : null}
       </TableCard>
-
-      <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>
   );
 }

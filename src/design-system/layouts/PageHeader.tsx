@@ -14,7 +14,7 @@ const pageDescriptions: Record<string, string> = {
   'Pré-Envio': 'Organize os leads por dia, valide as filas e prepare os disparos.',
   'Fila WhatsApp': 'Acompanhe os lotes programados e controle os disparos pelo WhatsApp.',
   'Fila Instagram': 'Gerencie os lotes programados e acompanhe os envios pelo Instagram.',
-  'Base Permanente': 'Consulte o historico completo dos leads processados pela plataforma.',
+  'Base Permanente': 'Destino final dos leads processados, somente para consulta e bloqueio de nova prospecção.',
   Monitoramento: 'Acompanhe Workers, filas, alertas e recuperações operacionais.',
   Auditoria: 'Detecte inconsistencias entre leads e filas e aplique reparos protegidos.',
   Chips: 'Gerencie chips, limites operacionais e status de cada instancia.',

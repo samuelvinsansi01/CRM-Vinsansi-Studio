@@ -1,4 +1,8 @@
-# CRM - Vinsansi Studio v2.4.0-R18
+# CRM - Vinsansi Studio v2.4.0-R19
+
+## R19 — Base Permanente = destino final
+
+A Base Permanente agora é somente consulta. Não existem resultado comercial, notas, follow-up, reentrada ou arquivamento manual dentro dessa tela. Ela registra o histórico final do lead e mantém o bloqueio definitivo de nova prospecção definido no R18.
 
 ## R18 — Base Permanente = nunca contatar novamente
 

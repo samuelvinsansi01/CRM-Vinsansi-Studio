@@ -29,8 +29,6 @@ export type BaseLead = {
   totalDispatches?: number;
   lastSentAt?: string;
   suppressed?: boolean;
-  commercialOutcome?: string;
-  operatorNotes?: string;
 };
 
 export type FinalLeadIdentities = {
@@ -48,7 +46,6 @@ export type BaseFilters = {
   city?: string;
   destination?: string;
   status?: string;
-  outcome?: string;
 };
 
 export type BaseSummary = {
@@ -59,21 +56,4 @@ export type BaseSummary = {
   archived: number;
   invalid: number;
   duplicates: number;
-};
-
-export type BaseArchiveFailure = {
-  id: string;
-  company?: string;
-  reason: string;
-};
-
-export type BaseArchiveResult = {
-  requested: number;
-  succeeded: number;
-  unchanged: number;
-  failed: number;
-  succeededIds: string[];
-  unchangedIds: string[];
-  failures: BaseArchiveFailure[];
-  auditWarnings: string[];
 };

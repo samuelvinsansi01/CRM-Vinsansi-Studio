@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { baseService } from '../services/base/base.service';
-import type { BaseArchiveResult, BaseFilters, BaseLead, BaseSummary } from '../services/base/types';
+import type { BaseFilters, BaseLead, BaseSummary } from '../services/base/types';
 
 type BaseOptions = {
   origins: string[];
@@ -9,7 +9,6 @@ type BaseOptions = {
   cities: string[];
   destinations: string[];
   statuses: string[];
-  outcomes: string[];
 };
 
 const emptySummary: BaseSummary = {
@@ -29,7 +28,6 @@ const emptyOptions: BaseOptions = {
   cities: ['Todos'],
   destinations: ['Todos'],
   statuses: ['Todos'],
-  outcomes: ['Todos'],
 };
 
 export function useBaseRecords(filters: BaseFilters) {
@@ -37,7 +35,6 @@ export function useBaseRecords(filters: BaseFilters) {
   const [summary, setSummary] = useState<BaseSummary>(emptySummary);
   const [options, setOptions] = useState<BaseOptions>(emptyOptions);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const hasLoadedRef = useRef(false);
@@ -78,18 +75,5 @@ export function useBaseRecords(filters: BaseFilters) {
     return () => { active = false; };
   }, [filters, refreshKey]);
 
-  const archiveMany = useCallback(async (ids: string[]): Promise<BaseArchiveResult> => {
-    setSaving(true);
-    try {
-      const result = await baseService.archiveMany(ids);
-      refresh();
-      return result;
-    } finally {
-      setSaving(false);
-    }
-  }, [refresh]);
-
-  const updateMetadata = useCallback(async (id:string,outcome:string,notes:string) => { setSaving(true); try { await baseService.updateMetadata(id,outcome,notes); refresh(); } finally { setSaving(false); } }, [refresh]);
-
-  return { records, summary, options, loading, saving, error, refresh, archiveMany, updateMetadata };
+  return { records, summary, options, loading, error, refresh };
 }
