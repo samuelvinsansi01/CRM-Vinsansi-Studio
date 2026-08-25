@@ -1,4 +1,4 @@
-# CRM - Vinsansi Studio v2.4.0-R16
+# CRM - Vinsansi Studio v2.4.0-R17
 
 # CRM - Vinsansi Studio v2.4.0 — Release Candidate das Etapas 1–15
 
