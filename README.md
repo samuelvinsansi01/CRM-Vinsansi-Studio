@@ -1,4 +1,9 @@
-# CRM - Vinsansi Studio v2.4.0-R17
+# CRM - Vinsansi Studio v2.4.0-R18
+
+## R18 — Base Permanente = nunca contatar novamente
+
+Na Etapa 10, qualquer empresa presente em `permanent_records` é terminal para prospecção. Não existe cooldown ou reentrada: resultados comerciais são memória/analytics e não liberam novo disparo. A preparação de fila e o início dos executores bloqueiam empresas já permanentes.
+
 
 # CRM - Vinsansi Studio v2.4.0 — Release Candidate das Etapas 1–15
 

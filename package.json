@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "node scripts/verify-release-v1.1.0.mjs && node scripts/verify-stage5.mjs && node scripts/verify-stage6.mjs && node scripts/verify-stage7.mjs && node scripts/verify-stages8-15.mjs && node scripts/verify-vercel-functions.mjs && node scripts/verify-syntax.mjs && node scripts/verify-r14-global-template-messages.mjs && node scripts/verify-r16-no-dispatch-windows.mjs && node scripts/verify-r17-instagram-sents-memory.mjs",
+    "verify:release": "node scripts/verify-release-v1.1.0.mjs && node scripts/verify-stage5.mjs && node scripts/verify-stage6.mjs && node scripts/verify-stage7.mjs && node scripts/verify-stages8-15.mjs && node scripts/verify-vercel-functions.mjs && node scripts/verify-syntax.mjs && node scripts/verify-r14-global-template-messages.mjs && node scripts/verify-r16-no-dispatch-windows.mjs && node scripts/verify-r17-instagram-sents-memory.mjs && node scripts/verify-r18-permanent-never-contact.mjs",
     "verify:stage3:sql": "node scripts/verify-stage3-sql.mjs",
     "verify:stage4:sql": "node scripts/verify-stage4-sql.mjs",
     "verify:stage5:sql": "node scripts/verify-stage5-sql.mjs",
@@ -15,7 +15,8 @@
     "verify:stage7": "node scripts/verify-stage7.mjs",
     "verify:r15": "node scripts/verify-r15-multichannel-queue.mjs",
     "verify:r16": "node scripts/verify-r16-no-dispatch-windows.mjs",
-    "verify:r17": "node scripts/verify-r17-instagram-sents-memory.mjs"
+    "verify:r17": "node scripts/verify-r17-instagram-sents-memory.mjs",
+    "verify:r18": "node scripts/verify-r18-permanent-never-contact.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
