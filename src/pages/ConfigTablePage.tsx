@@ -233,7 +233,7 @@ function makeScreen(kind: ConfigKind, options: ConfigModalOptions): ScreenDefini
         { key: 'channel', label: 'Canal', width: '12%' },
         { key: 'type', label: 'Tipo', width: '12%' },
         { key: 'messages', label: 'Mensagens', width: '30%' },
-        { key: 'status', label: 'WhatsApp', width: '10%' },
+        { key: 'status', label: 'Status', width: '10%' },
       ],
       fields: [
         { key: 'name', label: 'Nome do template', placeholder: 'Ex.: WhatsApp sem site - abordagem A', description: 'Mapeia diretamente para templates.templates_name.' },

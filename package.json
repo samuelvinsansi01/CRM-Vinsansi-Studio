@@ -12,7 +12,8 @@
     "verify:stage4:sql": "node scripts/verify-stage4-sql.mjs",
     "verify:stage5:sql": "node scripts/verify-stage5-sql.mjs",
     "verify:stage6": "node scripts/verify-stage6.mjs",
-    "verify:stage7": "node scripts/verify-stage7.mjs"
+    "verify:stage7": "node scripts/verify-stage7.mjs",
+    "verify:r15": "node scripts/verify-r15-multichannel-queue.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

@@ -1,3 +1,5 @@
+# CRM - Vinsansi Studio v2.4.0-R15
+
 # CRM - Vinsansi Studio v2.4.0 — Release Candidate das Etapas 1–15
 
 **Revisão atual do pacote: R12.** Ajustes finais de telemetria e fila manual da Etapa 8 em `CORRECAO-CRM-2.4.0-R12.md`.
