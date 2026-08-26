@@ -823,12 +823,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return send(req, res, 200, { ok: true, execution: updated.data, active: true });
     }
     if (action === 'candidates_list') {
+      const execution = await ownedExecution(client, usersId, text(input.executionId));
       const now = new Date().toISOString();
-      const expired = await client.from('maps_search_candidates').update({ review_state: 'expired', updated_at: now }).eq('organizations_id', organizationId).in('review_state', ['pending','rejected','invalid']).lte('review_expires_at', now);
+      const expired = await client.from('maps_search_candidates').update({ review_state: 'expired', updated_at: now }).eq('organizations_id', organizationId).eq('maps_search_executions_id', execution.maps_search_executions_id).in('review_state', ['pending','rejected','invalid']).lte('review_expires_at', now);
       if (expired.error) throw new Error(`maps_review_expire_failed:${expired.error.message}`);
       const candidates = await client.from('maps_search_candidates')
         .select('*,branches:branches_id(branches_name),states:states_id(states_name,states_code),cities:cities_id(cities_name),execution:maps_search_executions_id(created_at,status)')
         .eq('organizations_id', organizationId)
+        .eq('maps_search_executions_id', execution.maps_search_executions_id)
         .in('review_state', ['pending','rejected','invalid'])
         .gt('review_expires_at', now)
         .order('created_at');
@@ -840,12 +842,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       }});
     }
     if (action === 'review_queue_clear') {
+      const execution = await ownedExecution(client, usersId, text(input.executionId));
       const now = new Date().toISOString();
-      const active = await client.from('maps_search_candidates').select('maps_search_candidates_id').eq('organizations_id', organizationId).in('review_state', ['pending','rejected','invalid']).gt('review_expires_at', now);
+      const active = await client.from('maps_search_candidates').select('maps_search_candidates_id').eq('organizations_id', organizationId).eq('maps_search_executions_id', execution.maps_search_executions_id).in('review_state', ['pending','rejected','invalid']).gt('review_expires_at', now);
       if (active.error) throw new Error(`maps_review_clear_query_failed:${active.error.message}`);
       const ids = (active.data ?? []).map((r) => text(r.maps_search_candidates_id)).filter(Boolean);
       if (ids.length) {
-        const cleared = await client.from('maps_search_candidates').update({ review_state: 'expired', review_cleared_at: now, review_expires_at: now, updated_at: now }).in('maps_search_candidates_id', ids).eq('organizations_id', organizationId);
+        const cleared = await client.from('maps_search_candidates').update({ review_state: 'expired', review_cleared_at: now, review_expires_at: now, updated_at: now }).in('maps_search_candidates_id', ids).eq('organizations_id', organizationId).eq('maps_search_executions_id', execution.maps_search_executions_id);
         if (cleared.error) throw new Error(`maps_review_clear_failed:${cleared.error.message}`);
       }
       return send(req, res, 200, { ok: true, cleared: ids.length });
@@ -868,10 +871,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     if (['candidate_update','candidate_exclude','candidate_restore'].includes(action)) {
       const candidateId = text(input.candidateId);
-      const current = await client.from('maps_search_candidates').select('*').eq('maps_search_candidates_id', candidateId).eq('users_id', usersId).maybeSingle();
-      if (current.error || !current.data) throw new Error('maps_candidate_not_found');
+      const requestedExecution = await ownedExecution(client, usersId, text(input.executionId));
+      const current = await client.from('maps_search_candidates').select('*').eq('maps_search_candidates_id', candidateId).eq('users_id', usersId).eq('maps_search_executions_id', requestedExecution.maps_search_executions_id).maybeSingle();
+      if (current.error || !current.data) throw new Error('maps_candidate_not_found_in_execution');
       let patch: Row;
-      const execution = await ownedExecution(client, usersId, text(current.data.maps_search_executions_id));
+      const execution = requestedExecution;
       if (action === 'candidate_update') {
         if (current.data.promoted_leads_id) throw new Error('maps_candidate_already_promoted');
         const effective = effectiveCandidate({ phone: input.phone, whatsapp: input.whatsapp, instagram: input.instagram, website: input.website });
@@ -889,7 +893,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           ? { excluded_by_user: true, review_state: 'rejected', review_decided_at: new Date().toISOString(), updated_at: new Date().toISOString() }
           : { excluded_by_user: false, review_state: 'pending', review_decided_at: null, updated_at: new Date().toISOString() };
       }
-      const updated = await client.from('maps_search_candidates').update(patch).eq('maps_search_candidates_id', candidateId).eq('users_id', usersId).select('*').single();
+      const updated = await client.from('maps_search_candidates').update(patch).eq('maps_search_candidates_id', candidateId).eq('users_id', usersId).eq('maps_search_executions_id', execution.maps_search_executions_id).select('*').single();
       if (updated.error) throw new Error(updated.error.message);
       const counts = await executionSummary(client, execution);
       return send(req, res, 200, { ok: true, candidate: updated.data, counts, targetsReached: acquisitionTargetsReached(execution, counts) });
@@ -899,15 +903,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (!selectedIds.length) throw new Error('maps_leads_promote_selection_required');
       if (selectedIds.length > 25) throw new Error('maps_leads_promote_batch_too_large');
       const selected = new Set(selectedIds);
+      const requestedExecution = await ownedExecution(client, usersId, text(input.executionId));
       let candidatesQuery = client
         .from('maps_search_candidates')
         .select('*')
         .eq('users_id', usersId)
         .eq('organizations_id', organizationId)
+        .eq('maps_search_executions_id', requestedExecution.maps_search_executions_id)
         .eq('excluded_by_user', false)
         .in('maps_search_candidates_id', selectedIds);
       const candidates = await candidatesQuery;
       if (candidates.error) throw new Error(candidates.error.message);
+      if ((candidates.data ?? []).length !== selectedIds.length) throw new Error('maps_leads_promote_execution_mismatch');
       const sources = await client.from('contact_sources').select('contact_sources_id,contact_sources_key').eq('users_id', usersId).eq('status_id', 1);
       const country = await client.from('countries').select('countries_id').eq('countries_code', 'BR').maybeSingle();
       if (sources.error || country.error || !country.data) throw new Error('maps_lead_catalogs_invalid');
@@ -915,7 +922,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       let promoted = 0; let alreadyPromoted = 0; const failures: Array<{ candidateId: string; code: string }> = [];
       for (const candidate of candidates.data ?? []) {
         const candidateId = text(candidate.maps_search_candidates_id);
-        const execution = await ownedExecution(client, usersId, text(candidate.maps_search_executions_id));
+        const execution = requestedExecution;
         if (selected && !selected.has(candidateId)) continue;
         if (candidate.promoted_leads_id) { alreadyPromoted += 1; continue; }
         const existingLead = await client.from('leads').select('leads_id').eq('users_id', usersId).eq('maps_search_candidates_id', candidateId).maybeSingle();

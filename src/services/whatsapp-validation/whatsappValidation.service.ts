@@ -117,6 +117,10 @@ function applyPersistedResult(batch: WhatsAppValidationBatchResult, row: LeadDat
     addFailure(batch, { id, company: row.leads_name, reason: 'A API não confirmou a persistência do resultado.' });
     return;
   }
+  if ((providerResult.outcome === 'approved' || providerResult.outcome === 'revalidated') && providerResult.proofValid !== true) {
+    addFailure(batch, { id, company: row.leads_name, reason: 'O WhatsApp confirmou o número, mas a prova do telefone atual não foi persistida. Tente validar novamente.' });
+    return;
+  }
   addOutcome(batch, id, providerResult.outcome);
 }
 

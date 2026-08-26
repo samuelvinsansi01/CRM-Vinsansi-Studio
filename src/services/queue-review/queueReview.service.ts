@@ -250,7 +250,24 @@ async function list(channel: QueueReviewChannel, preferredResourceId = '', sched
 }
 
 async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
-  const prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
+  let prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
+
+  // R36: repara automaticamente itens antigos que entraram na Revisão antes da
+  // prova WhatsApp ser persistida corretamente. A aprovação revalida usando o
+  // MESMO chip do batch; somente depois de obter prova atual o snapshot é criado.
+  const missingWhatsAppProof = channel === 'WhatsApp'
+    && prepared.failures.some((failure) => failure.id === item.leadId && failure.reason.includes('Prova de validação WhatsApp ausente'));
+  if (missingWhatsAppProof) {
+    const validation = await whatsappValidationService.validateInitialWithChip([item.leadId], item.resourceId);
+    await restoreWhatsAppValid(item.batchId, validation.approvedIds);
+    await prune(item.batchId).catch(() => undefined);
+    if (!validation.approvedIds.includes(item.leadId)) {
+      const failure = validation.failures.find((candidate) => candidate.id === item.leadId);
+      throw new Error(`${item.company}: ${failure?.reason || 'O telefone não foi confirmado no WhatsApp pelo chip selecionado.'}`);
+    }
+    prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
+  }
+
   if (prepared.failures.length) {
     const first = prepared.failures[0];
     throw new Error(`${first.company ? `${first.company}: ` : ''}${first.reason}`);

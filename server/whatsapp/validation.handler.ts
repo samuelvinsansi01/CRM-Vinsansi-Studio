@@ -295,12 +295,40 @@ async function persistValidationResults(
     const leadId = String(result.leadId || result.lead_id || '');
     const lead = leadById.get(leadId);
     if (!lead) throw new Error(`Resultado sem lead confiável correspondente: ${leadId}.`);
+    const providerOutcome = persistedOutcome(result);
+    let proofValid = false;
+
+    // R36: a prova do telefone atual precisa existir ANTES de uma validação positiva
+    // poder alterar o estado do lead. Assim não existe mais o estado impossível
+    // “aprovado no provider, mas sem prova na fila”. Erro técnico não revoga uma
+    // prova anterior; resultado inválido revoga explicitamente a prova atual.
+    if (providerOutcome !== 'technical_error') {
+      const proof = await client.rpc('record_current_whatsapp_validation_proof', {
+        p_lead_id: Number(leadId),
+        p_validated_phone: String(lead.normalized_phone || lead.phone || ''),
+        p_provider: 'evolution',
+        p_provider_reference: String(lead.chip_instance || ''),
+        p_is_valid: providerOutcome === 'valid',
+        p_metadata: {
+          source: 'whatsapp_validation_api',
+          worker_status: result.status,
+          worker_valid: result.valid,
+          mode,
+        },
+      });
+      if (proof.error) throw new Error(`Falha ao registrar a prova WhatsApp do lead ${leadId}: ${proof.error.message}`);
+      proofValid = proof.data === true;
+      if (providerOutcome === 'valid' && !proofValid) {
+        throw new Error(`A validação WhatsApp do lead ${leadId} foi confirmada pelo provider, mas a prova não corresponde ao telefone atual.`);
+      }
+    }
+
     const { data, error } = await client.rpc('record_whatsapp_validation_result', {
       p_users_id: Number(publicUserId),
       p_lead_id: Number(leadId),
       p_validated_phone: String(lead.normalized_phone || lead.phone || ''),
       p_mode: mode,
-      p_outcome: persistedOutcome(result),
+      p_outcome: providerOutcome,
       p_provider: 'evolution',
       p_provider_reference: String(lead.chip_instance || ''),
       p_http_status: 200,
@@ -320,7 +348,7 @@ async function persistValidationResults(
       leadId,
       outcome: row.outcome,
       persisted: true,
-      proofValid: row.proof_valid === true,
+      proofValid: providerOutcome === 'valid' ? proofValid : false,
     });
   }
   return persisted;
