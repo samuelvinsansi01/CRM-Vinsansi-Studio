@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { normalizeInstagramUsername } from '../../instagram/identity.js';
-import { executorStatus, sessionScope } from '../../tools/executor.js';
+import { effectiveConfig, executorStatus, sessionScope } from '../../tools/executor.js';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void; end(): void };
@@ -86,9 +86,16 @@ async function socialForScope(client: SupabaseClient, scope: TokenScope) {
   return row;
 }
 
+async function instagramBatchSize(client: SupabaseClient, organizationId: number) {
+  const config = await effectiveConfig(client, organizationId, 'vinsansi_instagram');
+  const instagram = bodyRecord(bodyRecord(config.settings).instagram);
+  const configured = Number(instagram.perBatch ?? 15);
+  return Number.isFinite(configured) && configured >= 1 ? Math.floor(configured) : 15;
+}
+
 async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDate?: string) {
   const social = await socialForScope(client, scope);
-  const channelId = await instagramChannelId(client);
+  const [channelId, blockSize] = await Promise.all([instagramChannelId(client), instagramBatchSize(client, scope.organizationId)]);
   let queuesQuery = client.from('queues').select('*').eq('organizations_id', scope.organizationId).eq('channels_id', channelId);
   if (scheduledDate) queuesQuery = queuesQuery.gte('queues_scheduled_at', `${scheduledDate}T00:00:00.000Z`).lt('queues_scheduled_at', `${scheduledDate}T23:59:59.999Z`);
   const queuesResponse = await queuesQuery;
@@ -115,8 +122,15 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
   const branchMap = new Map<string, RecordValue>(branches.map((row: RecordValue) => [String(row.branches_id), row]));
   const statusMap = new Map<string, string>(((statusesResponse.data ?? []) as RecordValue[]).map((row: RecordValue) => [String(row.status_id), String(row.status_name)]));
   const queueMap = new Map(queues.map((row) => [String(row.queues_id), row]));
+  const queueOrder = new Map([...queues]
+    .sort((a, b) => text(a.queues_scheduled_at).localeCompare(text(b.queues_scheduled_at)) || Number(a.queues_id) - Number(b.queues_id))
+    .map((row, index) => [String(row.queues_id), index]));
+  const orderedItems = [...items].sort((a, b) =>
+    Number(queueOrder.get(String(a.queues_id)) ?? 0) - Number(queueOrder.get(String(b.queues_id)) ?? 0)
+    || Number(a.queue_items_position ?? 0) - Number(b.queue_items_position ?? 0)
+    || Number(a.queue_items_id ?? 0) - Number(b.queue_items_id ?? 0));
   const progressMap = new Map(progressRows.map((row) => [String(row.queue_items_id), row]));
-  return items.map((item) => {
+  return orderedItems.map((item, dailyIndex) => {
     const lead = leadMap.get(String(item.leads_id)) ?? {};
     const template = templateMap.get(String(item.templates_id)) ?? {};
     const branch = branchMap.get(String(lead.branches_id)) ?? {};
@@ -126,8 +140,8 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
     const snapshotRecipient = bodyRecord(snapshot.recipient);
     const snapshotMessages = bodyRecord(snapshot.messages);
     const snapshotMedia = bodyRecord(snapshot.media);
-    const position = Number(item.queue_items_position ?? 1);
-    const blockSize = 15;
+    const queuePosition = Number(item.queue_items_position ?? 1);
+    const position = dailyIndex + 1;
     const progress = progressMap.get(String(item.queue_items_id)) ?? {};
     const queueStatus = semanticStatus(statusMap.get(String(item.status_id)) ?? item.status_id);
     const progressStep = text(progress.step);
@@ -146,6 +160,7 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
       block_number: Math.floor((position - 1) / blockSize) + 1,
       block_size: blockSize,
       position,
+      queue_position: queuePosition,
       status,
       claim_token: text(progress.claim_token),
       resume_step: text(progress.step) || 'claimed',
@@ -153,6 +168,7 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
       progress_attempts: Number(progress.attempts ?? 0),
       progress_error: text(progress.error_message),
       last_heartbeat_at: text(progress.last_heartbeat_at),
+      finished_at: text(progress.finished_at),
       company_name: text(snapshotLead.company_name ?? lead.leads_name),
       phone: text(snapshotLead.phone ?? lead.leads_phone),
       parent_category: text(snapshotLead.branch_name ?? branch.branches_name),
@@ -177,8 +193,8 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
   });
 }
 
-async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, consumerId: string) {
-  const itemBeforeClaim = (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
+async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, consumerId: string, scheduledDate?: string) {
+  const itemBeforeClaim = (await loadItems(client, scope, scheduledDate)).find((row) => row.id === id) ?? null;
   if (!itemBeforeClaim) return null;
   if (!itemBeforeClaim.instagram_username) throw new Error('invalid_instagram_recipient_contract');
   const social = await socialForScope(client, scope);
@@ -196,7 +212,7 @@ async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, 
   }
   const claimed = Array.isArray(response.data) ? response.data[0] : response.data;
   await client.from('queue_items').update({dispatched_by_member_id:scope.memberId}).eq('organizations_id',scope.organizationId).eq('queue_items_id',Number(id)).is('dispatched_by_member_id',null);
-  const item = (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
+  const item = (await loadItems(client, scope, scheduledDate)).find((row) => row.id === id) ?? null;
   return item ? {
     ...item,
     claim_token: text((claimed as RecordValue)?.claim_token),
@@ -219,7 +235,7 @@ async function transition(client: SupabaseClient, scope: TokenScope, body: Recor
     p_metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {},
   });
   if (response.error) throw new Error(response.error.message);
-  return (await loadItems(client, scope)).find((row) => row.id === id) ?? null;
+  return (await loadItems(client, scope, text(body.scheduled_date))).find((row) => row.id === id) ?? null;
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
@@ -250,7 +266,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           error: 'invalid_instagram_recipient_contract',
         }));
       const candidate = items.find((item) => item.status === 'queued' && (!block || item.block_number === block) && Boolean(item.instagram_username));
-      const claimedItem = candidate ? await claimItem(client, scope, candidate.id, consumerId) : null;
+      const claimedItem = candidate ? await claimItem(client, scope, candidate.id, consumerId, text(body.scheduled_date)) : null;
       const iterationStatus = claimedItem
         ? (skippedInvalidRecipient.length ? 'claimed_with_skipped_invalid_recipient' : 'claimed')
         : candidate
@@ -266,7 +282,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         skipped_invalid_recipient: skippedInvalidRecipient,
       });
     }
-    if (action === 'claim_item') return send(req, res, 200, { ok: true, request_id: requestId, item: await claimItem(client, scope, text(body.id), consumerId) });
+    if (action === 'claim_item') return send(req, res, 200, { ok: true, request_id: requestId, item: await claimItem(client, scope, text(body.id), consumerId, text(body.scheduled_date)) });
     if (action === 'transition') return send(req, res, 200, { ok: true, request_id: requestId, item: await transition(client, scope, body) });
     return send(req, res, 400, { ok: false, request_id: requestId, error: 'action_invalid' });
   } catch (error) {

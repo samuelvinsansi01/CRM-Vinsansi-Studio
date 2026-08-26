@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+const source = fs.readFileSync(new URL('../server/routes/instagram/extension.ts', import.meta.url), 'utf8');
+const check = (condition, message) => { if (!condition) throw new Error(message); };
+check(source.includes('effectiveConfig'), 'R42: o endpoint Instagram deve ler a configuração efetiva da ferramenta.');
+check(source.includes('instagramBatchSize'), 'R42: tamanho do lote deve vir da configuração do Instagram.');
+check(source.includes('instagram.perBatch'), 'R42: perBatch precisa definir o tamanho do lote canônico.');
+check(!source.includes('const blockSize = 15'), 'R42: tamanho de lote não pode permanecer fixo em 15 no endpoint.');
+check(source.includes('finished_at: text(progress.finished_at)'), 'R42: fila precisa expor o horário de conclusão para cooldown persistente.');
+check(source.includes('orderedItems.map((item, dailyIndex)'), 'R42: posição diária deve ser global mesmo com múltiplas filas do perfil.');
+check(source.includes('const position = dailyIndex + 1'), 'R42: posição global diária precisa alimentar o lote.');
+check(source.includes('queue_position: queuePosition'), 'R42: posição original da fila deve permanecer disponível para diagnóstico.');
+check(source.includes('block_number: Math.floor((position - 1) / blockSize) + 1'), 'R42: numeração dos lotes deve usar o tamanho configurado.');
+console.log('R42: lotes Instagram seguem perBatch e expõem conclusão para cooldown persistente.');
