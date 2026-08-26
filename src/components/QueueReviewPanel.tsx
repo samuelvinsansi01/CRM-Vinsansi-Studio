@@ -62,15 +62,31 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
   useEffect(() => { resetPage(); }, [preferredResourceId, scheduledDate, resetPage]);
 
+  const removeItemLocally = useCallback((reviewItemId: string) => {
+    setBatches((current) => current
+      .map((batch) => ({ ...batch, items: batch.items.filter((candidate) => candidate.reviewItemId !== reviewItemId) }))
+      .filter((batch) => batch.items.length > 0));
+  }, []);
+
   const approve = async (item: QueueReviewItem) => {
     if (!canPrepare) return; setWorkingItem(item.reviewItemId);
-    try { await queueReviewService.approve(item, channel); await refresh(); onQueueChanged(); onToast('Lead aprovado', 'O lead entrou na Fila final e o snapshot foi criado.', 'success'); }
+    try {
+      await queueReviewService.approve(item, channel);
+      removeItemLocally(item.reviewItemId);
+      onQueueChanged();
+      onToast('Lead aprovado', 'O lead entrou na Fila final e o snapshot foi criado.', 'success');
+    }
     catch (error) { onToast('Não foi possível aprovar', error instanceof Error ? error.message : 'Revise o lead e tente novamente.', 'danger'); }
     finally { setWorkingItem(''); }
   };
   const invalidate = async (item: QueueReviewItem) => {
     if (!canInvalidate) return; setWorkingItem(item.reviewItemId);
-    try { await queueReviewService.invalidate(item, channel); await refresh(); onQueueChanged(); onToast('Lead invalidado', `A vaga foi liberada. Um novo lead só será puxado quando você clicar em Puxar ${channel}.`, 'warning'); }
+    try {
+      await queueReviewService.invalidate(item, channel);
+      removeItemLocally(item.reviewItemId);
+      onQueueChanged();
+      onToast('Lead invalidado', `A vaga foi liberada. Um novo lead só será puxado quando você clicar em Puxar ${channel}.`, 'warning');
+    }
     catch (error) { onToast('Não foi possível invalidar', error instanceof Error ? error.message : 'Tente novamente.', 'danger'); }
     finally { setWorkingItem(''); }
   };

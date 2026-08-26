@@ -195,6 +195,9 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
 
   const invalidate = useCallback(async (lead: WhatsAppQueueLead) => {
     await whatsappQueueService.invalidate(lead.id);
+    setBatches((current) => current
+      .map((batch) => ({ ...batch, leads: batch.leads.filter((candidate) => candidate.id !== lead.id) }))
+      .filter((batch) => batch.leads.length > 0));
     refresh();
   }, [refresh]);
 
