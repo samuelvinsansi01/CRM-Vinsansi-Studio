@@ -3,6 +3,7 @@ import { eventBus } from '../../lib/events';
 import { queuePreparationService, type QueuePreparationResource } from '../queue-preparation';
 import { whatsappValidationService } from '../whatsapp-validation/whatsappValidation.service';
 import type { QueueReviewBatch, QueueReviewChannel, QueueReviewItem, QueueReviewOpenBatch, QueueReviewPullResult } from './types';
+import { queueRolloverService } from '../queue-rollover/queueRollover.service';
 
 function rpcRow<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -166,6 +167,7 @@ async function fillBatch(
 }
 
 async function pullToCapacity(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId = '') {
+  await queueRolloverService.run();
   if (!preferredResourceId) {
     throw new Error(channel === 'WhatsApp'
       ? 'Selecione um chip específico antes de puxar e validar a fila WhatsApp.'
@@ -179,6 +181,7 @@ async function pullToCapacity(channel: QueueReviewChannel, scheduledDate: string
 }
 
 async function list(channel: QueueReviewChannel, preferredResourceId = '', scheduledDate = ''): Promise<QueueReviewBatch[]> {
+  await queueRolloverService.run();
   const resourceDate = scheduledDate || new Date().toISOString().slice(0, 10);
   const [{ data, error }, availableResources] = await Promise.all([
     getSupabaseClient().rpc('list_open_queue_review', { p_channel: channelKey(channel) }),

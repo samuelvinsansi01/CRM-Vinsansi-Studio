@@ -86,7 +86,13 @@ async function controlBatch(auth: AuthContext, action: string, ids: number[], ch
         p_action: action,
         p_worker_id: null,
       });
-  if (result.error) throw new Error(`worker_batch_control_failed:${result.error.message}`);
+  if (result.error) {
+    const message = String(result.error.message ?? '');
+    if ((action === 'status' || action === 'state') && message.includes('batch_not_found')) {
+      return batchStateFromRow(null, chip);
+    }
+    throw new Error(`worker_batch_control_failed:${message}`);
+  }
   return batchStateFromRow(result.data, chip);
 }
 

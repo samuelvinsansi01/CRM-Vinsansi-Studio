@@ -1,7 +1,7 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../maps/shared.js';
 import { sha256, type MapsExtensionScope } from '../../maps/token.js';
 
-const EXTENSION_VERSION = '1.0.9';
+const EXTENSION_VERSION = '1.0.12';
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const MAX_SNAPSHOT_BYTES = 1_500_000;
@@ -23,6 +23,21 @@ function strings(value: unknown): string[] {
   visit(value);
   const seen = new Set<string>();
   return result.filter((item) => { const key = normalize(item); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+}
+
+function rowObject(value: unknown): Row {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};
+}
+
+function executionCitySelection(execution: Row) {
+  const strategy = rowObject(execution.runner_strategy);
+  const mode = ['automatic','manual','multiple'].includes(text(strategy.citySelectionMode))
+    ? text(strategy.citySelectionMode)
+    : (text(execution.city_mode) === 'manual' ? 'manual' : 'automatic');
+  const ids = Array.from(new Set((Array.isArray(strategy.selectedCityIds) ? strategy.selectedCityIds : [])
+    .map((value) => Number(value))
+    .filter((value) => Number.isSafeInteger(value) && value > 0))).slice(0, 10);
+  return { mode, ids };
 }
 
 function branchSubcategories(value: unknown): string[] {
@@ -416,16 +431,33 @@ async function nextCoverage(client: ReturnType<typeof import('../../maps/shared.
   // A fila é propositalmente lazy: existe somente o termo atual da cidade.
   // Terminou o termo? Criamos/retornamos o próximo. Terminou todos? Só então
   // mudamos de cidade. Isso espelha exatamente o uso humano do campo de busca.
-  if (execution.city_mode === 'manual') {
+  const selection = executionCitySelection(execution);
+  if (selection.mode === 'manual') {
     const city = await cityWithState(client, Number(execution.requested_cities_id), Number(execution.states_id));
     return nextCoverageForCity(client, execution, city, terms, false);
   }
 
-  const cities = await client.from('cities').select('cities_id,cities_name,states_id').eq('states_id', Number(execution.states_id)).order('cities_name');
-  if (cities.error) throw new Error(cities.error.message);
   const state = await client.from('states').select('states_id,states_name,states_code').eq('states_id', Number(execution.states_id)).maybeSingle();
   if (state.error || !state.data) throw new Error('maps_state_not_found');
 
+  if (selection.mode === 'multiple') {
+    if (!selection.ids.length) throw new Error('maps_multiple_cities_required');
+    const selected = await client.from('cities').select('cities_id,cities_name,states_id')
+      .eq('states_id', Number(execution.states_id)).in('cities_id', selection.ids);
+    if (selected.error) throw new Error(selected.error.message);
+    if ((selected.data ?? []).length !== selection.ids.length) throw new Error('maps_city_state_mismatch');
+    const byId = new Map((selected.data ?? []).map((city) => [Number(city.cities_id), city]));
+    for (const cityId of selection.ids) {
+      const cityRow = byId.get(cityId);
+      if (!cityRow) continue;
+      const next = await nextCoverageForCity(client, execution, { ...cityRow, ...state.data }, terms, false);
+      if (next.blocked || next.coverage) return next;
+    }
+    return { blocked: false, coverage: null };
+  }
+
+  const cities = await client.from('cities').select('cities_id,cities_name,states_id').eq('states_id', Number(execution.states_id)).order('cities_name');
+  if (cities.error) throw new Error(cities.error.message);
   for (const cityRow of cities.data ?? []) {
     const next = await nextCoverageForCity(client, execution, { ...cityRow, ...state.data }, terms, true);
     if (next.blocked || next.coverage) return next;
@@ -536,8 +568,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const branchesId = integer(input.branchesId, 1);
       const statesId = integer(input.statesId, 1);
       const requestedDays = 1; // retained only for backward schema compatibility
-      const cityMode = input.cityMode === 'manual' ? 'manual' : 'automatic';
+      const cityMode = ['manual','multiple'].includes(text(input.cityMode)) ? text(input.cityMode) : 'automatic';
       const requestedCitiesId = cityMode === 'manual' ? integer(input.citiesId, 1) : null;
+      const requestedCitiesIds = cityMode === 'multiple'
+        ? Array.from(new Set((Array.isArray(input.citiesIds) ? input.citiesIds : []).map((value) => integer(value, 1)))).slice(0, 11)
+        : [];
+      if (cityMode === 'multiple' && (!requestedCitiesIds.length || requestedCitiesIds.length > 10)) throw new Error('maps_multiple_cities_limit');
       const extractionMode = input.extractionMode === 'quick' ? 'quick' : 'complete';
       const desiredCompanies = integer(input.desiredCompanies ?? 50, 1, 5000);
       const [{ branch, terms }, state, qualityCriteria] = await Promise.all([
@@ -556,6 +592,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const city = await client.from('cities').select('cities_id').eq('cities_id', requestedCitiesId).eq('states_id', statesId).maybeSingle();
         if (city.error || !city.data) throw new Error('maps_city_state_mismatch');
       }
+      if (requestedCitiesIds.length) {
+        const selectedCities = await client.from('cities').select('cities_id').eq('states_id', statesId).in('cities_id', requestedCitiesIds);
+        if (selectedCities.error || (selectedCities.data ?? []).length !== requestedCitiesIds.length) throw new Error('maps_city_state_mismatch');
+      }
       const executionId = crypto.randomUUID();
       const inserted = await client.rpc('create_maps_search_execution_v2', {
         p_execution_id: executionId,
@@ -565,7 +605,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         p_branch_name: branch.branches_name,
         p_states_id: statesId,
         p_requested_cities_id: requestedCitiesId,
-        p_city_mode: cityMode,
+        p_city_mode: cityMode === 'multiple' ? 'automatic' : cityMode,
         p_requested_days: requestedDays,
         p_extraction_mode: extractionMode,
         p_target_phone_whatsapp: targetWhatsapp,
@@ -573,7 +613,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         p_target_source: targetSource,
         p_extension_version: text(input.extensionVersion) || EXTENSION_VERSION,
         p_search_terms_snapshot: terms,
-        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies, qualityCriteria, reviewTtlHours: 24, validationBatchPercent: 50, validationBatchMin: 5, validationBatchMax: 50 },
+        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies, qualityCriteria, citySelectionMode: cityMode, selectedCityIds: requestedCitiesIds, reviewTtlHours: 24, validationBatchPercent: 50, validationBatchMin: 5, validationBatchMax: 50 },
       });
       if (inserted.error) {
         const message = text(inserted.error.message);

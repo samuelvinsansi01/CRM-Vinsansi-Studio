@@ -14,8 +14,8 @@ import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { renderTemplateVariables } from '../templates/templateVariables';
 import { hasAllTemplateMessages } from '../templates/templateContract';
-import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle/supabaseLeadCycle.repository';
+import { queueRolloverService } from '../queue-rollover/queueRollover.service';
 
 function isChip(record: ConfigRecord): record is ChipConfigRecord {
   return record.kind === 'chips';
@@ -44,62 +44,8 @@ async function assertLeadsUseOperationalChips(leads: WhatsAppQueueLead[]) {
   }
 }
 
-function activeQueueStatus(status: unknown) {
-  return isStatusGroup(status, 'queued') || isStatusGroup(status, 'paused') || isStatusGroup(status, 'sending');
-}
-
-function queueRolloverTargetDate() {
-  const today = toLocalDateInputValue();
-  return new Date().getHours() >= 22 ? dateInputAddDays(today, 1) : today;
-}
-
 async function rolloverOverdueWhatsAppItems() {
-  const targetDate = queueRolloverTargetDate();
-  const chips = await loadActiveChips();
-  const chipMap = new Map(chips.map((chip) => [chipInstance(chip), chip]));
-  if (!chipMap.size) return;
-
-  const allLeads = (await repositories.whatsappQueue.listBatches({})).flatMap((batch) => batch.leads);
-  const candidates = allLeads
-    .filter((lead) => (isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')) && lead.scheduled_date < targetDate)
-    .filter((lead) => chipMap.has(lead.chip_instance || lead.chip))
-    .sort((a, b) => `${a.scheduled_date}:${a.batch_number}:${a.position}:${a.created_at}`.localeCompare(`${b.scheduled_date}:${b.batch_number}:${b.position}:${b.created_at}`));
-
-  if (!candidates.length) return;
-
-  const candidateIds = new Set(candidates.map((lead) => lead.id));
-  const occupancy = new Map<string, number>();
-
-  for (const lead of allLeads) {
-    if (candidateIds.has(lead.id)) continue;
-    if (!activeQueueStatus(lead.status)) continue;
-    const instance = lead.chip_instance || lead.chip;
-    if (!chipMap.has(instance)) continue;
-    const key = `${instance}:${lead.scheduled_date}`;
-    occupancy.set(key, (occupancy.get(key) ?? 0) + 1);
-  }
-
-  for (const lead of candidates) {
-    const instance = lead.chip_instance || lead.chip;
-    const chip = chipMap.get(instance);
-    if (!chip) continue;
-    const dailyLimit = Math.max(1, chip.dailyLimit);
-    let scheduledDate = targetDate;
-    let key = `${instance}:${scheduledDate}`;
-
-    while ((occupancy.get(key) ?? 0) >= dailyLimit) {
-      scheduledDate = dateInputAddDays(scheduledDate, 1);
-      key = `${instance}:${scheduledDate}`;
-    }
-
-    const nextPosition = (occupancy.get(key) ?? 0) + 1;
-    occupancy.set(key, nextPosition);
-
-    await repositories.whatsappQueue.updateLead(lead.id, {
-      scheduled_date: scheduledDate,
-      position: nextPosition,
-    });
-  }
+  await queueRolloverService.run();
 }
 
 function allowedIds(leads: WhatsAppQueueLead[], action: 'mark_sending' | 'mark_sent' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'fail', toStatus: string) {
@@ -304,7 +250,15 @@ export const whatsappQueueService = {
   },
 
   async getBatchStatus(chip?: string): Promise<WhatsAppBatchState> {
-    return whatsappBatchGateway.status(chip);
+    try {
+      return await whatsappBatchGateway.status(chip);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('batch_not_found')) {
+        return { status: 'idle', enabled: false, chip: chip ?? '', total: 0, remaining: 0 };
+      }
+      throw error;
+    }
   },
 
   async startBatch(ids: string[]): Promise<WhatsAppBatchState> {

@@ -4,8 +4,8 @@ import { permissionsFor } from '../permissions';
 import { settingsService } from '../settings/settings.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
-import { dateInputAddDays, toLocalDateInputValue } from '../../utils/date';
 import type { InstagramQueueFilters, InstagramQueueLead, UpdateInstagramQueueLeadInput } from './types';
+import { queueRolloverService } from '../queue-rollover/queueRollover.service';
 
 async function getSelectedLeads(ids: string[]) {
   const batches = await repositories.instagramQueue.listBatches({});
@@ -31,47 +31,8 @@ function assertAllAllowed(
   return leads.map((lead) => lead.id);
 }
 
-function activeQueueStatus(status: unknown) {
-  return isStatusGroup(status, 'queued') || isStatusGroup(status, 'paused') || isStatusGroup(status, 'following') || isStatusGroup(status, 'dm_opened');
-}
-
-function queueRolloverTargetDate() {
-  const today = toLocalDateInputValue();
-  return new Date().getHours() >= 22 ? dateInputAddDays(today, 1) : today;
-}
-
 async function rolloverOverdueInstagramItems() {
-  const targetDate = queueRolloverTargetDate();
-  const settings = await settingsService.getDispatchSettings();
-  const fallbackDailyLimit = Math.max(1, settings.instagram.dailyLimit);
-  const allLeads = (await repositories.instagramQueue.listBatches({})).flatMap((batch) => batch.leads);
-  const candidates = allLeads
-    .filter((lead) => (isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')) && lead.scheduled_date < targetDate)
-    .sort((a, b) => `${a.scheduled_date}:${a.batch_number}:${a.position}:${a.created_at}`.localeCompare(`${b.scheduled_date}:${b.batch_number}:${b.position}:${b.created_at}`));
-
-  if (!candidates.length) return;
-  const candidateIds = new Set(candidates.map((lead) => lead.id));
-  const occupancy = new Map<string, number>();
-  for (const lead of allLeads) {
-    if (candidateIds.has(lead.id) || !activeQueueStatus(lead.status)) continue;
-    const key = `${lead.profile}:${lead.scheduled_date}`;
-    occupancy.set(key, (occupancy.get(key) ?? 0) + 1);
-  }
-
-  for (const lead of candidates) {
-    let scheduledDate = targetDate;
-    let key = `${lead.profile}:${scheduledDate}`;
-    while ((occupancy.get(key) ?? 0) >= fallbackDailyLimit) {
-      scheduledDate = dateInputAddDays(scheduledDate, 1);
-      key = `${lead.profile}:${scheduledDate}`;
-    }
-    const nextPosition = (occupancy.get(key) ?? 0) + 1;
-    occupancy.set(key, nextPosition);
-    await repositories.instagramQueue.updateLead(lead.id, {
-      scheduled_date: scheduledDate,
-      position: nextPosition,
-    });
-  }
+  await queueRolloverService.run();
 }
 
 function logQueueEvent(action: string, lead: Partial<InstagramQueueLead>, status?: string, message?: string) {
