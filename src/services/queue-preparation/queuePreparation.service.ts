@@ -1,6 +1,7 @@
 import { LEAD_STATUS } from '../status/leadStatus';
 import { calculatePersistedLeadPriorityScore } from '../lead-score/leadScore.service';
 import { eventBus } from '../../lib/events';
+import { getSupabaseClient } from '../../lib/supabase';
 import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
 import { channelId } from '../../repositories/schemaCatalog';
@@ -58,8 +59,25 @@ function activeInstagramProfile(record: InstagramConfigRecord) {
 }
 
 function activeQueueStatus(status: unknown) {
-  const value = String(status ?? '').toLowerCase();
-  return ['queued', 'sending', 'paused', 'following', 'dm_opened', 'sent'].includes(value);
+  const value = String(status ?? '').trim().toLowerCase();
+  // Tudo que ainda pertence ao dia consome capacidade. Somente uma invalidação/cancelamento libera vaga.
+  return !['invalid', 'cancelled', 'canceled', 'cancelado'].includes(value);
+}
+
+async function reviewUsage(channel: QueuePreparationChannel, scheduledDate: string) {
+  const { data, error } = await getSupabaseClient().rpc('list_open_queue_review', {
+    p_channel: channel.toLowerCase(),
+  });
+  if (error) throw new Error(`Não foi possível calcular a capacidade da revisão: ${error.message}`);
+
+  const counts = new Map<string, number>();
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    if (String(row.scheduled_date ?? '').slice(0, 10) !== scheduledDate) continue;
+    const id = String(row.resource_id ?? '');
+    if (!id) continue;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
 }
 
 function rowBranch(row: LeadDatabaseRow) {
@@ -113,24 +131,31 @@ async function loadConfiguration() {
 }
 
 async function queueUsage(channel: QueuePreparationChannel, scheduledDate: string) {
+  const reviewCountsPromise = reviewUsage(channel, scheduledDate);
+  const counts = new Map<string, number>();
+
   if (channel === 'WhatsApp') {
     const leads = (await repositories.whatsappQueue.listBatches({ scheduledDate })).flatMap((batch) => batch.leads);
-    const counts = new Map<string, number>();
     for (const lead of leads) {
       if (!activeQueueStatus(lead.status)) continue;
       const id = String(lead.chip_id || '');
+      if (!id) continue;
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
-    return counts;
+  } else {
+    const leads = (await repositories.instagramQueue.listBatches({ scheduledDate })).flatMap((batch) => batch.leads);
+    for (const lead of leads) {
+      if (!activeQueueStatus(lead.status)) continue;
+      const id = String(lead.profile_id || '');
+      if (!id) continue;
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
   }
 
-  const leads = (await repositories.instagramQueue.listBatches({ scheduledDate })).flatMap((batch) => batch.leads);
-  const counts = new Map<string, number>();
-  for (const lead of leads) {
-    if (!activeQueueStatus(lead.status)) continue;
-    const id = String(lead.profile_id || '');
-    counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
+  // R35: a capacidade exibida no Início é a capacidade REAL para puxar novos leads:
+  // Fila final do dia + itens ainda abertos em Revisão.
+  const reviewCounts = await reviewCountsPromise;
+  for (const [id, used] of reviewCounts) counts.set(id, (counts.get(id) ?? 0) + used);
   return counts;
 }
 

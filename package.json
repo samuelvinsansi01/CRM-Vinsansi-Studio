@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "node scripts/verify-syntax.mjs && node scripts/verify-r24-table-standardization.mjs && node scripts/verify-r29-operational-tables-alternative-name.mjs && node scripts/verify-r30-provider-recipient.mjs && node scripts/verify-r31-homologation-package.mjs && node scripts/verify-r32-worker-batch-control-plane.mjs && node scripts/verify-r33-empty-whatsapp-batch.mjs && node scripts/verify-r34-multi-city-rollover.mjs",
+    "verify:release": "node scripts/verify-syntax.mjs && node scripts/verify-r24-table-standardization.mjs && node scripts/verify-r29-operational-tables-alternative-name.mjs && node scripts/verify-r30-provider-recipient.mjs && node scripts/verify-r31-homologation-package.mjs && node scripts/verify-r32-worker-batch-control-plane.mjs && node scripts/verify-r33-empty-whatsapp-batch.mjs && node scripts/verify-r34-multi-city-rollover.mjs && node scripts/verify-r35-real-resource-capacity.mjs",
     "verify:stage3:sql": "node scripts/verify-stage3-sql.mjs",
     "verify:stage4:sql": "node scripts/verify-stage4-sql.mjs",
     "verify:stage5:sql": "node scripts/verify-stage5-sql.mjs",
@@ -33,7 +33,8 @@
     "verify:r31": "node scripts/verify-r31-homologation-package.mjs",
     "verify:r32": "node scripts/verify-r32-worker-batch-control-plane.mjs",
     "verify:r33": "node scripts/verify-r33-empty-whatsapp-batch.mjs",
-    "verify:r34": "node scripts/verify-r34-multi-city-rollover.mjs"
+    "verify:r34": "node scripts/verify-r34-multi-city-rollover.mjs",
+    "verify:r35": "node scripts/verify-r35-real-resource-capacity.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
