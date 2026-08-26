@@ -1814,3 +1814,25 @@ button.checkbox {
 .branch-categories-json .field__control:focus-within {
   border-color: color-mix(in srgb, var(--color-pure-white) 10%, transparent);
 }
+
+/* R46: confirmação persistente das ações de Revisão. */
+.queue-action-notice {
+  display: grid;
+  align-items: start;
+  gap: 4px;
+  min-height: 0;
+  margin: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  line-height: 18px;
+}
+
+.queue-action-notice strong {
+  color: var(--text-primary);
+}
+
+.queue-action-notice--danger {
+  border-color: var(--color-danger-border, var(--border-subtle));
+}

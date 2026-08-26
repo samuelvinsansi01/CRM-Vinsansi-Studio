@@ -279,9 +279,25 @@ async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
     p_template_id: Number(preparedItem.templateId),
   });
   if (error) throw new Error(error.message);
+
+  const approval = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
+  if (!approval || approval.contractVersion !== 'R46' || approval.persisted !== true || approval.reviewStatus !== 'locked' || !approval.queueItemId) {
+    const { data: stateData, error: stateError } = await getSupabaseClient().rpc('queue_review_approval_state', {
+      p_review_item_id: Number(item.reviewItemId),
+    });
+    if (stateError) {
+      throw new Error(`A aprovação não retornou a confirmação R46 e o estado persistido não pôde ser conferido: ${stateError.message}. Aplique o SQL R46 no Supabase.`);
+    }
+    const state = rpcRow(stateData as Record<string, unknown> | Record<string, unknown>[] | null);
+    if (!state || state.contractVersion !== 'R46' || state.persisted !== true) {
+      const detail = state?.reason ? ` (${String(state.reason)})` : '';
+      throw new Error(`A aprovação não foi persistida no banco${detail}. Aplique o SQL R46 no Supabase e tente novamente.`);
+    }
+  }
+
   eventBus.emit('import:changed', { source: 'move' });
   eventBus.emit(channel === 'WhatsApp' ? 'whatsapp-queue:changed' : 'instagram-queue:changed', { action: 'update' });
-  return data;
+  return approval ?? data;
 }
 
 async function invalidate(item: QueueReviewItem, channel: QueueReviewChannel) {
