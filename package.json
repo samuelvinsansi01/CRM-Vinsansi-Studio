@@ -7,7 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "node scripts/verify-syntax.mjs && node scripts/verify-r24-table-standardization.mjs && node scripts/verify-r29-operational-tables-alternative-name.mjs && node scripts/verify-r30-provider-recipient.mjs && node scripts/verify-r31-homologation-package.mjs && node scripts/verify-r32-worker-batch-control-plane.mjs && node scripts/verify-r33-empty-whatsapp-batch.mjs && node scripts/verify-r34-multi-city-rollover.mjs && node scripts/verify-r35-real-resource-capacity.mjs && node scripts/verify-r36-whatsapp-validation-proof.mjs && node scripts/verify-r37-capture-window-isolation.mjs && node scripts/verify-r38-whatsapp-validation-control-plane.mjs && node scripts/verify-r39-build-and-optimistic-queues.mjs && node scripts/verify-r40-element-level-queue-actions.mjs && node scripts/verify-r41-instant-review-actions.mjs && node scripts/verify-r42-instagram-batches.mjs && node scripts/verify-r43-whatsapp-effective-recipient.mjs",
+    "verify:release": "node scripts/verify-syntax.mjs && node scripts/verify-r24-table-standardization.mjs && node scripts/verify-r29-operational-tables-alternative-name.mjs && node scripts/verify-r30-provider-recipient.mjs && node scripts/verify-r31-homologation-package.mjs && node scripts/verify-r32-worker-batch-control-plane.mjs && node scripts/verify-r33-empty-whatsapp-batch.mjs && node scripts/verify-r34-multi-city-rollover.mjs && node scripts/verify-r35-real-resource-capacity.mjs && node scripts/verify-r36-whatsapp-validation-proof.mjs && node scripts/verify-r37-capture-window-isolation.mjs && node scripts/verify-r38-whatsapp-validation-control-plane.mjs && node scripts/verify-r39-build-and-optimistic-queues.mjs && node scripts/verify-r40-element-level-queue-actions.mjs && node scripts/verify-r41-instant-review-actions.mjs && node scripts/verify-r42-instagram-batches.mjs && node scripts/verify-r43-whatsapp-effective-recipient.mjs && node scripts/verify-r44-whatsapp-validation-result-permissions.mjs",
     "verify:stage3:sql": "node scripts/verify-stage3-sql.mjs",
     "verify:stage4:sql": "node scripts/verify-stage4-sql.mjs",
     "verify:stage5:sql": "node scripts/verify-stage5-sql.mjs",
@@ -41,7 +41,8 @@
     "verify:r40": "node scripts/verify-r40-element-level-queue-actions.mjs",
     "verify:r41": "node scripts/verify-r41-instant-review-actions.mjs",
     "verify:r42": "node scripts/verify-r42-instagram-batches.mjs",
-    "verify:r43": "node scripts/verify-r43-whatsapp-effective-recipient.mjs"
+    "verify:r43": "node scripts/verify-r43-whatsapp-effective-recipient.mjs",
+    "verify:r44": "node scripts/verify-r44-whatsapp-validation-result-permissions.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
