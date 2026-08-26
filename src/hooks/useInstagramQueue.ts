@@ -100,15 +100,28 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
     [refresh],
   );
 
+  const patchLeadLocally = useCallback((id: string, patch: Partial<InstagramQueueLead>) => {
+    setBatches((current) => current.map((batch) => ({
+      ...batch,
+      leads: batch.leads.map((lead) => lead.id === id ? { ...lead, ...patch } : lead),
+    })));
+  }, []);
+
   const invalidate = useCallback(
     async (lead: InstagramQueueLead) => {
       await instagramQueueService.invalidate(lead.id);
       setBatches((current) => current
         .map((batch) => ({ ...batch, leads: batch.leads.filter((candidate) => candidate.id !== lead.id) }))
         .filter((batch) => batch.leads.length > 0));
-      refresh();
+      setSummary((current) => ({
+        ...current,
+        queued: Math.max(0, current.queued - (['queued', 'paused', 'following', 'dm_opened'].includes(lead.status) ? 1 : 0)),
+        sent: Math.max(0, current.sent - (lead.status === 'sent' ? 1 : 0)),
+        errors: Math.max(0, current.errors - (['error', 'reconciliation_required'].includes(lead.status) ? 1 : 0)),
+        invalid: current.invalid + (lead.status === 'invalid' ? 0 : 1),
+      }));
     },
-    [refresh],
+    [],
   );
 
   return {
@@ -123,6 +136,7 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
     pause,
     resume,
     reprocess,
+    patchLeadLocally,
     invalidate,
   };
 }

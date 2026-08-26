@@ -193,13 +193,26 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
     refresh();
   }, [refresh]);
 
+  const patchLeadLocally = useCallback((id: string, patch: Partial<WhatsAppQueueLead>) => {
+    setBatches((current) => current.map((batch) => ({
+      ...batch,
+      leads: batch.leads.map((lead) => lead.id === id ? { ...lead, ...patch } : lead),
+    })));
+  }, []);
+
   const invalidate = useCallback(async (lead: WhatsAppQueueLead) => {
     await whatsappQueueService.invalidate(lead.id);
     setBatches((current) => current
       .map((batch) => ({ ...batch, leads: batch.leads.filter((candidate) => candidate.id !== lead.id) }))
       .filter((batch) => batch.leads.length > 0));
-    refresh();
-  }, [refresh]);
+    setSummary((current) => ({
+      ...current,
+      queued: Math.max(0, current.queued - (['queued', 'paused', 'sending'].includes(lead.status) ? 1 : 0)),
+      sent: Math.max(0, current.sent - (lead.status === 'sent' ? 1 : 0)),
+      finished: current.finished + (lead.status === 'invalid' || lead.status === 'sent' ? 0 : 1),
+      errors: Math.max(0, current.errors - (lead.status === 'error' ? 1 : 0)),
+    }));
+  }, []);
 
   return {
     chips,
@@ -219,6 +232,7 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
     pause,
     resume,
     reprocess,
+    patchLeadLocally,
     invalidate,
   };
 }

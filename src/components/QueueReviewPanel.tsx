@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DataTable, RowsPerPageControl, TableCard, Tag, type TableAction, type TableColumn, type ToastItem } from '../design-system/components';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { queueReviewService, type QueueReviewBatch, type QueueReviewChannel, type QueueReviewItem } from '../services/queue-review';
@@ -37,15 +37,27 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
   const [batches, setBatches] = useState<QueueReviewBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [workingItem, setWorkingItem] = useState('');
+  const toastRef = useRef(onToast);
+  const scopeRef = useRef('');
+
+  useEffect(() => { toastRef.current = onToast; }, [onToast]);
 
   const refresh = useCallback(async () => {
-    if (!preferredResourceId) { setBatches([]); setLoading(false); return; }
-    setLoading(true);
+    if (!preferredResourceId) { scopeRef.current = ''; setBatches([]); setLoading(false); return; }
+    const scopeKey = `${channel}:${preferredResourceId}:${scheduledDate}`;
+    const scopeChanged = scopeRef.current !== scopeKey;
+    if (scopeChanged) {
+      scopeRef.current = scopeKey;
+      setBatches([]);
+      setLoading(true);
+    }
     try { setBatches(await queueReviewService.list(channel, preferredResourceId, scheduledDate)); }
-    catch (error) { onToast('Não foi possível carregar a revisão', error instanceof Error ? error.message : 'Tente novamente.', 'danger'); }
-    finally { setLoading(false); }
-  }, [channel, onToast, preferredResourceId, scheduledDate]);
+    catch (error) { toastRef.current('Não foi possível carregar a revisão', error instanceof Error ? error.message : 'Tente novamente.', 'danger'); }
+    finally { if (scopeRef.current === scopeKey) setLoading(false); }
+  }, [channel, preferredResourceId, scheduledDate]);
 
+  // R40: atualizações do componente pai (cards, toasts e Fila final) não podem
+  // transformar uma ação local em novo carregamento visual da tabela de revisão.
   useEffect(() => { void refresh(); }, [refresh, refreshKey]);
   const currentBatch = batches[0];
   const reviewItems = useMemo(() => currentBatch?.items ?? [], [currentBatch]);

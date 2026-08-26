@@ -20,8 +20,8 @@ check(!invalidateBlock.includes('await refresh()'), 'R39: invalidar nao pode rec
 
 const waHook = read('src/hooks/useWhatsAppQueue.ts');
 const igHook = read('src/hooks/useInstagramQueue.ts');
-check(/invalidate[\s\S]*setBatches[\s\S]*refresh\(\)/.test(waHook), 'R39: invalidacao WhatsApp deve remover localmente e sincronizar em background.');
-check(/invalidate[\s\S]*setBatches[\s\S]*refresh\(\)/.test(igHook), 'R39: invalidacao Instagram deve remover localmente e sincronizar em background.');
+check(/invalidate[\s\S]*setBatches/.test(waHook), 'R39: invalidacao WhatsApp deve remover localmente.');
+check(/invalidate[\s\S]*setBatches/.test(igHook), 'R39: invalidacao Instagram deve remover localmente.');
 
 const page = read('src/pages/QueuePage.tsx');
 check(!/await invalidate\(lead\);setConfirmLead\(null\);setReviewRefreshKey/.test(page), 'R39: invalidacao da Fila final nao deve forcar reload visual da Revisao.');
