@@ -1,4 +1,5 @@
 // Shared server-side implementation for the validate and revalidate entrypoints.
+import { createHash } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { organizationScopedAuthHeaders, resolveOrganizationContext } from '../organization/context.js';
 
@@ -46,6 +47,7 @@ type AuthContext = {
   client: SupabaseClient;
   authUserId: string;
   publicUserId: string;
+  organizationId: number;
 };
 
 type ValidationLeadRow = {
@@ -60,14 +62,6 @@ type ValidationLeadRow = {
 
 function env(name: string) {
   return String(process.env[name] ?? '').trim();
-}
-
-function workerConfig() {
-  return {
-    url: env('WHATSAPP_VALIDATION_WORKER_URL') || env('WHATSAPP_VALIDATION_WORKER_HEALTH_URL'),
-    token: env('WHATSAPP_VALIDATION_WORKER_TOKEN') || env('WHATSAPP_VALIDATION_WORKER_HEALTH_TOKEN'),
-    timeoutMs: Math.max(2_000, Number(env('WHATSAPP_VALIDATION_TIMEOUT_MS') || env('WHATSAPP_VALIDATION_HEALTH_TIMEOUT_MS') || 30_000)),
-  };
 }
 
 function supabaseConfig() {
@@ -152,6 +146,7 @@ async function authenticate(req: ApiRequest): Promise<AuthContext> {
     client,
     authUserId: authData.user.id,
     publicUserId: String(organization.scopeUsersId),
+    organizationId: organization.organizationId,
   };
 }
 
@@ -215,9 +210,138 @@ async function resolveOwnedLeads(
   });
 }
 
-function safeMessage(payload: unknown, fallback: string) {
-  const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
-  return String(record.message ?? record.error ?? fallback).trim() || fallback;
+const CONTROL_PLANE_TIMEOUT_MS = 50_000;
+const CONTROL_PLANE_POLL_MS = 400;
+
+type ValidationRequestRow = {
+  whatsapp_validation_requests_id: string;
+  request_status: 'pending' | 'processing' | 'completed' | 'failed' | 'canceled';
+  result_payload?: unknown;
+  error_message?: string | null;
+  consumed_at?: string | null;
+  expires_at?: string | null;
+};
+
+function validationRequestKey(
+  organizationId: number,
+  leads: ValidationLead[],
+  operation: ValidationOperation,
+  mode: ValidationMode,
+) {
+  const canonical = leads
+    .map((lead) => ({
+      id: String(lead.id || lead.lead_id || ''),
+      phone: phoneDigits(lead.normalized_phone || lead.phone),
+      chip: String(lead.chip_instance || '').trim(),
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  return createHash('sha256')
+    .update(JSON.stringify({ organizationId, operation, mode, leads: canonical }))
+    .digest('hex');
+}
+
+async function getValidationRequest(client: SupabaseClient, organizationId: number, requestKey: string) {
+  const response = await client
+    .from('whatsapp_validation_requests')
+    .select('whatsapp_validation_requests_id,request_status,result_payload,error_message,consumed_at,expires_at')
+    .eq('organizations_id', organizationId)
+    .eq('request_key', requestKey)
+    .maybeSingle();
+  if (response.error) throw new Error(`Falha ao consultar a validação persistente: ${response.error.message}`);
+  return response.data as ValidationRequestRow | null;
+}
+
+async function enqueueValidationRequest(
+  client: SupabaseClient,
+  organizationId: number,
+  publicUserId: string,
+  leads: ValidationLead[],
+  operation: ValidationOperation,
+  mode: ValidationMode,
+) {
+  const requestKey = validationRequestKey(organizationId, leads, operation, mode);
+  const existing = await getValidationRequest(client, organizationId, requestKey);
+  const reusable = existing
+    && ['pending', 'processing'].includes(existing.request_status)
+    && (!existing.expires_at || new Date(existing.expires_at).getTime() > Date.now());
+  if (reusable || (existing?.request_status === 'completed' && !existing.consumed_at)) {
+    return { requestKey, requestId: existing!.whatsapp_validation_requests_id };
+  }
+
+  const values = {
+    organizations_id: organizationId,
+    users_id: Number(publicUserId),
+    request_key: requestKey,
+    operation,
+    mode,
+    leads_payload: leads,
+    request_status: 'pending',
+    worker_id: null,
+    claim_token: null,
+    attempts: 0,
+    result_payload: null,
+    error_message: null,
+    requested_at: new Date().toISOString(),
+    claimed_at: null,
+    finished_at: null,
+    consumed_at: null,
+    expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    const response = await client
+      .from('whatsapp_validation_requests')
+      .update(values)
+      .eq('organizations_id', organizationId)
+      .eq('whatsapp_validation_requests_id', existing.whatsapp_validation_requests_id)
+      .select('whatsapp_validation_requests_id')
+      .single();
+    if (response.error) throw new Error(`Falha ao reabrir a validação persistente: ${response.error.message}`);
+    return { requestKey, requestId: String(response.data.whatsapp_validation_requests_id) };
+  }
+
+  const inserted = await client
+    .from('whatsapp_validation_requests')
+    .insert(values)
+    .select('whatsapp_validation_requests_id')
+    .single();
+  if (inserted.error) {
+    // Corrida rara entre duas chamadas idênticas: reutiliza a solicitação vencedora.
+    const raced = await getValidationRequest(client, organizationId, requestKey);
+    if (!raced) throw new Error(`Falha ao criar a validação persistente: ${inserted.error.message}`);
+    return { requestKey, requestId: raced.whatsapp_validation_requests_id };
+  }
+  return { requestKey, requestId: String(inserted.data.whatsapp_validation_requests_id) };
+}
+
+async function waitForValidationRequest(
+  client: SupabaseClient,
+  organizationId: number,
+  requestId: string,
+): Promise<ValidationResult[]> {
+  const deadline = Date.now() + CONTROL_PLANE_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const response = await client
+      .from('whatsapp_validation_requests')
+      .select('request_status,result_payload,error_message')
+      .eq('organizations_id', organizationId)
+      .eq('whatsapp_validation_requests_id', requestId)
+      .maybeSingle();
+    if (response.error) throw new Error(`Falha ao acompanhar o Motor WhatsApp: ${response.error.message}`);
+    if (!response.data) throw new Error('Solicitação de validação WhatsApp não encontrada no control plane.');
+    const row = response.data as ValidationRequestRow;
+    if (row.request_status === 'failed') {
+      throw new Error(String(row.error_message || 'O Motor WhatsApp não conseguiu validar os números.'));
+    }
+    if (row.request_status === 'canceled') throw new Error('A validação WhatsApp foi cancelada.');
+    if (row.request_status === 'completed') {
+      if (!Array.isArray(row.result_payload)) throw new Error('O Motor WhatsApp concluiu sem um resultado válido.');
+      return row.result_payload as ValidationResult[];
+    }
+    await new Promise((resolve) => setTimeout(resolve, CONTROL_PLANE_POLL_MS));
+  }
+  throw new Error('O Motor WhatsApp local não respondeu à solicitação de validação dentro do prazo. Verifique se o Gerenciador e o Worker estão ligados.');
 }
 
 export async function runStrictValidation(
@@ -225,54 +349,21 @@ export async function runStrictValidation(
   operation: ValidationOperation,
   mode: ValidationMode,
   publicUserId: string,
-): Promise<ValidationResult[]> {
-  const config = workerConfig();
-  if (!config.url) throw new Error('WHATSAPP_VALIDATION_WORKER_URL não foi configurada.');
-  if (!config.token) throw new Error('WHATSAPP_VALIDATION_WORKER_TOKEN não foi configurado.');
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
-  try {
-    const response = await fetch(`${config.url.replace(/\/$/, '')}/validation/whatsapp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Worker-Token': config.token,
-      },
-      body: JSON.stringify({
-        user_id: publicUserId,
-        operation,
-        mode,
-        leads,
-      }),
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || payload?.ok !== true) {
-      throw new Error(safeMessage(payload, `Worker WhatsApp indisponível (HTTP ${response.status}).`));
-    }
-    if (payload?.meta?.operation !== operation || payload?.meta?.mode !== mode) {
-      throw new Error('Worker respondeu uma operação diferente da solicitada.');
-    }
-    const results = Array.isArray(payload?.results) ? payload.results as ValidationResult[] : [];
-    const expectedIds = new Set(leads.map((lead) => String(lead.id || lead.lead_id)));
-    const returnedIds = results.map((result) => String(result.leadId || result.lead_id || ''));
-    if (
-      results.length !== leads.length ||
-      new Set(returnedIds).size !== leads.length ||
-      returnedIds.some((id) => !expectedIds.has(id))
-    ) {
-      throw new Error('Worker retornou resultados sem correspondência exata dos leads solicitados.');
-    }
-    return results;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Worker WhatsApp não respondeu dentro do prazo. Nenhum lead foi alterado.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+  organizationId: number,
+  controlPlaneClient: SupabaseClient,
+): Promise<{ results: ValidationResult[]; requestId: string }> {
+  const queued = await enqueueValidationRequest(controlPlaneClient, organizationId, publicUserId, leads, operation, mode);
+  const results = await waitForValidationRequest(controlPlaneClient, organizationId, queued.requestId);
+  const expectedIds = new Set(leads.map((lead) => String(lead.id || lead.lead_id)));
+  const returnedIds = results.map((result) => String(result.leadId || result.lead_id || ''));
+  if (
+    results.length !== leads.length
+    || new Set(returnedIds).size !== leads.length
+    || returnedIds.some((id) => !expectedIds.has(id))
+  ) {
+    throw new Error('Motor WhatsApp retornou resultados sem correspondência exata dos leads solicitados.');
   }
+  return { results, requestId: queued.requestId };
 }
 
 function persistedOutcome(result: ValidationResult) {
@@ -381,10 +472,11 @@ export async function handleValidationRequest(req: ApiRequest, res: ApiResponse,
   try {
     const auth = await authenticate(req);
     const leads = await resolveOwnedLeads(auth, requested, expectedMode);
-    const trustedClient = serviceClient();
+    const controlPlaneClient = serviceClient();
     let providerResults: ValidationResult[];
     try {
-      providerResults = await runStrictValidation(leads, expectedOperation, expectedMode, auth.publicUserId);
+      const controlPlane = await runStrictValidation(leads, expectedOperation, expectedMode, auth.publicUserId, auth.organizationId, controlPlaneClient);
+      providerResults = controlPlane.results;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha técnica na validação WhatsApp.';
       const technicalResults = leads.map((lead) => ({
@@ -393,10 +485,17 @@ export async function handleValidationRequest(req: ApiRequest, res: ApiResponse,
         valid: false,
         errorMessage: message,
       }));
-      await persistValidationResults(trustedClient, leads, technicalResults, expectedMode, auth.publicUserId);
+      await persistValidationResults(auth.client, leads, technicalResults, expectedMode, auth.publicUserId);
       throw error;
     }
-    const results = await persistValidationResults(trustedClient, leads, providerResults, expectedMode, auth.publicUserId);
+    const results = await persistValidationResults(auth.client, leads, providerResults, expectedMode, auth.publicUserId);
+    const requestKey = validationRequestKey(auth.organizationId, leads, expectedOperation, expectedMode);
+    await controlPlaneClient
+      .from('whatsapp_validation_requests')
+      .update({ consumed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('organizations_id', auth.organizationId)
+      .eq('request_key', requestKey)
+      .eq('request_status', 'completed');
     const summary = results.reduce((acc, result) => {
       acc[result.status] += 1;
       return acc;
@@ -404,7 +503,7 @@ export async function handleValidationRequest(req: ApiRequest, res: ApiResponse,
     res.status(200).json({
       results,
       meta: {
-        provider: 'worker_evolution',
+        provider: 'control_plane_worker_evolution',
         simulated: false,
         operation: expectedOperation,
         mode: expectedMode,

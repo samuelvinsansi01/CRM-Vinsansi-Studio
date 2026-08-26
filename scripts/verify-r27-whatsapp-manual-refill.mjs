@@ -28,7 +28,8 @@ ok(queuePage.includes("queueReviewService.pullToCapacity('Instagram', scheduledD
 ok(reviewPanel.includes('queueReviewService.pullToCapacity(channel, scheduledDate, preferredResourceId)'), 'botão Puxar deixou de acionar pull explícito');
 ok(reviewPanel.includes('`Puxar ${channel}`'), 'ação Puxar não está disponível na revisão');
 ok(reviewService.includes("return fillBatch(channel, resource, scheduledDate, { revalidateExisting: channel === 'WhatsApp' });"), 'pull explícito de WhatsApp deixou de validar/preencher a capacidade');
-ok(whatsappValidationHandler.includes('WHATSAPP_VALIDATION_WORKER_URL'), 'contrato do worker de validação WhatsApp desapareceu');
+ok(whatsappValidationHandler.includes('whatsapp_validation_requests'), 'validação WhatsApp deixou de usar o control plane persistente');
+ok(!whatsappValidationHandler.includes('WHATSAPP_VALIDATION_WORKER_URL'), 'validação WhatsApp voltou a depender de URL direta do Worker');
 
 // Feedback deixa claro que a vaga WhatsApp fica aberta até novo clique.
 ok(reviewPanel.includes('Um novo lead só será puxado quando você clicar em Puxar WhatsApp.'), 'feedback da revisão não informa reposição manual WhatsApp');
