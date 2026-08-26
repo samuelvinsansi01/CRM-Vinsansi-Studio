@@ -1,6 +1,19 @@
-# CRM - Vinsansi Studio v2.4.0-R26
+## v2.4.0-R28 — resposta manual pelo JID canônico
 
-Release incremental sobre a R25.
+Respostas manuais agora preservam `remote_jid` da conversa e usam telefone apenas como fallback. Isso evita erro `not registered on WhatsApp` causado por reconstrução indevida do destino.
+
+# CRM - Vinsansi Studio v2.4.0-R27
+
+Release incremental sobre a R26.
+
+
+## R27 — WhatsApp com reposição manual
+
+No WhatsApp, invalidar um lead **não puxa outro automaticamente**. A vaga fica aberta até o operador clicar em **Puxar WhatsApp** com o chip escolhido. Isso vale tanto para a Revisão quanto para a Fila final.
+
+Dessa forma, a invalidação não chama o worker de validação e pode ser feita normalmente mesmo quando `WHATSAPP_VALIDATION_WORKER_URL` não estiver disponível naquele fluxo. A configuração do worker continua necessária no clique em **Puxar WhatsApp**, porque é ali que os novos números são validados de verdade.
+
+O Instagram permanece como estava: invalidação com reposição automática para Revisão.
 
 ## R26 — Revisão → Fila final
 
@@ -21,9 +34,9 @@ Somente invalidar/cancelar um item libera vaga; erros e reconciliações continu
 
 ### Reposição
 
-- Invalidar na Revisão remove o lead e repõe a vaga com o próximo melhor candidato.
-- Invalidar um lead aprovado da Fila final libera uma vaga e envia o substituto para **Revisão**.
-- O substituto só entra na Fila final depois de novo check de aprovação.
+- **WhatsApp:** invalidar apenas libera a vaga; o substituto só é buscado ao clicar em **Puxar WhatsApp**.
+- **Instagram:** invalidar mantém a reposição automática com o próximo melhor candidato em **Revisão**.
+- Em ambos os canais, o substituto só entra na Fila final depois de novo check de aprovação.
 
 ## Escopo por recurso
 

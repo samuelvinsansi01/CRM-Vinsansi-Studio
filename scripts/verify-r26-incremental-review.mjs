@@ -46,12 +46,12 @@ ok(migration.includes('FROM public.prepare_queue_items('), 'aprovação não cri
 ok((migration.match(/SET target_count=v_capacity.available/g) ?? []).length >= 3, 'target da Revisão não é atualizado após aprovação');
 ok(!migration.includes('queue_items_payload_snapshot'), 'R26 manipula snapshot manualmente em vez do pipeline canônico');
 
-// Invalidação final libera slot e replacement volta somente para Revisão.
+// Invalidação final libera slot. Instagram mantém replacement automático; WhatsApp foi tornado manual na R27.
 ok(whatsappRepo.includes("rpc('invalidate_final_queue_item'"), 'WhatsApp não usa invalidação final canônica');
 ok(instagramRepo.includes("rpc('invalidate_final_queue_item'"), 'Instagram não usa invalidação final canônica');
-ok(queuePage.includes("queueReviewService.pullToCapacity('WhatsApp', scheduledDate, activeChip)"), 'invalidação WhatsApp não repõe a vaga na Revisão');
+ok(!queuePage.includes("queueReviewService.pullToCapacity('WhatsApp', scheduledDate, activeChip)"), 'WhatsApp voltou a repor automaticamente após invalidação');
 ok(queuePage.includes("queueReviewService.pullToCapacity('Instagram', scheduledDate, activeProfile)"), 'invalidação Instagram não repõe a vaga na Revisão');
-ok(queuePage.includes('Uma nova vaga foi enviada para Revisão.'), 'feedback de reposição para Revisão ausente');
+ok(queuePage.includes('Uma nova vaga foi enviada para Revisão.'), 'feedback de reposição Instagram para Revisão ausente');
 
 // Escopo estrito: nunca agregar todos os recursos nem fallback silencioso.
 ok(reviewService.includes('if (!preferredResourceId)'), 'pull não exige recurso selecionado');

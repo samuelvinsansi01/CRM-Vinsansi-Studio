@@ -121,7 +121,13 @@ export function QueueReviewPanel({
       await queueReviewService.invalidate(item, channel);
       await refresh();
       onQueueChanged();
-      onToast('Lead invalidado', 'A vaga foi liberada e o próximo melhor lead voltou para a etapa de revisão.', 'warning');
+      onToast(
+        'Lead invalidado',
+        channel === 'WhatsApp'
+          ? 'A vaga foi liberada. Um novo lead só será puxado quando você clicar em Puxar WhatsApp.'
+          : 'A vaga foi liberada e o próximo melhor lead voltou para a etapa de revisão.',
+        'warning',
+      );
     } catch (error) {
       onToast('Não foi possível invalidar', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {

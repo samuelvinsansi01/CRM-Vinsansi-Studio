@@ -274,10 +274,9 @@ function WhatsAppQueuePage() {
     const lead = confirmLead;
     try {
       await invalidate(lead);
-      if (activeChip) await queueReviewService.pullToCapacity('WhatsApp', scheduledDate, activeChip).catch(() => undefined);
       setConfirmLead(null);
       setSelectedIds((current) => current.filter((id) => id !== lead.id));
-      pushToast({ title: 'Lead invalidado', description: `${lead.company} saiu da Fila final. Uma nova vaga foi enviada para Revisão.`, tone: 'warning' });
+      pushToast({ title: 'Lead invalidado', description: `${lead.company} saiu da Fila final. A vaga ficou aberta e só será preenchida quando você clicar em Puxar WhatsApp.`, tone: 'warning' });
     } catch (err) {
       pushToast({ title: 'Não foi possível invalidar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
