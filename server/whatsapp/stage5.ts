@@ -65,6 +65,40 @@ export async function evolutionCommand(scope:HumanScope,instancesId:number){
   return {instanceName:text(selected.instances_name),instanceUrl:text(selected.instances_url),apiKey:text(selected.api_key)};
 }
 
+
+function providerJidCandidate(value: unknown) {
+  const jid=text(value).toLowerCase().replace(/@c\.us$/i,'@s.whatsapp.net');
+  if(!/^[0-9]+@(lid|s\.whatsapp\.net)$/i.test(jid)) return '';
+  return jid;
+}
+
+export function stage5ProviderJidsFromPayload(value:unknown){
+  const payload=record(value);
+  const nested=(path:string[])=>{let current:unknown=payload;for(const key of path){if(!current||typeof current!=='object'||Array.isArray(current))return '';current=(current as Row)[key];}return providerJidCandidate(current);};
+  const preferLid=(values:string[])=>[...values.filter((jid)=>jid.endsWith('@lid')),...values.filter((jid)=>!jid.endsWith('@lid'))];
+  // Chat/remoteJid representam a thread. Sender só é fallback: em mensagens fromMe ele pode ser o próprio chip.
+  const chats=preferLid([nested(['Info','Chat']),nested(['info','Chat']),nested(['info','chat']),nested(['data','Info','Chat']),nested(['data','info','chat'])].filter(Boolean));
+  const remotes=preferLid([nested(['key','remoteJid']),nested(['remoteJid'])].filter(Boolean));
+  const senders=preferLid([nested(['Info','Sender']),nested(['info','Sender']),nested(['info','sender']),nested(['data','Info','Sender']),nested(['data','info','sender'])].filter(Boolean));
+  return [...new Set([...chats,...remotes,...senders])];
+}
+
+export async function providerRecipientForConversation(scope:HumanScope,conversationId:number,fallback:string){
+  const recent=await scope.admin.from('conversation_messages')
+    .select('conversation_messages_id,raw_payload')
+    .eq('organizations_id',scope.context.organizationId)
+    .eq('conversations_id',conversationId)
+    .order('conversation_messages_id',{ascending:false})
+    .limit(30);
+  if(!recent.error){
+    for(const row of (recent.data??[]) as Row[]){
+      const candidates=stage5ProviderJidsFromPayload(row.raw_payload);
+      if(candidates.length)return candidates[0];
+    }
+  }
+  return text(fallback);
+}
+
 export function safeFileName(value:unknown){const base=text(value).normalize('NFKD').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,120);return base||'arquivo';}
 export function allowedMedia(mime:string,size:number){const allowed=new Set(['image/jpeg','image/png','image/webp','video/mp4','audio/ogg','audio/mpeg','audio/mp4','application/pdf','application/octet-stream']);return allowed.has(mime)&&Number.isSafeInteger(size)&&size>0&&size<=26_214_400;}
 

@@ -95,3 +95,9 @@ Execute:
 
 ## R29
 Filas manuais, nome alternativo canônico e padronização única das tabelas. Aplicar `SQL - CRM R29 - Nome alternativo e filas manuais.sql` antes de publicar.
+
+## R30
+Resposta manual usa o JID real preservado no webhook da conversa, priorizando `@lid`. Não exige SQL novo além das migrations anteriores.
+
+## R31
+Correção de empacotamento/build da Homologação final. O repository `src/repositories/release/homologation.repository.ts` volta a fazer parte do pacote e a redução de status possui tipos explícitos. Não exige SQL novo além das migrations anteriores.
