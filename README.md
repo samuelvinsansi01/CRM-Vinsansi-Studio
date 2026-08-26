@@ -101,3 +101,7 @@ Resposta manual usa o JID real preservado no webhook da conversa, priorizando `@
 
 ## R31
 Correção de empacotamento/build da Homologação final. O repository `src/repositories/release/homologation.repository.ts` volta a fazer parte do pacote e a redução de status possui tipos explícitos. Não exige SQL novo além das migrations anteriores.
+
+## R32
+
+A fila persistente de WhatsApp agora é controlada diretamente pelo Supabase. O CRM não precisa mais de `WHATSAPP_WORKER_BATCH_URL`/`WHATSAPP_WORKER_BATCH_TOKEN` para criar ou controlar lotes. O Worker continua lendo os lotes do banco e realizando os disparos. A URL do Worker de validação permanece restrita ao fluxo **Puxar WhatsApp**.

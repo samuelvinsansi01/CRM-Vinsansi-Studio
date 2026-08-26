@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { organizationScopedAuthHeaders, resolveOrganizationContext } from '../../organization/context.js';
+import { serviceClient } from '../../maps/shared.js';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void };
@@ -49,18 +50,44 @@ async function chipInstance(auth: AuthContext, items: RecordValue[], provided: s
   return name;
 }
 
-async function callWorker(action: string, ids: number[], chip: string) {
-  const base = envAny('WHATSAPP_WORKER_BATCH_URL') || `${envAny('WHATSAPP_VALIDATION_WORKER_URL').replace(/\/$/, '')}/batch/whatsapp`;
-  const token = envAny('WHATSAPP_WORKER_BATCH_TOKEN', 'WHATSAPP_VALIDATION_WORKER_TOKEN');
-  if (!base || base === '/batch/whatsapp') throw new Error('worker_batch_backend_not_configured');
-  if (!token) throw new Error('worker_batch_token_not_configured');
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000);
-  try {
-    const response = await fetch(`${base.replace(/\/$/, '')}/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Worker-Token': token }, body: JSON.stringify({ queue_item_ids: ids, chip_instance: chip }), signal: controller.signal });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok || payload?.ok === false) throw new Error(String(payload?.message ?? payload?.error ?? `worker_http_${response.status}`));
-    return payload;
-  } finally { clearTimeout(timer); }
+function batchStateFromRow(raw: unknown, chip: string) {
+  const row = Array.isArray(raw) ? (raw[0] as RecordValue | undefined) : (raw as RecordValue | null | undefined);
+  if (!row) return { ok: true, status: 'idle', enabled: false, chip, total: 0, remaining: 0, processed: 0, sent: 0, failed: 0 };
+  return {
+    ok: true,
+    batch_id: Number(row.batch_id ?? row.worker_batches_id ?? 0),
+    status: String(row.batch_status ?? 'idle'),
+    enabled: row.enabled === true,
+    chip: String(row.chip ?? chip ?? ''),
+    total: Number(row.total ?? 0),
+    remaining: Number(row.remaining ?? 0),
+    processed: Number(row.processed ?? 0),
+    sent: Number(row.sent ?? 0),
+    failed: Number(row.failed ?? 0),
+    next_run_at: row.next_run_at ?? '',
+    started_at: row.started_at ?? '',
+    last_error: String(row.last_error ?? ''),
+    already_running: row.already_running === true,
+  };
+}
+
+async function controlBatch(auth: AuthContext, action: string, ids: number[], chip: string) {
+  const admin = serviceClient();
+  const result = action === 'start'
+    ? await admin.rpc('worker_start_whatsapp_batch', {
+        p_users_id: auth.publicUserId,
+        p_chip_instance: chip,
+        p_queue_item_ids: ids,
+        p_worker_id: null,
+      })
+    : await admin.rpc('worker_set_whatsapp_batch_state', {
+        p_users_id: auth.publicUserId,
+        p_chip_instance: chip,
+        p_action: action,
+        p_worker_id: null,
+      });
+  if (result.error) throw new Error(`worker_batch_control_failed:${result.error.message}`);
+  return batchStateFromRow(result.data, chip);
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
@@ -77,10 +104,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const items = await ownedItems(auth, ids);
       chip = await chipInstance(auth, items, chip);
     } else if (!chip) return send(res, 400, { ok: false, error: 'batch_chip_required' });
-    return send(res, action === 'start' ? 202 : 200, await callWorker(action, ids, chip));
+    return send(res, action === 'start' ? 202 : 200, await controlBatch(auth, action, ids, chip));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'worker_batch_proxy_error';
-    const status = message.includes('auth_') ? 401 : message.includes('not_available') ? 403 : message.includes('required') || message.includes('mismatch') || message.includes('multiple') ? 400 : 502;
+    const status = message.includes('auth_') ? 401 : message.includes('not_available') ? 403 : message.includes('required') || message.includes('mismatch') || message.includes('multiple') ? 400 : message.includes('not_configured') ? 503 : 502;
     return send(res, status, { ok: false, error: message, message });
   }
 }
