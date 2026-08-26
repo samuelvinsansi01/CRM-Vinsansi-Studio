@@ -36,7 +36,7 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
 }) {
   const [batches, setBatches] = useState<QueueReviewBatch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [workingItem, setWorkingItem] = useState('');
+  const pendingItemsRef = useRef(new Set<string>());
   const toastRef = useRef(onToast);
   const scopeRef = useRef('');
 
@@ -76,31 +76,56 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
 
   const removeItemLocally = useCallback((reviewItemId: string) => {
     setBatches((current) => current
-      .map((batch) => ({ ...batch, items: batch.items.filter((candidate) => candidate.reviewItemId !== reviewItemId) }))
-      .filter((batch) => batch.items.length > 0));
+      .map((batch) => ({ ...batch, items: batch.items.filter((candidate) => candidate.reviewItemId !== reviewItemId) })));
+  }, []);
+
+  const restoreItemLocally = useCallback((item: QueueReviewItem, sourceBatch: QueueReviewBatch) => {
+    setBatches((current) => {
+      if (current.some((batch) => batch.items.some((candidate) => candidate.reviewItemId === item.reviewItemId))) return current;
+      const existingIndex = current.findIndex((batch) => batch.batchId === sourceBatch.batchId);
+      if (existingIndex < 0) return [...current, { ...sourceBatch, items: [item] }];
+      return current.map((batch, index) => index !== existingIndex ? batch : {
+        ...batch,
+        items: [...batch.items, item].sort((a, b) => a.position - b.position),
+      });
+    });
   }, []);
 
   const approve = async (item: QueueReviewItem) => {
-    if (!canPrepare) return; setWorkingItem(item.reviewItemId);
+    if (!canPrepare || pendingItemsRef.current.has(item.reviewItemId)) return;
+    const sourceBatch = batches.find((batch) => batch.items.some((candidate) => candidate.reviewItemId === item.reviewItemId));
+    if (!sourceBatch) return;
+    pendingItemsRef.current.add(item.reviewItemId);
+    // R41: resposta visual imediata. A linha sai antes da ida ao backend;
+    // em falha, somente ela volta, sem recarregar a tabela inteira.
+    removeItemLocally(item.reviewItemId);
     try {
       await queueReviewService.approve(item, channel);
-      removeItemLocally(item.reviewItemId);
       onQueueChanged();
       onToast('Lead aprovado', 'O lead entrou na Fila final e o snapshot foi criado.', 'success');
     }
-    catch (error) { onToast('Não foi possível aprovar', error instanceof Error ? error.message : 'Revise o lead e tente novamente.', 'danger'); }
-    finally { setWorkingItem(''); }
+    catch (error) {
+      restoreItemLocally(item, sourceBatch);
+      onToast('Não foi possível aprovar', error instanceof Error ? error.message : 'Revise o lead e tente novamente.', 'danger');
+    }
+    finally { pendingItemsRef.current.delete(item.reviewItemId); }
   };
   const invalidate = async (item: QueueReviewItem) => {
-    if (!canInvalidate) return; setWorkingItem(item.reviewItemId);
+    if (!canInvalidate || pendingItemsRef.current.has(item.reviewItemId)) return;
+    const sourceBatch = batches.find((batch) => batch.items.some((candidate) => candidate.reviewItemId === item.reviewItemId));
+    if (!sourceBatch) return;
+    pendingItemsRef.current.add(item.reviewItemId);
+    removeItemLocally(item.reviewItemId);
     try {
       await queueReviewService.invalidate(item, channel);
-      removeItemLocally(item.reviewItemId);
       onQueueChanged();
       onToast('Lead invalidado', `A vaga foi liberada. Um novo lead só será puxado quando você clicar em Puxar ${channel}.`, 'warning');
     }
-    catch (error) { onToast('Não foi possível invalidar', error instanceof Error ? error.message : 'Tente novamente.', 'danger'); }
-    finally { setWorkingItem(''); }
+    catch (error) {
+      restoreItemLocally(item, sourceBatch);
+      onToast('Não foi possível invalidar', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
+    }
+    finally { pendingItemsRef.current.delete(item.reviewItemId); }
   };
   const handleAction = (action: TableAction, row: ReviewRow) => {
     const item = reviewItems.find((candidate) => candidate.reviewItemId === row.id); if (!item) return;
@@ -115,9 +140,9 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
   >
     {!preferredResourceId ? <div className="table-message">Selecione {channel === 'WhatsApp' ? 'um chip' : 'um perfil'} para revisar a fila.</div> : null}
     {preferredResourceId && loading && !batches.length ? <div className="table-message">Carregando revisão...</div> : null}
-    {preferredResourceId && !loading && !batches.length ? <div className="table-message">Nenhum lead aguardando revisão para este recurso.</div> : null}
+    {preferredResourceId && !loading && !reviewItems.length ? <div className="table-message">Nenhum lead aguardando revisão para este recurso.</div> : null}
     {!loading && pageItems.length ? <DataTable columns={columns} rows={pageItems} selectable={false} actions={['approve','invalidate']} actionsLabel="Ações"
-      getRowActions={(row) => workingItem === row.id ? [] : [...(canPrepare ? ['approve' as const] : []), ...(canInvalidate ? ['invalidate' as const] : [])]}
+      getRowActions={() => [...(canPrepare ? ['approve' as const] : []), ...(canInvalidate ? ['invalidate' as const] : [])]}
       onAction={handleAction} /> : null}
   </TableCard>;
 }
