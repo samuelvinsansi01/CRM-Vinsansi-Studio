@@ -267,14 +267,7 @@ async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
 async function invalidate(item: QueueReviewItem, channel: QueueReviewChannel) {
   const { error } = await getSupabaseClient().rpc('invalidate_queue_review_item', { p_review_item_id: Number(item.reviewItemId) });
   if (error) throw new Error(error.message);
-
-  // Instagram mantém reposição automática. No WhatsApp, invalidar apenas libera a vaga:
-  // um novo lead só pode ser reservado/validado por ação explícita em "Puxar WhatsApp".
-  if (channel === 'Instagram') {
-    const resourceList = await resources(channel, item.scheduledDate);
-    const resource = resourceList.find((entry) => entry.id === item.resourceId);
-    if (resource) await fillBatch(channel, resource, item.scheduledDate);
-  }
+  // R29: invalidar apenas libera a vaga. Nenhum canal repõe automaticamente.
 
   eventBus.emit('import:changed', { source: 'move' });
 }

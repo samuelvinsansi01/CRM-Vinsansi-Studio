@@ -816,6 +816,28 @@
   white-space: nowrap;
 }
 
+/* R29: todas as tabelas canônicas são de uma linha. Conteúdo longo é truncado com reticências. */
+.data-table table {
+  table-layout: fixed;
+}
+
+.data-table thead th,
+.data-table tbody td:not(.data-table__check):not(.data-table__actions) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table tbody td:not(.data-table__check):not(.data-table__actions) > *,
+.data-table tbody td:not(.data-table__check):not(.data-table__actions) a,
+.data-table tbody td:not(.data-table__check):not(.data-table__actions) strong,
+.data-table tbody td:not(.data-table__check):not(.data-table__actions) span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .data-table__check {
   width: var(--space-48);
   padding-left: var(--space-20);

@@ -40,7 +40,9 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): W
     ?? getEffectiveWhatsAppPhone(lead),
   );
   const website = String(snapshotLead.site ?? lead.leads_website ?? '');
-  const company = String(snapshotLead.company_name ?? lead.leads_name ?? '');
+  const originalCompany = String(snapshotLead.original_company_name ?? lead.leads_name ?? '');
+  const alternativeName = String(snapshotLead.alternative_company_name ?? lead.leads_alternative_name ?? '');
+  const company = String(snapshotLead.company_name ?? (alternativeName || originalCompany));
   const branchName = String(snapshotLead.branch_name ?? branch.branches_name ?? '');
   const instagram = String(snapshotLead.instagram ?? lead.leads_instagram ?? '');
   const mapsUrl = String(snapshotLead.maps_url ?? lead.leads_maps ?? '');
@@ -58,6 +60,8 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number]): W
     position,
     company,
     company_name: company,
+    original_company_name: originalCompany,
+    alternative_name: alternativeName,
     channel: 'whatsapp',
     phone,
     phone_normalized: normalizePhone(phone),

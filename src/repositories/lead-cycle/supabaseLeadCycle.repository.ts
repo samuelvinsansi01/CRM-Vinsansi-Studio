@@ -6,7 +6,7 @@ import type { LeadCycleRepository, LeadCycleTransitionPatch } from './leadCycle.
 export const LEAD_CYCLE_SELECT = `
   leads_id, users_id, branches_id, countries_id, states_id, cities_id,
   channels_id, lead_status_id, contact_sources_id, apify_import_jobs_id,
-  leads_name, leads_phone, leads_whatsapp, leads_instagram, leads_website, leads_maps,
+  leads_name, leads_alternative_name, leads_phone, leads_whatsapp, leads_instagram, leads_website, leads_maps,
   leads_street, leads_postal_code, leads_categories, leads_score, leads_priority_score,
   leads_reviews_count, leads_origin, leads_created_at, leads_updated_at,
   branches:branches_id ( branches_id, branches_name ),

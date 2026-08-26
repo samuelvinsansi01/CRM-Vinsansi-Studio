@@ -1,4 +1,4 @@
-import { Globe2, Instagram, MessageCircle, RefreshCcw, Users } from 'lucide-react';
+import { Globe2, Instagram, MessageCircle, Users } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -34,6 +34,7 @@ type Row = Record<string, ReactNode> & { id: string };
 
 type LeadEditForm = {
   company: string;
+  alternativeName: string;
   branchId: string;
   rawPhone: string;
   whatsapp: string;
@@ -44,6 +45,7 @@ type LeadEditForm = {
 
 const emptyEditForm: LeadEditForm = {
   company: '',
+  alternativeName: '',
   branchId: '',
   rawPhone: '',
   whatsapp: '',
@@ -73,14 +75,15 @@ function availabilityTag(available: boolean, href?: string, title?: string) {
 
 function companyCell(lead: LeadCycleLead) {
   const href = mapsHref(lead.mapsUrl);
-  if (!href) return <strong>{lead.company}</strong>;
-  return <a className="company-map-link" href={href} target="_blank" rel="noreferrer" title="Abrir perfil da empresa no Google Maps"><strong>{lead.company}</strong></a>;
+  if (!href) return <strong title={lead.displayCompany}>{lead.displayCompany}</strong>;
+  return <a className="company-map-link" href={href} target="_blank" rel="noreferrer" title={`Abrir ${lead.displayCompany} no Google Maps`}><strong>{lead.displayCompany}</strong></a>;
 }
 
 
 function toEditForm(lead: LeadCycleLead): LeadEditForm {
   return {
     company: lead.company,
+    alternativeName: lead.alternativeName,
     branchId: lead.branchId,
     rawPhone: lead.rawPhone,
     whatsapp: lead.whatsapp,
@@ -104,6 +107,8 @@ export function HomePage() {
   const [branches, setBranches] = useState<BranchConfigRecord[]>([]);
   const [whatsappResources, setWhatsappResources] = useState<QueuePreparationResource[]>([]);
   const [whatsappResourceId, setWhatsappResourceId] = useState('');
+  const [instagramResources, setInstagramResources] = useState<QueuePreparationResource[]>([]);
+  const [instagramResourceId, setInstagramResourceId] = useState('');
   const [editingLead, setEditingLead] = useState<LeadCycleLead | null>(null);
   const [editForm, setEditForm] = useState<LeadEditForm>(emptyEditForm);
   const [invalidatingLead, setInvalidatingLead] = useState<LeadCycleLead | null>(null);
@@ -118,10 +123,13 @@ export function HomePage() {
     void Promise.all([
       configService.list('branches'),
       canPrepare ? queueReviewService.resources('WhatsApp', toLocalDateInputValue()) : Promise.resolve([]),
-    ]).then(([records, resources]) => {
+      canPrepare ? queueReviewService.resources('Instagram', toLocalDateInputValue()) : Promise.resolve([]),
+    ]).then(([records, whatsapp, instagram]) => {
       setBranches(records.filter((record): record is BranchConfigRecord => record.kind === 'branches' && record.active));
-      setWhatsappResources(resources);
-      setWhatsappResourceId((current) => current && resources.some((resource) => resource.id === current) ? current : '');
+      setWhatsappResources(whatsapp);
+      setWhatsappResourceId((current) => current && whatsapp.some((resource) => resource.id === current) ? current : '');
+      setInstagramResources(instagram);
+      setInstagramResourceId((current) => current && instagram.some((resource) => resource.id === current) ? current : '');
     }).catch((error) => {
       toast('Não foi possível carregar os dados operacionais', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     });
@@ -148,7 +156,7 @@ export function HomePage() {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return sorted.filter((lead) =>
-      (!q || lead.company.toLowerCase().includes(q) || lead.phone.toLowerCase().includes(q) || lead.instagram.toLowerCase().includes(q))
+      (!q || lead.displayCompany.toLowerCase().includes(q) || lead.company.toLowerCase().includes(q) || lead.phone.toLowerCase().includes(q) || lead.instagram.toLowerCase().includes(q))
       && (branch === 'Todos' || lead.branch === branch)
       && (state === 'Todos' || lead.state === state)
     );
@@ -179,16 +187,16 @@ export function HomePage() {
     if (!canPrepare) return;
     setPulling(channel);
     try {
-      if (channel === 'WhatsApp' && !whatsappResourceId) {
-        toast('Selecione um chip', 'Escolha o chip que será usado para validar e preparar essa fila.', 'warning');
+      const resourceId = channel === 'WhatsApp' ? whatsappResourceId : instagramResourceId;
+      if (!resourceId) {
+        toast(channel === 'WhatsApp' ? 'Selecione um chip' : 'Selecione um perfil', channel === 'WhatsApp' ? 'Escolha o chip que será usado para validar e preparar essa fila.' : 'Escolha o perfil Instagram que receberá essa fila.', 'warning');
         return;
       }
-      const result = await queueReviewService.pullToCapacity(channel, toLocalDateInputValue(), channel === 'WhatsApp' ? whatsappResourceId : '');
+      const result = await queueReviewService.pullToCapacity(channel, toLocalDateInputValue(), resourceId);
       await imported.refresh();
-      if (channel === 'WhatsApp') {
-        const resources = await queueReviewService.resources('WhatsApp', toLocalDateInputValue());
-        setWhatsappResources(resources);
-      }
+      const resources = await queueReviewService.resources(channel, toLocalDateInputValue());
+      if (channel === 'WhatsApp') setWhatsappResources(resources);
+      else setInstagramResources(resources);
       resetPage();
       const details = `${result.batch.openCount}/${result.batch.targetCount} lead(s) prontos para revisão em ${result.resource.label}.`;
       toast(`Fila ${channel} preparada`, details + (result.exhausted ? ' A base elegível acabou antes do limite.' : ''), result.errors ? 'warning' : 'success');
@@ -249,6 +257,9 @@ export function HomePage() {
       value: resource.id,
     }))
     : [{ label: 'Nenhum chip operacional', value: '' }];
+  const instagramResourceOptions = instagramResources.length
+    ? instagramResources.map((resource) => ({ label: `${resource.label} · ${resource.available} disponível(is)`, value: resource.id }))
+    : [{ label: 'Nenhum perfil operacional', value: '' }];
 
   return (
     <div className="dashboard-table-page lead-list-page home-leads-page">
@@ -257,10 +268,8 @@ export function HomePage() {
         description="Leads importados aguardando seleção. Os melhores avaliados são puxados primeiro, independentemente da data de entrada."
         action={(
           <div className="home-leads-actions">
-            <Button variant="secondary" iconLeft={RefreshCcw} disabled={imported.loading || Boolean(pulling)} onClick={() => void imported.refresh()}>Atualizar</Button>
-            {canPrepare ? <SelectField className="home-chip-select" options={whatsappResourceOptions} value={whatsappResourceId} placeholder="Selecione o chip" onChange={setWhatsappResourceId} /> : null}
-            {canPrepare ? <Button iconLeft={MessageCircle} loading={pulling === 'WhatsApp'} disabled={Boolean(pulling) || !whatsappResourceId} onClick={() => void pull('WhatsApp')}>Puxar WhatsApp</Button> : null}
-            {canPrepare ? <Button iconLeft={Instagram} loading={pulling === 'Instagram'} disabled={Boolean(pulling)} onClick={() => void pull('Instagram')}>Puxar Instagram</Button> : null}
+            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={whatsappResourceOptions} value={whatsappResourceId} placeholder="Selecione o chip" onChange={setWhatsappResourceId} /><Button iconLeft={MessageCircle} loading={pulling === 'WhatsApp'} disabled={Boolean(pulling) || !whatsappResourceId} onClick={() => void pull('WhatsApp')}>Puxar WhatsApp</Button></div> : null}
+            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={instagramResourceOptions} value={instagramResourceId} placeholder="Selecione o perfil" onChange={setInstagramResourceId} /><Button iconLeft={Instagram} loading={pulling === 'Instagram'} disabled={Boolean(pulling) || !instagramResourceId} onClick={() => void pull('Instagram')}>Puxar Instagram</Button></div> : null}
           </div>
         )}
       />
@@ -317,7 +326,8 @@ export function HomePage() {
       >
         {editingLead ? (
           <div className="drawer-form">
-            <Field label="Empresa" value={editForm.company} onChange={(value) => setEditForm((current) => ({ ...current, company: value }))} />
+            <Field label="Empresa original" value={editForm.company} onChange={(value) => setEditForm((current) => ({ ...current, company: value }))} />
+            <Field label="Nome alternativo (opcional)" value={editForm.alternativeName} maxLength={160} placeholder="Nome curto usado nos envios" onChange={(value) => setEditForm((current) => ({ ...current, alternativeName: value }))} />
             <label className="drawer-field">
               <span>Ramo</span>
               <SelectField value={editForm.branchId} options={branchOptions} placeholder="Selecione o ramo" onChange={(value) => setEditForm((current) => ({ ...current, branchId: value }))} />

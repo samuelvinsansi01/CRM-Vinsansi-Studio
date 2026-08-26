@@ -46,7 +46,9 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], pr
   const scheduled = dateOnly(item.queue_items_scheduled_at ?? row.queue.queues_scheduled_at);
   const instagram = String(snapshotRecipient.instagram ?? snapshotLead.instagram ?? lead.leads_instagram ?? '');
   const username = normalizeInstagramUsername(instagram);
-  const company = String(snapshotLead.company_name ?? lead.leads_name ?? '');
+  const originalCompany = String(snapshotLead.original_company_name ?? lead.leads_name ?? '');
+  const alternativeName = String(snapshotLead.alternative_company_name ?? lead.leads_alternative_name ?? '');
+  const company = String(snapshotLead.company_name ?? (alternativeName || originalCompany));
   const branchName = String(snapshotLead.branch_name ?? branch.branches_name ?? '');
   const phone = String(snapshotLead.phone ?? lead.leads_phone ?? '');
   const website = String(snapshotLead.site ?? lead.leads_website ?? '');
@@ -65,6 +67,8 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], pr
     position,
     company,
     company_name: company,
+    original_company_name: originalCompany,
+    alternative_name: alternativeName,
     channel: 'instagram',
     instagram,
     profile: String(social.socials_username ?? ''),

@@ -5,6 +5,8 @@ export type LeadCycleChannel = 'WhatsApp' | 'Instagram';
 export type LeadCycleLead = {
   id: string;
   company: string;
+  alternativeName: string;
+  displayCompany: string;
   branchId: string;
   branch: string;
   state: string;
@@ -29,6 +31,7 @@ export type LeadCycleLead = {
 
 export type LeadCycleDetailsInput = {
   company: string;
+  alternativeName: string;
   branchId: string;
   channel?: LeadCycleChannel;
   rawPhone: string;

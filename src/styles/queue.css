@@ -709,3 +709,11 @@ button.batch__header {
 .queue-final-table__actions {
   padding-right: 14px !important;
 }
+
+
+/* R29 — controles de fila à direita: Reprocessar | recurso | Puxar. */
+.queue-topline--right { display:flex; justify-content:flex-end; }
+.queue-controls--right { display:flex; justify-content:flex-end; margin-left:auto; }
+.queue-page.lead-list-page .table-card { margin-bottom:var(--space-20); }
+.queue-page.lead-list-page .data-table__actions { width:148px; }
+@media(max-width:900px){.queue-controls--right{width:100%;justify-content:flex-end;}}

@@ -5,6 +5,7 @@ export type LeadCycleTransitionPatch = Partial<{
   channels_id: number | null;
   lead_status_id: LeadStatusId;
   leads_name: string;
+  leads_alternative_name: string | null;
   leads_phone: string | null;
   leads_whatsapp: string | null;
   leads_instagram: string | null;

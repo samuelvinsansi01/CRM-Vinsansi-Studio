@@ -7,6 +7,8 @@ export type WhatsAppQueueLead = {
   position: number;
   company: string;
   company_name: string;
+  original_company_name: string;
+  alternative_name: string;
   channel: 'whatsapp';
   phone: string;
   phone_normalized: string;
@@ -70,6 +72,8 @@ export type CreateWhatsAppQueueLeadInput = Omit<
   | 'order'
   | 'position'
   | 'company_name'
+  | 'original_company_name'
+  | 'alternative_name'
   | 'channel'
   | 'phone_normalized'
   | 'batchId'

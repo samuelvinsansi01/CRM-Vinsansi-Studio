@@ -91,3 +91,7 @@ O utilitário para Importados legados continua disponível:
 Execute:
 
 `npm run verify:release`
+
+
+## R29
+Filas manuais, nome alternativo canônico e padronização única das tabelas. Aplicar `SQL - CRM R29 - Nome alternativo e filas manuais.sql` antes de publicar.

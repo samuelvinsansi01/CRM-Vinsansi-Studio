@@ -28,6 +28,7 @@ export type LeadDatabaseRow = {
   contact_sources_id: number;
   apify_import_jobs_id: number | null;
   leads_name: string;
+  leads_alternative_name?: string | null;
   leads_phone: string | null;
   leads_whatsapp?: string | null;
   leads_instagram: string | null;

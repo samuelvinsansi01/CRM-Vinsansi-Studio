@@ -34,6 +34,8 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
   return {
     id: String(row.leads_id),
     company: row.leads_name,
+    alternativeName: row.leads_alternative_name ?? '',
+    displayCompany: (row.leads_alternative_name ?? '').trim() || row.leads_name,
     branchId: String(row.branches_id),
     branch: branch?.branches_name ?? '',
     state: state?.states_code ?? state?.states_name ?? '',
@@ -255,6 +257,7 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
   const updated = await supabaseLeadCycleRepository.compareAndSet(lead.id, lead.statusId, {
     branches_id: branchId,
     leads_name: company,
+    leads_alternative_name: input.alternativeName.trim() || null,
     leads_phone: rawPhone || null,
     leads_whatsapp: whatsapp || null,
     leads_instagram: instagram || null,

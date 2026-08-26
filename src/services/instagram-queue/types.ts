@@ -7,6 +7,8 @@ export type InstagramQueueLead = {
   position: number;
   company: string;
   company_name: string;
+  original_company_name: string;
+  alternative_name: string;
   channel: 'instagram';
   instagram: string;
   profile: string;
@@ -64,6 +66,8 @@ export type CreateInstagramQueueLeadInput = Omit<
   | 'order'
   | 'position'
   | 'company_name'
+  | 'original_company_name'
+  | 'alternative_name'
   | 'channel'
   | 'profile_id'
   | 'instagram_username'
