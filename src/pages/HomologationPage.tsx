@@ -21,7 +21,12 @@ export function HomologationPage(){
   useEffect(()=>{void refresh();},[refresh]);
   type HomologationSummary = { total: number; pending: number; passed: number; failed: number; not_applicable: number };
 
-  const summary=useMemo(()=>snapshot.checks.reduce<HomologationSummary>((acc:HomologationSummary,item:HomologationCheck)=>{acc.total++;acc[item.status]++;return acc;},{total:0,pending:0,passed:0,failed:0,not_applicable:0}),[snapshot.checks]);
+  const summary=useMemo(()=>snapshot.checks.reduce<HomologationSummary>((acc:HomologationSummary,item:HomologationCheck)=>{
+    acc.total += 1;
+    const status: HomologationCheck['status'] = item.status;
+    acc[status] += 1;
+    return acc;
+  },{total:0,pending:0,passed:0,failed:0,not_applicable:0}),[snapshot.checks]);
   const sections=useMemo(()=>{const map=new Map<string,HomologationCheck[]>();for(const check of snapshot.checks){const list=map.get(check.section)??[];list.push(check);map.set(check.section,list);}return [...map.entries()];},[snapshot.checks]);
   const start=async()=>{if(!canManage)return;const notes=window.prompt('Observação opcional para esta rodada de homologação:','')??'';setSaving('start');try{await startHomologation(notes);push({type:'success',message:'Homologação iniciada. A matriz completa de testes foi criada para esta organização.'});await refresh();}catch(err){push({type:'error',message:err instanceof Error?err.message:'Falha ao iniciar a homologação.'});}finally{setSaving('');}};
   const update=async(check:HomologationCheck,status:HomologationCheck['status'])=>{if(!snapshot.run||!canManage)return;let evidence=check.evidence||'';if(status==='failed'||status==='passed'){const value=window.prompt(status==='failed'?'Descreva o problema encontrado (recomendado):':'Evidência/observação do teste (opcional):',evidence);if(value===null)return;evidence=value;}setSaving(check.key);try{await setHomologationCheck(snapshot.run.id,check.key,status,evidence);await refresh();}catch(err){push({type:'error',message:err instanceof Error?err.message:'Falha ao salvar teste.'});}finally{setSaving('');}};
