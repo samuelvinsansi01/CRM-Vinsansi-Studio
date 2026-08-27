@@ -212,6 +212,7 @@ async function resolveOwnedLeads(
 
 const CONTROL_PLANE_TIMEOUT_MS = 50_000;
 const CONTROL_PLANE_POLL_MS = 400;
+const CONTROL_PLANE_STALE_CLAIM_MS = 20_000;
 
 type ValidationRequestRow = {
   whatsapp_validation_requests_id: string;
@@ -220,6 +221,10 @@ type ValidationRequestRow = {
   error_message?: string | null;
   consumed_at?: string | null;
   expires_at?: string | null;
+  worker_id?: string | null;
+  attempts?: number | null;
+  claimed_at?: string | null;
+  updated_at?: string | null;
 };
 
 function validationRequestKey(
@@ -243,7 +248,7 @@ function validationRequestKey(
 async function getValidationRequest(client: SupabaseClient, organizationId: number, requestKey: string) {
   const response = await client
     .from('whatsapp_validation_requests')
-    .select('whatsapp_validation_requests_id,request_status,result_payload,error_message,consumed_at,expires_at')
+    .select('whatsapp_validation_requests_id,request_status,result_payload,error_message,consumed_at,expires_at,worker_id,attempts,claimed_at,updated_at')
     .eq('organizations_id', organizationId)
     .eq('request_key', requestKey)
     .maybeSingle();
@@ -315,6 +320,50 @@ async function enqueueValidationRequest(
   return { requestKey, requestId: String(inserted.data.whatsapp_validation_requests_id) };
 }
 
+async function recoverStaleValidationClaim(
+  client: SupabaseClient,
+  organizationId: number,
+  requestId: string,
+  row: ValidationRequestRow,
+) {
+  if (row.request_status !== 'processing' || !row.claimed_at) return false;
+  const claimedAtMs = new Date(row.claimed_at).getTime();
+  if (!Number.isFinite(claimedAtMs) || Date.now() - claimedAtMs < CONTROL_PLANE_STALE_CLAIM_MS) return false;
+
+  const staleBefore = new Date(Date.now() - CONTROL_PLANE_STALE_CLAIM_MS).toISOString();
+  const response = await client
+    .from('whatsapp_validation_requests')
+    .update({
+      request_status: 'pending',
+      worker_id: null,
+      claim_token: null,
+      claimed_at: null,
+      error_message: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('organizations_id', organizationId)
+    .eq('whatsapp_validation_requests_id', requestId)
+    .eq('request_status', 'processing')
+    .lte('claimed_at', staleBefore)
+    .select('whatsapp_validation_requests_id')
+    .maybeSingle();
+  if (response.error) throw new Error(`Falha ao recuperar validação WhatsApp travada: ${response.error.message}`);
+  return Boolean(response.data?.whatsapp_validation_requests_id);
+}
+
+function validationTimeoutMessage(row: ValidationRequestRow | null) {
+  if (!row) return 'Solicitação de validação WhatsApp não encontrada ao encerrar a espera.';
+  if (row.request_status === 'pending') {
+    return `O Motor WhatsApp local não respondeu: não reclamou a solicitação dentro do prazo (status=pending, tentativas=${Number(row.attempts ?? 0)}). Reinicie/Repare o Worker se isso persistir.`;
+  }
+  if (row.request_status === 'processing') {
+    const worker = String(row.worker_id || 'desconhecido');
+    const claimed = row.claimed_at ? new Date(row.claimed_at).toISOString() : 'sem_horario';
+    return `O Motor WhatsApp local não respondeu por completo: reclamou a solicitação, mas não concluiu dentro do prazo (worker=${worker}, tentativas=${Number(row.attempts ?? 0)}, claimed_at=${claimed}).`;
+  }
+  return `O Motor WhatsApp local não respondeu dentro do prazo (status=${row.request_status}, tentativas=${Number(row.attempts ?? 0)}).`;
+}
+
 async function waitForValidationRequest(
   client: SupabaseClient,
   organizationId: number,
@@ -324,13 +373,17 @@ async function waitForValidationRequest(
   while (Date.now() < deadline) {
     const response = await client
       .from('whatsapp_validation_requests')
-      .select('request_status,result_payload,error_message')
+      .select('request_status,result_payload,error_message,worker_id,attempts,claimed_at,updated_at')
       .eq('organizations_id', organizationId)
       .eq('whatsapp_validation_requests_id', requestId)
       .maybeSingle();
     if (response.error) throw new Error(`Falha ao acompanhar o Motor WhatsApp: ${response.error.message}`);
     if (!response.data) throw new Error('Solicitação de validação WhatsApp não encontrada no control plane.');
     const row = response.data as ValidationRequestRow;
+    if (await recoverStaleValidationClaim(client, organizationId, requestId, row)) {
+      await new Promise((resolve) => setTimeout(resolve, CONTROL_PLANE_POLL_MS));
+      continue;
+    }
     if (row.request_status === 'failed') {
       throw new Error(String(row.error_message || 'O Motor WhatsApp não conseguiu validar os números.'));
     }
@@ -341,7 +394,14 @@ async function waitForValidationRequest(
     }
     await new Promise((resolve) => setTimeout(resolve, CONTROL_PLANE_POLL_MS));
   }
-  throw new Error('O Motor WhatsApp local não respondeu à solicitação de validação dentro do prazo. Verifique se o Gerenciador e o Worker estão ligados.');
+  const finalState = await client
+    .from('whatsapp_validation_requests')
+    .select('request_status,result_payload,error_message,worker_id,attempts,claimed_at,updated_at')
+    .eq('organizations_id', organizationId)
+    .eq('whatsapp_validation_requests_id', requestId)
+    .maybeSingle();
+  if (finalState.error) throw new Error(`Falha ao consultar o estado final da validação WhatsApp: ${finalState.error.message}`);
+  throw new Error(validationTimeoutMessage(finalState.data as ValidationRequestRow | null));
 }
 
 export async function runStrictValidation(
