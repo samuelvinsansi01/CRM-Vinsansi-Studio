@@ -1,49 +1,21 @@
-import { LEAD_STATUS } from '../status/leadStatus';
-import { calculatePersistedLeadPriorityScore } from '../lead-score/leadScore.service';
-import { eventBus } from '../../lib/events';
-import { getSupabaseClient } from '../../lib/supabase';
 import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
 import { channelId } from '../../repositories/schemaCatalog';
 import type { LeadDatabaseRow } from '../../types/lead.types';
 import { branchForBoundRecord } from '../config/branchMedia';
-import { isOperationalWhatsAppChip } from '../config/chipOperational';
-import type {
-  BranchConfigRecord,
-  ChipConfigRecord,
-  ConfigRecord,
-  InstagramConfigRecord,
-  TemplateConfigRecord,
-} from '../config/types';
+import type { BranchConfigRecord, ConfigRecord, TemplateConfigRecord } from '../config/types';
 import { normalizePhone } from '../import/importValidation';
-import { isValidInstagram, normalizeInstagramUsername } from '../instagram/instagram.utils';
+import { isValidInstagram } from '../instagram/instagram.utils';
 import { getEffectiveWhatsAppPhone } from '../leads/leadContact';
-import { renderLeadMessages } from '../templates/templateVariables';
+import { LEAD_STATUS } from '../status/leadStatus';
 import { templateMessageContractIssue } from '../templates/templateContract';
-import { settingsService } from '../settings/settings.service';
+import { renderLeadMessages } from '../templates/templateVariables';
 import { selectTemplateForLead, templateTypeForLead } from '../templates/templateSelector';
-import { loadCurrentWhatsAppValidationProofs, prepareQueueItems } from '../../repositories/queueSchema';
-import { effectiveScheduleDate } from './queuePreparation.rules';
-import type {
-  QueuePreparationChannel,
-  QueuePreparationFailure,
-  QueuePreparationLead,
-  QueuePreparationResource,
-  QueuePreparationResult,
-  QueuePreparationSnapshot,
-} from './types';
-
+import { loadCurrentWhatsAppValidationProofs } from '../../repositories/queueSchema';
+import type { QueuePreparationChannel, QueuePreparationFailure } from './types';
 
 function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
-}
-
-function isChip(record: ConfigRecord): record is ChipConfigRecord {
-  return record.kind === 'chips';
-}
-
-function isInstagramProfile(record: ConfigRecord): record is InstagramConfigRecord {
-  return record.kind === 'instagram';
 }
 
 function isBranch(record: ConfigRecord): record is BranchConfigRecord {
@@ -52,32 +24,6 @@ function isBranch(record: ConfigRecord): record is BranchConfigRecord {
 
 function isTemplate(record: ConfigRecord): record is TemplateConfigRecord {
   return record.kind === 'templates';
-}
-
-function activeInstagramProfile(record: InstagramConfigRecord) {
-  return Boolean(record.active && record.status !== 'Arquivado' && record.status !== 'deleted' && normalizeInstagramUsername(record.username));
-}
-
-function activeQueueStatus(status: unknown) {
-  const value = String(status ?? '').trim().toLowerCase();
-  // Tudo que ainda pertence ao dia consome capacidade. Somente uma invalidação/cancelamento libera vaga.
-  return !['invalid', 'cancelled', 'canceled', 'cancelado'].includes(value);
-}
-
-async function reviewUsage(channel: QueuePreparationChannel, scheduledDate: string) {
-  const { data, error } = await getSupabaseClient().rpc('list_open_queue_review', {
-    p_channel: channel.toLowerCase(),
-  });
-  if (error) throw new Error(`Não foi possível calcular a capacidade da revisão: ${error.message}`);
-
-  const counts = new Map<string, number>();
-  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
-    if (String(row.scheduled_date ?? '').slice(0, 10) !== scheduledDate) continue;
-    const id = String(row.resource_id ?? '');
-    if (!id) continue;
-    counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
-  return counts;
 }
 
 function rowBranch(row: LeadDatabaseRow) {
@@ -113,103 +59,19 @@ function leadContext(row: LeadDatabaseRow, channel: QueuePreparationChannel) {
   };
 }
 
-async function loadConfiguration() {
-  const [chips, profiles, branches, templates, settings] = await Promise.all([
-    repositories.config.list('chips'),
-    repositories.config.list('instagram'),
+async function loadReviewApprovalConfiguration() {
+  const [branches, templates] = await Promise.all([
     repositories.config.list('branches'),
     repositories.config.list('templates'),
-    settingsService.getDispatchSettings(),
   ]);
   return {
-    chips: chips.filter(isChip).filter(isOperationalWhatsAppChip),
-    profiles: profiles.filter(isInstagramProfile).filter(activeInstagramProfile),
     branches: branches.filter(isBranch),
     templates: templates.filter(isTemplate),
-    settings,
   };
 }
 
-async function queueUsage(channel: QueuePreparationChannel, scheduledDate: string) {
-  const reviewCountsPromise = reviewUsage(channel, scheduledDate);
-  const counts = new Map<string, number>();
-
-  if (channel === 'WhatsApp') {
-    const leads = (await repositories.whatsappQueue.listBatches({ scheduledDate })).flatMap((batch) => batch.leads);
-    for (const lead of leads) {
-      if (!activeQueueStatus(lead.status)) continue;
-      const id = String(lead.chip_id || '');
-      if (!id) continue;
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-  } else {
-    const leads = (await repositories.instagramQueue.listBatches({ scheduledDate })).flatMap((batch) => batch.leads);
-    for (const lead of leads) {
-      if (!activeQueueStatus(lead.status)) continue;
-      const id = String(lead.profile_id || '');
-      if (!id) continue;
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-  }
-
-  // R35: a capacidade exibida no Início é a capacidade REAL para puxar novos leads:
-  // Fila final do dia + itens ainda abertos em Revisão.
-  const reviewCounts = await reviewCountsPromise;
-  for (const [id, used] of reviewCounts) counts.set(id, (counts.get(id) ?? 0) + used);
-  return counts;
-}
-
-function buildResources(
-  channel: QueuePreparationChannel,
-  usage: Map<string, number>,
-  chips: ChipConfigRecord[],
-  profiles: InstagramConfigRecord[],
-  instagramDefaults: Awaited<ReturnType<typeof settingsService.getDispatchSettings>>['instagram'],
-): QueuePreparationResource[] {
-  if (channel === 'WhatsApp') {
-    return [...chips]
-      .sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name))
-      .map((chip) => {
-        const id = String(chip.id);
-        const used = usage.get(id) ?? 0;
-        const limit = Math.max(1, Number(chip.dailyLimit || 0));
-        return {
-          id,
-          label: chip.name || id,
-          aliases: [chip.name, chip.instance].filter(Boolean),
-          channel,
-          dailyLimit: limit,
-          batchSize: Math.max(1, Number(chip.blockSize || 1)),
-          used,
-          available: Math.max(0, limit - used),
-        };
-      });
-  }
-
-  return [...profiles]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((profile) => {
-      const id = String(profile.id);
-      const used = usage.get(id) ?? 0;
-      const limit = Math.max(1, Number(profile.dailyLimit || instagramDefaults.dailyLimit || 1));
-      return {
-        id,
-        label: profile.name || `@${normalizeInstagramUsername(profile.username)}`,
-        aliases: [profile.name, profile.username, normalizeInstagramUsername(profile.username)].filter(Boolean),
-        channel,
-        dailyLimit: limit,
-        batchSize: Math.max(1, Number(instagramDefaults.perBatch || 1)),
-        used,
-        available: Math.max(0, limit - used),
-      };
-    });
-}
-
 function findBranch(row: LeadDatabaseRow, branches: BranchConfigRecord[]) {
-  return branchForBoundRecord({
-    branch_id: String(row.branches_id),
-    branch: rowBranch(row),
-  }, branches);
+  return branchForBoundRecord({ branch_id: String(row.branches_id), branch: rowBranch(row) }, branches);
 }
 
 function preparationReason(
@@ -219,9 +81,8 @@ function preparationReason(
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
   hasWhatsAppProof = true,
-  expectedStatus: number = LEAD_STATUS.VALIDATED,
 ) {
-  if (row.lead_status_id !== expectedStatus) return expectedStatus === LEAD_STATUS.PRE_SEND ? 'O lead não está mais na revisão aberta.' : 'O lead não está mais no status Validado.';
+  if (row.lead_status_id !== LEAD_STATUS.PRE_SEND) return 'O lead não está mais na revisão aberta.';
   if (Number(row.channels_id) !== expectedChannelId) return 'O canal do lead foi alterado.';
   if (channel === 'WhatsApp' && !hasWhatsAppProof) return 'Prova de validação WhatsApp ausente para o telefone atual.';
   if (channel === 'WhatsApp' && normalizePhone(getEffectiveWhatsAppPhone(row)).length < 10) return 'Telefone inválido para WhatsApp.';
@@ -248,221 +109,17 @@ function preparationReason(
   return '';
 }
 
-function mapPreparationLead(
-  row: LeadDatabaseRow,
-  channel: QueuePreparationChannel,
-  expectedChannelId: number,
-  branches: BranchConfigRecord[],
-  templates: TemplateConfigRecord[],
-  hasWhatsAppProof = true,
-): QueuePreparationLead {
-  const reason = preparationReason(row, channel, expectedChannelId, branches, templates, hasWhatsAppProof);
-  const context = leadContext(row, channel);
-  return {
-    id: String(row.leads_id),
-    company: row.leads_name,
-    branch: context.branch,
-    city: context.city,
-    state: context.state,
-    contact: channel === 'WhatsApp' ? normalizePhone(getEffectiveWhatsAppPhone(row)) : normalizeInstagramUsername(row.leads_instagram),
-    channel,
-    score: calculatePersistedLeadPriorityScore(row as unknown as Record<string, unknown>),
-    templateType: templateTypeForLead(context),
-    ready: !reason,
-    blockReason: reason || undefined,
-    requiresWhatsAppValidation: channel === 'WhatsApp' && !hasWhatsAppProof,
-  };
-}
-
-function templateIdForLead(
-  row: LeadDatabaseRow,
-  channel: QueuePreparationChannel,
-  templates: TemplateConfigRecord[],
-) {
+function templateIdForLead(row: LeadDatabaseRow, channel: QueuePreparationChannel, templates: TemplateConfigRecord[]) {
   const selection = selectTemplateForLead(leadContext(row, channel), templates);
   if (!selection) throw new Error(`Nenhum template ${channel} compatível com o lead.`);
   return String(selection.template.id);
 }
 
-async function appendAudit(
-  row: LeadDatabaseRow,
-  channel: QueuePreparationChannel,
-  resource: QueuePreparationResource,
-  scheduledDate: string,
-  queueItemId: string,
-) {
-  await repositories.events.append({
-    source: 'queue-preparation',
-    action: 'validated_lead_enqueued',
-    channel: channel.toLowerCase() as 'whatsapp' | 'instagram',
-    leadId: String(row.leads_id),
-    status: '4',
-    metadata: {
-      flow: 'F06',
-      company_name: row.leads_name,
-      queue_item_id: queueItemId,
-      resource_id: resource.id,
-      resource_label: resource.label,
-      scheduled_date: scheduledDate,
-      previous_status_id: 2,
-      target_status_id: 4,
-    },
-  });
-}
-
-function addFailure(result: QueuePreparationResult, failure: QueuePreparationFailure, conflict = false) {
-  result.failures.push(failure);
-  result.failed = result.failures.length;
-  if (conflict) result.conflicts += 1;
-}
-
-async function snapshot(
-  channel: QueuePreparationChannel,
-  requestedDate: string,
-  resourceId?: string,
-): Promise<QueuePreparationSnapshot> {
-  const config = await loadConfiguration();
-  const date = effectiveScheduleDate(requestedDate);
-  const resolvedChannelId = Number(await channelId(channel));
-  const [usage, rows] = await Promise.all([
-    queueUsage(channel, date.effectiveDate),
-    supabaseLeadCycleRepository.listByStatuses([LEAD_STATUS.VALIDATED], resolvedChannelId),
-  ]);
-  const resources = buildResources(channel, usage, config.chips, config.profiles, config.settings.instagram);
-  const selectedResource = resources.find((resource) => resource.id === resourceId) ?? resources[0];
-  const proofs = channel === 'WhatsApp'
-    ? await loadCurrentWhatsAppValidationProofs(rows.map((row) => String(row.leads_id)))
-    : new Set(rows.map((row) => String(row.leads_id)));
-  const leads = rows
-    .map((row) => mapPreparationLead(row, channel, resolvedChannelId, config.branches, config.templates, proofs.has(String(row.leads_id))))
-    .sort((a, b) => Number(b.ready) - Number(a.ready) || b.score - a.score || a.company.localeCompare(b.company));
-
-  return {
-    channel,
-    ...date,
-    resources,
-    selectedResource,
-    leads,
-    ready: leads.filter((lead) => lead.ready).length,
-    blocked: leads.filter((lead) => !lead.ready).length,
-    capacity: selectedResource?.available ?? 0,
-  };
-}
-
-async function enqueueValidated(
-  channel: QueuePreparationChannel,
-  ids: string[],
-  requestedDate: string,
-  resourceId: string,
-): Promise<QueuePreparationResult> {
-  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
-  if (!uniqueIds.length) throw new Error('Selecione pelo menos um lead validado.');
-
-  const config = await loadConfiguration();
-  const date = effectiveScheduleDate(requestedDate);
-  const result: QueuePreparationResult = {
-    channel,
-    requested: uniqueIds.length,
-    queued: 0,
-    conflicts: 0,
-    failed: 0,
-    effectiveDate: date.effectiveDate,
-    resourceId,
-    queuedLeadIds: [],
-    failures: [],
-    auditWarnings: [],
-  };
-
-  const usage = await queueUsage(channel, date.effectiveDate);
-  const resources = buildResources(channel, usage, config.chips, config.profiles, config.settings.instagram);
-  const resource = resources.find((item) => item.id === resourceId);
-  if (!resource) throw new Error(channel === 'WhatsApp' ? 'Chip ativo não encontrado.' : 'Perfil Instagram ativo não encontrado.');
-
-  const expectedChannelId = Number(await channelId(channel));
-  const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
-  const byId = new Map(rows.map((row) => [String(row.leads_id), row]));
-  const proofs = channel === 'WhatsApp' ? await loadCurrentWhatsAppValidationProofs(uniqueIds) : new Set(uniqueIds);
-  const rpcItems: Array<{ leadId: string; templateId: string }> = [];
-
-  for (const id of uniqueIds) {
-    const row = byId.get(id);
-    if (!row) {
-      addFailure(result, { id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
-      continue;
-    }
-
-    if (row.lead_status_id !== LEAD_STATUS.VALIDATED || Number(row.channels_id) !== expectedChannelId) {
-      addFailure(result, { id, company: row.leads_name, reason: 'O lead mudou de status ou canal antes da preparação.' }, true);
-      continue;
-    }
-
-    const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates, proofs.has(id));
-    if (reason) {
-      addFailure(result, { id, company: row.leads_name, reason });
-      continue;
-    }
-
-    rpcItems.push({
-      leadId: id,
-      templateId: templateIdForLead(row, channel, config.templates),
-    });
-  }
-
-  if (rpcItems.length) {
-    const committed = await prepareQueueItems(channel, resource.id, date.effectiveDate, rpcItems);
-    const returned = new Set<string>();
-
-    for (const rowResult of committed) {
-      const id = rowResult.leadId;
-      returned.add(id);
-      const lead = byId.get(id);
-      const company = lead?.leads_name;
-
-      if (rowResult.outcome === 'queued' || rowResult.outcome === 'reconciled') {
-        result.queued += 1;
-        result.queuedLeadIds.push(id);
-
-        if (lead && rowResult.queueItemId) {
-          try {
-            await appendAudit(lead, channel, resource, date.effectiveDate, rowResult.queueItemId);
-          } catch (error) {
-            result.auditWarnings.push(`Lead ${id}: ${error instanceof Error ? error.message : 'falha ao registrar auditoria.'}`);
-          }
-        }
-        continue;
-      }
-
-      addFailure(result, {
-        id,
-        company,
-        reason: rowResult.reason || 'O banco recusou a preparação deste lead.',
-      }, rowResult.outcome === 'conflict');
-    }
-
-    for (const item of rpcItems) {
-      if (returned.has(item.leadId)) continue;
-      addFailure(result, {
-        id: item.leadId,
-        company: byId.get(item.leadId)?.leads_name,
-        reason: 'A transação não retornou um resultado para este lead.',
-      });
-    }
-  }
-
-  result.failed = result.failures.length;
-  if (result.queued) {
-    eventBus.emit('import:changed', { source: 'move' });
-    eventBus.emit(channel === 'WhatsApp' ? 'whatsapp-queue:changed' : 'instagram-queue:changed', { action: 'update' });
-  }
-  return result;
-}
-
-
-
 async function buildReviewLockItems(channel: QueuePreparationChannel, ids: string[]) {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (!uniqueIds.length) return { items: [] as Array<{ leadId: string; templateId: string }>, failures: [] as QueuePreparationFailure[] };
-  const config = await loadConfiguration();
+
+  const config = await loadReviewApprovalConfiguration();
   const expectedChannelId = Number(await channelId(channel));
   const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
   const byId = new Map(rows.map((row) => [String(row.leads_id), row]));
@@ -476,15 +133,7 @@ async function buildReviewLockItems(channel: QueuePreparationChannel, ids: strin
       failures.push({ id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
       continue;
     }
-    const reason = preparationReason(
-      row,
-      channel,
-      expectedChannelId,
-      config.branches,
-      config.templates,
-      proofs.has(id),
-      LEAD_STATUS.PRE_SEND,
-    );
+    const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates, proofs.has(id));
     if (reason) {
       failures.push({ id, company: row.leads_name, reason });
       continue;
@@ -494,9 +143,4 @@ async function buildReviewLockItems(channel: QueuePreparationChannel, ids: strin
   return { items, failures };
 }
 
-export const queuePreparationService = {
-  snapshot,
-  enqueueValidated,
-  buildReviewLockItems,
-  effectiveScheduleDate,
-};
+export const queuePreparationService = { buildReviewLockItems };

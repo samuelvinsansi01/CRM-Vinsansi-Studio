@@ -139,7 +139,7 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
 
   return <TableCard
     title={currentBatch ? `Revisão antes do disparo · ${currentBatch.resourceLabel}` : 'Revisão antes do disparo'}
-    footerText={currentBatch ? `Mostrando ${pageItems.length} de ${rows.length} lead(s) · ${currentBatch.items.length}/${currentBatch.targetCount} aguardando aprovação` : undefined}
+    footerText={currentBatch ? `Mostrando ${pageItems.length} de ${rows.length} lead(s) · ${currentBatch.items.length} aguardando aprovação · ${currentBatch.scheduledDate}` : undefined}
     footerLeft={rows.length ? <RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} /> : undefined}
     page={page} totalPages={totalPages} onPageChange={setPage}
   >

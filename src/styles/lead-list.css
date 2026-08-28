@@ -236,3 +236,7 @@
 .home-leads-actions,.home-pull-group { display:flex; align-items:center; gap:var(--space-08); }
 .home-leads-actions { justify-content:flex-end; flex-wrap:wrap; }
 .home-pull-group { flex-wrap:nowrap; }
+
+/* R54: data unica da puxada; a disponibilidade dos recursos e calculada para ela. */
+.home-leads-actions .home-pull-date { min-width: 168px; }
+.home-leads-actions .home-pull-date .field__control { min-width: 168px; }

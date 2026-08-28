@@ -94,6 +94,11 @@ export function useLeadCycle(view: LeadCycleView) {
     } finally { setSaving(false); }
   }, [refresh]);
 
+  const removeLocally = useCallback((ids: string[]) => {
+    const remove = new Set(ids.filter(Boolean));
+    if (!remove.size) return;
+    setRecords((current) => current.filter((record) => !remove.has(record.id)));
+  }, []);
 
-  return { records, loading, saving, error, refresh, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp, updateDetails, updateImportedInstagram };
+  return { records, loading, saving, error, refresh, removeLocally, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp, updateDetails, updateImportedInstagram };
 }

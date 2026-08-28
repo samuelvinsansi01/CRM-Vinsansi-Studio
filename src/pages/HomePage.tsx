@@ -1,4 +1,4 @@
-import { Globe2, Instagram, MessageCircle, Users } from 'lucide-react';
+import { Calendar, Globe2, Instagram, MessageCircle, Users } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -28,7 +28,7 @@ import type { LeadCycleLead } from '../services/lead-cycle/types';
 import { queueReviewService } from '../services/queue-review';
 import { toLocalDateInputValue } from '../utils/date';
 import { externalHttpHref, instagramHref, mapsHref, phoneHref } from '../utils/externalLinks';
-import type { QueuePreparationResource } from '../services/queue-preparation';
+import type { QueueReviewResource } from '../services/queue-review';
 
 type Row = Record<string, ReactNode> & { id: string };
 
@@ -103,12 +103,15 @@ export function HomePage() {
   const [branch, setBranch] = useState('Todos');
   const [state, setState] = useState('Todos');
   const [pulling, setPulling] = useState<'WhatsApp' | 'Instagram' | ''>('');
+  const [scheduledDate, setScheduledDate] = useState(toLocalDateInputValue());
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [branches, setBranches] = useState<BranchConfigRecord[]>([]);
-  const [whatsappResources, setWhatsappResources] = useState<QueuePreparationResource[]>([]);
+  const [whatsappResources, setWhatsappResources] = useState<QueueReviewResource[]>([]);
   const [whatsappResourceId, setWhatsappResourceId] = useState('');
-  const [instagramResources, setInstagramResources] = useState<QueuePreparationResource[]>([]);
+  const [instagramResources, setInstagramResources] = useState<QueueReviewResource[]>([]);
   const [instagramResourceId, setInstagramResourceId] = useState('');
+  const [whatsappPullCount, setWhatsappPullCount] = useState('15');
+  const [instagramPullCount, setInstagramPullCount] = useState('15');
   const [editingLead, setEditingLead] = useState<LeadCycleLead | null>(null);
   const [editForm, setEditForm] = useState<LeadEditForm>(emptyEditForm);
   const [invalidatingLead, setInvalidatingLead] = useState<LeadCycleLead | null>(null);
@@ -122,8 +125,8 @@ export function HomePage() {
   useEffect(() => {
     void Promise.all([
       configService.list('branches'),
-      canPrepare ? queueReviewService.resources('WhatsApp', toLocalDateInputValue()) : Promise.resolve([]),
-      canPrepare ? queueReviewService.resources('Instagram', toLocalDateInputValue()) : Promise.resolve([]),
+      canPrepare ? queueReviewService.resources('WhatsApp', scheduledDate) : Promise.resolve([]),
+      canPrepare ? queueReviewService.resources('Instagram', scheduledDate) : Promise.resolve([]),
     ]).then(([records, whatsapp, instagram]) => {
       setBranches(records.filter((record): record is BranchConfigRecord => record.kind === 'branches' && record.active));
       setWhatsappResources(whatsapp);
@@ -134,7 +137,7 @@ export function HomePage() {
       toast('Não foi possível carregar os dados operacionais', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canPrepare]);
+  }, [canPrepare, scheduledDate]);
 
   const branchOptions = useMemo(() => {
     const unique = new Map<string, BranchConfigRecord>();
@@ -192,14 +195,18 @@ export function HomePage() {
         toast(channel === 'WhatsApp' ? 'Selecione um chip' : 'Selecione um perfil', channel === 'WhatsApp' ? 'Escolha o chip que será usado para validar e preparar essa fila.' : 'Escolha o perfil Instagram que receberá essa fila.', 'warning');
         return;
       }
-      const result = await queueReviewService.pullToCapacity(channel, toLocalDateInputValue(), resourceId);
-      await imported.refresh();
-      const resources = await queueReviewService.resources(channel, toLocalDateInputValue());
-      if (channel === 'WhatsApp') setWhatsappResources(resources);
-      else setInstagramResources(resources);
+      const requestedCount = Number(channel === 'WhatsApp' ? whatsappPullCount : instagramPullCount);
+      const result = await queueReviewService.pull(channel, scheduledDate, resourceId, requestedCount);
+      imported.removeLocally(result.movedLeadIds);
+      const patchResource = (resources: QueueReviewResource[]) => resources.map((resource) =>
+        resource.id === result.resource.id ? result.resource : resource
+      );
+      if (channel === 'WhatsApp') setWhatsappResources(patchResource);
+      else setInstagramResources(patchResource);
       resetPage();
-      const details = `${result.batch.openCount}/${result.batch.targetCount} lead(s) prontos para revisão em ${result.resource.label}.`;
-      toast(`Fila ${channel} preparada`, details + (result.technicalStop ? ' A validação técnica foi interrompida sem retry automático; leads liberados poderão ser tentados em uma próxima ação.' : '') + (result.exhausted ? ' A base elegível acabou antes do limite.' : ''), result.errors ? 'warning' : 'success');
+      const formattedDate = new Date(`${result.batch.scheduledDate}T12:00:00`).toLocaleDateString('pt-BR');
+      const details = `${result.ready} pronto(s) para revisão · ${result.reserved}/${result.requested} reservado(s) · ${result.resource.label} · ${formattedDate}.`;
+      toast(`Fila ${channel} preparada`, details + (result.technicalStop ? ' Houve erro técnico; os afetados foram liberados sem retry automático.' : '') + (result.capacityLimited ? ' A capacidade restante da data limitou a quantidade.' : '') + (result.exhausted ? ' Não havia leads elegíveis suficientes para completar o pedido.' : ''), result.errors ? 'warning' : 'success');
     } catch (error) {
       toast(`Não foi possível puxar ${channel}`, error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {
@@ -268,8 +275,9 @@ export function HomePage() {
         description="Leads importados aguardando seleção. Os melhores avaliados são puxados primeiro, independentemente da data de entrada."
         action={(
           <div className="home-leads-actions">
-            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={whatsappResourceOptions} value={whatsappResourceId} placeholder="Selecione o chip" onChange={setWhatsappResourceId} /><Button iconLeft={MessageCircle} loading={pulling === 'WhatsApp'} disabled={Boolean(pulling) || !whatsappResourceId} onClick={() => void pull('WhatsApp')}>Puxar WhatsApp</Button></div> : null}
-            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={instagramResourceOptions} value={instagramResourceId} placeholder="Selecione o perfil" onChange={setInstagramResourceId} /><Button iconLeft={Instagram} loading={pulling === 'Instagram'} disabled={Boolean(pulling) || !instagramResourceId} onClick={() => void pull('Instagram')}>Puxar Instagram</Button></div> : null}
+            {canPrepare ? <Field className="home-pull-date" label="Data da fila" type="date" iconLeft={Calendar} min={toLocalDateInputValue()} value={scheduledDate} onChange={setScheduledDate} /> : null}
+            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={whatsappResourceOptions} value={whatsappResourceId} placeholder="Selecione o chip" onChange={setWhatsappResourceId} /><Field className="home-pull-quantity" label="Qtd." type="number" min={1} max={500} value={whatsappPullCount} onChange={setWhatsappPullCount} /><Button iconLeft={MessageCircle} loading={pulling === 'WhatsApp'} disabled={Boolean(pulling) || !whatsappResourceId} onClick={() => void pull('WhatsApp')}>Puxar WhatsApp</Button></div> : null}
+            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={instagramResourceOptions} value={instagramResourceId} placeholder="Selecione o perfil" onChange={setInstagramResourceId} /><Field className="home-pull-quantity" label="Qtd." type="number" min={1} max={500} value={instagramPullCount} onChange={setInstagramPullCount} /><Button iconLeft={Instagram} loading={pulling === 'Instagram'} disabled={Boolean(pulling) || !instagramResourceId} onClick={() => void pull('Instagram')}>Puxar Instagram</Button></div> : null}
           </div>
         )}
       />

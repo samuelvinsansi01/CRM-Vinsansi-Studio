@@ -1,6 +1,13 @@
-import type { QueuePreparationChannel, QueuePreparationResource } from '../queue-preparation';
+export type QueueReviewChannel = 'WhatsApp' | 'Instagram';
 
-export type QueueReviewChannel = QueuePreparationChannel;
+export type QueueReviewResource = {
+  id: string;
+  label: string;
+  channel: QueueReviewChannel;
+  dailyLimit: number;
+  used: number;
+  available: number;
+};
 
 export type QueueReviewOpenBatch = {
   batchId: string;
@@ -49,11 +56,15 @@ export type QueueReviewBatch = {
 
 export type QueueReviewPullResult = {
   batch: QueueReviewOpenBatch;
-  resource: QueuePreparationResource;
-  added: number;
+  resource: QueueReviewResource;
+  requested: number;
+  reserved: number;
+  ready: number;
   invalidatedByProvider: number;
   redirectedToInstagram: number;
   errors: number;
   exhausted: boolean;
   technicalStop: boolean;
+  capacityLimited: boolean;
+  movedLeadIds: string[];
 };

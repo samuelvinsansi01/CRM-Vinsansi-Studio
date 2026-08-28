@@ -19,6 +19,13 @@ import type {
   WhatsAppValidationMode,
 } from './types';
 
+export type PreparedWhatsAppValidationLead = {
+  id: string;
+  company: string;
+  phone: string;
+  normalizedPhone: string;
+};
+
 function emptyResult(mode: WhatsAppValidationMode, requested: number): WhatsAppValidationBatchResult {
   return {
     mode,
@@ -124,6 +131,54 @@ function applyPersistedResult(batch: WhatsAppValidationBatchResult, row: LeadDat
   addOutcome(batch, id, providerResult.outcome);
 }
 
+async function executePreparedInitialValidation(
+  prepared: PreparedWhatsAppValidationLead[],
+  chipInstanceName: string,
+) {
+  const unique = new Map(prepared.filter((lead) => lead.id).map((lead) => [lead.id, lead]));
+  const leads = Array.from(unique.values());
+  if (!leads.length) throw new Error('Selecione pelo menos um lead para validar.');
+  const chipInstanceValue = chipInstanceName.trim();
+  if (!chipInstanceValue) throw new WhatsAppValidationUnavailableError('A instancia Evolution do chip selecionado nao esta disponivel.');
+
+  const result = emptyResult('initial', leads.length);
+  const invalidPrepared = leads.filter((lead) => normalizePhone(lead.normalizedPhone || lead.phone).length < 10);
+  if (invalidPrepared.length) {
+    invalidPrepared.forEach((lead) => addFailure(result, { id: lead.id, company: lead.company, reason: 'Telefone invalido para WhatsApp.' }));
+    return result;
+  }
+
+  const requests: WhatsAppValidationRequest[] = leads.map((lead) => ({
+    id: lead.id,
+    sourceImportId: lead.id,
+    company: lead.company,
+    phone: lead.phone,
+    normalizedPhone: normalizePhone(lead.normalizedPhone || lead.phone),
+    chipInstance: chipInstanceValue,
+  }));
+  const providerResults = await whatsappValidationGateway.validateInitial(requests);
+  result.providerChecked = providerResults.length;
+  const providerById = new Map(providerResults.map((item) => [item.leadId, item]));
+
+  for (const lead of leads) {
+    const providerResult = providerById.get(lead.id);
+    if (!providerResult) {
+      addFailure(result, { id: lead.id, company: lead.company, reason: 'A API nao retornou o resultado persistido deste lead.' });
+      continue;
+    }
+    if (providerResult.persisted !== true || !providerResult.outcome) {
+      addFailure(result, { id: lead.id, company: lead.company, reason: 'A API nao confirmou a persistencia do resultado.' });
+      continue;
+    }
+    if ((providerResult.outcome === 'approved' || providerResult.outcome === 'revalidated') && providerResult.proofValid !== true) {
+      addFailure(result, { id: lead.id, company: lead.company, reason: 'O WhatsApp confirmou o numero, mas a prova do telefone atual nao foi persistida. Tente validar novamente.' });
+      continue;
+    }
+    addOutcome(result, lead.id, providerResult.outcome);
+  }
+  return result;
+}
+
 async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[], selectedResourceId?: string) {
   const ids = numericIds(rawIds);
   const result = emptyResult(mode, ids.length);
@@ -175,6 +230,9 @@ async function executeValidation(mode: WhatsAppValidationMode, rawIds: string[],
 }
 
 export const whatsappValidationService = {
+  validatePreparedInitial(leads: PreparedWhatsAppValidationLead[], chipInstanceName: string) {
+    return executePreparedInitialValidation(leads, chipInstanceName);
+  },
   validateInitial(ids: string[]) {
     return executeValidation('initial', ids);
   },

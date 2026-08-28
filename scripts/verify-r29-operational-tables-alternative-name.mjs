@@ -52,8 +52,9 @@ expect(igQueue.indexOf('>Reprocessar</Button>') < igQueue.indexOf('placeholder="
 expect(queuePage.includes('Somente este campo pode ser alterado aqui') && queuePage.includes('alternativeNameService.update'), 'edição na fila final deve alterar somente nome alternativo');
 
 const invalidateStart = reviewService.indexOf('async function invalidate');
-const invalidateEnd = reviewService.indexOf('async function lock', invalidateStart);
-const invalidateBlock = reviewService.slice(invalidateStart, invalidateEnd > invalidateStart ? invalidateEnd : undefined);
+const invalidateEndCandidates = [reviewService.indexOf('async function lock', invalidateStart), reviewService.indexOf('export const queueReviewService', invalidateStart)].filter((value) => value > invalidateStart);
+const invalidateEnd = invalidateEndCandidates.length ? Math.min(...invalidateEndCandidates) : reviewService.length;
+const invalidateBlock = reviewService.slice(invalidateStart, invalidateEnd);
 expect(invalidateStart >= 0 && !invalidateBlock.includes('fillBatch') && !invalidateBlock.includes('pullToCapacity'), 'invalidar na revisão não deve repor WhatsApp nem Instagram automaticamente');
 const waFinalInvalidateStart = queuePage.indexOf('const handleInvalidate=async', queuePage.indexOf('function WhatsAppQueuePage'));
 const waFinalInvalidateEnd = queuePage.indexOf('return <div', waFinalInvalidateStart);
