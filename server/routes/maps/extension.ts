@@ -1,8 +1,13 @@
 import { extensionScope, body, normalize, send, statusForError, text, type ApiRequest, type ApiResponse, type Row } from '../../maps/shared.js';
 import { sha256, type MapsExtensionScope } from '../../maps/token.js';
 
-const EXTENSION_VERSION = '1.0.12';
+const EXTENSION_VERSION = '1.0.13';
 const ACTIVE_EXECUTION_STATUSES = ['pending', 'running', 'paused'] as const;
+const REVIEW_LEASE_TERMINAL_STATUSES = ['completed', 'exhausted'] as const;
+const REVIEW_OWNER_STALE_MS = 15 * 60_000;
+const REVIEW_LEASE_STALE_MS = 2 * 60_000;
+const REVIEW_LEASE_MIN_EXTENSION_VERSION = '1.0.31';
+const REVIEW_GATE_VERSION = 'execution_aware_v2';
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
 const MAX_SNAPSHOT_BYTES = 1_500_000;
 const AGGREGATORS = /(^|[/.])(linktr\.ee|linktree|beacons\.ai|carrd\.co|taplink|bio\.link|lnk\.bio)([/.]|$)/i;
@@ -186,6 +191,13 @@ function meetsGlobalQuality(raw: Row, criteria: GlobalQualityCriteria) {
 
 type CaptureReviewDecision = 'available' | 'exists_in_crm' | 'in_review' | 'rejected_recently' | 'suppressed';
 type CaptureIdentity = { key: string; phone: string; instagram: string; domain: string; maps: string };
+type CaptureBatchDecisionResult = {
+  decisions: Map<string, CaptureReviewDecision>;
+  orphanReviewReleased: number;
+  staleReviewOwnersStopped: number;
+  activeReviewOwners: string[];
+  reviewGateVersion: string;
+};
 
 function normalizeDomainIdentity(value: unknown) {
   let v = text(value).toLowerCase().replace(/^https?:\/\//i, '').replace(/^www\./i, '');
@@ -210,8 +222,65 @@ function identityMatches(identity: CaptureIdentity, type: string, value: unknown
     || (type === 'domain' && identity.domain && identity.domain === v)
     || (type === 'maps' && identity.maps && identity.maps === v);
 }
+function candidateIdentity(row: Row): CaptureIdentity {
+  return {
+    key: text(row.dedupe_key),
+    phone: (() => { const p = plausiblePhone(row.effective_phone || row.effective_whatsapp); return p && !p.startsWith('55') && [10,11].includes(p.length) ? `55${p}` : p; })(),
+    instagram: normalizeInstagram(row.effective_instagram),
+    domain: normalizeDomainIdentity(row.effective_website),
+    maps: normalizeMapsIdentity(row.maps_url),
+  };
+}
+function captureIdentityMatchesCandidate(identity: CaptureIdentity, row: Row) {
+  if (text(row.dedupe_key) && text(row.dedupe_key) === identity.key) return true;
+  const other = candidateIdentity(row);
+  return Boolean((identity.phone && other.phone === identity.phone)
+    || (identity.instagram && other.instagram === identity.instagram)
+    || (identity.domain && other.domain === identity.domain)
+    || (identity.maps && other.maps === identity.maps));
+}
+function semverAtLeast(value: unknown, minimum: string) {
+  const parse = (input: unknown) => text(input).split('-')[0].split('.').map((part) => Number(part)).slice(0, 3);
+  const current = parse(value); const floor = parse(minimum);
+  if (current.some((part) => !Number.isFinite(part)) || current.length < 3) return false;
+  for (let i = 0; i < 3; i += 1) {
+    const left = Number(current[i] || 0); const right = Number(floor[i] || 0);
+    if (left > right) return true;
+    if (left < right) return false;
+  }
+  return true;
+}
+function executionLastSeenMs(execution: Row) {
+  for (const candidate of [execution.last_heartbeat_at, execution.updated_at, execution.created_at]) {
+    const parsed = Date.parse(text(candidate));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+function reviewOwnerState(execution: Row, nowMs: number) {
+  if (!execution || !text(execution.maps_search_executions_id)) return { active: false, staleActive: false, reason: 'execution_missing' };
+  const status = text(execution.status);
+  const ageMs = Math.max(0, nowMs - executionLastSeenMs(execution));
+  if (ACTIVE_EXECUTION_STATUSES.includes(status as typeof ACTIVE_EXECUTION_STATUSES[number])) {
+    return ageMs <= REVIEW_OWNER_STALE_MS
+      ? { active: true, staleActive: false, reason: 'active_execution' }
+      : { active: false, staleActive: true, reason: 'stale_active_execution' };
+  }
+  if (REVIEW_LEASE_TERMINAL_STATUSES.includes(status as typeof REVIEW_LEASE_TERMINAL_STATUSES[number])) {
+    const supportsLease = semverAtLeast(execution.extension_version, REVIEW_LEASE_MIN_EXTENSION_VERSION);
+    return supportsLease && ageMs <= REVIEW_LEASE_STALE_MS
+      ? { active: true, staleActive: false, reason: 'active_review_lease' }
+      : { active: false, staleActive: false, reason: supportsLease ? 'expired_review_lease' : 'legacy_terminal_execution' };
+  }
+  return { active: false, staleActive: false, reason: 'terminal_execution' };
+}
 
-async function captureBatchDecisions(client: ReturnType<typeof import('../../maps/shared.js').serviceClient>, organizationId: number, raws: Row[]) {
+async function captureBatchDecisions(
+  client: ReturnType<typeof import('../../maps/shared.js').serviceClient>,
+  organizationId: number,
+  raws: Row[],
+  currentExecutionId = '',
+): Promise<CaptureBatchDecisionResult> {
   const identities = raws.map(captureIdentity);
   const decisions = new Map<string, CaptureReviewDecision>();
   const values = (type: keyof Omit<CaptureIdentity,'key'>) => [...new Set(identities.map((i) => i[type]).filter(Boolean))];
@@ -226,31 +295,59 @@ async function captureBatchDecisions(client: ReturnType<typeof import('../../map
   for (const identity of identities) {
     if (registryRows.some((r) => identityMatches(identity, text(r.identity_type), r.identity_value))) decisions.set(identity.key, 'exists_in_crm');
   }
-  const now = new Date().toISOString();
+
+  const nowDate = new Date(); const now = nowDate.toISOString(); const nowMs = nowDate.getTime();
   const activeReview = await client.from('maps_search_candidates')
-    .select('dedupe_key,effective_phone,effective_whatsapp,effective_instagram,effective_website,maps_url,review_state,review_expires_at')
+    .select('maps_search_candidates_id,maps_search_executions_id,dedupe_key,effective_phone,effective_whatsapp,effective_instagram,effective_website,maps_url,review_state,review_expires_at,execution:maps_search_executions_id(maps_search_executions_id,status,last_heartbeat_at,updated_at,created_at,extension_version)')
     .eq('organizations_id', organizationId)
     .in('review_state', ['pending','rejected','invalid'])
     .gt('review_expires_at', now);
   if (activeReview.error) throw new Error(`maps_review_batch_failed:${activeReview.error.message}`);
+
+  const activeRows: Row[] = [];
+  const orphanExecutionIds = new Set<string>();
+  const missingExecutionCandidateIds = new Set<string>();
+  const staleExecutionIds = new Set<string>();
+  const activeReviewOwners = new Set<string>();
+  for (const row of (activeReview.data ?? []) as Row[]) {
+    const ownerExecutionId = text(row.maps_search_executions_id);
+    if (ownerExecutionId && ownerExecutionId === text(currentExecutionId)) continue;
+    const execution = rowObject(row.execution);
+    const owner = reviewOwnerState(execution, nowMs);
+    if (owner.active) {
+      activeRows.push(row);
+      if (ownerExecutionId) activeReviewOwners.add(ownerExecutionId);
+      continue;
+    }
+    if (ownerExecutionId) orphanExecutionIds.add(ownerExecutionId);
+    else if (text(row.maps_search_candidates_id)) missingExecutionCandidateIds.add(text(row.maps_search_candidates_id));
+    if (owner.staleActive && ownerExecutionId) staleExecutionIds.add(ownerExecutionId);
+  }
+
+  if (staleExecutionIds.size) {
+    const stopped = await client.from('maps_search_executions').update({
+      status: 'stopped', termination_reason: 'stale_review_owner', finished_at: now, updated_at: now,
+    }).eq('organizations_id', organizationId).in('maps_search_executions_id', [...staleExecutionIds]).in('status', [...ACTIVE_EXECUTION_STATUSES]);
+    if (stopped.error) throw new Error(`maps_stale_review_owner_stop_failed:${stopped.error.message}`);
+  }
+
+  const orphanCandidateIds = new Set<string>(missingExecutionCandidateIds);
+  for (const row of (activeReview.data ?? []) as Row[]) {
+    if (orphanExecutionIds.has(text(row.maps_search_executions_id)) && text(row.maps_search_candidates_id)) orphanCandidateIds.add(text(row.maps_search_candidates_id));
+  }
+  if (orphanCandidateIds.size) {
+    const expired = await client.from('maps_search_candidates').update({
+      review_state: 'expired', review_cleared_at: now, review_expires_at: now, updated_at: now,
+    }).eq('organizations_id', organizationId).in('maps_search_candidates_id', [...orphanCandidateIds]).in('review_state', ['pending','rejected','invalid']);
+    if (expired.error) throw new Error(`maps_orphan_review_expire_failed:${expired.error.message}`);
+  }
+
   for (const identity of identities) {
     if (decisions.has(identity.key)) continue;
-    const matched = (activeReview.data ?? []).find((r) => {
-      if (text(r.dedupe_key) && text(r.dedupe_key) === identity.key) return true;
-      const rowIdentity: CaptureIdentity = {
-        key: text(r.dedupe_key),
-        phone: (() => { const p = plausiblePhone(r.effective_phone || r.effective_whatsapp); return p && !p.startsWith('55') && [10,11].includes(p.length) ? `55${p}` : p; })(),
-        instagram: normalizeInstagram(r.effective_instagram),
-        domain: normalizeDomainIdentity(r.effective_website),
-        maps: normalizeMapsIdentity(r.maps_url),
-      };
-      return Boolean((identity.phone && rowIdentity.phone === identity.phone)
-        || (identity.instagram && rowIdentity.instagram === identity.instagram)
-        || (identity.domain && rowIdentity.domain === identity.domain)
-        || (identity.maps && rowIdentity.maps === identity.maps));
-    });
+    const matched = activeRows.find((row) => captureIdentityMatchesCandidate(identity, row));
     if (matched) decisions.set(identity.key, ['rejected','invalid'].includes(text(matched.review_state)) ? 'rejected_recently' : 'in_review');
   }
+
   const suppressions: Row[] = [];
   for (const type of ['phone','instagram','domain','maps'] as const) {
     const list = values(type);
@@ -260,10 +357,16 @@ async function captureBatchDecisions(client: ReturnType<typeof import('../../map
     suppressions.push(...(q.data ?? []));
   }
   for (const identity of identities) {
-    if (!decisions.has(identity.key) && suppressions.some((r) => identityMatches(identity, text(r.identity_type), r.identity_value))) decisions.set(identity.key, 'suppressed');
+    if (!decisions.has(identity.key) && suppressions.some((row) => identityMatches(identity, text(row.identity_type), row.identity_value))) decisions.set(identity.key, 'suppressed');
     if (!decisions.has(identity.key)) decisions.set(identity.key, 'available');
   }
-  return decisions;
+  return {
+    decisions,
+    orphanReviewReleased: orphanCandidateIds.size,
+    staleReviewOwnersStopped: staleExecutionIds.size,
+    activeReviewOwners: [...activeReviewOwners],
+    reviewGateVersion: REVIEW_GATE_VERSION,
+  };
 }
 
 function businessStatus(raw: Row): 'open' | 'temporarily_closed' | 'permanently_closed' | 'unknown' {
@@ -640,6 +743,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const coverageId = text(input.coverageId);
       const items = Array.isArray(input.items) ? input.items as Row[] : [];
       if (!batchId || !coverageId || !items.length || items.length > 50) throw new Error('maps_batch_invalid');
+      const batchHeartbeat = await client.from('maps_search_executions').update({ last_heartbeat_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('users_id', usersId);
+      if (batchHeartbeat.error) throw new Error(`maps_batch_heartbeat_failed:${batchHeartbeat.error.message}`);
       const payloadHash = await sha256(JSON.stringify({ coverageId, items }));
       const existingBatch = await client.from('maps_search_batches').select('*').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('batch_id', batchId).maybeSingle();
       if (existingBatch.error) throw new Error(existingBatch.error.message);
@@ -654,7 +759,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (coverage.error || !coverage.data) throw new Error('maps_coverage_not_found');
       let accepted = 0; let duplicates = 0; let rejected = 0; let blockedCrm = 0; let blockedReview = 0; let blockedRejected = 0; let suppressed = 0; const candidateIds: string[] = [];
       const rejectionBreakdown = { invalidIdentity: 0, quality: 0, closedBusiness: 0, noSupportedContact: 0, suppressed: 0 };
-      const batchDecisions = await captureBatchDecisions(client, organizationId, items);
+      const reviewGate = await captureBatchDecisions(client, organizationId, items, text(execution.maps_search_executions_id));
+      const batchDecisions = reviewGate.decisions;
       const qualityCriteria = executionQualityCriteria(execution);
       const startingCounts = await executionSummary(client, execution);
       const allocationCounts = {
@@ -744,6 +850,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         blockedReview,
         blockedRejected,
         suppressed,
+        orphanReviewReleased: reviewGate.orphanReviewReleased,
+        staleReviewOwnersStopped: reviewGate.staleReviewOwnersStopped,
+        activeReviewOwners: reviewGate.activeReviewOwners,
+        reviewGateVersion: reviewGate.reviewGateVersion,
         rejectionBreakdown,
         overflowAvailable,
         candidateIds,
@@ -808,19 +918,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (action === 'execution_transition') {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
       const status = text(input.status);
-      if (!new Set(['running','paused','stopped','error']).has(status)) throw new Error('maps_execution_status_invalid');
-      const updated = await client.from('maps_search_executions').update({ status, last_error: text(input.lastError) || null, termination_reason: text(input.terminationReason) || null, started_at: status === 'running' ? text(execution.started_at) || new Date().toISOString() : execution.started_at, finished_at: ['stopped','error'].includes(status) ? new Date().toISOString() : null, last_heartbeat_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id).select('*').single();
+      if (!new Set(['running','paused','stopped','error','completed','exhausted']).has(status)) throw new Error('maps_execution_status_invalid');
+      const transitionNow = new Date().toISOString();
+      const terminal = ['stopped','error','completed','exhausted'].includes(status);
+      const updated = await client.from('maps_search_executions').update({ status, last_error: text(input.lastError) || null, termination_reason: text(input.terminationReason) || null, started_at: status === 'running' ? text(execution.started_at) || transitionNow : execution.started_at, finished_at: terminal ? transitionNow : null, last_heartbeat_at: transitionNow, updated_at: transitionNow }).eq('maps_search_executions_id', execution.maps_search_executions_id).select('*').single();
       if (updated.error) throw new Error(updated.error.message);
       return send(req, res, 200, { ok: true, execution: updated.data });
     }
     if (action === 'execution_heartbeat') {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
-      if (!ACTIVE_EXECUTION_STATUSES.includes(text(execution.status) as typeof ACTIVE_EXECUTION_STATUSES[number])) {
-        return send(req, res, 200, { ok: true, execution, active: false });
-      }
-      const updated = await client.from('maps_search_executions').update({ last_heartbeat_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('users_id', usersId).select('*').single();
+      const executionStatus = text(execution.status);
+      const executionActive = ACTIVE_EXECUTION_STATUSES.includes(executionStatus as typeof ACTIVE_EXECUTION_STATUSES[number]);
+      const reviewLeaseActive = REVIEW_LEASE_TERMINAL_STATUSES.includes(executionStatus as typeof REVIEW_LEASE_TERMINAL_STATUSES[number])
+        && semverAtLeast(execution.extension_version, REVIEW_LEASE_MIN_EXTENSION_VERSION);
+      if (!executionActive && !reviewLeaseActive) return send(req, res, 200, { ok: true, execution, active: false, reviewLease: false });
+      const heartbeatNow = new Date().toISOString();
+      const updated = await client.from('maps_search_executions').update({ last_heartbeat_at: heartbeatNow, updated_at: heartbeatNow }).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('users_id', usersId).select('*').single();
       if (updated.error) throw new Error(`maps_execution_heartbeat_failed:${updated.error.message}`);
-      return send(req, res, 200, { ok: true, execution: updated.data, active: true });
+      return send(req, res, 200, { ok: true, execution: updated.data, active: executionActive, reviewLease: reviewLeaseActive });
     }
     if (action === 'candidates_list') {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
