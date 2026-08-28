@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const handler=fs.readFileSync(new URL('../server/whatsapp/validation.handler.ts',import.meta.url),'utf8');
+const migration=fs.readFileSync(new URL('../supabase/migrations/20260828203000_r52_whatsapp_validation_at_most_once.sql',import.meta.url),'utf8');
+assert.doesNotMatch(handler,/recoverStaleValidationClaim|CONTROL_PLANE_STALE_CLAIM_MS/);
+assert.doesNotMatch(migration,/claimed_at\s*<|SET\s+request_status='pending',worker_id=NULL,claim_token=NULL/);
+assert.match(migration,/request_status='pending'/);
+assert.match(migration,/attempts=0/);
+assert.match(migration,/attempts=1/);
+assert.match(handler,/não será reclamada\/repetida automaticamente/);
+console.log('CRM R52 WhatsApp validation at-most-once safety: OK');
