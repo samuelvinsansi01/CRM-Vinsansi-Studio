@@ -199,7 +199,7 @@ export function HomePage() {
       else setInstagramResources(resources);
       resetPage();
       const details = `${result.batch.openCount}/${result.batch.targetCount} lead(s) prontos para revisão em ${result.resource.label}.`;
-      toast(`Fila ${channel} preparada`, details + (result.exhausted ? ' A base elegível acabou antes do limite.' : ''), result.errors ? 'warning' : 'success');
+      toast(`Fila ${channel} preparada`, details + (result.technicalStop ? ' A validação técnica foi interrompida sem retry automático; leads liberados poderão ser tentados em uma próxima ação.' : '') + (result.exhausted ? ' A base elegível acabou antes do limite.' : ''), result.errors ? 'warning' : 'success');
     } catch (error) {
       toast(`Não foi possível puxar ${channel}`, error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {

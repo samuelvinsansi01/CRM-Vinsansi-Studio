@@ -19,7 +19,7 @@ import { toLocalDateInputValue } from '../utils/date';
 export type QueuePageProps={channel:'whatsapp'|'instagram'}; type QueueTab='Revisão'|'Fila final';
 function todayInputValue(){return toLocalDateInputValue();}
 function useQueueToasts(){const[toasts,setToasts]=useState<ToastItem[]>([]);const pushToast=(toast:Omit<ToastItem,'id'>)=>{const id=`toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;setToasts((current)=>[{id,...toast},...current].slice(0,4));window.setTimeout(()=>setToasts((current)=>current.filter((item)=>item.id!==id)),3800);};return{toasts,setToasts,pushToast};}
-function pullDescription(result:Awaited<ReturnType<typeof queueReviewService.pullToCapacity>>){return[`${result.batch.openCount}/${result.batch.targetCount} em revisão`,result.invalidatedByProvider?`${result.invalidatedByProvider} sem WhatsApp`:'',result.redirectedToInstagram?`${result.redirectedToInstagram} liberado(s) para Instagram`:'',result.exhausted?'base elegível esgotada':''].filter(Boolean).join(' · ');}
+function pullDescription(result:Awaited<ReturnType<typeof queueReviewService.pullToCapacity>>){return[`${result.batch.openCount}/${result.batch.targetCount} em revisão`,result.invalidatedByProvider?`${result.invalidatedByProvider} sem WhatsApp`:'',result.redirectedToInstagram?`${result.redirectedToInstagram} liberado(s) para Instagram`:'',result.technicalStop?'validação técnica interrompida sem retry automático':'',result.exhausted?'base elegível esgotada':''].filter(Boolean).join(' · ');}
 export function QueuePage({channel}:QueuePageProps){return channel==='instagram'?<InstagramQueuePage/>:<WhatsAppQueuePage/>;}
 
 function WhatsAppQueuePage(){

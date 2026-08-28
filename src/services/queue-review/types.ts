@@ -55,4 +55,5 @@ export type QueueReviewPullResult = {
   redirectedToInstagram: number;
   errors: number;
   exhausted: boolean;
+  technicalStop: boolean;
 };

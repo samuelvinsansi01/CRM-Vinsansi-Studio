@@ -111,11 +111,16 @@ async function fillBatch(
   let redirectedToInstagram = 0;
   let errors = 0;
   let exhausted = false;
+  let technicalStop = false;
   let guard = 0;
+  // R53: um lead liberado pode voltar em uma ação futura, mas nunca deve ser
+  // validado duas vezes dentro do MESMO clique de Puxar.
+  const attemptedLeadIds = new Set<string>();
 
   if (channel === 'WhatsApp' && options.revalidateExisting && batch.openCount > 0) {
     const existingIds = await openReviewLeadIds(batch.batchId, channel);
     if (existingIds.length) {
+      existingIds.forEach((id) => attemptedLeadIds.add(id));
       const validation = await whatsappValidationService.validateInitialWithChip(existingIds, resource.id);
       await restoreWhatsAppValid(batch.batchId, validation.approvedIds);
       const retryable = Array.from(new Set([...validation.errorIds, ...validation.conflictIds]));
@@ -125,18 +130,23 @@ async function fillBatch(
       errors += validation.errors + validation.failed;
       await prune(batch.batchId);
       batch = await openBatch(channel, resource.id, scheduledDate);
+      if (retryable.length) technicalStop = true;
     }
   }
 
-  while (batch.missingCount > 0 && guard < 100) {
+  while (batch.missingCount > 0 && guard < 100 && !technicalStop) {
     guard += 1;
     const wanted = Math.max(1, Math.min(batch.missingCount, resource.batchSize || batch.missingCount));
-    const candidates = await candidateIds(batch.batchId, Math.max(wanted * 3, 20));
+    const poolLimit = Math.min(500, Math.max(wanted * 3 + attemptedLeadIds.size, 20));
+    const candidates = (await candidateIds(batch.batchId, poolLimit))
+      .filter((id) => !attemptedLeadIds.has(id));
     if (!candidates.length) {
       exhausted = true;
       break;
     }
-    const reserved = await reserve(batch.batchId, candidates.slice(0, wanted));
+    const selected = candidates.slice(0, wanted);
+    selected.forEach((id) => attemptedLeadIds.add(id));
+    const reserved = await reserve(batch.batchId, selected);
     if (!reserved.length) {
       exhausted = true;
       break;
@@ -152,6 +162,10 @@ async function fillBatch(
         redirectedToInstagram += validation.redirectedToInstagram;
         errors += validation.errors + validation.failed;
         await prune(batch.batchId);
+        // R53: erro/conflito técnico encerra esta ação depois do lote atual.
+        // Os leads são liberados para uma ação FUTURA; não descemos a base
+        // fazendo novas consultas WhatsApp automaticamente no mesmo clique.
+        if (retryable.length) technicalStop = true;
       } catch (error) {
         // Falha técnica não pode deixar uma reserva PRE_SEND ocupando a revisão.
         await release(batch.batchId, reserved).catch(() => undefined);
@@ -163,7 +177,7 @@ async function fillBatch(
   }
 
   eventBus.emit('import:changed', { source: 'move' });
-  return { batch, resource, added, invalidatedByProvider, redirectedToInstagram, errors, exhausted };
+  return { batch, resource, added, invalidatedByProvider, redirectedToInstagram, errors, exhausted, technicalStop };
 }
 
 async function pullToCapacity(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId = '') {
