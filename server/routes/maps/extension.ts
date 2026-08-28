@@ -414,6 +414,17 @@ function acquisitionTargetsReached(execution: Row, counts: Row) {
     && Number(counts.unique_allocated_count || 0) >= targetUnique;
 }
 
+// R50: a meta é hard stop apenas em "Até atingir meta". Execuções antigas que
+// ainda não possuem o campo são tratadas como "Esgotar Maps", porque o modo
+// completo sempre foi a estratégia padrão do Motor de Captura.
+function executionSearchStrategy(execution: Row) {
+  return text((execution.runner_strategy as Row | null)?.searchStrategy) === 'until_target' ? 'until_target' : 'exhaust_feed';
+}
+
+function acquisitionTargetIsHardStop(execution: Row, counts: Row, desiredLimitReported = false) {
+  return desiredLimitReported || (executionSearchStrategy(execution) === 'until_target' && acquisitionTargetsReached(execution, counts));
+}
+
 function leadPriorityScore(candidate: Row, rating: number | null, reviews: number | null) {
   let score = 500; // ramo conhecido
   if (candidate.effective_whatsapp || candidate.effective_phone) score += 300;
@@ -679,6 +690,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (cityMode === 'multiple' && (!requestedCitiesIds.length || requestedCitiesIds.length > 10)) throw new Error('maps_multiple_cities_limit');
       const extractionMode = input.extractionMode === 'quick' ? 'quick' : 'complete';
       const desiredCompanies = integer(input.desiredCompanies ?? 50, 1, 5000);
+      const searchStrategy = text(input.searchStrategy) === 'until_target' ? 'until_target' : 'exhaust_feed';
       const [{ branch, terms }, state, qualityCriteria] = await Promise.all([
         branchTerms(client, usersId, branchesId),
         client.from('states').select('states_id,states_name,states_code').eq('states_id', statesId).maybeSingle(),
@@ -716,7 +728,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         p_target_source: targetSource,
         p_extension_version: text(input.extensionVersion) || EXTENSION_VERSION,
         p_search_terms_snapshot: terms,
-        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies, qualityCriteria, citySelectionMode: cityMode, selectedCityIds: requestedCitiesIds, reviewTtlHours: 24, validationBatchPercent: 50, validationBatchMin: 5, validationBatchMax: 50 },
+        p_runner_strategy: { order: 'city_then_terms', terms: 'branch_plus_subcategories', coverageCreation: 'lazy_one_term_at_a_time', coverageExpiration: null, additiveTargets: false, reviewBeforeImport: true, maxConcurrentPerUser: 5, desiredCompanyCount: desiredCompanies, searchStrategy, qualityCriteria, citySelectionMode: cityMode, selectedCityIds: requestedCitiesIds, reviewTtlHours: 24, validationBatchPercent: 50, validationBatchMin: 5, validationBatchMax: 50 },
       });
       if (inserted.error) {
         const message = text(inserted.error.message);
@@ -734,8 +746,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
       const counts = await executionSummary(client, execution);
       const reached = acquisitionTargetsReached(execution, counts);
-      const next = action === 'next_search' && !reached && !['completed','exhausted','error','stopped'].includes(text(execution.status)) ? await nextCoverage(client, execution) : null;
-      return send(req, res, 200, { ok: true, execution: { ...execution, ...counts }, targetsReached: reached, next });
+      const targetStop = acquisitionTargetIsHardStop(execution, counts);
+      const next = action === 'next_search' && !targetStop && !['completed','exhausted','error','stopped'].includes(text(execution.status)) ? await nextCoverage(client, execution) : null;
+      return send(req, res, 200, { ok: true, execution: { ...execution, ...counts }, targetsReached: reached, stopAfterCurrentCoverage: targetStop, next });
     }
     if (action === 'batch_sync') {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
@@ -768,7 +781,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         instagram: Number(startingCounts.instagram_bucket_count || 0),
       };
       const desiredCompanyCount = Math.max(0, Number((execution.runner_strategy as Row | null)?.desiredCompanyCount || 0));
-      const remainingNeeded = desiredCompanyCount > 0 ? Math.max(0, desiredCompanyCount - Number(startingCounts.unique_count || 0)) : Number.MAX_SAFE_INTEGER;
+      const hardTargetMode = executionSearchStrategy(execution) === 'until_target';
+      const remainingNeeded = hardTargetMode && desiredCompanyCount > 0
+        ? Math.max(0, desiredCompanyCount - Number(startingCounts.unique_count || 0))
+        : Number.MAX_SAFE_INTEGER;
       let overflowAvailable = 0;
       for (const raw of items) {
         const dedupeKey = itemKey(raw);
@@ -888,6 +904,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const counts = await executionSummary(client, execution);
       const targetsReached = acquisitionTargetsReached(execution, counts);
       const desiredLimitReported = text(input.terminationReason) === 'desired_company_count_reached';
+      const targetStop = acquisitionTargetIsHardStop(execution, counts, desiredLimitReported);
       if (desiredLimitReported && !targetsReached) {
         // Nunca abra outra cobertura quando a extensão informou que bateu a meta
         // mas a mesa de revisão ainda não recebeu todos os candidatos. Nesse caso
@@ -904,16 +921,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (status === 'error') {
         await client.from('maps_search_executions').update({ status: 'error', last_error: patch.last_error, updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
       } else if (TERMINAL_COVERAGE.has(status)) {
-        // v1.0.3: a quantidade digitada é limite duro. Após todos os candidatos
-        // estarem persistidos na Revisão, nenhuma nova cobertura pode nascer.
-        if (targetsReached) {
+        // R50: somente "Até atingir meta" transforma o alvo em término. Em
+        // "Esgotar Maps" a cobertura termina pelo próprio Maps e a execução pode
+        // continuar para a próxima cobertura/termo mesmo acima da meta.
+        if (targetStop) {
           await client.from('maps_search_executions').update({ status: 'completed', termination_reason: 'desired_company_count_reached', finished_at: new Date().toISOString(), last_heartbeat_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
         } else {
           next = await nextCoverage(client, execution);
           if (!next.coverage) await client.from('maps_search_executions').update({ status: 'exhausted', termination_reason: 'available_coverage_exhausted', finished_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_executions_id', execution.maps_search_executions_id);
         }
       }
-      return send(req, res, 200, { ok: true, coverage: updated.data, counts, targetsReached, stopAfterCurrentCoverage: targetsReached, next });
+      return send(req, res, 200, { ok: true, coverage: updated.data, counts, targetsReached, stopAfterCurrentCoverage: targetStop, next });
     }
     if (action === 'execution_transition') {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
