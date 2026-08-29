@@ -117,6 +117,11 @@ const queueSchema = read('src/repositories/queueSchema.ts');
 if (!queueSchema.includes(".neq('status_id', CANONICAL_CATALOG.status.CANCELED)")) fail('cancelados_ainda_retornam_na_fila_ativa');
 const whatsappQueueHook = read('src/hooks/useWhatsAppQueue.ts');
 if (!whatsappQueueHook.includes('total: Math.max(0, current.total - 1)')) fail('resumo_whatsapp_nao_remove_invalidado_do_total');
+const queueFinalTable = read('src/components/QueueFinalTable.tsx');
+for (const token of ['const displayLeads=useMemo<FinalLead[]>', '.map((lead,index)=>({...lead,position:index+1}))', 'displayLeads.find']) {
+  if (!queueFinalTable.includes(token)) fail(`posicao_operacional_fila_final_incompleta:${token}`);
+}
+if (queueFinalTable.includes('()=>leads.map((lead)=>({ id:lead.id, position:lead.position')) fail('fila_final_ainda_exibe_posicao_historica');
 
 const homolog = read(homologSql);
 for (const token of [

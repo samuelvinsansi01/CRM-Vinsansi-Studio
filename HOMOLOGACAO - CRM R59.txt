@@ -1,5 +1,5 @@
 CRM - Vinsansi Studio v2.4.0-R59
-BUILD FIX 6 — 29/08/2026
+BUILD FIX 7 — 29/08/2026
 
 ARQUIVOS OBRIGATÓRIOS DE HOMOLOGAÇÃO
 - CHECK - CRM R59 - Homologacao final.sql
@@ -21,6 +21,13 @@ BUILD FIX 6 — INVALIDAÇÃO
 - Filas canônicas não carregam status operacional cancelado na listagem ativa.
 - Mapeamento interno invalid -> status CANCELADO; cancelado nunca é interpretado como erro técnico.
 - Resumos locais removem o item invalidado do Total e não aumentam Erros/Finalizados.
+
+BUILD FIX 7 — POSIÇÃO OPERACIONAL DA FILA
+- A coluna # da Fila final exibe posição atual compacta 1..N, sem lacunas após invalidação/cancelamento.
+- A ordem histórica persistida continua intacta para o runtime/Worker; apenas a representação operacional é compactada.
+- Ao invalidar um item, os itens seguintes sobem visualmente uma posição imediatamente.
+- A capacidade liberada continua sendo preenchida somente por uma nova ação Puxar; não há refill automático.
+- Drawer e ações recebem a mesma posição operacional mostrada na tabela.
 
 CHECK R59
 - 20_status_operacional_divergencias valida o catálogo operacional 1–8.

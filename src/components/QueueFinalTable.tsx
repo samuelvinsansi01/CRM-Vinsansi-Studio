@@ -19,16 +19,21 @@ export function QueueFinalTable({ channel, leads, resourceLabel, canEdit, canInv
   channel:'WhatsApp'|'Instagram'; leads:FinalLead[]; resourceLabel:string; canEdit:boolean; canInvalidate:boolean;
   onView:(lead:FinalLead)=>void; onEdit:(lead:FinalLead)=>void; onInvalidate:(lead:FinalLead)=>void;
 }) {
-  const rows=useMemo<FinalRow[]>(()=>leads.map((lead)=>({ id:lead.id, position:lead.position, company:company(lead), branch:lead.branch||'—', state:lead.state||'—', city:lead.city||'—', rating:Number(lead.rating||0).toFixed(1), reviews:Number(lead.reviews||0).toLocaleString('pt-BR'), channel:channelCell(lead), site:availability(Boolean(String(lead.site||'').trim()),externalHttpHref(lead.site),'Abrir site'), status:queueStatus(lead) })),[leads]);
+  // A posição persistida é a ordem histórica usada pelo runtime. Na tela, a Fila final
+  // sempre exibe a posição operacional atual, sem lacunas após cancelamentos/invalidações.
+  const displayLeads=useMemo<FinalLead[]>(()=>[...leads]
+    .sort((a,b)=>a.position-b.position||Number(a.id)-Number(b.id))
+    .map((lead,index)=>({...lead,position:index+1})),[leads]);
+  const rows=useMemo<FinalRow[]>(()=>displayLeads.map((lead)=>({ id:lead.id, position:lead.position, company:company(lead), branch:lead.branch||'—', state:lead.state||'—', city:lead.city||'—', rating:Number(lead.rating||0).toFixed(1), reviews:Number(lead.reviews||0).toLocaleString('pt-BR'), channel:channelCell(lead), site:availability(Boolean(String(lead.site||'').trim()),externalHttpHref(lead.site),'Abrir site'), status:queueStatus(lead) })),[displayLeads]);
   const columns=useMemo<TableColumn<FinalRow>[]>(()=>[
     {key:'position',label:'#',width:'5%'},{key:'company',label:'Empresa',width:'23%'},{key:'branch',label:'Ramo',width:'13%'},{key:'state',label:'Estado',width:'7%'},{key:'city',label:'Cidade',width:'11%'},{key:'rating',label:'Nota',width:'6%'},{key:'reviews',label:'Avaliações',width:'8%'},{key:'channel',label:channel,width:'8%'},{key:'site',label:'Site',width:'7%'},{key:'status',label:'Status',width:'10%'},
   ],[channel]);
   const {page,setPage,rowsPerPage,setRowsPerPage,totalPages,pageItems}=useClientPagination(rows,20);
-  const handleAction=(action:TableAction,row:FinalRow)=>{const lead=leads.find((candidate)=>candidate.id===row.id);if(!lead)return;if(action==='view')onView(lead);if(action==='edit')onEdit(lead);if(action==='invalidate')onInvalidate(lead);};
+  const handleAction=(action:TableAction,row:FinalRow)=>{const lead=displayLeads.find((candidate)=>candidate.id===row.id);if(!lead)return;if(action==='view')onView(lead);if(action==='edit')onEdit(lead);if(action==='invalidate')onInvalidate(lead);};
   return <TableCard title={`Listagem de disparos · ${resourceLabel}`} footerText={`Mostrando ${pageItems.length} de ${leads.length} lead(s)`} footerLeft={leads.length?<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage}/>:undefined} page={page} totalPages={totalPages} onPageChange={setPage}>
     {!leads.length?<div className="table-message">Nenhum item aprovado para este recurso.</div>:null}
     {pageItems.length?<DataTable columns={columns} rows={pageItems} selectable={false} actions={['view','edit','invalidate']} actionsLabel="Ações"
-      getRowActions={(row)=>{const lead=leads.find((candidate)=>candidate.id===row.id);if(!lead)return[];const canInvalidateLead=lead.channel==='whatsapp'?permissionsFor('whatsapp-queue',lead.status).canInvalidate():permissionsFor('instagram-queue',lead.status).canInvalidate();return ['view' as const,...(canEdit?['edit' as const]:[]),...(canInvalidate&&canInvalidateLead?['invalidate' as const]:[])];}}
+      getRowActions={(row)=>{const lead=displayLeads.find((candidate)=>candidate.id===row.id);if(!lead)return[];const canInvalidateLead=lead.channel==='whatsapp'?permissionsFor('whatsapp-queue',lead.status).canInvalidate():permissionsFor('instagram-queue',lead.status).canInvalidate();return ['view' as const,...(canEdit?['edit' as const]:[]),...(canInvalidate&&canInvalidateLead?['invalidate' as const]:[])];}}
       onAction={handleAction}/>:null}
   </TableCard>;
 }
