@@ -94,19 +94,29 @@ for (const token of ['label="Importados"', 'label="Sem destino"', 'label="WhatsA
 for (const legacyCard of ['label="Com número"', 'label="Com Instagram"', 'label="Com site"']) {
   if (homePage.includes(legacyCard)) fail(`card_inicio_legado:${legacyCard}`);
 }
-const invalidationPatch = 'APLICAR - CRM R59 BUILD FIX 5 - Corrigir invalidacao.sql';
+const invalidationPatch = 'APLICAR - CRM R59 BUILD FIX 6 - Corrigir invalidacao.sql';
 if (!exists(invalidationPatch)) fail('sql_correcao_invalidacao_ausente');
 const invalidationSql = read(invalidationPatch);
 for (const token of [
   'CREATE OR REPLACE FUNCTION public.invalidate_final_queue_item',
   'CREATE OR REPLACE FUNCTION public.invalidate_queue_review_item',
-  'SET status_id = 6',
+  'SET status_id = 7',
   'SET lead_status_id = 6',
   "'contractVersion', 'R59'",
 ]) if (!invalidationSql.includes(token)) fail(`sql_correcao_invalidacao_incompleto:${token}`);
 for (const legacy of ['invalid_status_catalog_missing', "IN ('invalido', 'invalid')", "'contractVersion', 'R58'"]) {
   if (invalidationSql.includes(legacy)) fail(`sql_correcao_invalidacao_legado:${legacy}`);
 }
+const schemaCatalog = read('src/repositories/schemaCatalog.ts');
+for (const token of [
+  'invalid: CANONICAL_CATALOG.status.CANCELED',
+  "if (normalized === 'cancelado' || normalized === 'canceled' || normalized === 'cancelled') return 'invalid';",
+]) if (!schemaCatalog.includes(token)) fail(`contrato_cancelamento_fila_incompleto:${token}`);
+if (schemaCatalog.includes('invalid: CANONICAL_CATALOG.status.ERROR')) fail('invalidacao_ainda_mapeada_como_erro');
+const queueSchema = read('src/repositories/queueSchema.ts');
+if (!queueSchema.includes(".neq('status_id', CANONICAL_CATALOG.status.CANCELED)")) fail('cancelados_ainda_retornam_na_fila_ativa');
+const whatsappQueueHook = read('src/hooks/useWhatsAppQueue.ts');
+if (!whatsappQueueHook.includes('total: Math.max(0, current.total - 1)')) fail('resumo_whatsapp_nao_remove_invalidado_do_total');
 
 const homolog = read(homologSql);
 for (const token of [
@@ -117,6 +127,7 @@ for (const token of [
   'enviado_sem_canal_legacy',
   'status_operacional_divergencias',
   'contrato_invalidacao_r59',
+  'invalidacao_manual_marcada_como_erro',
   'SOMENTE LEITURA',
 ]) if (!homolog.includes(token)) fail(`homolog_sql_incompleto:${token}`);
 console.log('CRM R59 final contract + homologacao: OK');

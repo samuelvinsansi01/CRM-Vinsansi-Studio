@@ -1,37 +1,44 @@
 CRM - Vinsansi Studio v2.4.0-R59
-BUILD FIX 4 — 29/08/2026
+BUILD FIX 6 — 29/08/2026
 
-ARQUIVO OBRIGATÓRIO DE HOMOLOGAÇÃO
+ARQUIVOS OBRIGATÓRIOS DE HOMOLOGAÇÃO
 - CHECK - CRM R59 - Homologacao final.sql
+- APLICAR - CRM R59 BUILD FIX 6 - Corrigir invalidacao.sql
 
-CORREÇÕES DE BUILD APLICADAS
-- validation.handler.ts: builders DELETE/PATCH do Supabase separados, sem atribuição incompatível PostgrestQueryBuilder/PostgrestFilterBuilder.
-- Header.tsx: removida navegação antiga para a página "audit", que não faz parte de PageId no contrato R59.
-- CatalogCrudPage.tsx: removidos acessos a propriedades em fallback já reduzido a never pelo discriminated union.
-- HomologationPage.tsx: repositório R59 somente leitura restaurado no pacote em src/repositories/release/homologation.repository.ts.
-- repositories/index.ts e services: removida a dependência do repositório antigo de eventos/auditoria; nenhum runtime volta a depender de audit_events.
+CONTRATO ATUAL
+- Banco estrutural congelado em 60 tabelas.
+- lead_status 6 = invalido.
+- status 6 = erro, reservado a falha técnica.
+- status 7 = cancelado, usado quando o operador invalida um item da Fila final.
+- Item cancelado sai da fila ativa e permanece apenas como histórico relacional.
+- Lead invalidado aparece na Base Permanente como Inválido.
+
+BUILD FIX 6 — INVALIDAÇÃO
+- invalidate_final_queue_item encerra o queue_item com status_id=7 (cancelado), não status_id=6 (erro).
+- queue_items_error_message não é usado para invalidação manual.
+- invalidate_queue_review_item mantém lead_status_id=6 e contrato R59.
+- Itens gravados pela versão anterior como erro por "invalidado pelo operador" são reparados para cancelado.
+- Filas canônicas não carregam status operacional cancelado na listagem ativa.
+- Mapeamento interno invalid -> status CANCELADO; cancelado nunca é interpretado como erro técnico.
+- Resumos locais removem o item invalidado do Total e não aumentam Erros/Finalizados.
+
+CHECK R59
+- 20_status_operacional_divergencias valida o catálogo operacional 1–8.
+- 21_contrato_invalidacao_r59 valida o contrato das duas RPCs sem busca textual ampla/falso positivo.
+- 22_invalidacao_manual_marcada_como_erro detecta qualquer resíduo de invalidação manual gravado como erro técnico.
+
+INÍCIO
+- Cards oficiais: Importados, Sem destino, WhatsApp, Instagram.
+- Contagens por destino real do lead; cards antigos Com número/Com Instagram/Com site não fazem parte da página.
+
+WHATSAPP
+- Observabilidade técnica preservada desde o Gateway até o toast da fila.
+- Gateway esperado: 1.2.14.
+- Worker esperado: 3.13.7.
 
 VERIFICAÇÕES EXECUTADAS NESTE PACOTE
-- node scripts/verify-r59-final-contract.mjs: APROVADO.
 - node scripts/verify-syntax.mjs: APROVADO em 233 arquivos TypeScript.
-- O verificador R59 exige a presença do arquivo SQL de homologação, da página e do repositório de homologação.
-- O verificador R59 bloqueia referências às estruturas removidas do banco e também ao repositório antigo de eventos/auditoria.
-
-BANCO CONGELADO
-- 60 tabelas.
-- 7 lead_status.
-- 3 canais.
-- 0 constraints não validadas.
-- Auditoria de dados 01–11 = OK.
-- 22 enviados antigos sem canal permanecem somente como legado informativo.
+- node scripts/verify-r59-final-contract.mjs: APROVADO.
 
 BUILD COMPLETO
-O build completo Vite/TypeScript não foi executado neste ambiente porque as dependências npm não estão disponíveis localmente e o registry não respondeu durante a tentativa de instalação. As falhas TypeScript reportadas no build externo foram corrigidas neste pacote; a confirmação final do `npm run build` deve ocorrer no ambiente com as dependências instaladas.
-
-
-BUILD FIX 4 — OBSERVABILIDADE WHATSAPP
-- outcome=error mantém errorMessage até o resultado da puxada.
-- QueueReviewPullResult expõe technicalReasons sem alterar schema do banco.
-- Home/Fila exibem o motivo técnico real, limitado aos motivos distintos da execução.
-- validation.handler inclui technicalReasons no meta da resposta e distingue conflito de identidade quando informado pelo Gateway.
-- Nenhuma tabela, RPC, trigger ou estrutura de banco foi alterada.
+- O build completo Vite/TypeScript depende das dependências npm instaladas e não foi executado neste ambiente.

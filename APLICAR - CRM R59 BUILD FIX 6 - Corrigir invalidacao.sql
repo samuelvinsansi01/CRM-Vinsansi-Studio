@@ -1,8 +1,9 @@
--- CRM - Vinsansi Studio R59 BUILD FIX 5
+-- CRM - Vinsansi Studio R59 BUILD FIX 6
 -- CORRECAO CIRURGICA: invalidação da Revisão/Fila final.
--- Nao cria tabelas, nao cria status e nao altera o contrato congelado.
--- O contrato R59 usa:
---   public.status.status_id = 6      -> erro
+-- Nao cria tabelas, nao cria status e nao altera o contrato estrutural congelado.
+-- Contrato semantico R59:
+--   public.status.status_id = 7           -> cancelado (encerramento deliberado pelo operador)
+--   public.status.status_id = 6           -> erro (somente falha tecnica)
 --   public.lead_status.lead_status_id = 6 -> invalido
 
 BEGIN;
@@ -51,10 +52,10 @@ BEGIN
     RAISE EXCEPTION 'queue_item_already_sent';
   END IF;
 
-  -- Contrato R59 congelado: status 6 = erro; lead_status 6 = invalido.
+  -- Invalidacao manual encerra o item como CANCELADO; ERRO fica reservado a falha tecnica.
   UPDATE public.queue_items
-  SET status_id = 6,
-      queue_items_error_message = nullif(trim(coalesce(p_reason, '')), ''),
+  SET status_id = 7,
+      queue_items_error_message = NULL,
       queue_items_finished_at = now(),
       queue_items_updated_at = now()
   WHERE queue_items_id = p_queue_item_id
@@ -71,7 +72,7 @@ BEGIN
   SET step = 'invalid',
       canonical_step = 'invalid',
       finished_at = now(),
-      error_message = nullif(trim(coalesce(p_reason, '')), ''),
+      error_message = NULL,
       instagram_queue_progress_updated_at = now()
   WHERE queue_items_id = p_queue_item_id
     AND organizations_id = v_org;
@@ -80,7 +81,9 @@ BEGIN
     'contractVersion', 'R59',
     'queueItemId', p_queue_item_id,
     'leadId', v_item.leads_id,
-    'invalidated', true
+    'invalidated', true,
+    'queueStatus', 'cancelado',
+    'leadStatus', 'invalido'
   );
 END;
 $function$;
@@ -177,5 +180,26 @@ BEGIN
   );
 END;
 $function$;
+
+-- Repara apenas itens gravados pela versão anterior como ERRO por uma invalidação manual.
+-- Falhas tecnicas reais permanecem status_id = 6 e continuam reprocessaveis.
+UPDATE public.queue_items qi
+SET status_id = 7,
+    queue_items_error_message = NULL,
+    queue_items_updated_at = now()
+FROM public.leads l
+WHERE l.leads_id = qi.leads_id
+  AND l.users_id = qi.users_id
+  AND l.lead_status_id = 6
+  AND qi.status_id = 6
+  AND regexp_replace(lower(public.unaccent(trim(coalesce(qi.queue_items_error_message, '')))), '[^a-z0-9]+', '', 'g') = 'invalidadopelooperador';
+
+UPDATE public.instagram_queue_progress p
+SET error_message = NULL,
+    instagram_queue_progress_updated_at = now()
+FROM public.queue_items qi
+WHERE qi.queue_items_id = p.queue_items_id
+  AND qi.status_id = 7
+  AND p.canonical_step = 'invalid';
 
 COMMIT;

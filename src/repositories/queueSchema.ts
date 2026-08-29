@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../lib/supabase';
-import { channelId, currentUserIdNumber, operationalStatusFromName, queueStatusId, queueStatusNameMap } from './schemaCatalog';
+import { CANONICAL_CATALOG, channelId, currentUserIdNumber, operationalStatusFromName, queueStatusId, queueStatusNameMap } from './schemaCatalog';
 import { nowIso } from './supabase.helpers';
 
 type Row = Record<string, unknown>;
@@ -124,7 +124,7 @@ export async function loadCanonicalQueue(channel: QueueChannel): Promise<Canonic
   const queues = (queueResponse.data ?? []) as Row[];
   const queueIds = ids(queues, 'queues_id');
   if (!queueIds.length) return [];
-  const itemResponse = await client.from('queue_items').select('*').eq('users_id', userId).in('queues_id', queueIds);
+  const itemResponse = await client.from('queue_items').select('*').eq('users_id', userId).in('queues_id', queueIds).neq('status_id', CANONICAL_CATALOG.status.CANCELED);
   if (itemResponse.error) throw new Error(`Nao foi possivel carregar os itens de ${channel}: ${itemResponse.error.message}`);
   const items = (itemResponse.data ?? []) as Row[];
   const [leads, chips, socials, templates, statuses] = await Promise.all([

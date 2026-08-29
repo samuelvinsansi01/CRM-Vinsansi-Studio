@@ -42,8 +42,25 @@ invalidation_contract_diff AS (
   SELECT (
     CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='invalidate_final_queue_item' AND pg_get_function_identity_arguments(p.oid)='p_queue_item_id bigint, p_reason text') <> 1 THEN 1 ELSE 0 END +
     CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='invalidate_queue_review_item' AND pg_get_function_identity_arguments(p.oid)='p_review_item_id bigint') <> 1 THEN 1 ELSE 0 END +
-    CASE WHEN EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='invalidate_final_queue_item' AND (p.prosrc ILIKE '%invalid_status_catalog_missing%' OR p.prosrc ILIKE '%FROM public.status s%invalido%' OR p.prosrc NOT ILIKE '%SET status_id = 6%' OR p.prosrc NOT ILIKE '%SET lead_status_id = 6%')) THEN 1 ELSE 0 END +
-    CASE WHEN EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='invalidate_queue_review_item' AND (p.prosrc ILIKE '%contractVersion%R58%' OR p.prosrc NOT ILIKE '%contractVersion%R59%' OR p.prosrc NOT ILIKE '%SET lead_status_id = 6%')) THEN 1 ELSE 0 END
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='invalidate_final_queue_item' AND (
+        lower(p.prosrc) LIKE '%invalid_status_catalog_missing%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%setstatus_id=7%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%setlead_status_id=6%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%queue_items_error_message=null%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''queuestatus'',''cancelado''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''contractversion'',''r59''%'
+      )
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='invalidate_queue_review_item' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) LIKE '%''contractversion'',''r58''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''contractversion'',''r59''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%setlead_status_id=6%'
+      )
+    ) THEN 1 ELSE 0 END
   )::bigint AS total
 ),
 channel_diff AS (
@@ -131,6 +148,12 @@ checks AS (
   UNION ALL SELECT '19_enviado_sem_canal_legacy',count(*)::bigint,0,true FROM public.leads WHERE lead_status_id=5 AND channels_id IS NULL
   UNION ALL SELECT '20_status_operacional_divergencias',(SELECT total FROM status_diff),0,false
   UNION ALL SELECT '21_contrato_invalidacao_r59',(SELECT total FROM invalidation_contract_diff),0,false
+  UNION ALL SELECT '22_invalidacao_manual_marcada_como_erro',count(*)::bigint,0,false
+  FROM public.queue_items qi
+  JOIN public.leads l ON l.leads_id=qi.leads_id AND l.users_id=qi.users_id
+  WHERE qi.status_id=6
+    AND l.lead_status_id=6
+    AND regexp_replace(lower(public.unaccent(trim(coalesce(qi.queue_items_error_message,'')))), '[^a-z0-9]+','','g')='invalidadopelooperador'
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado

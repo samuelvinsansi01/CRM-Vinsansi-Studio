@@ -207,9 +207,10 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
       .filter((batch) => batch.leads.length > 0));
     setSummary((current) => ({
       ...current,
+      total: Math.max(0, current.total - 1),
       queued: Math.max(0, current.queued - (['queued', 'paused', 'sending'].includes(lead.status) ? 1 : 0)),
-      sent: Math.max(0, current.sent - (lead.status === 'sent' ? 1 : 0)),
-      finished: current.finished + (lead.status === 'invalid' || lead.status === 'sent' ? 0 : 1),
+      sent: current.sent,
+      finished: current.finished,
       errors: Math.max(0, current.errors - (lead.status === 'error' ? 1 : 0)),
     }));
   }, []);

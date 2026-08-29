@@ -115,10 +115,11 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
         .filter((batch) => batch.leads.length > 0));
       setSummary((current) => ({
         ...current,
+        total: Math.max(0, current.total - 1),
         queued: Math.max(0, current.queued - (['queued', 'paused', 'following', 'dm_opened'].includes(lead.status) ? 1 : 0)),
-        sent: Math.max(0, current.sent - (lead.status === 'sent' ? 1 : 0)),
+        sent: current.sent,
         errors: Math.max(0, current.errors - (['error', 'reconciliation_required'].includes(lead.status) ? 1 : 0)),
-        invalid: current.invalid + (lead.status === 'invalid' ? 0 : 1),
+        invalid: current.invalid,
       }));
     },
     [],

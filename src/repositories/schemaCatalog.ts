@@ -137,8 +137,8 @@ export async function queueStatusId(status: string) {
     pausado: CANONICAL_CATALOG.status.PAUSED,
     error: CANONICAL_CATALOG.status.ERROR,
     erro: CANONICAL_CATALOG.status.ERROR,
-    invalid: CANONICAL_CATALOG.status.ERROR,
-    invalido: CANONICAL_CATALOG.status.ERROR,
+    invalid: CANONICAL_CATALOG.status.CANCELED,
+    invalido: CANONICAL_CATALOG.status.CANCELED,
     canceled: CANONICAL_CATALOG.status.CANCELED,
     cancelled: CANONICAL_CATALOG.status.CANCELED,
     cancelado: CANONICAL_CATALOG.status.CANCELED,
@@ -171,6 +171,6 @@ export function operationalStatusFromName(name: unknown) {
   if (normalized === 'erro' || normalized === 'error' || normalized === 'failed') return 'error';
   if (normalized === 'pausado' || normalized === 'paused') return 'paused';
   if (normalized === 'processando' || normalized === 'processing' || normalized === 'sending') return 'sending';
-  if (normalized === 'cancelado' || normalized === 'canceled' || normalized === 'cancelled') return 'error';
+  if (normalized === 'cancelado' || normalized === 'canceled' || normalized === 'cancelled') return 'invalid';
   return 'queued';
 }
