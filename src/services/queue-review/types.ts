@@ -52,6 +52,7 @@ export type QueueReviewPullResult = {
   errors: number;
   exhausted: boolean;
   technicalStop: boolean;
+  technicalReasons: string[];
   movedLeadIds: string[];
   redirectedLeadIds: string[];
 };

@@ -36,6 +36,9 @@ for (const token of ['validatePreparedInitial','validateInitial(ids)','revalidat
   if (token !== 'validatePreparedInitial' && validationService.includes(token)) fail(`servico_validacao_legado:${token}`);
 }
 if (!validationService.includes('validatePreparedInitial')) fail('servico_validacao_sem_fluxo_preparado');
+for (const token of ['technicalErrors', 'providerResult.errorMessage']) if (!validationService.includes(token)) fail(`diagnostico_whatsapp_ausente:${token}`);
+const queueReview = read('src/services/queue-review/queueReview.service.ts');
+for (const token of ['technicalReasons', 'validation.technicalErrors']) if (!queueReview.includes(token)) fail(`diagnostico_fila_whatsapp_ausente:${token}`);
 const validationGateway = read('src/services/whatsapp-validation/whatsappValidation.gateway.ts');
 const technicalOutcomeIndex = validationGateway.indexOf("if (outcome === 'error')");
 const invalidOutcomeIndex = validationGateway.indexOf("if (explicit === false || invalidStatus)");

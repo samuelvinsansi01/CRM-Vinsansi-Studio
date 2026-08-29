@@ -95,6 +95,7 @@ async function pullToCapacity(
   let redirectedToInstagram = 0;
   let errors = 0;
   let technicalStop = false;
+  let technicalReasons: string[] = [];
   let ready = 0;
   const movedLeadIds = new Set<string>();
   const redirectedLeadIds = new Set<string>();
@@ -115,6 +116,10 @@ async function pullToCapacity(
     redirectedToInstagram = validation.redirectedToInstagram;
     errors = validation.errors + validation.failed;
     technicalStop = validation.errorIds.length > 0 || validation.failures.length > 0;
+    technicalReasons = Array.from(new Set([
+      ...validation.technicalErrors.map((item) => item.reason.trim()),
+      ...validation.failures.map((item) => item.reason.trim()),
+    ].filter(Boolean))).slice(0, 3);
     ready = readyIds.length;
 
     // A validação pode liberar reservas (inválido/erro). Recarrega só o card de capacidade;
@@ -140,6 +145,7 @@ async function pullToCapacity(
     errors,
     exhausted,
     technicalStop,
+    technicalReasons,
     movedLeadIds: Array.from(movedLeadIds),
     redirectedLeadIds: Array.from(redirectedLeadIds),
   };

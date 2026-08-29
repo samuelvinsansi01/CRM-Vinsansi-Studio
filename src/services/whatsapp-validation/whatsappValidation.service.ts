@@ -18,7 +18,7 @@ function emptyResult(requested: number): WhatsAppValidationBatchResult {
   return {
     mode: 'initial', requested, providerChecked: 0, approved: 0,
     redirectedToInstagram: 0, invalidated: 0, errors: 0, failed: 0,
-    approvedIds: [], redirectedIds: [], invalidatedIds: [], errorIds: [], failures: [],
+    approvedIds: [], redirectedIds: [], invalidatedIds: [], errorIds: [], technicalErrors: [], failures: [],
   };
 }
 
@@ -73,6 +73,11 @@ async function validatePreparedInitial(leadsInput: PreparedWhatsAppValidationLea
     } else {
       result.errors += 1;
       result.errorIds.push(lead.id);
+      result.technicalErrors.push({
+        id: lead.id,
+        company: lead.company,
+        reason: providerResult.errorMessage?.trim() || 'Gateway/Evolution não confirmou o resultado deste número.',
+      });
     }
   }
   return result;

@@ -80,6 +80,7 @@ type GatewayCheckItem = {
   jid?: unknown;
   matched?: unknown;
   confirmed?: unknown;
+  reason?: unknown;
 };
 
 function env(...names: string[]) {
@@ -469,7 +470,11 @@ async function validateDirect(auth: AuthContext, leads: OwnedValidationLead[], c
         : matches.length === 0
           ? 'Gateway não retornou correspondência exata para o número.'
           : classified === 'technical_error'
-            ? 'Gateway/Evolution não confirmou explicitamente se o número possui WhatsApp.'
+            ? String(matches[0]?.reason ?? '').trim() === 'identity_conflict'
+              ? 'Gateway/Evolution retornou identidades telefônicas conflitantes para o número solicitado.'
+              : String(matches[0]?.reason ?? '').trim() === 'no_matching_identity'
+                ? 'Gateway/Evolution não retornou identidade correspondente ao número solicitado.'
+                : 'Gateway/Evolution não confirmou explicitamente se o número possui WhatsApp.'
             : '';
       results.set(lead.id, await persistProviderOutcome(auth, lead, classified, channels, message));
     }
@@ -510,6 +515,10 @@ export async function handleValidationRequest(req: ApiRequest, res: ApiResponse)
       acc[result.status] += 1;
       return acc;
     }, { valid: 0, invalid: 0, error: 0 });
+    const technicalReasons = Array.from(new Set(results
+      .filter((result) => result.status === 'error')
+      .map((result) => String(result.errorMessage ?? '').trim())
+      .filter(Boolean)));
     res.status(200).json({
       results,
       meta: {
@@ -518,6 +527,7 @@ export async function handleValidationRequest(req: ApiRequest, res: ApiResponse)
         operation: 'validate',
         mode: 'initial',
         ...summary,
+        technicalReasons,
       },
     });
   } catch (error) {

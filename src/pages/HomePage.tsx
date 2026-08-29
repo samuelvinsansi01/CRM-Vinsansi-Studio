@@ -206,7 +206,10 @@ export function HomePage() {
       const formattedDate = new Date(`${result.scheduledDate}T12:00:00`).toLocaleDateString('pt-BR');
       const details = `${result.ready} pronto(s) para revisão · ${result.reserved} reservado(s) · ${result.resource.label} · ${formattedDate}.`;
       const redirected = result.redirectedToInstagram ? ` ${result.redirectedToInstagram} telefone(s) não confirmado(s) no WhatsApp e direcionado(s) ao Instagram.` : '';
-      toast(`Fila ${channel} preparada`, details + redirected + (result.technicalStop ? ' Houve erro técnico; os afetados foram liberados sem retry automático.' : '') + (result.exhausted ? ` Não havia leads elegíveis suficientes para preencher as ${result.capacityToFill} vaga(s) disponíveis.` : ''), result.errors ? 'warning' : 'success');
+      const technical = result.technicalStop
+        ? ` Houve erro técnico; os afetados foram liberados sem retry automático.${result.technicalReasons.length ? ` Motivo: ${result.technicalReasons.join(' | ')}` : ''}`
+        : '';
+      toast(`Fila ${channel} preparada`, details + redirected + technical + (result.exhausted ? ` Não havia leads elegíveis suficientes para preencher as ${result.capacityToFill} vaga(s) disponíveis.` : ''), result.errors ? 'warning' : 'success');
     } catch (error) {
       toast(`Não foi possível puxar ${channel}`, error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {

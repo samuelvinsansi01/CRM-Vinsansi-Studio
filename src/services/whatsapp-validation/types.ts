@@ -17,5 +17,6 @@ export type WhatsAppValidationBatchResult = {
   redirectedIds: string[];
   invalidatedIds: string[];
   errorIds: string[];
+  technicalErrors: WhatsAppValidationFailure[];
   failures: WhatsAppValidationFailure[];
 };

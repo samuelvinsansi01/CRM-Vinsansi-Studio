@@ -1,5 +1,5 @@
 CRM - Vinsansi Studio v2.4.0-R59
-BUILD FIX — 29/08/2026
+BUILD FIX 4 — 29/08/2026
 
 ARQUIVO OBRIGATÓRIO DE HOMOLOGAÇÃO
 - CHECK - CRM R59 - Homologacao final.sql
@@ -27,3 +27,11 @@ BANCO CONGELADO
 
 BUILD COMPLETO
 O build completo Vite/TypeScript não foi executado neste ambiente porque as dependências npm não estão disponíveis localmente e o registry não respondeu durante a tentativa de instalação. As falhas TypeScript reportadas no build externo foram corrigidas neste pacote; a confirmação final do `npm run build` deve ocorrer no ambiente com as dependências instaladas.
+
+
+BUILD FIX 4 — OBSERVABILIDADE WHATSAPP
+- outcome=error mantém errorMessage até o resultado da puxada.
+- QueueReviewPullResult expõe technicalReasons sem alterar schema do banco.
+- Home/Fila exibem o motivo técnico real, limitado aos motivos distintos da execução.
+- validation.handler inclui technicalReasons no meta da resposta e distingue conflito de identidade quando informado pelo Gateway.
+- Nenhuma tabela, RPC, trigger ou estrutura de banco foi alterada.
