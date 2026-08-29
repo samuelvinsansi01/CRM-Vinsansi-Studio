@@ -1,4 +1,4 @@
-import { Calendar, Globe2, Instagram, MessageCircle, Users } from 'lucide-react';
+import { Calendar, Instagram, MessageCircle, Unplug, Users } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -258,9 +258,9 @@ export function HomePage() {
     if (action === 'invalidate') setInvalidatingLead(lead);
   };
 
-  const whatsappCount = sorted.filter((lead) => (lead.whatsapp || lead.rawPhone).replace(/\D/g, '').length >= 10).length;
-  const instagramCount = sorted.filter((lead) => Boolean(lead.instagram.trim())).length;
-  const siteCount = sorted.filter((lead) => Boolean(lead.website.trim())).length;
+  const noDestinationCount = sorted.filter((lead) => lead.channel === 'Sem destino').length;
+  const whatsappCount = sorted.filter((lead) => lead.channel === 'WhatsApp').length;
+  const instagramCount = sorted.filter((lead) => lead.channel === 'Instagram').length;
   const whatsappResourceOptions = whatsappResources.length
     ? whatsappResources.map((resource) => ({
       label: `${resource.label} · ${resource.available} disponível(is)`,
@@ -289,9 +289,9 @@ export function HomePage() {
 
       <section className="metric-grid metric-grid--4">
         <MetricCard icon={Users} value={String(sorted.length)} label="Importados" tone="neutral" />
-        <MetricCard icon={MessageCircle} value={String(whatsappCount)} label="Com número" tone="success" />
-        <MetricCard icon={Instagram} value={String(instagramCount)} label="Com Instagram" tone="primary" />
-        <MetricCard icon={Globe2} value={String(siteCount)} label="Com site" tone="warning" />
+        <MetricCard icon={Unplug} value={String(noDestinationCount)} label="Sem destino" tone="warning" />
+        <MetricCard icon={MessageCircle} value={String(whatsappCount)} label="WhatsApp" tone="success" />
+        <MetricCard icon={Instagram} value={String(instagramCount)} label="Instagram" tone="primary" />
       </section>
 
       <FiltersBar>

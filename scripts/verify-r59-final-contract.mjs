@@ -87,6 +87,27 @@ const mapsRoute = read('server/routes/maps/extension.ts');
 for (const token of ['leads_normalized_phone','leads_normalized_instagram','leads_normalized_domain','leads_normalized_maps']) if (!mapsRoute.includes(token)) fail(`captura_identidade_direta_ausente:${token}`);
 const pull = read('src/services/queue-review/queueReview.service.ts');
 for (const token of ['pull_queue_review_to_capacity','validatePreparedInitial','capacityToFill','redirectedLeadIds']) if (!pull.includes(token)) fail(`puxada_final_incompleta:${token}`);
+const homePage = read('src/pages/HomePage.tsx');
+for (const token of ['label="Importados"', 'label="Sem destino"', 'label="WhatsApp"', 'label="Instagram"', "lead.channel === 'Sem destino'", "lead.channel === 'WhatsApp'", "lead.channel === 'Instagram'"]) {
+  if (!homePage.includes(token)) fail(`cards_inicio_incompletos:${token}`);
+}
+for (const legacyCard of ['label="Com número"', 'label="Com Instagram"', 'label="Com site"']) {
+  if (homePage.includes(legacyCard)) fail(`card_inicio_legado:${legacyCard}`);
+}
+const invalidationPatch = 'APLICAR - CRM R59 BUILD FIX 5 - Corrigir invalidacao.sql';
+if (!exists(invalidationPatch)) fail('sql_correcao_invalidacao_ausente');
+const invalidationSql = read(invalidationPatch);
+for (const token of [
+  'CREATE OR REPLACE FUNCTION public.invalidate_final_queue_item',
+  'CREATE OR REPLACE FUNCTION public.invalidate_queue_review_item',
+  'SET status_id = 6',
+  'SET lead_status_id = 6',
+  "'contractVersion', 'R59'",
+]) if (!invalidationSql.includes(token)) fail(`sql_correcao_invalidacao_incompleto:${token}`);
+for (const legacy of ['invalid_status_catalog_missing', "IN ('invalido', 'invalid')", "'contractVersion', 'R58'"]) {
+  if (invalidationSql.includes(legacy)) fail(`sql_correcao_invalidacao_legado:${legacy}`);
+}
+
 const homolog = read(homologSql);
 for (const token of [
   '60::bigint esperado',
@@ -94,6 +115,8 @@ for (const token of [
   'revisao_com_canal_invalido',
   'revisao_canal_divergente_batch',
   'enviado_sem_canal_legacy',
+  'status_operacional_divergencias',
+  'contrato_invalidacao_r59',
   'SOMENTE LEITURA',
 ]) if (!homolog.includes(token)) fail(`homolog_sql_incompleto:${token}`);
 console.log('CRM R59 final contract + homologacao: OK');

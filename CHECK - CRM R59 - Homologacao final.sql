@@ -25,6 +25,27 @@ lead_status_diff AS (
   )
   SELECT count(*)::bigint total FROM diff
 ),
+status_diff AS (
+  WITH esperado(id,nome) AS (VALUES
+    (1::bigint,'ativo'::text),(2::bigint,'inativo'::text),(3::bigint,'pendente'::text),(4::bigint,'processando'::text),
+    (5::bigint,'concluido'::text),(6::bigint,'erro'::text),(7::bigint,'cancelado'::text),(8::bigint,'pausado'::text)
+  ), atual AS (
+    SELECT status_id AS id,regexp_replace(lower(public.unaccent(trim(status_name))), '[^a-z0-9]+','','g') AS nome FROM public.status
+  ), diff AS (
+    (SELECT * FROM esperado EXCEPT SELECT * FROM atual)
+    UNION ALL
+    (SELECT * FROM atual EXCEPT SELECT * FROM esperado)
+  )
+  SELECT count(*)::bigint total FROM diff
+),
+invalidation_contract_diff AS (
+  SELECT (
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='invalidate_final_queue_item' AND pg_get_function_identity_arguments(p.oid)='p_queue_item_id bigint, p_reason text') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='invalidate_queue_review_item' AND pg_get_function_identity_arguments(p.oid)='p_review_item_id bigint') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='invalidate_final_queue_item' AND (p.prosrc ILIKE '%invalid_status_catalog_missing%' OR p.prosrc ILIKE '%FROM public.status s%invalido%' OR p.prosrc NOT ILIKE '%SET status_id = 6%' OR p.prosrc NOT ILIKE '%SET lead_status_id = 6%')) THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='invalidate_queue_review_item' AND (p.prosrc ILIKE '%contractVersion%R58%' OR p.prosrc NOT ILIKE '%contractVersion%R59%' OR p.prosrc NOT ILIKE '%SET lead_status_id = 6%')) THEN 1 ELSE 0 END
+  )::bigint AS total
+),
 channel_diff AS (
   WITH esperado(nome) AS (VALUES ('whatsapp'::text),('instagram'::text),('sem_destino'::text)), atual AS (
     SELECT regexp_replace(lower(public.unaccent(trim(channels_name))), '[^a-z0-9]+','_','g') nome FROM public.channels
@@ -108,6 +129,8 @@ checks AS (
   UNION ALL SELECT '17_review_locked_sem_queue_item',count(*)::bigint,0,false FROM public.queue_review_items WHERE review_status='locked' AND queue_items_id IS NULL
   UNION ALL SELECT '18_sem_contato_com_instagram',count(*)::bigint,0,false FROM public.leads WHERE lead_status_id=3 AND length(btrim(coalesce(leads_instagram,'')))>0
   UNION ALL SELECT '19_enviado_sem_canal_legacy',count(*)::bigint,0,true FROM public.leads WHERE lead_status_id=5 AND channels_id IS NULL
+  UNION ALL SELECT '20_status_operacional_divergencias',(SELECT total FROM status_diff),0,false
+  UNION ALL SELECT '21_contrato_invalidacao_r59',(SELECT total FROM invalidation_contract_diff),0,false
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado
