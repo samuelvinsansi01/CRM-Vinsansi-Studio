@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/tools/browser-pair",
+      "destination": "/api/tools?route=browser-pair"
+    },
+    {
+      "source": "/api/tools/executor/:action",
+      "destination": "/api/tools?route=executor/:action"
+    },
+    {
+      "source": "/api/maps/:action",
+      "destination": "/api/maps?route=:action"
+    },
+    {
+      "source": "/api/instagram/:action",
+      "destination": "/api/instagram?route=:action"
+    },
+    {
+      "source": "/api/whatsapp/:action",
+      "destination": "/api/whatsapp?route=:action"
+    },
+    {
+      "source": "/api/organization/:action",
+      "destination": "/api/organization?route=:action"
+    },
+    {
+      "source": "/api/desktop/:action",
+      "destination": "/api/system?route=desktop/:action"
+    },
+    {
+      "source": "/api/chat/:action",
+      "destination": "/api/system?route=chat/:action"
+    }
+  ]
+}
