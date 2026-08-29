@@ -3,7 +3,7 @@ import type { LeadOrigin } from '../../types/lead.types';
 
 export type ImportLeadStatus = 'pending' | 'review' | 'approved' | 'rejected' | 'queued' | 'sent';
 
-export type ImportLeadDestination = 'WhatsApp' | 'Com site' | 'Agregadores' | 'Instagram' | 'Recusado' | 'Já no banco';
+export type ImportLeadDestination = 'WhatsApp' | 'Instagram' | 'Sem destino' | 'Com site' | 'Agregadores' | 'Recusado' | 'Já no banco';
 
 export type ImportRejectionCode =
   | 'missing_name'

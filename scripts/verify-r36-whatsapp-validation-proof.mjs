@@ -15,7 +15,7 @@ const checks = [
   ['handler bloqueia positivo sem prova', handler.includes("providerOutcome === 'valid' && !proofValid")],
   ['serviço exige proofValid para aprovado', validation.includes("providerResult.proofValid !== true")],
   ['aprovação revalida prova ausente', review.includes("missingWhatsAppProof") && review.includes("validateInitialWithChip([item.leadId], item.resourceId)")],
-  ['revalidação restaura PRE_SEND antes da aprovação', review.includes('await reconcileWhatsApp(item.batchId, readyIds, retryable)') || review.includes('await reconcileWhatsApp(item.batchId, validation.approvedIds, retryable)') || (review.indexOf('await restoreWhatsAppValid(item.batchId, validation.approvedIds)') < review.indexOf('await prune(item.batchId).catch'))],
+  ['revalidação restaura PRE_SEND antes da aprovação', review.includes('await reconcileWhatsApp(item.batchId, readyIds, releaseIds)') || review.includes('await reconcileWhatsApp(item.batchId, readyIds, retryable)') || review.includes('await reconcileWhatsApp(item.batchId, validation.approvedIds, retryable)') || (review.indexOf('await restoreWhatsAppValid(item.batchId, validation.approvedIds)') < review.indexOf('await prune(item.batchId).catch'))],
 ];
 
 const failed = checks.filter(([, ok]) => !ok);

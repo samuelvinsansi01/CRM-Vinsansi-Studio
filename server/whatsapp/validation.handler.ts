@@ -30,6 +30,7 @@ export type ValidationLead = {
   phone?: string;
   normalized_phone?: string;
   chip_instance?: string;
+  instagram?: string;
 };
 
 export type ValidationResult = {
@@ -38,7 +39,7 @@ export type ValidationResult = {
   status: 'valid' | 'invalid' | 'error';
   valid: boolean;
   errorMessage?: string;
-  outcome?: 'approved' | 'revalidated' | 'instagram_review_required' | 'error';
+  outcome?: 'approved' | 'revalidated' | 'instagram_review_required' | 'no_contact' | 'error';
   persisted?: boolean;
   proofValid?: boolean;
 };
@@ -56,6 +57,7 @@ type ValidationLeadRow = {
   leads_name?: string | null;
   leads_phone?: string | null;
   leads_whatsapp?: string | null;
+  leads_instagram?: string | null;
   lead_status_id?: number | string | null;
   channels_id?: number | string | null;
 };
@@ -163,10 +165,10 @@ async function resolveOwnedLeads(
   mode: ValidationMode,
 ): Promise<ValidationLead[]> {
   const ids = numericLeadIds(requested);
-  const expectedStatus = mode === 'initial' ? 3 : 2;
+  const expectedStatus = 2;
   const { data, error } = await auth.client
     .from('leads')
-    .select('leads_id,users_id,leads_name,leads_phone,leads_whatsapp,lead_status_id,channels_id')
+    .select('leads_id,users_id,leads_name,leads_phone,leads_whatsapp,leads_instagram,lead_status_id,channels_id')
     .eq('users_id', auth.publicUserId)
     .in('leads_id', ids.map(Number));
   if (error) throw new Error(`Falha ao conferir os leads no banco: ${error.message}`);
@@ -206,6 +208,7 @@ async function resolveOwnedLeads(
       phone,
       normalized_phone: phone,
       chip_instance: chipInstance,
+      instagram: String(row.leads_instagram ?? '').trim(),
     };
   });
 }
@@ -400,6 +403,24 @@ function persistedOutcome(result: ValidationResult) {
   return 'technical_error';
 }
 
+async function validationChannelIds(client: SupabaseClient) {
+  const response = await client.from('channels').select('channels_id,channels_name');
+  if (response.error) throw new Error(`Falha ao carregar canais: ${response.error.message}`);
+  const rows = (response.data ?? []) as Array<{ channels_id?: unknown; channels_name?: unknown }>;
+  const normalized = (value: unknown) => String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+  const find = (name: string) => Number(rows.find((row) => normalized(row.channels_name) === name)?.channels_id ?? 0);
+  const whatsapp = find('whatsapp');
+  const instagram = find('instagram');
+  if (!whatsapp || !instagram) throw new Error('Canais WhatsApp/Instagram não encontrados na tabela channels.');
+  return { whatsapp, instagram };
+}
+
 async function persistValidationResults(
   client: SupabaseClient,
   leads: ValidationLead[],
@@ -409,6 +430,7 @@ async function persistValidationResults(
 ): Promise<ValidationResult[]> {
   const leadById = new Map(leads.map((lead) => [String(lead.id || lead.lead_id), lead]));
   const persisted: ValidationResult[] = [];
+  const channels = await validationChannelIds(client);
 
   for (const result of results) {
     const leadId = String(result.leadId || result.lead_id || '');
@@ -417,10 +439,9 @@ async function persistValidationResults(
     const providerOutcome = persistedOutcome(result);
     let proofValid = false;
 
-    // R36: a prova do telefone atual precisa existir ANTES de uma validação positiva
-    // poder alterar o estado do lead. Assim não existe mais o estado impossível
-    // “aprovado no provider, mas sem prova na fila”. Erro técnico não revoga uma
-    // prova anterior; resultado inválido revoga explicitamente a prova atual.
+    // A prova atual permanece enquanto o Worker ainda depende dela para proteger
+    // o disparo. Ela não controla mais o status do lead: o estado canônico fica
+    // somente em public.leads.
     if (providerOutcome !== 'technical_error') {
       const proof = await client.rpc('record_current_whatsapp_validation_proof', {
         p_lead_id: Number(leadId),
@@ -442,30 +463,48 @@ async function persistValidationResults(
       }
     }
 
-    const { data, error } = await client.rpc('record_whatsapp_validation_result', {
-      p_users_id: Number(publicUserId),
-      p_lead_id: Number(leadId),
-      p_validated_phone: String(lead.normalized_phone || lead.phone || ''),
-      p_mode: mode,
-      p_outcome: providerOutcome,
-      p_provider: 'evolution',
-      p_provider_reference: String(lead.chip_instance || ''),
-      p_http_status: 200,
-      p_error_code: result.status === 'error' ? 'provider_result_error' : null,
-      p_error_message: result.errorMessage ?? null,
-      p_response_metadata: {
-        source: 'whatsapp_validation_api',
-        worker_status: result.status,
-        worker_valid: result.valid,
-      },
-    });
-    if (error) throw new Error(`Falha ao persistir a validação do lead ${leadId}: ${error.message}`);
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row?.outcome) throw new Error(`A persistência do lead ${leadId} não retornou confirmação.`);
+    if (providerOutcome === 'technical_error') {
+      // Erro técnico não decide o destino do lead. A reserva é liberada pelo
+      // reconciliador do clique e volta ao estado Importado sem retry/refill.
+      persisted.push({
+        ...result,
+        leadId,
+        outcome: 'error',
+        persisted: true,
+        proofValid: false,
+      });
+      continue;
+    }
+
+    const hasInstagram = Boolean(String(lead.instagram ?? '').trim());
+    const target = providerOutcome === 'valid'
+      ? { lead_status_id: 2, channels_id: channels.whatsapp }
+      : hasInstagram
+        ? { lead_status_id: 1, channels_id: channels.instagram }
+        : { lead_status_id: 3, channels_id: null as number | null };
+
+    const update = await client
+      .from('leads')
+      .update({ ...target, leads_updated_at: new Date().toISOString() })
+      .eq('leads_id', Number(leadId))
+      .eq('users_id', publicUserId)
+      .eq('lead_status_id', 2)
+      .eq('channels_id', channels.whatsapp)
+      .select('leads_id')
+      .maybeSingle();
+    if (update.error) throw new Error(`Falha ao persistir a validação do lead ${leadId}: ${update.error.message}`);
+    if (!update.data) throw new Error(`O lead ${leadId} mudou de estado durante a validação. Nenhum resultado conflitante foi aplicado.`);
+
+    const outcome: NonNullable<ValidationResult['outcome']> = providerOutcome === 'valid'
+      ? (mode === 'initial' ? 'approved' : 'revalidated')
+      : hasInstagram
+        ? 'instagram_review_required'
+        : 'no_contact';
+
     persisted.push({
       ...result,
       leadId,
-      outcome: row.outcome,
+      outcome,
       persisted: true,
       proofValid: providerOutcome === 'valid' ? proofValid : false,
     });

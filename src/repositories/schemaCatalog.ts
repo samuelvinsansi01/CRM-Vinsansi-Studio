@@ -20,13 +20,12 @@ export const CANONICAL_CATALOG = {
   },
   leadStatus: {
     IMPORTED: 1,
-    VALIDATED: 2,
-    PRE_SEND: 3,
+    REVIEW: 2,
+    NO_CONTACT: 3,
     QUEUED: 4,
     SENT: 5,
     INVALID: 6,
     DUPLICATE: 7,
-    ARCHIVED: 8,
   },
   contactSources: {
     NO_SITE: 1,
@@ -103,10 +102,13 @@ export async function inactiveStatusId() {
   return String(CANONICAL_CATALOG.status.INACTIVE);
 }
 
-export async function channelId(channel: 'WhatsApp' | 'Instagram') {
-  return String(channel === 'WhatsApp'
-    ? CANONICAL_CATALOG.channels.WHATSAPP
-    : CANONICAL_CATALOG.channels.INSTAGRAM);
+export async function channelId(channel: 'WhatsApp' | 'Instagram' | 'Sem destino') {
+  if (channel === 'WhatsApp') return String(CANONICAL_CATALOG.channels.WHATSAPP);
+  if (channel === 'Instagram') return String(CANONICAL_CATALOG.channels.INSTAGRAM);
+  const rows = await listChannels();
+  const match = rows.find((row) => normalizeCatalogName(row.name) === 'sem destino');
+  if (!match) throw new Error('Canal Sem destino não encontrado na tabela channels. Aplique a migration R58.');
+  return match.id;
 }
 
 export async function currentUserIdNumber() {

@@ -15,7 +15,7 @@ export type WhatsAppValidationResult = {
   status: 'valid' | 'invalid' | 'error';
   valid: boolean;
   errorMessage?: string;
-  outcome?: 'approved' | 'revalidated' | 'instagram_review_required' | 'error';
+  outcome?: 'approved' | 'revalidated' | 'instagram_review_required' | 'no_contact' | 'error';
   persisted?: boolean;
   proofValid?: boolean;
 };
@@ -68,7 +68,7 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
   const record = result as Record<string, unknown>;
   const leadId = resultLeadId(record);
   const outcome = String(record.outcome ?? '') as WhatsAppValidationResult['outcome'];
-  const allowedOutcomes = new Set(['approved', 'revalidated', 'instagram_review_required', 'error']);
+  const allowedOutcomes = new Set(['approved', 'revalidated', 'instagram_review_required', 'no_contact', 'error']);
   if (!leadId || record.persisted !== true || !allowedOutcomes.has(String(outcome))) return null;
 
   const explicit = booleanLike(record.valid ?? record.exists ?? record.hasWhatsapp ?? record.has_whatsapp ?? record.isWhatsapp ?? record.is_whatsapp);
@@ -76,7 +76,7 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
   const invalidStatus = ['invalid', 'whatsapp_invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
 
   if (explicit === false || invalidStatus) {
-    if (outcome !== 'instagram_review_required') return null;
+    if (outcome !== 'instagram_review_required' && outcome !== 'no_contact') return null;
     return { leadId, status: 'invalid', valid: false, errorMessage: resultError(record), outcome, persisted: true, proofValid: false };
   }
 

@@ -112,6 +112,9 @@ function addOutcome(result: WhatsAppValidationBatchResult, id: string, outcome: 
   } else if (outcome === 'instagram_review_required') {
     result.redirectedToInstagram += 1;
     result.redirectedIds.push(id);
+  } else if (outcome === 'no_contact') {
+    result.invalidated += 1;
+    result.invalidatedIds.push(id);
   } else {
     result.errors += 1;
     result.errorIds.push(id);

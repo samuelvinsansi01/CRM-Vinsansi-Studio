@@ -1,9 +1,9 @@
 import type { LeadStatusId, LeadStatusName } from '../../types/lead.types';
 
 export type BaseLeadStatus = LeadStatusName;
-export type BaseFinalStatusId = Extract<LeadStatusId, 5 | 6 | 7 | 8>;
-export type BaseLeadOrigin = 'WhatsApp' | 'Instagram';
-export type BaseLeadDestination = 'WhatsApp' | 'Instagram' | 'Com site' | 'Agregador';
+export type BaseFinalStatusId = Extract<LeadStatusId, 3 | 5 | 6 | 7>;
+export type BaseLeadOrigin = 'WhatsApp' | 'Instagram' | 'Sem destino' | 'Sem canal';
+export type BaseLeadDestination = BaseLeadOrigin | 'Com site' | 'Agregador';
 
 export type BaseLead = {
   id: string;
@@ -53,7 +53,7 @@ export type BaseSummary = {
   sent: number;
   sentWhatsApp: number;
   sentInstagram: number;
-  archived: number;
+  noContact: number;
   invalid: number;
   duplicates: number;
 };

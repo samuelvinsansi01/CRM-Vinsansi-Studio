@@ -9,6 +9,7 @@ export type StatusGroup =
   | 'invalid'
   | 'error'
   | 'review'
+  | 'no_contact'
   | 'archived'
   | 'sending'
   | 'paused'
@@ -26,6 +27,7 @@ export type CanonicalStatus =
   | 'INVALID'
   | 'ERROR'
   | 'REVIEW'
+  | 'NO_CONTACT'
   | 'ARCHIVED'
   | 'SENDING'
   | 'PAUSED'
@@ -48,7 +50,7 @@ const STATUS_GROUPS: Record<StatusGroup, { canonical: CanonicalStatus; label: st
     canonical: 'APPROVED',
     label: 'Aprovado',
     tone: 'success',
-    aliases: ['approved', 'aprovado', 'validado', 'aprovados', 'approved_for_queue', 'approved for queue', 'approved_for_instagram_queue', 'approved for instagram queue', 'whatsapp_valid'],
+    aliases: ['approved', 'aprovado', 'aprovados', 'approved_for_queue', 'approved for queue', 'approved_for_instagram_queue', 'approved for instagram queue', 'whatsapp_valid'],
   },
   pending: {
     canonical: 'PENDING',
@@ -90,7 +92,13 @@ const STATUS_GROUPS: Record<StatusGroup, { canonical: CanonicalStatus; label: st
     canonical: 'REVIEW',
     label: 'Em revis\u00e3o',
     tone: 'warning',
-    aliases: ['review', 'pre_envio', 'pre envio', 'pré-envio', 'em revisao', 'revisao', 'validation retry'],
+    aliases: ['review', 'em revisao', 'revisao', 'validation retry'],
+  },
+  no_contact: {
+    canonical: 'NO_CONTACT',
+    label: 'Sem contato',
+    tone: 'neutral',
+    aliases: ['sem_contato', 'sem contato', 'no_contact', 'no contact'],
   },
   archived: {
     canonical: 'ARCHIVED',
@@ -164,12 +172,11 @@ export function normalizeStatusGroup(value: unknown): StatusGroup {
     ? Number(value)
     : Number.NaN;
   if (numeric === LEAD_STATUS.IMPORTED) return 'pending';
-  if (numeric === LEAD_STATUS.VALIDATED) return 'approved';
-  if (numeric === LEAD_STATUS.PRE_SEND) return 'review';
+  if (numeric === LEAD_STATUS.REVIEW) return 'review';
+  if (numeric === LEAD_STATUS.NO_CONTACT) return 'no_contact';
   if (numeric === LEAD_STATUS.QUEUED) return 'queued';
   if (numeric === LEAD_STATUS.SENT) return 'sent';
   if (numeric === LEAD_STATUS.INVALID || numeric === LEAD_STATUS.DUPLICATE) return 'invalid';
-  if (numeric === LEAD_STATUS.ARCHIVED) return 'archived';
 
   const normalized = normalizeComparable(value);
   return ALIAS_TO_GROUP.get(normalized) ?? 'unknown';
@@ -204,7 +211,7 @@ export function isStatusGroup(value: unknown, group: StatusGroup) {
 
 export type NormalizedWhatsAppQueueStatus = 'queued' | 'sending' | 'sent' | 'paused' | 'error' | 'invalid';
 export type NormalizedInstagramQueueStatus = 'queued' | 'following' | 'dm_opened' | 'sent' | 'paused' | 'error' | 'invalid';
-export type NormalizedBaseStatus = 'sent' | 'archived' | 'invalid' | 'error' | 'deleted';
+export type NormalizedBaseStatus = 'sent' | 'no_contact' | 'invalid' | 'error' | 'deleted';
 
 
 export function normalizeWhatsAppQueueStatus(value: unknown, fallback: NormalizedWhatsAppQueueStatus = 'queued'): NormalizedWhatsAppQueueStatus {
@@ -223,11 +230,11 @@ export function normalizeInstagramQueueStatus(value: unknown, fallback: Normaliz
 
 export function normalizeBaseStatus(value: unknown, fallback: NormalizedBaseStatus = 'sent'): NormalizedBaseStatus {
   const group = normalizeStatusGroup(value);
-  if (group === 'sent' || group === 'archived' || group === 'invalid' || group === 'error' || group === 'deleted') return group;
+  if (group === 'sent' || group === 'no_contact' || group === 'invalid' || group === 'error' || group === 'deleted') return group;
   return fallback;
 }
 
 export function isFinalStatus(value: unknown) {
   const group = normalizeStatusGroup(value);
-  return group === 'sent' || group === 'archived' || group === 'invalid' || group === 'deleted';
+  return group === 'sent' || group === 'no_contact' || group === 'invalid' || group === 'deleted';
 }

@@ -1,5 +1,4 @@
 import { eventBus } from '../../lib/events';
-import { repositories } from '../../repositories';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle';
 import type { LeadDatabaseRow, LeadStatusId, LeadStatusName } from '../../types/lead.types';
 import { LEAD_STATUS } from '../status/leadStatus';
@@ -23,13 +22,20 @@ function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
-function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): LeadCycleLead {
+function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number, noDestinationId: number): LeadCycleLead {
   const branch = one(row.branches);
   const state = one(row.states);
   const city = one(row.cities);
   const source = one(row.contact_sources);
   const status = one(row.lead_status);
   const resolvedChannelId = row.channels_id == null ? null : Number(row.channels_id);
+  const channel = resolvedChannelId == null
+    ? null
+    : resolvedChannelId === instagramId
+      ? 'Instagram'
+      : resolvedChannelId === noDestinationId
+        ? 'Sem destino'
+        : 'WhatsApp';
 
   return {
     id: String(row.leads_id),
@@ -47,7 +53,7 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
     website: row.leads_website ?? '',
     mapsUrl: row.leads_maps ?? '',
     channelId: resolvedChannelId,
-    channel: resolvedChannelId == null ? null : resolvedChannelId === instagramId ? 'Instagram' : 'WhatsApp',
+    channel,
     contactSourceId: row.contact_sources_id,
     contactSource: source?.contact_sources_name ?? '',
     statusId: row.lead_status_id,
@@ -59,11 +65,20 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number): 
   };
 }
 
-async function listByStatuses(statusIds: LeadStatusId[], filterChannelId?: number): Promise<LeadCycleLead[]> {
-  const [whatsappId, instagramId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]);
-  return (await supabaseLeadCycleRepository.listByStatuses(statusIds, filterChannelId)).map((row) => mapRow(row, Number(whatsappId), Number(instagramId)));
+async function catalogIds() {
+  const [whatsapp, instagram, noDestination] = await Promise.all([
+    channelId('WhatsApp'),
+    channelId('Instagram'),
+    channelId('Sem destino'),
+  ]);
+  return { whatsapp: Number(whatsapp), instagram: Number(instagram), noDestination: Number(noDestination) };
 }
 
+async function listByStatuses(statusIds: LeadStatusId[], filterChannelId?: number): Promise<LeadCycleLead[]> {
+  const ids = await catalogIds();
+  return (await supabaseLeadCycleRepository.listByStatuses(statusIds, filterChannelId))
+    .map((row) => mapRow(row, ids.whatsapp, ids.instagram, ids.noDestination));
+}
 
 function emptyRoutingResult(command: LeadRoutingCommand, requested: number): LeadRoutingResult {
   return {
@@ -79,57 +94,9 @@ function emptyRoutingResult(command: LeadRoutingCommand, requested: number): Lea
   };
 }
 
-function commandChannel(command: LeadRoutingCommand): 'whatsapp' | 'instagram' | undefined {
-  if (command.includes('whatsapp')) return 'whatsapp';
-  if (command.includes('instagram')) return 'instagram';
-  return undefined;
-}
-
-async function appendRoutingAudit(
-  command: LeadRoutingCommand,
-  before: LeadDatabaseRow,
-  after: LeadDatabaseRow,
-) {
-  await repositories.events.append({
-    source: 'lead-routing',
-    action: command,
-    channel: commandChannel(command),
-    leadId: String(after.leads_id),
-    status: String(after.lead_status_id),
-    metadata: {
-      company_name: after.leads_name,
-      previous_status_id: before.lead_status_id,
-      target_status_id: after.lead_status_id,
-      previous_channel_id: before.channels_id,
-      target_channel_id: after.channels_id,
-      flow: 'F04',
-    },
-  });
-}
-
 function addFailure(result: LeadRoutingResult, failure: LeadRoutingFailure) {
   result.failures.push(failure);
   result.failed = result.failures.length;
-}
-
-function prevalidateBatch(
-  ids: string[],
-  rowsById: Map<string, LeadDatabaseRow>,
-  command: LeadRoutingCommand,
-) {
-  const failures: LeadRoutingFailure[] = [];
-
-  for (const id of ids) {
-    const row = rowsById.get(id);
-    if (!row) {
-      failures.push({ id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
-      continue;
-    }
-    const reason = validateRoutingCommand(row, command);
-    if (reason) failures.push({ id, company: row.leads_name, reason });
-  }
-
-  return failures;
 }
 
 async function executeRoutingCommand(command: LeadRoutingCommand, ids: string[]): Promise<LeadRoutingResult> {
@@ -139,61 +106,35 @@ async function executeRoutingCommand(command: LeadRoutingCommand, ids: string[])
   const result = emptyRoutingResult(command, uniqueIds.length);
   const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
   const rowsById = new Map(rows.map((row) => [String(row.leads_id), row]));
-  const validationFailures = prevalidateBatch(uniqueIds, rowsById, command);
 
-  // Não inicia um lote quando já sabemos que parte da seleção é inválida.
-  // Isso evita alterações parciais causadas por erro de entrada ou seleção desatualizada.
-  if (validationFailures.length) {
-    const invalidIds = new Set(validationFailures.map((failure) => failure.id));
-    validationFailures.forEach((failure) => addFailure(result, failure));
-    uniqueIds
-      .filter((id) => !invalidIds.has(id))
-      .forEach((id) => addFailure(result, {
-        id,
-        company: rowsById.get(id)?.leads_name,
-        reason: 'Ação não executada porque o lote contém leads inválidos ou desatualizados.',
-      }));
-    return result;
-  }
-
-  const decision = routingDecision(command);
-  const targetChannelId = decision.targetChannel ? Number(await channelId(decision.targetChannel)) : undefined;
   for (const id of uniqueIds) {
-    const before = rowsById.get(id)!;
-    const noop = isRoutingNoop(before, command, targetChannelId);
+    const before = rowsById.get(id);
+    if (!before) {
+      addFailure(result, { id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
+      continue;
+    }
+    const reason = validateRoutingCommand(before, command);
+    if (reason) {
+      addFailure(result, { id, company: before.leads_name, reason });
+      continue;
+    }
 
+    const decision = routingDecision(command);
+    const noop = isRoutingNoop(before, command);
     try {
-      // Mesmo quando o destino já é o atual, executamos o compare-and-set.
-      // Isso confirma que o status não mudou entre a leitura e a ação do usuário.
       const after = await supabaseLeadCycleRepository.compareAndSet(id, decision.expectedStatus, {
         lead_status_id: decision.targetStatus,
-        ...(targetChannelId ? { channels_id: targetChannelId } : {}),
       });
-
       if (!after) {
-        addFailure(result, {
-          id,
-          company: before.leads_name,
-          reason: 'O lead foi alterado por outra operação. Atualize a tela e tente novamente.',
-        });
+        addFailure(result, { id, company: before.leads_name, reason: 'O lead foi alterado por outra operação.' });
         continue;
       }
-
       if (noop) {
         result.unchangedIds.push(id);
         result.unchanged += 1;
-        continue;
-      }
-
-      result.succeededIds.push(id);
-      result.succeeded += 1;
-
-      try {
-        await appendRoutingAudit(command, before, after);
-      } catch (error) {
-        result.auditWarnings.push(
-          `Lead ${id}: ${error instanceof Error ? error.message : 'falha ao registrar auditoria.'}`,
-        );
+      } else {
+        result.succeededIds.push(id);
+        result.succeeded += 1;
       }
     } catch (error) {
       addFailure(result, {
@@ -204,12 +145,9 @@ async function executeRoutingCommand(command: LeadRoutingCommand, ids: string[])
     }
   }
 
-  if (result.succeeded || result.unchanged) {
-    eventBus.emit('import:changed', { source: 'move' });
-  }
+  if (result.succeeded || result.unchanged) eventBus.emit('import:changed', { source: 'move' });
   return result;
 }
-
 
 async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) {
   const company = input.company.trim();
@@ -224,35 +162,30 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
   if (input.instagram.trim() && (!instagram || !isValidInstagram(instagram))) {
     throw new Error('Informe um username ou URL canônica de perfil do Instagram.');
   }
-  if (!rawPhone && !whatsapp && !instagram) {
-    throw new Error('Mantenha pelo menos um contato: telefone, WhatsApp ou Instagram.');
-  }
 
-  if (lead.statusId !== LEAD_STATUS.IMPORTED) {
-    if (!input.channel) throw new Error('Informe o canal do lead.');
-    if (input.channel === 'Instagram' && (!instagram || !isValidInstagram(instagram))) {
-      throw new Error('Para usar Instagram como destino, informe um Instagram válido.');
-    }
-    if (input.channel === 'WhatsApp' && (whatsapp || rawPhone).length < 10) {
-      throw new Error('Para usar WhatsApp como destino, informe um telefone ou WhatsApp válido.');
-    }
-    if (lead.statusId === LEAD_STATUS.PRE_SEND && input.channel !== lead.channel) {
-      throw new Error('O destino não pode ser alterado enquanto o lead estiver aguardando validação.');
-    }
-  }
+  const effectivePhone = whatsapp || rawPhone;
+  if (!effectivePhone && !instagram) throw new Error('Mantenha pelo menos um contato: telefone, WhatsApp ou Instagram.');
 
   const before = (await supabaseLeadCycleRepository.listByIds([lead.id]))[0];
   if (!before) throw new Error('Lead não encontrado ou sem permissão de acesso.');
-  if (before.lead_status_id !== lead.statusId) {
-    throw new Error('O lead mudou de status. Atualize a página e tente novamente.');
-  }
+  if (before.lead_status_id !== lead.statusId) throw new Error('O lead mudou de status. Atualize a página e tente novamente.');
 
-  const [whatsappId, instagramId] = await Promise.all([channelId('WhatsApp'), channelId('Instagram')]);
-  const targetChannelId = lead.statusId === LEAD_STATUS.IMPORTED
-    ? null
-    : input.channel === 'Instagram'
-      ? Number(instagramId)
-      : Number(whatsappId);
+  const ids = await catalogIds();
+  let targetChannelId = before.channels_id == null ? null : Number(before.channels_id);
+
+  if (lead.statusId === LEAD_STATUS.IMPORTED) {
+    targetChannelId = effectivePhone && instagram
+      ? ids.noDestination
+      : instagram
+        ? ids.instagram
+        : ids.whatsapp;
+  } else if (input.channel === 'Instagram') {
+    if (!instagram) throw new Error('Para usar Instagram como destino, informe um Instagram válido.');
+    targetChannelId = ids.instagram;
+  } else if (input.channel === 'WhatsApp') {
+    if (effectivePhone.length < 10) throw new Error('Para usar WhatsApp como destino, informe um telefone ou WhatsApp válido.');
+    targetChannelId = ids.whatsapp;
+  }
 
   const updated = await supabaseLeadCycleRepository.compareAndSet(lead.id, lead.statusId, {
     branches_id: branchId,
@@ -267,48 +200,12 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
   }, before.channels_id == null ? undefined : Number(before.channels_id));
   if (!updated) throw new Error('O lead foi alterado por outra operação. Atualize a página e tente novamente.');
 
-  try {
-    await repositories.events.append({
-      source: 'lead-routing',
-      action: 'edit-details',
-      channel: targetChannelId == null ? undefined : (input.channel?.toLowerCase() as 'whatsapp' | 'instagram' | undefined),
-      leadId: lead.id,
-      status: String(updated.lead_status_id),
-      metadata: {
-        company_name: updated.leads_name,
-        previous_branch_id: before.branches_id,
-        target_branch_id: branchId,
-        previous_phone: before.leads_phone,
-        previous_whatsapp: before.leads_whatsapp,
-        previous_instagram: before.leads_instagram,
-        previous_channel_id: before.channels_id,
-        target_channel_id: targetChannelId,
-        flow: lead.statusId === LEAD_STATUS.IMPORTED ? 'R24_HOME_IMPORTED_EDIT' : 'F04',
-      },
-    });
-  } catch {
-    // A edição canônica não deve ser revertida por falha secundária de auditoria.
-  }
-
   eventBus.emit('import:changed', { source: 'update' });
-  return mapRow(updated, Number(whatsappId), Number(instagramId));
-}
-
-async function updateImportedInstagram(id: string, value: string) {
-  const username = normalizeInstagramUsername(value);
-  if (!username || !isValidInstagram(username)) throw new Error('Informe um username ou URL canônica de perfil do Instagram.');
-  const instagramId = Number(await channelId('Instagram'));
-  const updated = await supabaseLeadCycleRepository.compareAndSet(id, LEAD_STATUS.IMPORTED, { leads_instagram: username }, instagramId);
-  if (!updated) throw new Error('O lead mudou de status ou destino. Atualize a página e tente novamente.');
-  eventBus.emit('import:changed', { source: 'move' });
-  return mapRow(updated, Number(await channelId('WhatsApp')), instagramId);
+  return mapRow(updated, ids.whatsapp, ids.instagram, ids.noDestination);
 }
 
 export const leadCycleService = {
   listImported: () => listByStatuses([LEAD_STATUS.IMPORTED]),
-  listValid: () => listByStatuses([LEAD_STATUS.VALIDATED]),
-  listPreSend: async () => listByStatuses([LEAD_STATUS.PRE_SEND], Number(await channelId('WhatsApp'))),
   executeRoutingCommand,
   updateDetails,
-  updateImportedInstagram,
 };

@@ -5,12 +5,12 @@ import type { WhatsAppValidationMode } from './types';
 
 export type WhatsAppValidationTarget = {
   statusId: LeadStatusId;
-  channelId: number;
-  outcome: 'approved' | 'revalidated' | 'instagram_review_required';
+  channelId: number | null;
+  outcome: 'approved' | 'revalidated' | 'instagram_review_required' | 'no_contact';
 };
 
-export function expectedStatusForValidation(mode: WhatsAppValidationMode): LeadStatusId {
-  return mode === 'initial' ? LEAD_STATUS.PRE_SEND : LEAD_STATUS.VALIDATED;
+export function expectedStatusForValidation(_mode: WhatsAppValidationMode): LeadStatusId {
+  return LEAD_STATUS.REVIEW;
 }
 
 export function isLikelyValidWhatsApp(value: unknown) {
@@ -27,7 +27,7 @@ export function validationSelectionError(
   if (row.lead_status_id !== expectedStatus) {
     return `O lead mudou de etapa. Esperado status ${expectedStatus}, recebido ${row.lead_status_id}.`;
   }
-  if (Number(row.channels_id) !== whatsappChannelId) return 'Somente leads do canal WhatsApp podem ser validados neste fluxo.';
+  if (Number(row.channels_id) !== whatsappChannelId) return 'Somente leads em Revisão pelo WhatsApp podem ser validados neste fluxo.';
   return null;
 }
 
@@ -36,16 +36,19 @@ export function validWhatsAppTarget(
   whatsappChannelId: number,
 ): WhatsAppValidationTarget {
   return {
-    statusId: LEAD_STATUS.VALIDATED,
+    statusId: LEAD_STATUS.REVIEW,
     channelId: whatsappChannelId,
     outcome: mode === 'initial' ? 'approved' : 'revalidated',
   };
 }
 
 export function invalidWhatsAppTarget(
-  _row: LeadDatabaseRow,
+  row: LeadDatabaseRow,
   _whatsappChannelId: number,
   instagramChannelId: number,
 ): WhatsAppValidationTarget {
-  return { statusId: LEAD_STATUS.IMPORTED, channelId: instagramChannelId, outcome: 'instagram_review_required' };
+  const hasInstagram = Boolean(String(row.leads_instagram ?? '').trim());
+  return hasInstagram
+    ? { statusId: LEAD_STATUS.IMPORTED, channelId: instagramChannelId, outcome: 'instagram_review_required' }
+    : { statusId: LEAD_STATUS.NO_CONTACT, channelId: null, outcome: 'no_contact' };
 }

@@ -23,7 +23,7 @@ function compactStrings(values: Array<string | undefined>) {
 }
 
 async function listOperationalLeads() {
-  const statuses: ImportListFilters['status'][] = ['pending', 'review', 'approved', 'rejected', 'invalid', 'archived'];
+  const statuses: ImportListFilters['status'][] = ['pending', 'review', 'rejected', 'invalid'];
   const groups = await Promise.all(statuses.map((status) => repositories.import.list({ status })));
   const byId = new Map<string, ImportLead>();
   groups.flat().forEach((lead) => byId.set(lead.id, lead));
@@ -78,18 +78,17 @@ export const importService = {
   },
 
   async listHomeOperationalLeads() {
-    // Início é exclusivamente o começo do ciclo: lead_status_id = 1
-    // (importado / em aguarde). Leads validados pertencem à tela de validados,
-    // e nunca devem continuar aparecendo aqui.
+    // Início é exclusivamente o começo do ciclo: lead_status_id = 1 (Importado).
+    // Revisão só nasce quando uma puxada WhatsApp/Instagram realmente reserva o lead.
     const pending = await repositories.import.list({ status: 'pending' });
     return pending.filter((lead) => isStatusGroup(lead.status, 'pending'));
   },
 
 
   async listValidatedLeads() {
-    // A tela fixa Válidos exibe exclusivamente lead_status_id = 2.
-    const approved = await repositories.import.list({ status: 'approved' });
-    return approved.filter((lead) => isStatusGroup(lead.status, 'approved'));
+    // Compatibilidade de API interna: status 2 agora significa Revisão.
+    const review = await repositories.import.list({ status: 'review' });
+    return review.filter((lead) => isStatusGroup(lead.status, 'review'));
   },
 
   async summary() {

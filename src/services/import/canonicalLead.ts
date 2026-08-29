@@ -52,14 +52,14 @@ function destinationOf(lead: ImportLead): ImportLeadDestination {
 }
 
 export function canonicalStatusId(status: unknown): LeadStatusId {
-  if (isStatusGroup(status, 'pending')) return LEAD_STATUS.IMPORTED;
-  if (isStatusGroup(status, 'approved')) return LEAD_STATUS.VALIDATED;
-  if (isStatusGroup(status, 'review')) return LEAD_STATUS.PRE_SEND;
+  if (isStatusGroup(status, 'pending') || isStatusGroup(status, 'approved')) return LEAD_STATUS.IMPORTED;
+  if (isStatusGroup(status, 'review')) return LEAD_STATUS.REVIEW;
+  if (isStatusGroup(status, 'no_contact')) return LEAD_STATUS.NO_CONTACT;
   if (isStatusGroup(status, 'queued')) return LEAD_STATUS.QUEUED;
   if (isStatusGroup(status, 'sent')) return LEAD_STATUS.SENT;
   if (isStatusGroup(status, 'rejected') || isStatusGroup(status, 'invalid')) return LEAD_STATUS.INVALID;
   if (String(status ?? '').trim().toLowerCase() === 'duplicado') return LEAD_STATUS.DUPLICATE;
-  if (isStatusGroup(status, 'archived') || isStatusGroup(status, 'deleted')) return LEAD_STATUS.ARCHIVED;
+  if (isStatusGroup(status, 'archived') || isStatusGroup(status, 'deleted')) return LEAD_STATUS.INVALID;
   throw new Error(`Status de lead desconhecido: ${String(status ?? '') || 'vazio'}.`);
 }
 
@@ -96,7 +96,7 @@ function validateLead(lead: ImportLead, lookup: CanonicalLeadLookup, allowFinalS
   }
 
   const statusId = canonicalStatusId(lead.status);
-  if (!allowFinalStatus && statusId !== LEAD_STATUS.IMPORTED && statusId !== LEAD_STATUS.PRE_SEND && statusId !== LEAD_STATUS.VALIDATED) {
+  if (!allowFinalStatus && statusId !== LEAD_STATUS.IMPORTED && statusId !== LEAD_STATUS.REVIEW) {
     throw new Error(`Status de importação não persistível: ${String(lead.status ?? '') || 'vazio'}.`);
   }
 }
@@ -118,8 +118,8 @@ function commonPayload(
   const maps = String(lead.normalizedMapsUrl ?? '').trim();
 
   const statusId = canonicalStatusId(lead.status);
-  if (statusId !== LEAD_STATUS.IMPORTED && (!lookup.channelId || lookup.channelId <= 0)) {
-    throw new Error(`O lead “${lead.empresa.trim()}” precisa de um canal antes de sair de Importado.`);
+  if (statusId !== LEAD_STATUS.NO_CONTACT && (!lookup.channelId || lookup.channelId <= 0)) {
+    throw new Error(`O lead “${lead.empresa.trim()}” precisa de um canal operacional.`);
   }
 
   return {
@@ -127,7 +127,7 @@ function commonPayload(
     countries_id: lookup.countryId,
     states_id: lookup.stateId,
     cities_id: lookup.cityId,
-    channels_id: statusId === LEAD_STATUS.IMPORTED ? null : lookup.channelId,
+    channels_id: statusId === LEAD_STATUS.NO_CONTACT ? null : lookup.channelId,
     lead_status_id: statusId,
     contact_sources_id: lookup.contactSourceId,
     apify_import_jobs_id: options.apifyImportJobId ?? null,

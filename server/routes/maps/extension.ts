@@ -1048,10 +1048,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const candidates = await candidatesQuery;
       if (candidates.error) throw new Error(candidates.error.message);
       if ((candidates.data ?? []).length !== selectedIds.length) throw new Error('maps_leads_promote_execution_mismatch');
-      const sources = await client.from('contact_sources').select('contact_sources_id,contact_sources_key').eq('users_id', usersId).eq('status_id', 1);
-      const country = await client.from('countries').select('countries_id').eq('countries_code', 'BR').maybeSingle();
-      if (sources.error || country.error || !country.data) throw new Error('maps_lead_catalogs_invalid');
+      const [sources, country, channels] = await Promise.all([
+        client.from('contact_sources').select('contact_sources_id,contact_sources_key').eq('users_id', usersId).eq('status_id', 1),
+        client.from('countries').select('countries_id').eq('countries_code', 'BR').maybeSingle(),
+        client.from('channels').select('channels_id,channels_name'),
+      ]);
+      if (sources.error || country.error || channels.error || !country.data) throw new Error('maps_lead_catalogs_invalid');
       const sourceByKey = new Map((sources.data ?? []).map((row) => [text(row.contact_sources_key), Number(row.contact_sources_id)]));
+      const channelByName = new Map((channels.data ?? []).map((row) => [normalize(row.channels_name), Number(row.channels_id)]));
+      const whatsappChannelId = channelByName.get('whatsapp');
+      const instagramChannelId = channelByName.get('instagram');
+      const noDestinationChannelId = channelByName.get('sem destino');
+      if (!whatsappChannelId || !instagramChannelId || !noDestinationChannelId) throw new Error('maps_lead_channels_invalid');
       let promoted = 0; let alreadyPromoted = 0; const failures: Array<{ candidateId: string; code: string }> = [];
       for (const candidate of candidates.data ?? []) {
         const candidateId = text(candidate.maps_search_candidates_id);
@@ -1088,11 +1096,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           failures.push({ candidateId, code: text(gate.decision) });
           continue;
         }
-        // Instagram válido tem prioridade operacional mesmo quando também existe
-        // telefone/WhatsApp. A origem comercial permanece compatível com a regra
-        // anterior: se havia telefone, conserva sem_site/dominio_proprio/agregador;
-        // Instagram só vira origem quando ele é o único contato suportado.
+        // R58: o destino inicial fica no próprio lead. Quando os dois contatos
+        // existem, o lead entra como Sem destino e só recebe WhatsApp/Instagram
+        // quando for efetivamente puxado para a Revisão daquele canal.
         const sourceKey = phoneWhatsapp ? text(candidate.website_classification || 'sem_site') : 'instagram';
+        const initialChannelId = phoneWhatsapp && instagram
+          ? noDestinationChannelId
+          : phoneWhatsapp
+            ? whatsappChannelId
+            : instagramChannelId;
         const sourceId = sourceByKey.get(sourceKey);
         if (!sourceId) throw new Error(`maps_contact_source_not_found:${sourceKey}`);
         const rating = candidate.maps_rating == null ? mapsRating((candidate.raw_payload as Row) || {}) : mapsRating({ rating: candidate.maps_rating });
@@ -1104,7 +1116,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           countries_id: country.data.countries_id,
           states_id: candidate.states_id,
           cities_id: candidate.cities_id,
-          channels_id: null,
+          channels_id: initialChannelId,
           lead_status_id: 1,
           contact_sources_id: sourceId,
           leads_name: candidate.candidate_name,

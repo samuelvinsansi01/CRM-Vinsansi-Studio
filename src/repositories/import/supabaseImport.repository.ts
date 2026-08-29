@@ -68,7 +68,7 @@ const NORMALIZED_LEADS_SELECT = `
   contact_sources:contact_sources_id ( contact_sources_id, contact_sources_name )
 `;
 
-const ACTIVE_IMPORT_STATUS_IDS: LeadStatusId[] = [LEAD_STATUS.IMPORTED, LEAD_STATUS.VALIDATED];
+const ACTIVE_IMPORT_STATUS_IDS: LeadStatusId[] = [LEAD_STATUS.IMPORTED, LEAD_STATUS.REVIEW];
 const ALL_LEAD_STATUS_IDS: LeadStatusId[] = Object.values(LEAD_STATUS);
 
 type LookupRow = Record<string, unknown>;
@@ -221,13 +221,12 @@ async function listRows(statusIds?: LeadStatusId[]): Promise<LeadDatabaseRow[]> 
 }
 
 function statusIdsForFilter(status: ImportListFilters['status']): LeadStatusId[] {
-  if (status === 'pending') return [1];
-  if (status === 'approved') return [2];
-  if (status === 'review') return [3];
+  if (status === 'pending' || status === 'approved') return [1];
+  if (status === 'review') return [2];
   if (status === 'queued') return [4];
   if (status === 'sent') return [5];
   if (status === 'rejected' || status === 'invalid') return [6, 7];
-  if (status === 'archived' || status === 'deleted') return [8];
+  if (status === 'archived' || status === 'deleted') return [6];
   return ALL_LEAD_STATUS_IDS;
 }
 
@@ -280,7 +279,18 @@ async function resolveLookups(leads: ImportLead[]): Promise<Map<string, Canonica
   const result = new Map<string, CanonicalLeadLookup>();
 
   const channelFor = (lead: ImportLead) => {
-    if (canonicalStatusId(lead.status) === LEAD_STATUS.IMPORTED) return null;
+    const statusId = canonicalStatusId(lead.status);
+    if (statusId === LEAD_STATUS.NO_CONTACT) return null;
+
+    if (statusId === LEAD_STATUS.IMPORTED) {
+      const phone = normalizePhone(lead.normalizedPhone || lead.whatsapp);
+      const instagram = normalizeInstagramUsername(lead.normalizedInstagram || lead.instagram_url || lead.instagram);
+      const target = phone && instagram ? 'sem destino' : instagram ? 'instagram' : 'whatsapp';
+      const row = channels.find((channel) => normalizeComparable(channel.channels_name) === target);
+      if (!row) throw new Error(`O canal ${target === 'sem destino' ? 'Sem destino' : target === 'instagram' ? 'Instagram' : 'WhatsApp'} não existe na tabela channels.`);
+      return Number(row.channels_id);
+    }
+
     const destination = lead.send_instagram ? 'Instagram' : lead.destination ?? lead.destino;
     const target = destination === 'Instagram' ? 'instagram' : 'whatsapp';
     const row = channels.find((channel) => normalizeComparable(channel.channels_name).includes(target));
@@ -619,22 +629,19 @@ export const supabaseImportRepository: ImportRepository = {
     const userId = await getCurrentUserId();
     const { data, error } = await getSupabaseClient()
       .from('leads')
-      .update({ lead_status_id: LEAD_STATUS.ARCHIVED, leads_updated_at: new Date().toISOString() })
+      .update({ lead_status_id: LEAD_STATUS.INVALID, leads_updated_at: new Date().toISOString() })
       .eq('leads_id', Number(id))
       .eq('users_id', userId)
       .select('leads_id')
       .maybeSingle();
-    if (error) throw new Error(`Não foi possível arquivar o lead: ${error.message}`);
-    if (!data) throw new Error('Lead não encontrado ou sem permissão para arquivar.');
+    if (error) throw new Error(`Não foi possível invalidar o lead: ${error.message}`);
+    if (!data) throw new Error('Lead não encontrado ou sem permissão para invalidar.');
   },
 
   async move(id, status: 'approved' | 'rejected') {
     const userId = await getCurrentUserId();
     const current = rowToImportLead(await getLeadRow(id));
-    const whatsappDestination = !current.send_instagram && (current.destination ?? current.destino) !== 'Instagram';
-    const statusId: LeadStatusId = status === 'approved'
-      ? whatsappDestination ? LEAD_STATUS.PRE_SEND : LEAD_STATUS.VALIDATED
-      : LEAD_STATUS.INVALID;
+    const statusId: LeadStatusId = status === 'approved' ? LEAD_STATUS.IMPORTED : LEAD_STATUS.INVALID;
     const { data, error } = await getSupabaseClient()
       .from('leads')
       .update({ lead_status_id: statusId, leads_updated_at: new Date().toISOString() })

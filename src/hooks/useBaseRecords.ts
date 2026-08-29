@@ -16,7 +16,7 @@ const emptySummary: BaseSummary = {
   sent: 0,
   sentWhatsApp: 0,
   sentInstagram: 0,
-  archived: 0,
+  noContact: 0,
   invalid: 0,
   duplicates: 0,
 };

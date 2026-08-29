@@ -8,10 +8,7 @@ type PageHeaderProps = {
 
 const pageDescriptions: Record<string, string> = {
   Inicio: 'Visualize, organize e defina o destino operacional de cada lead.',
-  'Válidos': 'Leads validados e prontos para serem distribuídos às filas de envio.',
   Importar: 'Importe novos leads, valide os dados e revise a previa antes de salvar.',
-  'Pre-Envio': 'Organize os leads por dia, valide as filas e prepare os disparos.',
-  'Pré-Envio': 'Organize os leads por dia, valide as filas e prepare os disparos.',
   'Fila WhatsApp': 'Acompanhe os lotes programados e controle os disparos pelo WhatsApp.',
   'Fila Instagram': 'Gerencie os lotes programados e acompanhe os envios pelo Instagram.',
   'Base Permanente': 'Destino final dos leads processados, somente para consulta e bloqueio de nova prospecção.',

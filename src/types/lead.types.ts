@@ -5,13 +5,12 @@ export type { LeadStatusId } from '../services/status/leadStatus';
 
 export type LeadStatusName =
   | 'importado'
-  | 'validado'
-  | 'pre_envio'
+  | 'revisao'
+  | 'sem_contato'
   | 'na_fila'
   | 'enviado'
   | 'invalido'
-  | 'duplicado'
-  | 'arquivado';
+  | 'duplicado';
 export type LeadOrigin = 'manual' | 'apify' | 'csv' | 'api' | 'google_maps';
 
 export type LeadRelation<T> = T | T[] | null;

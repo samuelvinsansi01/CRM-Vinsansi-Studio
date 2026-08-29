@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { leadCycleService } from '../services/lead-cycle/leadCycle.service';
 import type {
   LeadCycleDetailsInput,
@@ -6,35 +6,29 @@ import type {
   LeadRoutingCommand,
   LeadRoutingResult,
 } from '../services/lead-cycle/types';
-import { whatsappValidationService } from '../services/whatsapp-validation/whatsappValidation.service';
-import type { WhatsAppValidationBatchResult } from '../services/whatsapp-validation/types';
 
-export type LeadCycleView = 'imported' | 'valid' | 'pre-send';
+export type LeadCycleView = 'imported';
 
-const loaders = {
-  imported: leadCycleService.listImported,
-  valid: leadCycleService.listValid,
-  'pre-send': leadCycleService.listPreSend,
-};
-
-export function useLeadCycle(view: LeadCycleView) {
+export function useLeadCycle(_view: LeadCycleView = 'imported') {
   const [records, setRecords] = useState<LeadCycleLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadedRef = useRef(false);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (!loadedRef.current) setLoading(true);
     setError(null);
     try {
-      setRecords(await loaders[view]());
+      setRecords(await leadCycleService.listImported());
     } catch (err) {
-      setRecords([]);
       setError(err instanceof Error ? err.message : 'Não foi possível carregar os leads.');
+      if (!loadedRef.current) setRecords([]);
     } finally {
+      loadedRef.current = true;
       setLoading(false);
     }
-  }, [view]);
+  }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -45,54 +39,33 @@ export function useLeadCycle(view: LeadCycleView) {
     setSaving(true);
     try {
       const result = await leadCycleService.executeRoutingCommand(command, ids);
-      await refresh();
+      const moved = new Set([...result.succeededIds, ...result.unchangedIds]);
+      if (moved.size) setRecords((current) => current.filter((record) => !moved.has(record.id)));
       return result;
     } finally {
       setSaving(false);
     }
-  }, [refresh]);
-
-
-  const validateWhatsApp = useCallback(async (ids: string[]): Promise<WhatsAppValidationBatchResult> => {
-    setSaving(true);
-    try {
-      const result = await whatsappValidationService.validateInitial(ids);
-      await refresh();
-      return result;
-    } finally {
-      setSaving(false);
-    }
-  }, [refresh]);
-
-  const revalidateWhatsApp = useCallback(async (ids: string[]): Promise<WhatsAppValidationBatchResult> => {
-    setSaving(true);
-    try {
-      const result = await whatsappValidationService.revalidateApproved(ids);
-      await refresh();
-      return result;
-    } finally {
-      setSaving(false);
-    }
-  }, [refresh]);
-
+  }, []);
 
   const updateDetails = useCallback(async (lead: LeadCycleLead, input: LeadCycleDetailsInput) => {
     setSaving(true);
     try {
-      const result = await leadCycleService.updateDetails(lead, input);
-      await refresh();
-      return result;
-    } finally { setSaving(false); }
-  }, [refresh]);
+      const updated = await leadCycleService.updateDetails(lead, input);
+      setRecords((current) => current.map((record) => record.id === updated.id ? updated : record));
+      return updated;
+    } finally {
+      setSaving(false);
+    }
+  }, []);
 
-  const updateImportedInstagram = useCallback(async (id: string, value: string) => {
-    setSaving(true);
-    try {
-      const result = await leadCycleService.updateImportedInstagram(id, value);
-      await refresh();
-      return result;
-    } finally { setSaving(false); }
-  }, [refresh]);
+
+  const patchChannelLocally = useCallback((ids: string[], channel: LeadCycleLead['channel']) => {
+    const patch = new Set(ids.filter(Boolean));
+    if (!patch.size) return;
+    setRecords((current) => current.map((record) =>
+      patch.has(record.id) ? { ...record, channel } : record
+    ));
+  }, []);
 
   const removeLocally = useCallback((ids: string[]) => {
     const remove = new Set(ids.filter(Boolean));
@@ -100,5 +73,5 @@ export function useLeadCycle(view: LeadCycleView) {
     setRecords((current) => current.filter((record) => !remove.has(record.id)));
   }, []);
 
-  return { records, loading, saving, error, refresh, removeLocally, executeRoutingCommand, validateWhatsApp, revalidateWhatsApp, updateDetails, updateImportedInstagram };
+  return { records, loading, saving, error, refresh, removeLocally, patchChannelLocally, executeRoutingCommand, updateDetails };
 }

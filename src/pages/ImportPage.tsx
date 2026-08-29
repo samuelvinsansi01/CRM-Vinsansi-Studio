@@ -107,6 +107,7 @@ function splitSubcategories(value?: string | null) {
 
 function destinationLabel(value?: string | null) {
   const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized.includes('sem destino') || normalized.includes('sem_destino')) return 'Sem destino';
   if (normalized.includes('instagram')) return 'Instagram';
   if (normalized.includes('site')) return 'Com site';
   if (normalized.includes('agreg')) return 'Agregadores';
@@ -358,7 +359,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       return;
     }
 
-    const destination = instagram ? 'Instagram' : 'WhatsApp';
+    const destination: ImportLeadDestination = whatsapp && instagram ? 'Sem destino' : instagram ? 'Instagram' : 'WhatsApp';
 
     try {
       const createResult = await createLead({
@@ -387,7 +388,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       setPage(1);
       setSelectedRows([]);
 
-      pushToast({ title: 'Lead adicionado', description: 'Lead salvo como Importado. O destino será definido somente ao puxar uma fila.', tone: 'success' });
+      pushToast({ title: 'Lead adicionado', description: 'Lead salvo como Importado. O destino inicial foi definido automaticamente pelos contatos.', tone: 'success' });
     } catch (err) {
       pushToast({ title: 'Não foi possível adicionar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
@@ -443,12 +444,12 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       }
       setDeleteLead(null);
       pushToast({
-        title: persisted ? 'Lead arquivado' : 'Item removido da prévia',
-        description: persisted ? 'lead_status_id atualizado para Arquivado (8) na tabela leads.' : 'O item temporário foi removido apenas desta sessão.',
+        title: persisted ? 'Lead invalidado' : 'Item removido da prévia',
+        description: persisted ? 'O lead foi marcado como Inválido na tabela leads.' : 'O item temporário foi removido apenas desta sessão.',
         tone: persisted ? 'warning' : 'info',
       });
     } catch (err) {
-      pushToast({ title: persisted ? 'Não foi possível arquivar' : 'Não foi possível remover', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
+      pushToast({ title: persisted ? 'Não foi possível invalidar' : 'Não foi possível remover', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
     }
   };
 
@@ -456,7 +457,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
     const permissions = permissionsFor('import', lead.status);
     const actions: TableAction[] = ['view'];
     if (canEdit && permissions.canEdit()) actions.push('edit');
-    if (canDelete && permissions.canArchive()) actions.push(/^\d+$/.test(lead.id) ? 'archive' : 'delete');
+    if (canDelete && permissions.canInvalidate()) actions.push(/^\d+$/.test(lead.id) ? 'invalidate' : 'delete');
     return actions;
   };
 
@@ -465,7 +466,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
       openLeadDrawer(lead, action);
       return;
     }
-    if (action === 'archive' || action === 'delete') setDeleteLead(lead);
+    if (action === 'invalidate' || action === 'delete') setDeleteLead(lead);
   };
 
   const runBulkMove = async (nextStatus: 'approved' | 'rejected') => {
@@ -557,7 +558,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         <summary>Importar backup JSON (diagnóstico)</summary>
         <section className="import-grid import-grid--manual">
           <Panel title="JSON de backup/diagnóstico" className="import-json">
-            <p>Cole o JSON exportado pela extensão Google Maps. A extensão fornece candidatos; as regras canônicas e a barreira de simulação continuam sob responsabilidade da plataforma. O canal só será escolhido quando a fila for puxada.</p>
+            <p>Cole o JSON exportado pela extensão Google Maps. A extensão fornece candidatos; as regras canônicas e a barreira de simulação continuam sob responsabilidade da plataforma. O destino inicial é definido pelos contatos: WhatsApp, Instagram ou Sem destino quando os dois existem.</p>
             <Field
               as="textarea"
               className="json-dropzone"
@@ -609,7 +610,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
               selectable={canEdit || canDelete}
               selectedRows={selectedRows}
               onSelectedRowsChange={setSelectedRows}
-              actions={canEdit || canDelete ? ['view', 'edit', 'archive'] : ['view']}
+              actions={canEdit || canDelete ? ['view', 'edit', 'invalidate'] : ['view']}
               getRowActions={rowActions}
               onAction={(action, lead) => handleRowAction(action, lead)}
               columns={columns}
@@ -623,7 +624,7 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
         open={drawerOpen}
         title={drawerMode === 'edit' ? 'Editar lead' : 'Detalhes do lead'}
         description={editingLead && /^\d+$/.test(editingLead.id)
-          ? 'Edite somente os dados do lead. Leads Importados permanecem sem destino até serem puxados para uma fila.'
+          ? 'Edite os dados do lead. Enquanto estiver Importado, o destino é recalculado pelos contatos: WhatsApp, Instagram ou Sem destino.'
           : 'Item ainda não persistido: as alterações afetam somente a prévia desta sessão.'}
         onClose={closeDrawer}
         footer={
@@ -670,11 +671,11 @@ export function ImportPage({ rejected = false, onStatusChange }: ImportPageProps
 
       <ConfirmDialog
         open={deleteLead !== null}
-        title={deleteLead && /^\d+$/.test(deleteLead.id) ? 'Arquivar lead?' : 'Remover item da prévia?'}
+        title={deleteLead && /^\d+$/.test(deleteLead.id) ? 'Invalidar lead?' : 'Remover item da prévia?'}
         description={deleteLead && /^\d+$/.test(deleteLead.id)
-          ? 'Esta ação grava lead_status_id = 8 (Arquivado) na tabela canônica leads.'
+          ? 'Esta ação marca o lead como Inválido e encerra sua prospecção.'
           : 'Esta ação remove somente o item temporário da prévia atual.'}
-        confirmLabel={deleteLead && /^\d+$/.test(deleteLead.id) ? 'Arquivar' : 'Remover'}
+        confirmLabel={deleteLead && /^\d+$/.test(deleteLead.id) ? 'Invalidar' : 'Remover'}
         danger
         onClose={() => setDeleteLead(null)}
         onConfirm={confirmDelete}

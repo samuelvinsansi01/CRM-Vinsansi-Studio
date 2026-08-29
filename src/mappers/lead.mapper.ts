@@ -35,12 +35,25 @@ function normalizeInstagram(value: string | null) {
     .split(/[/?#\s]/)[0];
 }
 
+function normalizedChannel(channelName: string | undefined) {
+  return String(channelName ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+}
+
 function originFromChannel(channelName: string | undefined): BaseLeadOrigin {
-  return channelName?.toLowerCase() === 'instagram' ? 'Instagram' : 'WhatsApp';
+  const channel = normalizedChannel(channelName);
+  if (channel === 'instagram') return 'Instagram';
+  if (channel === 'sem destino') return 'Sem destino';
+  if (channel === 'whatsapp') return 'WhatsApp';
+  return 'Sem canal';
 }
 
 function destinationFromLead(channelName: string | undefined, sourceId: number, website: string): BaseLeadDestination {
-  if (channelName?.toLowerCase() === 'instagram' || sourceId === 4) return 'Instagram';
+  const channel = normalizedChannel(channelName);
+  if (channel === 'instagram') return 'Instagram';
+  if (channel === 'sem destino') return 'Sem destino';
+  if (channel === 'whatsapp') return 'WhatsApp';
+  // Compatibilidade apenas para linhas históricas sem channels_id.
+  if (sourceId === 4) return 'Instagram';
   if (sourceId === 3) return 'Agregador';
   if (sourceId === 2 || website.trim()) return 'Com site';
   return 'WhatsApp';
@@ -74,7 +87,7 @@ export function mapLead(row: LeadDatabaseRow): BaseLead {
     mapsUrl: row.leads_maps ?? '',
     origin,
     destination,
-    status: status?.lead_status_name ?? ({ 1: 'importado', 2: 'validado', 3: 'pre_envio', 4: 'na_fila', 5: 'enviado', 6: 'invalido', 7: 'duplicado', 8: 'arquivado' } as const)[row.lead_status_id],
+    status: status?.lead_status_name ?? ({ 1: 'importado', 2: 'revisao', 3: 'sem_contato', 4: 'na_fila', 5: 'enviado', 6: 'invalido', 7: 'duplicado' } as const)[row.lead_status_id],
     statusId: row.lead_status_id as BaseLead['statusId'],
     finalizedAt: row.leads_updated_at ?? row.leads_created_at,
   };

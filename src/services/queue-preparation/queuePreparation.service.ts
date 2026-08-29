@@ -82,7 +82,7 @@ function preparationReason(
   templates: TemplateConfigRecord[],
   hasWhatsAppProof = true,
 ) {
-  if (row.lead_status_id !== LEAD_STATUS.PRE_SEND) return 'O lead não está mais na revisão aberta.';
+  if (row.lead_status_id !== LEAD_STATUS.REVIEW) return 'O lead não está mais na revisão aberta.';
   if (Number(row.channels_id) !== expectedChannelId) return 'O canal do lead foi alterado.';
   if (channel === 'WhatsApp' && !hasWhatsAppProof) return 'Prova de validação WhatsApp ausente para o telefone atual.';
   if (channel === 'WhatsApp' && normalizePhone(getEffectiveWhatsAppPhone(row)).length < 10) return 'Telefone inválido para WhatsApp.';

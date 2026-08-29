@@ -1,6 +1,6 @@
 import type { LeadStatusId, LeadStatusName } from '../../types/lead.types';
 
-export type LeadCycleChannel = 'WhatsApp' | 'Instagram';
+export type LeadCycleChannel = 'WhatsApp' | 'Instagram' | 'Sem destino';
 
 export type LeadCycleLead = {
   id: string;
@@ -41,18 +41,7 @@ export type LeadCycleDetailsInput = {
   mapsUrl: string;
 };
 
-export type LeadRoutingCommand =
-  | 'route-imported-to-whatsapp'
-  | 'route-imported-to-instagram'
-  | 'invalidate-imported'
-  | 'archive-imported'
-  | 'set-valid-channel-whatsapp'
-  | 'set-valid-channel-instagram'
-  | 'archive-valid'
-  | 'invalidate-valid'
-  | 'return-valid-to-imported'
-  | 'invalidate-pre-send'
-  | 'archive-pre-send';
+export type LeadRoutingCommand = 'invalidate-imported';
 
 export type LeadRoutingFailure = {
   id: string;

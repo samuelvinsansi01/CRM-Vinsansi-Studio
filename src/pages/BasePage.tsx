@@ -1,4 +1,4 @@
-import { Archive, Instagram, MessageCircle, RefreshCcw, Send, Users, X } from 'lucide-react';
+import { Instagram, MessageCircle, RefreshCcw, Send, Unplug, Users, X } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -20,7 +20,7 @@ import { useBaseRecords } from '../hooks/useBaseRecords';
 import { useClientPagination } from '../hooks/useClientPagination';
 import type { BaseLead } from '../services/base/types';
 
-const STATUS_LABEL = { 5: 'Enviado', 6: 'Inválido', 7: 'Duplicado', 8: 'Arquivado' } as const;
+const STATUS_LABEL = { 3: 'Sem contato', 5: 'Enviado', 6: 'Inválido', 7: 'Duplicado' } as const;
 
 type Row = Record<string, ReactNode> & { id: string };
 const columns: TableColumn<Row>[] = [
@@ -36,8 +36,13 @@ const columns: TableColumn<Row>[] = [
 ];
 
 function statusTag(lead: BaseLead) {
-  const tone = lead.statusId === 5 ? 'success' : lead.statusId === 8 ? 'neutral' : 'danger';
+  const tone = lead.statusId === 5 ? 'success' : lead.statusId === 3 ? 'neutral' : 'danger';
   return <Tag tone={tone}>{STATUS_LABEL[lead.statusId]}</Tag>;
+}
+
+function channelTag(lead: BaseLead) {
+  const tone = lead.origin === 'Instagram' ? 'primary' : lead.origin === 'WhatsApp' ? 'success' : 'neutral';
+  return <Tag tone={tone}>{lead.origin}</Tag>;
 }
 
 function formatDateTime(value?: string) {
@@ -64,7 +69,7 @@ export function BasePage() {
   const [viewingLead, setViewingLead] = useState<BaseLead | null>(null);
   const filters = useMemo(() => ({
     search,
-    status: status === 'Todos' ? 'Todos' : ({ Enviado: 'enviado', Inválido: 'invalido', Duplicado: 'duplicado', Arquivado: 'arquivado' } as Record<string, string>)[status],
+    status: status === 'Todos' ? 'Todos' : ({ 'Sem contato': 'sem_contato', Enviado: 'enviado', Inválido: 'invalido', Duplicado: 'duplicado' } as Record<string, string>)[status],
     origin: channel,
   }), [search, status, channel]);
   const { records, summary, loading, error, refresh } = useBaseRecords(filters);
@@ -75,10 +80,10 @@ export function BasePage() {
     branch: lead.branch || '—',
     state: lead.state || '—',
     city: lead.city || '—',
-    channel: <Tag tone={lead.origin === 'Instagram' ? 'primary' : 'success'}>{lead.origin}</Tag>,
+    channel: channelTag(lead),
     instagram: instagramContact(lead),
     whatsapp: whatsappContact(lead),
-    sentAt: formatDateTime(lead.lastSentAt),
+    sentAt: lead.statusId === 5 ? formatDateTime(lead.lastSentAt) : '—',
     status: statusTag(lead),
   })), [records]);
 
@@ -94,7 +99,7 @@ export function BasePage() {
     <div className="dashboard-table-page lead-list-page">
       <PageHeader
         title="Base Permanente"
-        description="Destino final dos leads processados. Registros somente para consulta e bloqueio definitivo de nova prospecção."
+        description="Visão dos próprios leads que já encerraram o fluxo: enviados, inválidos, duplicados ou sem contato."
         action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading} onClick={refresh}>Atualizar</Button>}
       />
 
@@ -104,12 +109,12 @@ export function BasePage() {
         <MetricCard icon={MessageCircle} value={String(summary.sentWhatsApp)} label="WhatsApp enviados" tone="success" />
         <MetricCard icon={Instagram} value={String(summary.sentInstagram)} label="Instagram enviados" tone="primary" />
         <MetricCard icon={X} value={String(summary.invalid + summary.duplicates)} label="Inválidos e duplicados" tone="danger" />
-        <MetricCard icon={Archive} value={String(summary.archived)} label="Arquivados" />
+        <MetricCard icon={Unplug} value={String(summary.noContact)} label="Sem contato" />
       </section>
 
       <FiltersBar>
-        <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Arquivado']} placeholder="Status" onChange={(value) => { setStatus(value); resetPage(); }} />
-        <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram']} placeholder="Canal de envio" onChange={(value) => { setChannel(value); resetPage(); }} />
+        <SelectField value={status} options={['Todos', 'Enviado', 'Inválido', 'Duplicado', 'Sem contato']} placeholder="Status" onChange={(value) => { setStatus(value); resetPage(); }} />
+        <SelectField value={channel} options={['Todos', 'WhatsApp', 'Instagram', 'Sem canal']} placeholder="Canal de envio" onChange={(value) => { setChannel(value); resetPage(); }} />
         <SearchInput value={search} onChange={(value) => { setSearch(value); resetPage(); }} placeholder="Buscar empresa ou contato" />
       </FiltersBar>
 
@@ -138,8 +143,8 @@ export function BasePage() {
 
       <Drawer
         open={viewingLead !== null}
-        title="Registro da Base Permanente"
-        description="Consulta somente leitura. Este registro bloqueia definitivamente uma nova prospecção da empresa."
+        title="Lead finalizado"
+        description="Consulta somente leitura do lead na própria tabela principal."
         onClose={() => setViewingLead(null)}
         footer={<Button variant="secondary" onClick={() => setViewingLead(null)}>Fechar</Button>}
       >
@@ -152,7 +157,7 @@ export function BasePage() {
             <Field label="Canal de envio" value={viewingLead.origin} readOnly />
             <Field label="Instagram" value={instagramContact(viewingLead)} readOnly />
             <Field label="WhatsApp" value={whatsappContact(viewingLead)} readOnly />
-            <Field label="Data de envio" value={formatDateTime(viewingLead.lastSentAt)} readOnly />
+            <Field label="Data de envio" value={viewingLead.statusId === 5 ? formatDateTime(viewingLead.lastSentAt) : '—'} readOnly />
             <Field label="Status" value={STATUS_LABEL[viewingLead.statusId]} readOnly />
           </div>
         ) : null}

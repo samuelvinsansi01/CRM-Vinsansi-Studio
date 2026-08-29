@@ -196,6 +196,7 @@ export function HomePage() {
       }
       const result = await queueReviewService.pull(channel, scheduledDate, resourceId);
       imported.removeLocally(result.movedLeadIds);
+      imported.patchChannelLocally(result.redirectedLeadIds, 'Instagram');
       const patchResource = (resources: QueueReviewResource[]) => resources.map((resource) =>
         resource.id === result.resource.id ? result.resource : resource
       );
@@ -228,7 +229,7 @@ export function HomePage() {
     try {
       await imported.updateDetails(editingLead, editForm);
       closeEdit();
-      toast('Lead atualizado', 'Os dados foram atualizados sem definir destino.');
+      toast('Lead atualizado', 'Os dados foram atualizados e o destino do Importado foi recalculado pelos contatos.');
     } catch (error) {
       toast('Não foi possível salvar', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     }
@@ -324,7 +325,7 @@ export function HomePage() {
       <Drawer
         open={editingLead !== null}
         title="Editar lead"
-        description="O lead continua Importado e sem destino. O canal só será definido quando você puxar a fila."
+        description="O lead continua Importado. O destino é recalculado pelos contatos: WhatsApp, Instagram ou Sem destino."
         onClose={closeEdit}
         footer={(
           <>
