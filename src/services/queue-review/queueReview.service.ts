@@ -2,7 +2,7 @@ import { getSupabaseClient } from '../../lib/supabase';
 import { eventBus } from '../../lib/events';
 import { queuePreparationService } from '../queue-preparation';
 import { whatsappValidationService, type PreparedWhatsAppValidationLead } from '../whatsapp-validation/whatsappValidation.service';
-import type { QueueReviewBatch, QueueReviewChannel, QueueReviewItem, QueueReviewOpenBatch, QueueReviewPullResult, QueueReviewResource } from './types';
+import type { QueueReviewBatch, QueueReviewChannel, QueueReviewItem, QueueReviewPullResult, QueueReviewResource } from './types';
 import { queueRolloverService } from '../queue-rollover/queueRollover.service';
 
 function rpcRow<T>(value: T | T[] | null): T | null {
@@ -17,22 +17,9 @@ function numericIds(ids: string[]) {
   return Array.from(new Set(ids.filter((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0))).map(Number);
 }
 
-function openBatchFrom(value: Record<string, unknown>): QueueReviewOpenBatch {
-  return {
-    batchId: String(value.batchId ?? value.batch_id ?? ''),
-    channel: String(value.channel ?? '') === 'instagram' ? 'instagram' : 'whatsapp',
-    resourceId: String(value.resourceId ?? value.resource_id ?? ''),
-    scheduledDate: String(value.scheduledDate ?? value.scheduled_date ?? ''),
-    dailyLimit: Number(value.dailyLimit ?? value.daily_limit ?? 0),
-    used: Number(value.used ?? 0),
-    targetCount: Number(value.targetCount ?? value.target_count ?? 0),
-    openCount: Number(value.openCount ?? value.open_count ?? 0),
-    missingCount: Number(value.missingCount ?? value.missing_count ?? 0),
-  };
-}
-
-type OpenBatchContext = {
-  batch: QueueReviewOpenBatch;
+type PullCapacityBase = {
+  batchId: string;
+  scheduledDate: string;
   resource: QueueReviewResource;
   providerKey: string;
 };
@@ -43,7 +30,6 @@ function resourceFromRow(channel: QueueReviewChannel, value: Record<string, unkn
     label: String(value.resource_label ?? value.resourceLabel ?? value.resource_id ?? ''),
     channel,
     dailyLimit: Number(value.daily_limit ?? value.dailyLimit ?? 0),
-    used: Math.max(0, Number(value.used ?? 0)),
     available: Math.max(0, Number(value.available ?? value.missingCount ?? value.missing_count ?? 0)),
   };
 }
@@ -57,44 +43,49 @@ async function resources(channel: QueueReviewChannel, scheduledDate: string) {
   return ((data ?? []) as Array<Record<string, unknown>>).map((row) => resourceFromRow(channel, row));
 }
 
-async function openBatchByKey(channel: QueueReviewChannel, resourceKey: string, scheduledDate: string): Promise<OpenBatchContext> {
-  const { data, error } = await getSupabaseClient().rpc('open_queue_review_batch_by_key', {
+type ReservedReviewLead = PreparedWhatsAppValidationLead & {
+  reviewItemId: string;
+  instagram: string;
+};
+
+type PullCapacityContext = PullCapacityBase & {
+  capacityToFill: number;
+  reserved: ReservedReviewLead[];
+};
+
+function reservedLeadFrom(value: Record<string, unknown>): ReservedReviewLead {
+  return {
+    id: String(value.leadId ?? value.lead_id ?? ''),
+    reviewItemId: String(value.reviewItemId ?? value.review_item_id ?? ''),
+    company: String(value.company ?? ''),
+    phone: String(value.phone ?? ''),
+    normalizedPhone: String(value.normalizedPhone ?? value.normalized_phone ?? ''),
+    instagram: String(value.instagram ?? ''),
+  };
+}
+
+async function pullCapacity(channel: QueueReviewChannel, resourceKey: string, scheduledDate: string): Promise<PullCapacityContext> {
+  const { data, error } = await getSupabaseClient().rpc('pull_queue_review_to_capacity', {
     p_channel: channelKey(channel),
     p_resource_key: resourceKey,
     p_scheduled_date: scheduledDate,
   });
   if (error) throw new Error(error.message);
   const row = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
-  if (!row) throw new Error('O banco não retornou a revisão aberta.');
+  if (!row) throw new Error('O banco não retornou o resultado da puxada.');
+  const rawReserved = Array.isArray(row.reserved) ? row.reserved : [];
+  const reserved = rawReserved
+    .filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value))
+    .map(reservedLeadFrom)
+    .filter((lead) => lead.id && lead.reviewItemId);
   return {
-    batch: openBatchFrom(row),
-    resource: resourceFromRow(channel, {
-      ...row,
-      available: row.missingCount ?? row.missing_count,
-    }),
+    batchId: String(row.batchId ?? row.batch_id ?? ''),
+    scheduledDate: String(row.scheduledDate ?? row.scheduled_date ?? ''),
+    resource: resourceFromRow(channel, row),
     providerKey: String(row.providerKey ?? row.provider_key ?? ''),
+    capacityToFill: Math.max(0, Number(row.capacityToFill ?? row.capacity_to_fill ?? 0)),
+    reserved,
   };
-}
-
-type ReservedReviewLead = PreparedWhatsAppValidationLead & {
-  reviewItemId: string;
-  instagram: string;
-};
-
-async function reserveNext(batchId: string, limit: number) {
-  const { data, error } = await getSupabaseClient().rpc('reserve_next_queue_review_items', {
-    p_batch_id: Number(batchId),
-    p_limit: Math.max(1, Math.min(500, Math.trunc(limit))),
-  });
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as Array<Record<string, unknown>>).map<ReservedReviewLead>((row) => ({
-    id: String(row.lead_id ?? ''),
-    reviewItemId: String(row.review_item_id ?? ''),
-    company: String(row.company ?? ''),
-    phone: String(row.phone ?? ''),
-    normalizedPhone: String(row.normalized_phone ?? ''),
-    instagram: String(row.instagram ?? ''),
-  })).filter((row) => row.id && row.reviewItemId);
 }
 
 async function reconcileWhatsApp(batchId: string, approvedIds: string[], releaseIds: string[]) {
@@ -107,22 +98,14 @@ async function reconcileWhatsApp(batchId: string, approvedIds: string[], release
   return rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
 }
 
-async function pullRequested(
+async function pullToCapacity(
   channel: QueueReviewChannel,
   resourceKey: string,
   scheduledDate: string,
-  requestedCount: number,
 ): Promise<QueueReviewPullResult> {
-  const requested = Number(requestedCount);
-  if (!Number.isSafeInteger(requested) || requested < 1 || requested > 500) {
-    throw new Error('Informe uma quantidade entre 1 e 500 leads.');
-  }
-
-  let context = await openBatchByKey(channel, resourceKey, scheduledDate);
-  let { batch } = context;
+  const context = await pullCapacity(channel, resourceKey, scheduledDate);
   let { resource } = context;
-  const allowed = Math.max(0, Math.min(requested, batch.missingCount));
-  const capacityLimited = allowed < requested;
+  const { batchId, reserved, capacityToFill } = context;
   let invalidatedByProvider = 0;
   let redirectedToInstagram = 0;
   let errors = 0;
@@ -130,16 +113,16 @@ async function pullRequested(
   let ready = 0;
   const movedLeadIds = new Set<string>();
 
-  // R54: um clique faz UMA unica reserva. Nunca existe refill automatico,
-  // oversampling, segunda passada ou tentativa de completar a capacidade.
-  const reserved = allowed > 0 ? await reserveNext(batch.batchId, allowed) : [];
-  const exhausted = allowed > 0 && reserved.length < allowed;
+  // R55: o banco calcula a capacidade restante do recurso/data e faz UMA
+  // unica reserva ate essa capacidade. Nao existe quantidade manual, refill,
+  // oversampling, segunda passagem ou retry automatico dentro do clique.
+  const exhausted = capacityToFill > 0 && reserved.length < capacityToFill;
 
   if (channel === 'WhatsApp' && reserved.length) {
     try {
       const validation = await whatsappValidationService.validatePreparedInitial(reserved, context.providerKey);
       const releaseIds = Array.from(new Set([...validation.errorIds, ...validation.conflictIds]));
-      await reconcileWhatsApp(batch.batchId, validation.approvedIds, releaseIds);
+      const reconciled = await reconcileWhatsApp(batchId, validation.approvedIds, releaseIds);
       validation.approvedIds.forEach((id) => movedLeadIds.add(id));
       validation.invalidatedIds.forEach((id) => movedLeadIds.add(id));
       validation.redirectedIds.forEach((id) => movedLeadIds.add(id));
@@ -148,10 +131,13 @@ async function pullRequested(
       errors += validation.errors + validation.failed;
       technicalStop = releaseIds.length > 0;
       ready = validation.approved + validation.revalidated;
+
+      const missingCount = Math.max(0, Number(reconciled?.missingCount ?? reconciled?.missing_count ?? resource.available));
+      resource = { ...resource, available: missingCount };
     } catch (error) {
       // Falha antes de um resultado persistido: libera somente estes reservados.
       // Nao existe nova reserva nem retry dentro desta acao.
-      await reconcileWhatsApp(batch.batchId, [], reserved.map((lead) => lead.id)).catch(() => undefined);
+      await reconcileWhatsApp(batchId, [], reserved.map((lead) => lead.id)).catch(() => undefined);
       throw error;
     }
   }
@@ -161,17 +147,11 @@ async function pullRequested(
     ready = reserved.length;
   }
 
-  // Uma leitura final pequena deixa capacidade/contadores exatos sem hidratar
-  // a fila inteira e sem disparar qualquer nova selecao ou validacao.
-  context = await openBatchByKey(channel, resourceKey, scheduledDate);
-  batch = context.batch;
-  resource = context.resource;
-
   eventBus.emit('import:changed', { source: 'move' });
   return {
-    batch,
+    scheduledDate: context.scheduledDate,
     resource,
-    requested,
+    capacityToFill,
     reserved: reserved.length,
     ready,
     invalidatedByProvider,
@@ -179,12 +159,11 @@ async function pullRequested(
     errors,
     exhausted,
     technicalStop,
-    capacityLimited,
     movedLeadIds: Array.from(movedLeadIds),
   };
 }
 
-async function pull(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string, requestedCount: number) {
+async function pull(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string) {
   await queueRolloverService.run();
   if (!preferredResourceId) {
     throw new Error(channel === 'WhatsApp'
@@ -192,7 +171,7 @@ async function pull(channel: QueueReviewChannel, scheduledDate: string, preferre
       : 'Selecione um perfil específico antes de puxar a fila Instagram.');
   }
   if (!scheduledDate) throw new Error('Selecione a data que receberá os leads.');
-  return pullRequested(channel, preferredResourceId, scheduledDate, requestedCount);
+  return pullToCapacity(channel, preferredResourceId, scheduledDate);
 }
 
 async function list(channel: QueueReviewChannel, preferredResourceId = '', scheduledDate = ''): Promise<QueueReviewBatch[]> {
@@ -253,7 +232,7 @@ async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
   let prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
 
   // Reparacao rara/legada: se faltar prova, revalida somente este lead no chip
-  // do batch e reconcilia pelo mesmo contrato atomico R54.
+  // do batch e reconcilia pelo mesmo contrato atomico R54/R55.
   const missingWhatsAppProof = channel === 'WhatsApp'
     && prepared.failures.some((failure) => failure.id === item.leadId && failure.reason.includes('Prova de validação WhatsApp ausente'));
   if (missingWhatsAppProof) {

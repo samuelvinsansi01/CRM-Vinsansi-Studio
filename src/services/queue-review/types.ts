@@ -5,20 +5,7 @@ export type QueueReviewResource = {
   label: string;
   channel: QueueReviewChannel;
   dailyLimit: number;
-  used: number;
   available: number;
-};
-
-export type QueueReviewOpenBatch = {
-  batchId: string;
-  channel: 'whatsapp' | 'instagram';
-  resourceId: string;
-  scheduledDate: string;
-  dailyLimit: number;
-  used: number;
-  targetCount: number;
-  openCount: number;
-  missingCount: number;
 };
 
 export type QueueReviewItem = {
@@ -55,9 +42,9 @@ export type QueueReviewBatch = {
 };
 
 export type QueueReviewPullResult = {
-  batch: QueueReviewOpenBatch;
+  scheduledDate: string;
   resource: QueueReviewResource;
-  requested: number;
+  capacityToFill: number;
   reserved: number;
   ready: number;
   invalidatedByProvider: number;
@@ -65,6 +52,5 @@ export type QueueReviewPullResult = {
   errors: number;
   exhausted: boolean;
   technicalStop: boolean;
-  capacityLimited: boolean;
   movedLeadIds: string[];
 };

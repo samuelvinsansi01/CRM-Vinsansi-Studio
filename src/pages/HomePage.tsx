@@ -110,8 +110,6 @@ export function HomePage() {
   const [whatsappResourceId, setWhatsappResourceId] = useState('');
   const [instagramResources, setInstagramResources] = useState<QueueReviewResource[]>([]);
   const [instagramResourceId, setInstagramResourceId] = useState('');
-  const [whatsappPullCount, setWhatsappPullCount] = useState('15');
-  const [instagramPullCount, setInstagramPullCount] = useState('15');
   const [editingLead, setEditingLead] = useState<LeadCycleLead | null>(null);
   const [editForm, setEditForm] = useState<LeadEditForm>(emptyEditForm);
   const [invalidatingLead, setInvalidatingLead] = useState<LeadCycleLead | null>(null);
@@ -195,8 +193,7 @@ export function HomePage() {
         toast(channel === 'WhatsApp' ? 'Selecione um chip' : 'Selecione um perfil', channel === 'WhatsApp' ? 'Escolha o chip que será usado para validar e preparar essa fila.' : 'Escolha o perfil Instagram que receberá essa fila.', 'warning');
         return;
       }
-      const requestedCount = Number(channel === 'WhatsApp' ? whatsappPullCount : instagramPullCount);
-      const result = await queueReviewService.pull(channel, scheduledDate, resourceId, requestedCount);
+      const result = await queueReviewService.pull(channel, scheduledDate, resourceId);
       imported.removeLocally(result.movedLeadIds);
       const patchResource = (resources: QueueReviewResource[]) => resources.map((resource) =>
         resource.id === result.resource.id ? result.resource : resource
@@ -204,9 +201,9 @@ export function HomePage() {
       if (channel === 'WhatsApp') setWhatsappResources(patchResource);
       else setInstagramResources(patchResource);
       resetPage();
-      const formattedDate = new Date(`${result.batch.scheduledDate}T12:00:00`).toLocaleDateString('pt-BR');
-      const details = `${result.ready} pronto(s) para revisão · ${result.reserved}/${result.requested} reservado(s) · ${result.resource.label} · ${formattedDate}.`;
-      toast(`Fila ${channel} preparada`, details + (result.technicalStop ? ' Houve erro técnico; os afetados foram liberados sem retry automático.' : '') + (result.capacityLimited ? ' A capacidade restante da data limitou a quantidade.' : '') + (result.exhausted ? ' Não havia leads elegíveis suficientes para completar o pedido.' : ''), result.errors ? 'warning' : 'success');
+      const formattedDate = new Date(`${result.scheduledDate}T12:00:00`).toLocaleDateString('pt-BR');
+      const details = `${result.ready} pronto(s) para revisão · ${result.reserved} reservado(s) · ${result.resource.label} · ${formattedDate}.`;
+      toast(`Fila ${channel} preparada`, details + (result.technicalStop ? ' Houve erro técnico; os afetados foram liberados sem retry automático.' : '') + (result.exhausted ? ` Não havia leads elegíveis suficientes para preencher as ${result.capacityToFill} vaga(s) disponíveis.` : ''), result.errors ? 'warning' : 'success');
     } catch (error) {
       toast(`Não foi possível puxar ${channel}`, error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {
@@ -267,6 +264,8 @@ export function HomePage() {
   const instagramResourceOptions = instagramResources.length
     ? instagramResources.map((resource) => ({ label: `${resource.label} · ${resource.available} disponível(is)`, value: resource.id }))
     : [{ label: 'Nenhum perfil operacional', value: '' }];
+  const whatsappAvailable = whatsappResources.find((resource) => resource.id === whatsappResourceId)?.available ?? 0;
+  const instagramAvailable = instagramResources.find((resource) => resource.id === instagramResourceId)?.available ?? 0;
 
   return (
     <div className="dashboard-table-page lead-list-page home-leads-page">
@@ -276,8 +275,8 @@ export function HomePage() {
         action={(
           <div className="home-leads-actions">
             {canPrepare ? <Field className="home-pull-date" label="Data da fila" type="date" iconLeft={Calendar} min={toLocalDateInputValue()} value={scheduledDate} onChange={setScheduledDate} /> : null}
-            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={whatsappResourceOptions} value={whatsappResourceId} placeholder="Selecione o chip" onChange={setWhatsappResourceId} /><Field className="home-pull-quantity" label="Qtd." type="number" min={1} max={500} value={whatsappPullCount} onChange={setWhatsappPullCount} /><Button iconLeft={MessageCircle} loading={pulling === 'WhatsApp'} disabled={Boolean(pulling) || !whatsappResourceId} onClick={() => void pull('WhatsApp')}>Puxar WhatsApp</Button></div> : null}
-            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={instagramResourceOptions} value={instagramResourceId} placeholder="Selecione o perfil" onChange={setInstagramResourceId} /><Field className="home-pull-quantity" label="Qtd." type="number" min={1} max={500} value={instagramPullCount} onChange={setInstagramPullCount} /><Button iconLeft={Instagram} loading={pulling === 'Instagram'} disabled={Boolean(pulling) || !instagramResourceId} onClick={() => void pull('Instagram')}>Puxar Instagram</Button></div> : null}
+            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={whatsappResourceOptions} value={whatsappResourceId} placeholder="Selecione o chip" onChange={setWhatsappResourceId} /><Button iconLeft={MessageCircle} loading={pulling === 'WhatsApp'} disabled={Boolean(pulling) || !whatsappResourceId || whatsappAvailable <= 0} onClick={() => void pull('WhatsApp')}>Puxar WhatsApp</Button></div> : null}
+            {canPrepare ? <div className="home-pull-group"><SelectField className="home-chip-select" options={instagramResourceOptions} value={instagramResourceId} placeholder="Selecione o perfil" onChange={setInstagramResourceId} /><Button iconLeft={Instagram} loading={pulling === 'Instagram'} disabled={Boolean(pulling) || !instagramResourceId || instagramAvailable <= 0} onClick={() => void pull('Instagram')}>Puxar Instagram</Button></div> : null}
           </div>
         )}
       />
