@@ -41,7 +41,7 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number, n
     id: String(row.leads_id),
     company: row.leads_name,
     alternativeName: row.leads_alternative_name ?? '',
-    displayCompany: (row.leads_alternative_name ?? '').trim() || row.leads_name,
+    displayCompany: row.leads_name,
     branchId: String(row.branches_id),
     branch: branch?.branches_name ?? '',
     state: state?.states_code ?? state?.states_name ?? '',

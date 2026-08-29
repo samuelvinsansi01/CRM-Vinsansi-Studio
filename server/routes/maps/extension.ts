@@ -1093,7 +1093,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           failures.push({ candidateId, code: text(gate.decision) });
           continue;
         }
-        // R58: o destino inicial fica no próprio lead. Quando os dois contatos
+        // R59: o destino inicial fica no próprio lead. Quando os dois contatos
         // existem, o lead entra como Sem destino e só recebe WhatsApp/Instagram
         // quando for efetivamente puxado para a Revisão daquele canal.
         const sourceKey = phoneWhatsapp ? text(candidate.website_classification || 'sem_site') : 'instagram';

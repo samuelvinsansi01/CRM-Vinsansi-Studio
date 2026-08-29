@@ -63,6 +63,46 @@ invalidation_contract_diff AS (
     ) THEN 1 ELSE 0 END
   )::bigint AS total
 ),
+alternative_name_contract_diff AS (
+  SELECT (
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='update_lead_alternative_name' AND pg_get_function_identity_arguments(p.oid)='p_lead_id bigint, p_alternative_name text, p_queue_item_id bigint') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='update_lead_alternative_name' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%build_queue_item_payload_snapshot%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%vinsansi.allow_queue_snapshot_refresh%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''contractversion'',''r59''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''originalcompanyname''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''sendcompanyname''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%v_snapshot->''messages''%'
+      )
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='build_queue_item_payload_snapshot' AND pg_get_function_identity_arguments(p.oid)='p_users_id bigint, p_queues_id bigint, p_leads_id bigint, p_templates_id bigint, p_frozen_at timestamp with time zone') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='build_queue_item_payload_snapshot' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%leads_alternative_name%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''company_name''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''original_company_name''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%render_queue_snapshot_message%'
+      )
+    ) THEN 1 ELSE 0 END
+  )::bigint AS total
+),
+approval_contract_diff AS (
+  SELECT (
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='approve_queue_review_item' AND pg_get_function_identity_arguments(p.oid)='p_review_item_id bigint, p_template_id bigint') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='approve_queue_review_item' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) LIKE '%''contractversion'',''r58''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''contractversion'',''r59''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%queue_review_snapshot_message_1_missing%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%queue_review_lead_not_queued%'
+      )
+    ) THEN 1 ELSE 0 END
+  )::bigint AS total
+),
 channel_diff AS (
   WITH esperado(nome) AS (VALUES ('whatsapp'::text),('instagram'::text),('sem_destino'::text)), atual AS (
     SELECT regexp_replace(lower(public.unaccent(trim(channels_name))), '[^a-z0-9]+','_','g') nome FROM public.channels
@@ -154,6 +194,8 @@ checks AS (
   WHERE qi.status_id=6
     AND l.lead_status_id=6
     AND regexp_replace(lower(public.unaccent(trim(coalesce(qi.queue_items_error_message,'')))), '[^a-z0-9]+','','g')='invalidadopelooperador'
+  UNION ALL SELECT '23_contrato_nome_alternativo_r59',(SELECT total FROM alternative_name_contract_diff),0,false
+  UNION ALL SELECT '24_contrato_aprovacao_r59',(SELECT total FROM approval_contract_diff),0,false
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado

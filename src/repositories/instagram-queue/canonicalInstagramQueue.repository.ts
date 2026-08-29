@@ -48,7 +48,8 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], pr
   const username = normalizeInstagramUsername(instagram);
   const originalCompany = String(snapshotLead.original_company_name ?? lead.leads_name ?? '');
   const alternativeName = String(snapshotLead.alternative_company_name ?? lead.leads_alternative_name ?? '');
-  const company = String(snapshotLead.company_name ?? (alternativeName || originalCompany));
+  const sendCompanyName = String(snapshotLead.company_name ?? (alternativeName || originalCompany));
+  const company = originalCompany;
   const branchName = String(snapshotLead.branch_name ?? branch.branches_name ?? '');
   const phone = String(snapshotLead.phone ?? lead.leads_phone ?? '');
   const website = String(snapshotLead.site ?? lead.leads_website ?? '');
@@ -66,7 +67,7 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], pr
     order: position,
     position,
     company,
-    company_name: company,
+    company_name: sendCompanyName,
     original_company_name: originalCompany,
     alternative_name: alternativeName,
     channel: 'instagram',

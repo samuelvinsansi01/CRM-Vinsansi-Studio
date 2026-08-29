@@ -123,6 +123,48 @@ for (const token of ['const displayLeads=useMemo<FinalLead[]>', '.map((lead,inde
 }
 if (queueFinalTable.includes('()=>leads.map((lead)=>({ id:lead.id, position:lead.position')) fail('fila_final_ainda_exibe_posicao_historica');
 
+const alternativePatch = 'APLICAR - CRM R59 BUILD FIX 8 - Nome alternativo e snapshot.sql';
+if (!exists(alternativePatch)) fail('sql_nome_alternativo_fix8_ausente');
+const alternativeSql = read(alternativePatch);
+for (const token of [
+  'CREATE OR REPLACE FUNCTION public.update_lead_alternative_name',
+  'build_queue_item_payload_snapshot',
+  "set_config('vinsansi.allow_queue_snapshot_refresh', 'on', true)",
+  "'contractVersion', 'R59'",
+  "'originalCompanyName'",
+  "'sendCompanyName'",
+  "'messages'",
+  'CREATE OR REPLACE FUNCTION public.approve_queue_review_item',
+]) if (!alternativeSql.includes(token)) fail(`sql_nome_alternativo_fix8_incompleto:${token}`);
+if (alternativeSql.includes("'contractVersion', 'R58'")) fail('sql_nome_alternativo_fix8_contrato_r58');
+
+const whatsappQueueRepository = read('src/repositories/whatsapp-queue/canonicalWhatsAppQueue.repository.ts');
+const instagramQueueRepository = read('src/repositories/instagram-queue/canonicalInstagramQueue.repository.ts');
+for (const [name, source] of [['whatsapp', whatsappQueueRepository], ['instagram', instagramQueueRepository]]) {
+  for (const token of [
+    'const sendCompanyName = String(snapshotLead.company_name ?? (alternativeName || originalCompany));',
+    'const company = originalCompany;',
+    'company_name: sendCompanyName,',
+  ]) if (!source.includes(token)) fail(`nome_original_fila_${name}_incompleto:${token}`);
+  if (source.includes('const company = String(snapshotLead.company_name ?? (alternativeName || originalCompany));')) fail(`nome_alternativo_ainda_substitui_empresa_${name}`);
+}
+const leadCycleService = read('src/services/lead-cycle/leadCycle.service.ts');
+if (!leadCycleService.includes('displayCompany: row.leads_name,')) fail('nome_alternativo_ainda_substitui_empresa_no_ciclo');
+const alternativeService = read('src/services/leads/alternativeName.service.ts');
+for (const token of ['AlternativeNameUpdateResult', 'sendCompanyName', 'message1: text(messages.message_1)', 'snapshotRefreshed']) {
+  if (!alternativeService.includes(token)) fail(`retorno_nome_alternativo_incompleto:${token}`);
+}
+const queuePage = read('src/pages/QueuePage.tsx');
+for (const token of [
+  'company:original',
+  'company_name:result.sendCompanyName||result.alternativeName||original',
+  'message1:result.message1',
+  'message4:result.message4',
+  'Nome usado no envio" value={lead.company_name||lead.alternative_name||lead.original_company_name||lead.company}',
+  'As mensagens deste item foram regeneradas. A tabela mantém o nome original da empresa.',
+]) if (!queuePage.includes(token)) fail(`ui_nome_alternativo_incompleta:${token}`);
+if (queuePage.includes('const displayName=alternativeName||original')) fail('ui_nome_alternativo_legado_ainda_presente');
+
 const homolog = read(homologSql);
 for (const token of [
   '60::bigint esperado',
@@ -133,6 +175,8 @@ for (const token of [
   'status_operacional_divergencias',
   'contrato_invalidacao_r59',
   'invalidacao_manual_marcada_como_erro',
+  'contrato_nome_alternativo_r59',
+  'contrato_aprovacao_r59',
   'SOMENTE LEITURA',
 ]) if (!homolog.includes(token)) fail(`homolog_sql_incompleto:${token}`);
 console.log('CRM R59 final contract + homologacao: OK');

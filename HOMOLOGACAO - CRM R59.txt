@@ -1,9 +1,10 @@
 CRM - Vinsansi Studio v2.4.0-R59
-BUILD FIX 7 — 29/08/2026
+BUILD FIX 8 — 29/08/2026
 
 ARQUIVOS OBRIGATÓRIOS DE HOMOLOGAÇÃO
 - CHECK - CRM R59 - Homologacao final.sql
 - APLICAR - CRM R59 BUILD FIX 6 - Corrigir invalidacao.sql
+- APLICAR - CRM R59 BUILD FIX 8 - Nome alternativo e snapshot.sql
 
 CONTRATO ATUAL
 - Banco estrutural congelado em 60 tabelas.
@@ -49,3 +50,14 @@ VERIFICAÇÕES EXECUTADAS NESTE PACOTE
 
 BUILD COMPLETO
 - O build completo Vite/TypeScript depende das dependências npm instaladas e não foi executado neste ambiente.
+
+BUILD FIX 8 — NOME ALTERNATIVO E SNAPSHOT
+- Nome original da empresa permanece nas tabelas e listagens; leads_alternative_name não substitui mais a coluna Empresa.
+- Nome alternativo é usado somente como nome efetivo de personalização do envio.
+- Fila WhatsApp e Fila Instagram separam company (original) de company_name (nome usado no envio).
+- update_lead_alternative_name regenera snapshot + hash antes do início e devolve as mensagens regeneradas ao frontend.
+- O frontend atualiza localmente Mensagens 1–4 sem refresh/piscar a tabela.
+- Remover o nome alternativo regenera o snapshot usando novamente o nome original.
+- approve_queue_review_item passa a declarar contrato R59, sem resíduo de versão anterior.
+- CHECK 23 valida o contrato do nome alternativo/snapshot.
+- CHECK 24 valida o contrato R59 da aprovação Revisão -> Fila final.
