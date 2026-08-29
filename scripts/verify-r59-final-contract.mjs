@@ -36,6 +36,12 @@ for (const token of ['validatePreparedInitial','validateInitial(ids)','revalidat
   if (token !== 'validatePreparedInitial' && validationService.includes(token)) fail(`servico_validacao_legado:${token}`);
 }
 if (!validationService.includes('validatePreparedInitial')) fail('servico_validacao_sem_fluxo_preparado');
+const validationGateway = read('src/services/whatsapp-validation/whatsappValidation.gateway.ts');
+const technicalOutcomeIndex = validationGateway.indexOf("if (outcome === 'error')");
+const invalidOutcomeIndex = validationGateway.indexOf("if (explicit === false || invalidStatus)");
+if (technicalOutcomeIndex < 0 || invalidOutcomeIndex < 0 || technicalOutcomeIndex > invalidOutcomeIndex) {
+  fail('resultado_tecnico_whatsapp_interpretado_como_invalido');
+}
 
 // Regression guards for the R59 build errors reported during the real TypeScript build.
 if (handler.includes("let query = auth.admin.from('queue_review_items')")) fail('builder_supabase_mutavel_regrediu');

@@ -61,6 +61,21 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
   const status = String(record.status ?? record.result ?? '').toLowerCase();
   const invalidStatus = ['invalid', 'whatsapp_invalid', 'not_found', 'no_whatsapp', 'not_on_whatsapp'].includes(status);
 
+  // O backend R59 usa valid=false também para erro técnico. O outcome é o
+  // discriminador comercial canônico; portanto erro precisa ser tratado antes
+  // de interpretar valid=false como "sem WhatsApp". Caso contrário o resultado
+  // técnico é descartado e o cliente acusa falsamente IDs sem correspondência.
+  if (outcome === 'error') {
+    return {
+      leadId,
+      status: 'error',
+      valid: false,
+      outcome: 'error',
+      persisted: true,
+      errorMessage: resultError(record) ?? 'Gateway/Evolution não confirmou o resultado deste número.',
+    };
+  }
+
   if (explicit === false || invalidStatus) {
     if (outcome !== 'instagram_review_required' && outcome !== 'no_contact') return null;
     return { leadId, status: 'invalid', valid: false, errorMessage: resultError(record), outcome, persisted: true };
@@ -71,15 +86,7 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
     return { leadId, status: 'valid', valid: true, outcome, persisted: true };
   }
 
-  if (outcome !== 'error') return null;
-  return {
-    leadId,
-    status: 'error',
-    valid: false,
-    outcome: 'error',
-    persisted: true,
-    errorMessage: resultError(record) ?? 'Gateway/Evolution não confirmou o resultado deste número.',
-  };
+  return null;
 }
 
 function assertOneResultForEachLead(leads: WhatsAppValidationRequest[], normalized: WhatsAppValidationResult[]) {
