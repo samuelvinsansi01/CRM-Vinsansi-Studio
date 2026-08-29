@@ -3,7 +3,7 @@ import type { LeadStatusId, LeadStatusName } from '../../types/lead.types';
 export type BaseLeadStatus = LeadStatusName;
 export type BaseFinalStatusId = Extract<LeadStatusId, 3 | 5 | 6 | 7>;
 export type BaseLeadOrigin = 'WhatsApp' | 'Instagram' | 'Sem destino' | 'Sem canal';
-export type BaseLeadDestination = Exclude<BaseLeadOrigin, 'Sem canal'> | 'Com site' | 'Agregador';
+export type BaseLeadDestination = BaseLeadOrigin | 'Com site' | 'Agregador';
 
 export type BaseLead = {
   id: string;

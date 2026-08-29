@@ -106,7 +106,6 @@ function normalizeLeadInput(input: ImportLeadInput): ImportLeadInput {
 
 function rowToImportLead(row: LeadDatabaseRow): ImportLead {
   const mapped = mapLead(row);
-  const destination = mapped.destination === 'Agregador' ? 'Agregadores' : mapped.destination;
   const originalDestination: ImportLeadDestination = row.contact_sources_id === 4
     ? 'Instagram'
     : row.contact_sources_id === 3
@@ -114,6 +113,11 @@ function rowToImportLead(row: LeadDatabaseRow): ImportLead {
       : row.contact_sources_id === 2
         ? 'Com site'
         : 'WhatsApp';
+  const destination: ImportLeadDestination = mapped.destination === 'Agregador'
+    ? 'Agregadores'
+    : mapped.destination === 'Sem canal'
+      ? originalDestination
+      : mapped.destination;
 
   const categories = (row.leads_categories ?? []).map(String).map((value) => value.trim()).filter(Boolean);
   const normalizedParent = normalizeComparable(mapped.branch);
