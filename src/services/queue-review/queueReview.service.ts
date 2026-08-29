@@ -121,17 +121,22 @@ async function pullToCapacity(
   if (channel === 'WhatsApp' && reserved.length) {
     try {
       const validation = await whatsappValidationService.validatePreparedInitial(reserved, context.providerKey);
+      const readyIds = Array.from(new Set([...validation.approvedIds, ...validation.revalidatedIds]));
       const releaseIds = Array.from(new Set([...validation.errorIds, ...validation.conflictIds]));
-      const reconciled = await reconcileWhatsApp(batchId, validation.approvedIds, releaseIds);
-      validation.approvedIds.forEach((id) => movedLeadIds.add(id));
+      const reconciled = await reconcileWhatsApp(batchId, readyIds, releaseIds);
+      readyIds.forEach((id) => movedLeadIds.add(id));
       validation.invalidatedIds.forEach((id) => movedLeadIds.add(id));
       validation.redirectedIds.forEach((id) => movedLeadIds.add(id));
       invalidatedByProvider += validation.invalidated;
       redirectedToInstagram += validation.redirectedToInstagram;
       errors += validation.errors + validation.failed;
       technicalStop = releaseIds.length > 0;
-      ready = validation.approved + validation.revalidated;
+      ready = readyIds.length;
 
+      const openCount = Math.max(0, Number(reconciled?.openCount ?? reconciled?.open_count ?? 0));
+      if (openCount < readyIds.length) {
+        throw new Error('A validação terminou, mas o banco não manteve todos os leads prontos na Revisão. A reserva deste clique será liberada para evitar uma fila invisível.');
+      }
       const missingCount = Math.max(0, Number(reconciled?.missingCount ?? reconciled?.missing_count ?? resource.available));
       resource = { ...resource, available: missingCount };
     } catch (error) {
@@ -237,9 +242,10 @@ async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
     && prepared.failures.some((failure) => failure.id === item.leadId && failure.reason.includes('Prova de validação WhatsApp ausente'));
   if (missingWhatsAppProof) {
     const validation = await whatsappValidationService.validateInitialWithChip([item.leadId], item.resourceId);
+    const readyIds = Array.from(new Set([...validation.approvedIds, ...validation.revalidatedIds]));
     const retryable = Array.from(new Set([...validation.errorIds, ...validation.conflictIds]));
-    await reconcileWhatsApp(item.batchId, validation.approvedIds, retryable);
-    if (!validation.approvedIds.includes(item.leadId)) {
+    await reconcileWhatsApp(item.batchId, readyIds, retryable);
+    if (!readyIds.includes(item.leadId)) {
       const failure = validation.failures.find((candidate) => candidate.id === item.leadId);
       throw new Error(`${item.company}: ${failure?.reason || 'O telefone não foi confirmado no WhatsApp pelo chip selecionado.'}`);
     }

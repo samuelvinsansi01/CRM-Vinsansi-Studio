@@ -21,6 +21,7 @@ import {
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useLeadCycle } from '../hooks/useLeadCycle';
+import { useOperationalQueueDate } from '../hooks/useOperationalQueueDate';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { configService } from '../services/config/config.service';
 import type { BranchConfigRecord } from '../services/config/types';
@@ -103,7 +104,7 @@ export function HomePage() {
   const [branch, setBranch] = useState('Todos');
   const [state, setState] = useState('Todos');
   const [pulling, setPulling] = useState<'WhatsApp' | 'Instagram' | ''>('');
-  const [scheduledDate, setScheduledDate] = useState(toLocalDateInputValue());
+  const [scheduledDate, setScheduledDate] = useOperationalQueueDate();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [branches, setBranches] = useState<BranchConfigRecord[]>([]);
   const [whatsappResources, setWhatsappResources] = useState<QueueReviewResource[]>([]);
@@ -203,7 +204,8 @@ export function HomePage() {
       resetPage();
       const formattedDate = new Date(`${result.scheduledDate}T12:00:00`).toLocaleDateString('pt-BR');
       const details = `${result.ready} pronto(s) para revisão · ${result.reserved} reservado(s) · ${result.resource.label} · ${formattedDate}.`;
-      toast(`Fila ${channel} preparada`, details + (result.technicalStop ? ' Houve erro técnico; os afetados foram liberados sem retry automático.' : '') + (result.exhausted ? ` Não havia leads elegíveis suficientes para preencher as ${result.capacityToFill} vaga(s) disponíveis.` : ''), result.errors ? 'warning' : 'success');
+      const redirected = result.redirectedToInstagram ? ` ${result.redirectedToInstagram} telefone(s) não confirmado(s) no WhatsApp e direcionado(s) ao Instagram.` : '';
+      toast(`Fila ${channel} preparada`, details + redirected + (result.technicalStop ? ' Houve erro técnico; os afetados foram liberados sem retry automático.' : '') + (result.exhausted ? ` Não havia leads elegíveis suficientes para preencher as ${result.capacityToFill} vaga(s) disponíveis.` : ''), result.errors ? 'warning' : 'success');
     } catch (error) {
       toast(`Não foi possível puxar ${channel}`, error instanceof Error ? error.message : 'Tente novamente.', 'danger');
     } finally {

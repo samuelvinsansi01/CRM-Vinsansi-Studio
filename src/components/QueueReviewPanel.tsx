@@ -40,10 +40,12 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
   const pendingItemsRef = useRef(new Set<string>());
   const toastRef = useRef(onToast);
   const scopeRef = useRef('');
+  const requestRef = useRef(0);
 
   useEffect(() => { toastRef.current = onToast; }, [onToast]);
 
   const refresh = useCallback(async () => {
+    const requestId = ++requestRef.current;
     if (!preferredResourceId) { scopeRef.current = ''; setBatches([]); setLoading(false); return; }
     const scopeKey = `${channel}:${preferredResourceId}:${scheduledDate}`;
     const scopeChanged = scopeRef.current !== scopeKey;
@@ -52,9 +54,16 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
       setBatches([]);
       setLoading(true);
     }
-    try { setBatches(await queueReviewService.list(channel, preferredResourceId, scheduledDate)); }
-    catch (error) { toastRef.current('Não foi possível carregar a revisão', error instanceof Error ? error.message : 'Tente novamente.', 'danger'); }
-    finally { if (scopeRef.current === scopeKey) setLoading(false); }
+    try {
+      const nextBatches = await queueReviewService.list(channel, preferredResourceId, scheduledDate);
+      if (requestRef.current === requestId && scopeRef.current === scopeKey) setBatches(nextBatches);
+    }
+    catch (error) {
+      if (requestRef.current === requestId && scopeRef.current === scopeKey) {
+        toastRef.current('Não foi possível carregar a revisão', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
+      }
+    }
+    finally { if (requestRef.current === requestId && scopeRef.current === scopeKey) setLoading(false); }
   }, [channel, preferredResourceId, scheduledDate]);
 
   // R40: atualizações do componente pai (cards, toasts e Fila final) não podem

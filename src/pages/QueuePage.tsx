@@ -5,6 +5,7 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { QueueReviewPanel } from '../components/QueueReviewPanel';
 import { QueueFinalTable, type FinalLead } from '../components/QueueFinalTable';
 import { useInstagramQueue } from '../hooks/useInstagramQueue';
+import { useOperationalQueueDate } from '../hooks/useOperationalQueueDate';
 import { useWhatsAppQueue } from '../hooks/useWhatsAppQueue';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
 import type { InstagramQueueLead } from '../services/instagram-queue/types';
@@ -19,12 +20,12 @@ import { toLocalDateInputValue } from '../utils/date';
 export type QueuePageProps={channel:'whatsapp'|'instagram'}; type QueueTab='Revisão'|'Fila final';
 function todayInputValue(){return toLocalDateInputValue();}
 function useQueueToasts(){const[toasts,setToasts]=useState<ToastItem[]>([]);const pushToast=(toast:Omit<ToastItem,'id'>)=>{const id=`toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;setToasts((current)=>[{id,...toast},...current].slice(0,4));window.setTimeout(()=>setToasts((current)=>current.filter((item)=>item.id!==id)),3800);};return{toasts,setToasts,pushToast};}
-function pullDescription(result:Awaited<ReturnType<typeof queueReviewService.pull>>){return[`${result.ready} pronto(s)`,`${result.reserved} reservado(s)`,result.invalidatedByProvider?`${result.invalidatedByProvider} sem WhatsApp`:'',result.redirectedToInstagram?`${result.redirectedToInstagram} liberado(s) para Instagram`:'',result.technicalStop?'erro técnico liberado sem retry automático':'',result.exhausted?`sem elegíveis suficientes para preencher ${result.capacityToFill} vaga(s)`:'' ].filter(Boolean).join(' · ');}
+function pullDescription(result:Awaited<ReturnType<typeof queueReviewService.pull>>){return[`${result.ready} pronto(s)`,`${result.reserved} reservado(s)`,result.invalidatedByProvider?`${result.invalidatedByProvider} sem WhatsApp`:'',result.redirectedToInstagram?`${result.redirectedToInstagram} sem WhatsApp, direcionado(s) ao Instagram`:'',result.technicalStop?'erro técnico liberado sem retry automático':'',result.exhausted?`sem elegíveis suficientes para preencher ${result.capacityToFill} vaga(s)`:'' ].filter(Boolean).join(' · ');}
 export function QueuePage({channel}:QueuePageProps){return channel==='instagram'?<InstagramQueuePage/>:<WhatsAppQueuePage/>;}
 
 function WhatsAppQueuePage(){
   const{hasPermission}=useOrganizationContext();const canPrepare=hasPermission('queues.prepare');const canControl=hasPermission('queues.control');const canEditLead=hasPermission('leads.edit');const canInvalidate=hasPermission('leads.validate');
-  const[activeChip,setActiveChip]=useState('');const[activeTab,setActiveTab]=useState<QueueTab>('Revisão');const[scheduledDate,setScheduledDate]=useState(todayInputValue);const[confirmLead,setConfirmLead]=useState<WhatsAppQueueLead|null>(null);const[viewLead,setViewLead]=useState<WhatsAppQueueLead|null>(null);const[nameLead,setNameLead]=useState<WhatsAppQueueLead|null>(null);const[pulling,setPulling]=useState(false);const[reprocessing,setReprocessing]=useState(false);const[reviewRefreshKey,setReviewRefreshKey]=useState(0);const{toasts,setToasts,pushToast}=useQueueToasts();
+  const[activeChip,setActiveChip]=useState('');const[activeTab,setActiveTab]=useState<QueueTab>('Revisão');const[scheduledDate,setScheduledDate]=useOperationalQueueDate();const[confirmLead,setConfirmLead]=useState<WhatsAppQueueLead|null>(null);const[viewLead,setViewLead]=useState<WhatsAppQueueLead|null>(null);const[nameLead,setNameLead]=useState<WhatsAppQueueLead|null>(null);const[pulling,setPulling]=useState(false);const[reprocessing,setReprocessing]=useState(false);const[reviewRefreshKey,setReviewRefreshKey]=useState(0);const{toasts,setToasts,pushToast}=useQueueToasts();
   const{chips,batches,summary,loading,error,refresh,reprocess,patchLeadLocally,invalidate}=useWhatsAppQueue(activeChip,scheduledDate);
   useEffect(()=>{if(!chips.length){if(activeChip)setActiveChip('');return;}if(!activeChip||!chips.includes(activeChip))setActiveChip(chips[0]);},[activeChip,chips]);
   const finalLeads=useMemo(()=>batches.flatMap((batch)=>batch.leads),[batches]);const chipOptions=chips.map((chip)=>({label:chip,value:chip}));const scopeLabel=activeChip||'Selecione um chip';
@@ -44,7 +45,7 @@ function WhatsAppQueuePage(){
 
 function InstagramQueuePage(){
   const{hasPermission}=useOrganizationContext();const canPrepare=hasPermission('queues.prepare');const canControl=hasPermission('queues.control');const canEditLead=hasPermission('leads.edit');const canInvalidate=hasPermission('leads.validate');
-  const[activeProfile,setActiveProfile]=useState('');const[activeTab,setActiveTab]=useState<QueueTab>('Revisão');const[scheduledDate,setScheduledDate]=useState(todayInputValue);const[confirmLead,setConfirmLead]=useState<InstagramQueueLead|null>(null);const[viewLead,setViewLead]=useState<InstagramQueueLead|null>(null);const[nameLead,setNameLead]=useState<InstagramQueueLead|null>(null);const[pulling,setPulling]=useState(false);const[reprocessing,setReprocessing]=useState(false);const[reviewRefreshKey,setReviewRefreshKey]=useState(0);const{toasts,setToasts,pushToast}=useQueueToasts();
+  const[activeProfile,setActiveProfile]=useState('');const[activeTab,setActiveTab]=useState<QueueTab>('Revisão');const[scheduledDate,setScheduledDate]=useOperationalQueueDate();const[confirmLead,setConfirmLead]=useState<InstagramQueueLead|null>(null);const[viewLead,setViewLead]=useState<InstagramQueueLead|null>(null);const[nameLead,setNameLead]=useState<InstagramQueueLead|null>(null);const[pulling,setPulling]=useState(false);const[reprocessing,setReprocessing]=useState(false);const[reviewRefreshKey,setReviewRefreshKey]=useState(0);const{toasts,setToasts,pushToast}=useQueueToasts();
   const{profiles,batches,summary,loading,error,refresh,patchLeadLocally,invalidate,reprocess}=useInstagramQueue(activeProfile,scheduledDate);
   useEffect(()=>{if(!profiles.length){if(activeProfile)setActiveProfile('');return;}if(!activeProfile||!profiles.includes(activeProfile))setActiveProfile(profiles[0]);},[activeProfile,profiles]);
   const finalLeads=useMemo(()=>batches.flatMap((batch)=>batch.leads),[batches]);const profileOptions=profiles.map((profile)=>({label:profile,value:profile}));const scopeLabel=activeProfile||'Selecione um perfil';
