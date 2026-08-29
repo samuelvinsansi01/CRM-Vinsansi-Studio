@@ -281,16 +281,41 @@ function providerResult(item: GatewayCheckItem | undefined, expectedPhone: strin
 }
 
 async function reviewItemMutation(auth: AuthContext, lead: OwnedValidationLead, mode: 'invalidate' | 'release') {
-  let query = auth.admin.from('queue_review_items');
-  if (mode === 'release') query = query.delete();
-  else query = query.update({ review_status: 'invalidated', updated_at: new Date().toISOString() });
-  query = query
+  const reviewItemId = lead.review_item_id && /^\d+$/.test(lead.review_item_id)
+    ? Number(lead.review_item_id)
+    : null;
+
+  if (mode === 'release') {
+    let deleteQuery = auth.admin
+      .from('queue_review_items')
+      .delete()
+      .eq('organizations_id', auth.organizationId)
+      .eq('leads_id', Number(lead.id))
+      .eq('review_status', 'open');
+
+    if (reviewItemId !== null) {
+      deleteQuery = deleteQuery.eq('queue_review_items_id', reviewItemId);
+    }
+
+    const result = await deleteQuery.select('queue_review_items_id').maybeSingle();
+    if (result.error) throw new Error(`Falha ao liberar a Revisão do lead ${lead.id}: ${result.error.message}`);
+    if (!result.data) throw new Error(`A reserva de Revisão do lead ${lead.id} mudou durante a validação.`);
+    return;
+  }
+
+  let updateQuery = auth.admin
+    .from('queue_review_items')
+    .update({ review_status: 'invalidated', updated_at: new Date().toISOString() })
     .eq('organizations_id', auth.organizationId)
     .eq('leads_id', Number(lead.id))
     .eq('review_status', 'open');
-  if (lead.review_item_id && /^\d+$/.test(lead.review_item_id)) query = query.eq('queue_review_items_id', Number(lead.review_item_id));
-  const result = await query.select('queue_review_items_id').maybeSingle();
-  if (result.error) throw new Error(`Falha ao liberar a Revisão do lead ${lead.id}: ${result.error.message}`);
+
+  if (reviewItemId !== null) {
+    updateQuery = updateQuery.eq('queue_review_items_id', reviewItemId);
+  }
+
+  const result = await updateQuery.select('queue_review_items_id').maybeSingle();
+  if (result.error) throw new Error(`Falha ao invalidar a Revisão do lead ${lead.id}: ${result.error.message}`);
   if (!result.data) throw new Error(`A reserva de Revisão do lead ${lead.id} mudou durante a validação.`);
 }
 

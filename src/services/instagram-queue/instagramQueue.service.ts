@@ -33,22 +33,6 @@ function assertAllAllowed(
 async function rolloverOverdueInstagramItems() {
 }
 
-function logQueueEvent(action: string, lead: Partial<InstagramQueueLead>, status?: string, message?: string) {
-  void repositories.events.append({
-    source: 'instagram-queue',
-    action,
-    channel: 'instagram',
-    leadId: lead.lead_id,
-    queueItemId: lead.id,
-    status,
-    message,
-    metadata: {
-      batch_id: lead.batch_id ?? lead.batchId,
-      profile_id: lead.profile_id ?? lead.profile,
-      template_id: lead.template_id,
-    },
-  }).catch(() => undefined);
-}
 
 export const instagramQueueService = {
   async listProfiles() {
@@ -71,7 +55,6 @@ export const instagramQueueService = {
     if (!permissionsFor('instagram-queue', current.status).canEdit()) throw new Error('Este item não pode ser editado no estado atual.');
     assertStatusPatch(current, input);
     const lead = await repositories.instagramQueue.updateLead(id, input);
-    logQueueEvent('updated', current, current.status);
     eventBus.emit('instagram-queue:changed', { action: 'update' });
     return lead;
   },
@@ -80,7 +63,6 @@ export const instagramQueueService = {
     const leads = await getSelectedLeads(ids);
     const allowed = assertAllAllowed(leads, 'pause', 'paused', 'Todos os itens selecionados precisam estar disponíveis para pausa.');
     await repositories.instagramQueue.pause(allowed);
-    leads.forEach((lead) => logQueueEvent('paused', lead, 'paused'));
     eventBus.emit('instagram-queue:changed', { action: 'pause' });
   },
 
@@ -88,7 +70,6 @@ export const instagramQueueService = {
     const leads = await getSelectedLeads(ids);
     const allowed = assertAllAllowed(leads, 'resume', 'queued', 'Todos os itens selecionados precisam estar pausados.');
     await repositories.instagramQueue.resume(allowed);
-    leads.forEach((lead) => logQueueEvent('resumed', lead, 'queued'));
     eventBus.emit('instagram-queue:changed', { action: 'resume' });
   },
 
@@ -96,7 +77,6 @@ export const instagramQueueService = {
     const leads = await getSelectedLeads(ids);
     const allowed = assertAllAllowed(leads, 'reprocess', 'queued', 'Apenas itens Instagram com erro podem ser reprocessados.');
     await repositories.instagramQueue.reprocess(allowed);
-    leads.forEach((lead) => logQueueEvent('reprocessed', lead, 'queued'));
     eventBus.emit('instagram-queue:changed', { action: 'reprocess' });
   },
 
@@ -105,7 +85,6 @@ export const instagramQueueService = {
     if (!lead) throw new Error('Item não encontrado na fila Instagram.');
     assertTransition({ entity: 'instagram-queue', fromStatus: lead.status, toStatus: 'invalid', action: 'invalidate' });
     await repositories.instagramQueue.invalidate(id);
-    logQueueEvent('invalidated', lead, 'invalid');
     eventBus.emit('instagram-queue:changed', { action: 'invalidate' });
   },
 };

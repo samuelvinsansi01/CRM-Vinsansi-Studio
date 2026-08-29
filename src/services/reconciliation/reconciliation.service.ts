@@ -1,6 +1,5 @@
 import { eventBus } from '../../lib/events';
 import { isSupabaseConfigured } from '../../lib/supabase';
-import { repositories } from '../../repositories';
 import { canonicalReconciliationRepository } from '../../repositories/reconciliation';
 import { analyzeReconciliationSnapshot } from './reconciliation.rules';
 import type {
@@ -24,34 +23,9 @@ function emptyScan(): ReconciliationScan {
   };
 }
 
-function eventChannel(issue: ReconciliationIssue) {
-  return issue.channel;
-}
 
-async function appendRepairAudit(issue: ReconciliationIssue, result: ReconciliationRepairResult) {
-  await repositories.events.append({
-    source: 'reconciliation',
-    action: issue.repairAction ?? 'manual-review',
-    channel: eventChannel(issue),
-    leadId: issue.leadId,
-    queueItemId: issue.queueItemId,
-    status: result.repaired ? 'repaired' : 'unchanged',
-    message: result.message,
-    metadata: {
-      flow: 'F10',
-      issue_id: issue.id,
-      issue_type: issue.type,
-      severity: issue.severity,
-      previous_lead_status_id: issue.leadStatusId,
-      previous_queue_status: issue.queueStatusRaw ?? issue.queueStatus,
-      safe_for_bulk_repair: issue.safeForBulkRepair,
-      company_name: issue.leadName,
-    },
-  });
-}
 
 function emitRefreshEvents(issue: ReconciliationIssue) {
-  eventBus.emit('audit:changed', { action: 'repair', issueId: issue.id });
   if (issue.channel === 'whatsapp') eventBus.emit('whatsapp-queue:changed', { action: 'update' });
   if (issue.channel === 'instagram') eventBus.emit('instagram-queue:changed', { action: 'update' });
   if (issue.leadId) {
@@ -67,18 +41,12 @@ async function scan(): Promise<ReconciliationScan> {
     canonicalReconciliationRepository.loadQueueItems(),
   ]);
   const result = analyzeReconciliationSnapshot(leads, queueItems, staleAfterMinutes());
-  eventBus.emit('audit:changed', { action: 'scan' });
   return result;
 }
 
 async function repair(issue: ReconciliationIssue): Promise<ReconciliationRepairResult> {
   if (!isSupabaseConfigured()) throw new Error('A reconciliação exige conexão com o Supabase.');
   const result = await canonicalReconciliationRepository.repair(issue);
-  try {
-    await appendRepairAudit(issue, result);
-  } catch (error) {
-    result.auditWarning = error instanceof Error ? error.message : 'Falha ao registrar auditoria do reparo.';
-  }
   emitRefreshEvents(issue);
   return result;
 }

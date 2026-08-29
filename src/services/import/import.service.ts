@@ -258,7 +258,6 @@ export const importService = {
     const selected = uniqueIds.map((id) => byId.get(id));
     if (selected.some((lead) => !lead)) throw new Error('Um ou mais leads nao foram encontrados.');
 
-    const sentAt = new Date().toISOString();
     const selectedLeads = selected as ImportLead[];
 
     for (const lead of selectedLeads) {
@@ -267,24 +266,6 @@ export const importService = {
       await repositories.import.update(lead.id, {
         status: 'sent',
         motivo: reason,
-      });
-      await repositories.events.append({
-        source: 'import',
-        action: 'manual_mark_sent',
-        channel: channelFromImport(lead),
-        leadId: lead.id,
-        status: 'sent',
-        message: reason,
-        metadata: {
-          company_name: lead.empresa,
-          normalized_phone: normalizePhone(lead.whatsapp),
-          instagram_url: lead.instagram_url ?? lead.instagram,
-          website: lead.site,
-          maps_url: lead.normalizedMapsUrl,
-          destination: lead.destination ?? lead.destino,
-          manual: true,
-          sent_at: sentAt,
-        },
       });
     }
 

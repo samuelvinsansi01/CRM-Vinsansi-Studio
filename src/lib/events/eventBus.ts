@@ -7,7 +7,6 @@ export type LeadCertoEventMap = {
   'whatsapp-queue:changed': { action: 'send' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'update' | 'sending' | 'worker-sent' | 'error' };
   'instagram-queue:changed': { action: 'send' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'update' | 'sending' | 'worker-sent' | 'error' };
   'base:changed': { action: 'update' | 'archive' | 'restore' | 'remove' | 'status' | 'metadata' };
-  'audit:changed': { action: 'scan' | 'repair'; issueId?: string };
   'toast:push': { type: 'success' | 'error' | 'warning' | 'info'; message: string };
 };
 

@@ -37,6 +37,22 @@ for (const token of ['validatePreparedInitial','validateInitial(ids)','revalidat
 }
 if (!validationService.includes('validatePreparedInitial')) fail('servico_validacao_sem_fluxo_preparado');
 
+// Regression guards for the R59 build errors reported during the real TypeScript build.
+if (handler.includes("let query = auth.admin.from('queue_review_items')")) fail('builder_supabase_mutavel_regrediu');
+for (const token of ["let deleteQuery = auth.admin", "let updateQuery = auth.admin"]) {
+  if (!handler.includes(token)) fail(`builder_supabase_final_ausente:${token}`);
+}
+const header = read('src/design-system/layouts/Header.tsx');
+for (const token of ["canAccessPage('audit')", "navigate('audit')", 'ClipboardList']) {
+  if (header.includes(token)) fail(`header_auditoria_regrediu:${token}`);
+}
+const catalog = read('src/pages/CatalogCrudPage.tsx');
+if ((catalog.match(/return \{ name: record\.name, statusId: record\.statusId \};/g) ?? []).length > 1) fail('catalog_never_fallback_regrediu');
+const repositoryIndex = read('src/repositories/index.ts');
+for (const token of ["from './events'", "export * from './events'", 'canonicalEventLogRepository']) {
+  if (repositoryIndex.includes(token)) fail(`repositorio_eventos_regrediu:${token}`);
+}
+
 const runtimeRoots = ['src','server','api'];
 const extensions = new Set(['.ts','.tsx','.js','.mjs']);
 const files = [];
@@ -53,6 +69,10 @@ const forbidden = [
   '/api/whatsapp/revalidate','whatsapp-revalidation-review','whatsapp-revalidate'
 ];
 for (const token of forbidden) if (runtime.includes(token)) fail(`referencia_removida:${token}`);
+for (const token of ["repositories.events", "canAccessPage('audit')", "navigate('audit')"]) {
+  if (runtime.includes(token)) fail(`residuo_codigo_removido:${token}`);
+}
+if (exists('src/repositories/events')) fail('repositorio_eventos_legado_ainda_existe');
 
 const mapsRoute = read('server/routes/maps/extension.ts');
 for (const token of ['leads_normalized_phone','leads_normalized_instagram','leads_normalized_domain','leads_normalized_maps']) if (!mapsRoute.includes(token)) fail(`captura_identidade_direta_ausente:${token}`);

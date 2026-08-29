@@ -1,0 +1,29 @@
+CRM - Vinsansi Studio v2.4.0-R59
+BUILD FIX — 29/08/2026
+
+ARQUIVO OBRIGATÓRIO DE HOMOLOGAÇÃO
+- CHECK - CRM R59 - Homologacao final.sql
+
+CORREÇÕES DE BUILD APLICADAS
+- validation.handler.ts: builders DELETE/PATCH do Supabase separados, sem atribuição incompatível PostgrestQueryBuilder/PostgrestFilterBuilder.
+- Header.tsx: removida navegação antiga para a página "audit", que não faz parte de PageId no contrato R59.
+- CatalogCrudPage.tsx: removidos acessos a propriedades em fallback já reduzido a never pelo discriminated union.
+- HomologationPage.tsx: repositório R59 somente leitura restaurado no pacote em src/repositories/release/homologation.repository.ts.
+- repositories/index.ts e services: removida a dependência do repositório antigo de eventos/auditoria; nenhum runtime volta a depender de audit_events.
+
+VERIFICAÇÕES EXECUTADAS NESTE PACOTE
+- node scripts/verify-r59-final-contract.mjs: APROVADO.
+- node scripts/verify-syntax.mjs: APROVADO em 233 arquivos TypeScript.
+- O verificador R59 exige a presença do arquivo SQL de homologação, da página e do repositório de homologação.
+- O verificador R59 bloqueia referências às estruturas removidas do banco e também ao repositório antigo de eventos/auditoria.
+
+BANCO CONGELADO
+- 60 tabelas.
+- 7 lead_status.
+- 3 canais.
+- 0 constraints não validadas.
+- Auditoria de dados 01–11 = OK.
+- 22 enviados antigos sem canal permanecem somente como legado informativo.
+
+BUILD COMPLETO
+O build completo Vite/TypeScript não foi executado neste ambiente porque as dependências npm não estão disponíveis localmente e o registry não respondeu durante a tentativa de instalação. As falhas TypeScript reportadas no build externo foram corrigidas neste pacote; a confirmação final do `npm run build` deve ocorrer no ambiente com as dependências instaladas.

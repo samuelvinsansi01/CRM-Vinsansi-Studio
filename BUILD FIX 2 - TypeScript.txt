@@ -1,0 +1,12 @@
+CRM Vinsansi Studio 2.4.0-R59 - BUILD FIX 2
+
+Correções específicas para os erros do build real reportados:
+- server/whatsapp/validation.handler.ts: builders DELETE/PATCH do Supabase separados e tipados por inferência correta.
+- Header.tsx: removida navegação antiga para audit.
+- CatalogCrudPage.tsx: removidos fallbacks impossíveis que acessavam record quando o discriminated union já era never.
+- HomologationPage.tsx: repositório obrigatório de homologação incluído no pacote.
+- src/repositories/release/homologation.repository.ts: incluído e verificado.
+- src/repositories/index.ts: removida dependência do repositório ./events eliminado.
+- CHECK - CRM R59 - Homologacao final.sql: incluído e verificado.
+
+O script verify:r59 possui guardas de regressão para esses erros.

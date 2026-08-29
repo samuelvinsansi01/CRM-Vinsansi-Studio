@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Building2, ChevronDown, ChevronLeft, ClipboardList, LogOut, UserRound } from 'lucide-react';
+import { Bell, Building2, ChevronDown, ChevronLeft, LogOut, UserRound } from 'lucide-react';
 import { IconButton } from '../components';
 import { navGroups, pagePermissions, type NavGroup, type PageId } from '../../pages/pageRegistry';
 import { useAuthContext } from '../../providers/AuthProvider';
@@ -195,12 +195,6 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                   <UserRound size={14} strokeWidth={1.8} />
                   Minha conta
                 </button>
-                {canAccessPage('audit') ? (
-                  <button type="button" onClick={() => navigate('audit')}>
-                    <ClipboardList size={14} strokeWidth={1.8} />
-                    Auditoria
-                  </button>
-                ) : null}
                 <button type="button" onClick={() => void signOut()}>
                   <LogOut size={14} strokeWidth={1.8} />
                   Sair

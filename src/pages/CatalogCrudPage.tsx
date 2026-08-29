@@ -116,7 +116,7 @@ function initialForm(kind: CatalogKind, record?: CatalogRecord | null): FormStat
   if (record.kind === 'instances') return { name: record.name, url: record.url, apiKey: '' };
   if (record.kind === 'template_channels') return { name: record.name, blockedChannelIds: record.blockedChannelIds, statusId: record.statusId };
   if (record.kind === 'template_types') return { name: record.name, statusId: record.statusId };
-  return { name: record.name, statusId: record.statusId };
+  throw new Error('Tipo de catálogo não suportado.');
 }
 
 function FormSelect({ label, value, options, onChange }: { label: string; value: string; options: Array<{ label: string; value: string }>; onChange: (value: string) => void }) {
@@ -194,7 +194,7 @@ function rowFor(record: CatalogRecord, channels: ChannelOption[]): CatalogTableR
     status: statusTag(record.active),
   };
   if (record.kind === 'template_types') return { id: record.id, name: record.name, status: statusTag(record.active) };
-  return { id: record.id, name: record.name, status: statusTag(record.active) };
+  throw new Error('Tipo de catálogo não suportado.');
 }
 
 function CatalogForm({ kind, form, channels, onChange }: { kind: CatalogKind; form: FormState; channels: ChannelOption[]; onChange: (key: string, value: FormValue) => void }) {

@@ -12,7 +12,6 @@ import { chipInstance, chipLevelDefaults, isOperationalWhatsAppChip } from '../c
 import { settingsService } from '../settings';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
-import { renderTemplateVariables } from '../templates/templateVariables';
 import { hasAllTemplateMessages } from '../templates/templateContract';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle/supabaseLeadCycle.repository';
 
@@ -93,58 +92,7 @@ function assertWorkerContractReady(leads: WhatsAppQueueLead[]) {
   throw new Error(`Item WhatsApp sem contrato de worker (${missing.company || missing.id}): ${missingWhatsAppWorkerFields(missing).join(', ')}.`);
 }
 
-async function logDispatchMessages(leads: WhatsAppQueueLead[], replayed = false) {
-  // Auditoria nunca pode desfazer um envio confirmado. Falhas de log ficam registradas
-  // no console/observabilidade do backend, mas nao revertem o estado operacional.
-  await Promise.allSettled(
-    leads.flatMap((lead) =>
-      [
-        { part: 'message_1', body: renderTemplateVariables(lead.message_1 || lead.message1, lead) },
-        { part: 'message_2', body: renderTemplateVariables(lead.message_2 || lead.message2, lead) },
-        { part: 'message_3', body: renderTemplateVariables(lead.message_3 || lead.message3, lead) },
-        { part: 'message_4', body: renderTemplateVariables(lead.message_4 || lead.message4, lead) },
-        { part: 'image', body: lead.image_url || lead.image_id || '' },
-      ]
-        .filter((item) => item.body.trim())
-        .map((item) =>
-          repositories.events.appendDispatchMessageLog({
-            leadId: sourceLeadId(lead),
-            chipId: lead.chip_id,
-            instance: lead.chip_instance || lead.chip,
-            phone: lead.phone,
-            normalizedPhone: lead.phone_normalized,
-            direction: 'outbound',
-            part: item.part,
-            body: item.body,
-            status: 'sent',
-            responsePayload: {
-              queue_item_id: lead.id,
-              batch_id: lead.batch_id ?? lead.batchId,
-              template_id: lead.template_id,
-              replayed_post_send: replayed,
-            },
-          }),
-        ),
-    ),
-  );
-}
 
-function logQueueEvent(action: string, lead: Partial<WhatsAppQueueLead>, status?: string, message?: string) {
-  void repositories.events.append({
-    source: 'whatsapp-queue',
-    action,
-    channel: 'whatsapp',
-    leadId: lead.lead_id,
-    queueItemId: lead.id,
-    status,
-    message,
-    metadata: {
-      batch_id: lead.batch_id ?? lead.batchId,
-      chip_id: lead.chip_id ?? lead.chip,
-      template_id: lead.template_id,
-    },
-  }).catch(() => undefined);
-}
 
 async function syncCanonicalSentStatus(leads: WhatsAppQueueLead[]) {
   await Promise.allSettled(leads.map(async (lead) => {
@@ -152,35 +100,19 @@ async function syncCanonicalSentStatus(leads: WhatsAppQueueLead[]) {
     if (!/^\d+$/.test(leadId)) return;
     const updated = await supabaseLeadCycleRepository.compareAndSet(leadId, LEAD_STATUS.QUEUED, { lead_status_id: LEAD_STATUS.SENT });
     if (updated) return;
-    await repositories.events.append({
-      source: 'whatsapp-queue',
-      action: 'canonical_sent_sync_conflict',
-      channel: 'whatsapp',
-      leadId,
-      queueItemId: lead.id,
-      status: 'sent',
-      metadata: {
-        flow: 'F09',
-        canonical_source: 'leads',
-        expected_status_id: 4,
-        target_status_id: 5,
-      },
-    });
+    console.warn(`Lead ${leadId} não estava mais em Na fila ao sincronizar Enviado; mantendo o estado canônico atual.`);
   }));
 }
 async function finishSentPersistence({
   queueIds,
   leads,
-  replayed = false,
 }: {
   queueIds: string[];
   leads: WhatsAppQueueLead[];
-  replayed?: boolean;
 }) {
   // O estado do lead é atualizado; a Base Permanente consolidada é sincronizada pelos triggers do banco.
   if (leads.length) await syncCanonicalSentStatus(leads);
   if (queueIds.length) await repositories.whatsappQueue.send(queueIds);
-  if (leads.length) await logDispatchMessages(leads, replayed);
 }
 
 export const whatsappQueueService = {
@@ -199,7 +131,6 @@ export const whatsappQueueService = {
     const leads = await getSelectedLeads(ids);
     const allowed = assertAllAllowed(leads, 'mark_sending', 'sending', 'Todos os itens selecionados precisam poder iniciar envio.');
     await Promise.all(allowed.map((id) => repositories.whatsappQueue.updateLead(id, { status: 'sending' })));
-    leads.forEach((lead) => logQueueEvent('sending', lead, 'sending'));
     eventBus.emit('whatsapp-queue:changed', { action: 'sending' });
   },
 
@@ -207,8 +138,7 @@ export const whatsappQueueService = {
     const sentLeads = await getSelectedLeads(ids);
     const allowed = assertAllAllowed(sentLeads, 'mark_sent', 'sent', 'Todos os itens selecionados precisam estar em envio para marcar como enviados.');
     const allowedLeads = sentLeads.filter((lead) => allowed.includes(lead.id));
-    await finishSentPersistence({ queueIds: allowed, leads: allowedLeads, replayed: true });
-    allowedLeads.forEach((lead) => logQueueEvent('sent', lead, 'sent'));
+    await finishSentPersistence({ queueIds: allowed, leads: allowedLeads });
     eventBus.emit('whatsapp-queue:changed', { action: 'worker-sent' });
     if (allowedLeads.length) eventBus.emit('base:changed', { action: 'update' });
   },
@@ -217,7 +147,6 @@ export const whatsappQueueService = {
     const [lead] = await getSelectedLeads([id]);
     if (lead) assertTransition({ entity: 'whatsapp-queue', fromStatus: lead.status, toStatus: 'error', action: 'fail' });
     await repositories.whatsappQueue.updateLead(id, { status: 'error', error_message: message });
-    logQueueEvent('error', lead ?? { id }, 'error', message);
     eventBus.emit('whatsapp-queue:changed', { action: 'error' });
   },
 
@@ -282,7 +211,6 @@ export const whatsappQueueService = {
     const paused = leads.filter((lead) => permissionsFor('whatsapp-queue', lead.status).canResume());
     if (paused.length) {
       await Promise.all(paused.map((lead) => repositories.whatsappQueue.updateLead(lead.id, { status: 'queued', error_message: '' })));
-      paused.forEach((lead) => logQueueEvent('resume_for_batch', lead, 'queued'));
     }
 
     const state = await whatsappBatchGateway.start(ids, chip);
@@ -335,20 +263,6 @@ export const whatsappQueueService = {
     const sentLeads = leads.filter((lead) => sentIds.includes(lead.id));
     const errorResults = normalizedResults.filter((result) => result.status === 'error');
     const pausedResults = normalizedResults.filter((result) => result.status === 'paused');
-
-    sentLeads.forEach((lead) => logQueueEvent('sent_by_worker', lead, 'sent'));
-    errorResults.forEach((result) => logQueueEvent(
-      'worker_error',
-      leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId },
-      'error',
-      result.errorMessage,
-    ));
-    pausedResults.forEach((result) => logQueueEvent(
-      'worker_paused',
-      leads.find((lead) => lead.id === result.leadId) ?? { id: result.leadId },
-      'paused',
-      result.errorMessage,
-    ));
 
     eventBus.emit('whatsapp-queue:changed', { action: 'send' });
     if (sentLeads.length) eventBus.emit('base:changed', { action: 'update' });

@@ -1,6 +1,5 @@
 import { supabaseBaseRepository } from './base';
 import { canonicalConfigRepository } from './config';
-import { canonicalEventLogRepository } from './events';
 import { supabaseImportRepository } from './import';
 import { canonicalInstagramQueueRepository } from './instagram-queue';
 import { canonicalSettingsRepository } from './settings';
@@ -13,7 +12,6 @@ export const repositories = {
   instagramQueue: canonicalInstagramQueueRepository,
   base: supabaseBaseRepository,
   settings: canonicalSettingsRepository,
-  events: canonicalEventLogRepository,
 };
 
 export * from './config';
@@ -22,5 +20,4 @@ export * from './whatsapp-queue';
 export * from './instagram-queue';
 export * from './base';
 export * from './settings';
-export * from './events';
 export * from './lead-cycle';
