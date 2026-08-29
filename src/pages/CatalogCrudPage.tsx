@@ -34,7 +34,6 @@ import {
   type LevelRecord,
   type TemplateChannelRecord,
   type TemplateTypeRecord,
-  type TemplateVariableRecord,
 } from '../repositories/configuration';
 
 export type CatalogCrudPageProps = { kind: CatalogKind };
@@ -77,11 +76,6 @@ const definitions: Record<CatalogKind, PageDefinition> = {
     description: 'Gerencie os tipos usados para classificar templates de mensagens.',
     singular: 'tipo de template', tableTitle: 'Tipos de template', emptyMessage: 'Nenhum tipo de template cadastrado.',
   },
-  template_variables: {
-    title: 'Variáveis',
-    description: 'Cadastre variáveis reutilizáveis, suas chaves, origem e valor padrão.',
-    singular: 'variável', tableTitle: 'Variáveis de template', emptyMessage: 'Nenhuma variável cadastrada.',
-  },
 };
 
 const statusOptions = [
@@ -108,7 +102,7 @@ function initialForm(kind: CatalogKind, record?: CatalogRecord | null): FormStat
     if (kind === 'instances') return { name: '', url: '', apiKey: '' };
     if (kind === 'template_channels') return { name: '', blockedChannelIds: [], statusId: '1' };
     if (kind === 'template_types') return { name: '', statusId: '1' };
-    return { name: '', key: '', source: '', defaultValue: '', statusId: '1' };
+    return { name: '', statusId: '1' };
   }
 
   if (record.kind === 'contact_sources') return {
@@ -122,7 +116,7 @@ function initialForm(kind: CatalogKind, record?: CatalogRecord | null): FormStat
   if (record.kind === 'instances') return { name: record.name, url: record.url, apiKey: '' };
   if (record.kind === 'template_channels') return { name: record.name, blockedChannelIds: record.blockedChannelIds, statusId: record.statusId };
   if (record.kind === 'template_types') return { name: record.name, statusId: record.statusId };
-  return { name: record.name, key: record.key, source: record.source, defaultValue: record.defaultValue, statusId: record.statusId };
+  return { name: record.name, statusId: record.statusId };
 }
 
 function FormSelect({ label, value, options, onChange }: { label: string; value: string; options: Array<{ label: string; value: string }>; onChange: (value: string) => void }) {
@@ -177,13 +171,7 @@ function columnsFor(kind: CatalogKind): TableColumn<CatalogTableRow>[] {
     { key: 'name', label: 'Tipo de template', width: '70%' },
     { key: 'status', label: 'Status', width: '20%' },
   ];
-  return [
-    { key: 'name', label: 'Variável', width: '22%' },
-    { key: 'key', label: 'Chave', width: '20%' },
-    { key: 'source', label: 'Origem', width: '28%' },
-    { key: 'defaultValue', label: 'Valor padrão', width: '18%' },
-    { key: 'status', label: 'Status', width: '12%' },
-  ];
+  return [{ key: 'name', label: 'Item' }, { key: 'status', label: 'Status' }];
 }
 
 function rowFor(record: CatalogRecord, channels: ChannelOption[]): CatalogTableRow {
@@ -206,10 +194,7 @@ function rowFor(record: CatalogRecord, channels: ChannelOption[]): CatalogTableR
     status: statusTag(record.active),
   };
   if (record.kind === 'template_types') return { id: record.id, name: record.name, status: statusTag(record.active) };
-  return {
-    id: record.id, name: record.name, key: <code>{`{{${record.key}}}`}</code>, source: record.source,
-    defaultValue: record.defaultValue || '—', status: statusTag(record.active),
-  };
+  return { id: record.id, name: record.name, status: statusTag(record.active) };
 }
 
 function CatalogForm({ kind, form, channels, onChange }: { kind: CatalogKind; form: FormState; channels: ChannelOption[]; onChange: (key: string, value: FormValue) => void }) {
@@ -270,13 +255,6 @@ function CatalogForm({ kind, form, channels, onChange }: { kind: CatalogKind; fo
         </div>
       ) : null}
 
-      {kind === 'template_variables' ? (
-        <>
-          <Field label="Chave técnica" value={stringValue(form.key)} placeholder="ex.: empresa" onChange={(value) => onChange('key', value)} />
-          <Field label="Origem do dado" value={stringValue(form.source)} placeholder="ex.: leads.leads_name" onChange={(value) => onChange('source', value)} />
-          <Field label="Valor padrão" value={stringValue(form.defaultValue)} placeholder="Usado quando o dado estiver vazio" onChange={(value) => onChange('defaultValue', value)} />
-        </>
-      ) : null}
 
       {kind !== 'instances' ? (
         <FormSelect label="Status" value={stringValue(form.statusId) || '1'} options={statusOptions} onChange={(value) => onChange('statusId', value)} />
@@ -289,7 +267,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
   const { hasPermission } = useOrganizationContext();
   const managePermission = kind === 'instances'
     ? 'whatsapp.instances.manage'
-    : kind === 'template_channels' || kind === 'template_types' || kind === 'template_variables'
+    : kind === 'template_channels' || kind === 'template_types'
       ? 'templates.manage'
       : 'settings.manage';
   const canManage = hasPermission(managePermission);

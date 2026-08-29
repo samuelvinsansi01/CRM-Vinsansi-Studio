@@ -3,11 +3,11 @@ import { organizationRequestHeaders } from '../organization/organizationSession'
 
 export type WhatsAppValidationRequest = {
   id: string;
-  sourceImportId?: string;
   company: string;
   phone: string;
   normalizedPhone: string;
-  chipInstance?: string;
+  chipInstance: string;
+  reviewItemId?: string;
 };
 
 export type WhatsAppValidationResult = {
@@ -15,20 +15,15 @@ export type WhatsAppValidationResult = {
   status: 'valid' | 'invalid' | 'error';
   valid: boolean;
   errorMessage?: string;
-  outcome?: 'approved' | 'revalidated' | 'instagram_review_required' | 'no_contact' | 'error';
+  outcome?: 'approved' | 'instagram_review_required' | 'no_contact' | 'error';
   persisted?: boolean;
-  proofValid?: boolean;
 };
 
 export interface WhatsAppValidationGateway {
   validateInitial(leads: WhatsAppValidationRequest[]): Promise<WhatsAppValidationResult[]>;
-  revalidateApproved(leads: WhatsAppValidationRequest[]): Promise<WhatsAppValidationResult[]>;
 }
 
-type ValidationOperation = 'validate' | 'revalidate';
-type ValidationMode = 'initial' | 'revalidation';
-
-/** Infraestrutura indisponível: a operação foi interrompida antes de alterar qualquer lead. */
+/** Infraestrutura indisponível: o clique não deve gerar retry/refill automático. */
 export class WhatsAppValidationUnavailableError extends Error {
   readonly code = 'validation_unavailable';
 
@@ -38,16 +33,8 @@ export class WhatsAppValidationUnavailableError extends Error {
   }
 }
 
-function initialValidationEndpoint() {
-  return '/api/whatsapp/validate';
-}
-
-function revalidationEndpoint() {
-  return '/api/whatsapp/revalidate';
-}
-
 function resultLeadId(result: Record<string, unknown>) {
-  return String(result.leadId ?? result.lead_id ?? result.id ?? result.queue_item_id ?? '');
+  return String(result.leadId ?? result.lead_id ?? result.id ?? '');
 }
 
 function resultError(result: Record<string, unknown>) {
@@ -62,13 +49,12 @@ function booleanLike(value: unknown) {
   return undefined;
 }
 
-/** Recebe apenas confirmações explícitas produzidas pelo worker. */
 function normalizeValidationResult(result: unknown): WhatsAppValidationResult | null {
   if (!result || typeof result !== 'object') return null;
   const record = result as Record<string, unknown>;
   const leadId = resultLeadId(record);
   const outcome = String(record.outcome ?? '') as WhatsAppValidationResult['outcome'];
-  const allowedOutcomes = new Set(['approved', 'revalidated', 'instagram_review_required', 'no_contact', 'error']);
+  const allowedOutcomes = new Set(['approved', 'instagram_review_required', 'no_contact', 'error']);
   if (!leadId || record.persisted !== true || !allowedOutcomes.has(String(outcome))) return null;
 
   const explicit = booleanLike(record.valid ?? record.exists ?? record.hasWhatsapp ?? record.has_whatsapp ?? record.isWhatsapp ?? record.is_whatsapp);
@@ -77,12 +63,12 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
 
   if (explicit === false || invalidStatus) {
     if (outcome !== 'instagram_review_required' && outcome !== 'no_contact') return null;
-    return { leadId, status: 'invalid', valid: false, errorMessage: resultError(record), outcome, persisted: true, proofValid: false };
+    return { leadId, status: 'invalid', valid: false, errorMessage: resultError(record), outcome, persisted: true };
   }
 
   if (explicit === true) {
-    if ((outcome !== 'approved' && outcome !== 'revalidated') || record.proofValid !== true) return null;
-    return { leadId, status: 'valid', valid: true, outcome, persisted: true, proofValid: true };
+    if (outcome !== 'approved') return null;
+    return { leadId, status: 'valid', valid: true, outcome, persisted: true };
   }
 
   if (outcome !== 'error') return null;
@@ -92,8 +78,7 @@ function normalizeValidationResult(result: unknown): WhatsAppValidationResult | 
     valid: false,
     outcome: 'error',
     persisted: true,
-    proofValid: false,
-    errorMessage: resultError(record) ?? 'Worker nao retornou confirmação explícita de WhatsApp para este lead.',
+    errorMessage: resultError(record) ?? 'Gateway/Evolution não confirmou o resultado deste número.',
   };
 }
 
@@ -101,83 +86,63 @@ function assertOneResultForEachLead(leads: WhatsAppValidationRequest[], normaliz
   const expected = new Set(leads.map((lead) => lead.id));
   const received = normalized.map((result) => result.leadId);
   const uniqueReceived = new Set(received);
-
-  if (
-    normalized.length !== leads.length ||
-    uniqueReceived.size !== leads.length ||
-    received.some((leadId) => !expected.has(leadId))
-  ) {
-    throw new Error('Worker WhatsApp retornou resultados sem correspondência exata dos leads solicitados. Nenhum lead será aprovado.');
+  if (normalized.length !== leads.length || uniqueReceived.size !== leads.length || received.some((leadId) => !expected.has(leadId))) {
+    throw new Error('Validação WhatsApp retornou resultados sem correspondência exata dos leads solicitados.');
   }
 }
 
-
-async function authenticatedHeaders(operation: ValidationOperation) {
+async function authenticatedHeaders() {
   const { data, error } = await getSupabaseClient().auth.getSession();
   if (error) throw new Error(error.message);
   const token = data.session?.access_token;
   if (!token) throw new Error('Sessão inválida. Entre novamente no painel.');
   return organizationRequestHeaders({
     'Content-Type': 'application/json',
-    'X-Lead-Certo-Operation': operation,
+    'X-Lead-Certo-Operation': 'validate',
     Authorization: `Bearer ${token}`,
   });
 }
 
-async function callValidationWorker(
-  endpoint: string,
-  operation: ValidationOperation,
-  mode: ValidationMode,
-  leads: WhatsAppValidationRequest[],
-): Promise<WhatsAppValidationResult[]> {
-  if (!endpoint) throw new Error(`Configure o endpoint de ${operation === 'validate' ? 'validação inicial' : 'revalidação'} do WhatsApp antes de aprovar leads.`);
-
-  const response = await fetch(endpoint, {
+async function callValidationApi(leads: WhatsAppValidationRequest[]): Promise<WhatsAppValidationResult[]> {
+  const response = await fetch('/api/whatsapp/validate', {
     method: 'POST',
-    headers: await authenticatedHeaders(operation),
+    headers: await authenticatedHeaders(),
     body: JSON.stringify({
       channel: 'whatsapp',
-      operation,
-      mode,
+      operation: 'validate',
+      mode: 'initial',
       leads: leads.map((lead) => ({
         id: lead.id,
-        lead_id: lead.sourceImportId,
+        lead_id: lead.id,
         company: lead.company,
         phone: lead.phone,
         normalized_phone: lead.normalizedPhone,
         chip_instance: lead.chipInstance,
+        review_item_id: lead.reviewItemId,
       })),
     }),
   });
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = payload?.message || payload?.error || response.statusText || `Erro ao executar ${operation} no worker WhatsApp.`;
+    const message = payload?.message || payload?.error || response.statusText || 'Erro ao validar WhatsApp.';
     const formatted = Array.isArray(message) ? message.flat(Infinity).join(', ') : String(message);
-    if (response.status === 503 && payload?.code === 'validation_unavailable') {
-      throw new WhatsAppValidationUnavailableError(formatted);
-    }
+    if (response.status === 503 && payload?.code === 'validation_unavailable') throw new WhatsAppValidationUnavailableError(formatted);
     throw new Error(formatted);
   }
 
-  if (payload?.meta?.operation !== operation || payload?.meta?.mode !== mode) {
-    throw new Error('Worker respondeu uma operação diferente da solicitada. Nenhum lead será aprovado.');
+  if (payload?.meta?.operation !== 'validate' || payload?.meta?.mode !== 'initial') {
+    throw new Error('A validação respondeu um contrato diferente do solicitado.');
   }
 
-  const results: unknown[] = Array.isArray(payload?.results) ? payload.results : Array.isArray(payload) ? payload : [];
+  const results: unknown[] = Array.isArray(payload?.results) ? payload.results : [];
   const normalized = results.map(normalizeValidationResult).filter((item): item is WhatsAppValidationResult => Boolean(item));
   assertOneResultForEachLead(leads, normalized);
   return normalized;
 }
 
-
-export const workerWhatsAppValidationGateway: WhatsAppValidationGateway = {
+export const whatsappValidationGateway: WhatsAppValidationGateway = {
   validateInitial(leads) {
-    return callValidationWorker(initialValidationEndpoint(), 'validate', 'initial', leads);
-  },
-  revalidateApproved(leads) {
-    return callValidationWorker(revalidationEndpoint(), 'revalidate', 'revalidation', leads);
+    return callValidationApi(leads);
   },
 };
-
-export const whatsappValidationGateway = workerWhatsAppValidationGateway;

@@ -73,54 +73,14 @@ export type TemplateTypeRecord = {
   updatedAt: string;
 };
 
-export type TemplateVariableRecord = {
-  id: string;
-  kind: 'template_variables';
-  name: string;
-  key: string;
-  source: string;
-  defaultValue: string;
-  statusId: string;
-  active: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
 export type CatalogRecord =
   | ContactSourceRecord
   | LevelRecord
   | InstanceRecord
   | TemplateChannelRecord
-  | TemplateTypeRecord
-  | TemplateVariableRecord;
+  | TemplateTypeRecord;
 
 export type CatalogKind = CatalogRecord['kind'];
-
-export type ImportRulesRecord = {
-  id: string;
-  statusId: string;
-  minRating: string;
-  minReviews: string;
-  requireName: boolean;
-  requirePhone: boolean;
-  requireInstagram: boolean;
-  requireWebsite: boolean;
-  requireAnyContact: boolean;
-  deduplicatePhone: boolean;
-  deduplicateInstagram: boolean;
-  deduplicateWebsite: boolean;
-  deduplicateMaps: boolean;
-};
-
-export type ValidationRulesRecord = {
-  id: string;
-  statusId: string;
-  sourceId: string;
-  channelId: string;
-  fallbackChannelId: string;
-  instagramRequiresApproval: boolean;
-  maxTechnicalAttempts: string;
-};
 
 type Row = Record<string, unknown>;
 
@@ -262,16 +222,7 @@ export async function listCatalogRecords(kind: CatalogKind): Promise<CatalogReco
     }));
   }
 
-  const { data, error } = await client.from('template_variables')
-    .select('template_variables_id,template_variables_name,template_variables_key,template_variables_source,template_variables_default_value,status_id,template_variables_created_at,template_variables_updated_at')
-    .eq('users_id', userId)
-    .order('template_variables_name');
-  if (error) throw new Error(error.message);
-  return ((data ?? []) as Row[]).map((row): TemplateVariableRecord => ({
-    id: text(row.template_variables_id), kind: 'template_variables', name: text(row.template_variables_name),
-    key: text(row.template_variables_key), source: text(row.template_variables_source), defaultValue: text(row.template_variables_default_value),
-    statusId: text(row.status_id), active: statusIsActive(row.status_id), createdAt: text(row.template_variables_created_at), updatedAt: text(row.template_variables_updated_at),
-  }));
+  throw new Error(`Catálogo não suportado: ${String(kind)}`);
 }
 
 function normalizedKey(value: unknown) {
@@ -349,15 +300,7 @@ export async function createCatalogRecord(kind: CatalogKind, input: Record<strin
     return;
   }
 
-  const name = text(input.name).trim();
-  const key = normalizedKey(input.key || name);
-  const source = text(input.source).trim();
-  if (!name || !key || !source) throw new Error('Nome, chave e origem da variável são obrigatórios.');
-  const { error } = await client.from('template_variables').insert({
-    users_id: usersId, status_id: statusId, template_variables_name: name, template_variables_key: key,
-    template_variables_source: source, template_variables_default_value: text(input.defaultValue),
-  });
-  if (error) throw new Error(error.message);
+  throw new Error(`Catálogo não suportado: ${String(kind)}`);
 }
 
 export async function updateCatalogRecord(kind: CatalogKind, id: string, input: Record<string, unknown>) {
@@ -425,17 +368,12 @@ export async function updateCatalogRecord(kind: CatalogKind, id: string, input: 
     return;
   }
 
-  const { error } = await client.from('template_variables').update({
-    status_id: statusId, template_variables_name: text(input.name).trim(),
-    template_variables_key: normalizedKey(input.key || input.name), template_variables_source: text(input.source).trim(),
-    template_variables_default_value: text(input.defaultValue), template_variables_updated_at: nowIso(),
-  }).eq('template_variables_id', numericId).eq('users_id', usersId);
-  if (error) throw new Error(error.message);
+  throw new Error(`Catálogo não suportado: ${String(kind)}`);
 }
 
 const idColumn: Record<CatalogKind, string> = {
   contact_sources: 'contact_sources_id', levels: 'levels_id', instances: 'instances_id',
-  template_channels: 'template_channels_id', template_types: 'template_types_id', template_variables: 'template_variables_id',
+  template_channels: 'template_channels_id', template_types: 'template_types_id',
 };
 
 export async function deleteCatalogRecord(kind: CatalogKind, id: string) {
@@ -448,67 +386,5 @@ export async function deleteCatalogRecord(kind: CatalogKind, id: string) {
     return;
   }
   const { error } = await getSupabaseClient().from(kind).delete().eq(idColumn[kind], numericId).eq('users_id', usersId);
-  if (error) throw new Error(error.message);
-}
-
-export async function loadImportRules(): Promise<ImportRulesRecord> {
-  const usersId = await userIdNumber();
-  const { data, error } = await getSupabaseClient().from('import_rules')
-    .select('*').eq('users_id', usersId).maybeSingle();
-  if (error) throw new Error(error.message);
-  const row = (data ?? {}) as Row;
-  return {
-    id: text(row.import_rules_id), statusId: text(row.status_id, '1'),
-    minRating: row.import_rules_min_rating == null ? '' : text(row.import_rules_min_rating),
-    minReviews: row.import_rules_min_reviews == null ? '' : text(row.import_rules_min_reviews),
-    requireName: bool(row.import_rules_require_name, true), requirePhone: bool(row.import_rules_require_phone),
-    requireInstagram: bool(row.import_rules_require_instagram), requireWebsite: bool(row.import_rules_require_website),
-    requireAnyContact: bool(row.import_rules_require_any_contact, true), deduplicatePhone: bool(row.import_rules_deduplicate_phone, true),
-    deduplicateInstagram: bool(row.import_rules_deduplicate_instagram, true), deduplicateWebsite: bool(row.import_rules_deduplicate_website, true),
-    deduplicateMaps: bool(row.import_rules_deduplicate_maps, true),
-  };
-}
-
-export async function saveImportRules(input: ImportRulesRecord) {
-  const usersId = await userIdNumber();
-  const payload = {
-    users_id: usersId, status_id: Number(input.statusId || 1),
-    import_rules_min_rating: input.minRating === '' ? null : Number(input.minRating),
-    import_rules_min_reviews: input.minReviews === '' ? null : Math.max(0, Number(input.minReviews)),
-    import_rules_require_name: input.requireName, import_rules_require_phone: input.requirePhone,
-    import_rules_require_instagram: input.requireInstagram, import_rules_require_website: input.requireWebsite,
-    import_rules_require_any_contact: input.requireAnyContact, import_rules_deduplicate_phone: input.deduplicatePhone,
-    import_rules_deduplicate_instagram: input.deduplicateInstagram, import_rules_deduplicate_website: input.deduplicateWebsite,
-    import_rules_deduplicate_maps: input.deduplicateMaps, import_rules_updated_at: nowIso(),
-  };
-  const { error } = await getSupabaseClient().from('import_rules').upsert(payload, { onConflict: 'users_id' });
-  if (error) throw new Error(error.message);
-}
-
-export async function loadValidationRules(): Promise<ValidationRulesRecord> {
-  const usersId = await userIdNumber();
-  const { data, error } = await getSupabaseClient().from('validation_rules').select('*').eq('users_id', usersId).maybeSingle();
-  if (error) throw new Error(error.message);
-  const row = (data ?? {}) as Row;
-  return {
-    id: text(row.validation_rules_id), statusId: text(row.status_id, '1'), sourceId: text(row.validation_rules_source_id),
-    channelId: text(row.validation_rules_channel_id), fallbackChannelId: text(row.validation_rules_fallback_channel_id),
-    instagramRequiresApproval: bool(row.validation_rules_instagram_requires_approval, true),
-    maxTechnicalAttempts: text(row.validation_rules_max_technical_attempts, '3'),
-  };
-}
-
-export async function saveValidationRules(input: ValidationRulesRecord) {
-  const usersId = await userIdNumber();
-  if (!input.sourceId || !input.channelId || !input.fallbackChannelId) throw new Error('Origem e canais são obrigatórios.');
-  if (input.channelId === input.fallbackChannelId) throw new Error('O canal validado e o canal de fallback devem ser diferentes.');
-  const payload = {
-    users_id: usersId, status_id: Number(input.statusId || 1), validation_rules_source_id: Number(input.sourceId),
-    validation_rules_channel_id: Number(input.channelId), validation_rules_fallback_channel_id: Number(input.fallbackChannelId),
-    validation_rules_instagram_requires_approval: input.instagramRequiresApproval,
-    validation_rules_max_technical_attempts: Math.min(10, Math.max(1, Number(input.maxTechnicalAttempts) || 3)),
-    validation_rules_updated_at: nowIso(),
-  };
-  const { error } = await getSupabaseClient().from('validation_rules').upsert(payload, { onConflict: 'users_id' });
   if (error) throw new Error(error.message);
 }

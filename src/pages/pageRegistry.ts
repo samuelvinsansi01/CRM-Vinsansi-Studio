@@ -11,7 +11,6 @@ export type PageId =
   | 'sender-instagram'
   | 'message-branches'
   | 'message-templates'
-  | 'message-variables'
   | 'settings'
   | 'config-contact-sources'
   | 'config-import-rules'
@@ -27,7 +26,6 @@ export type PageId =
   | 'account'
   | 'tools'
   | 'monitoring'
-  | 'audit'
   | 'homologation';
 
 export type NavItem = {
@@ -82,7 +80,6 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { id: 'message-branches', label: 'Ramos' },
       { id: 'message-templates', label: 'Templates de mensagens' },
-      { id: 'message-variables', label: 'Variáveis' },
     ],
   },
   {
@@ -92,7 +89,6 @@ export const navGroups: readonly NavGroup[] = [
       { id: 'organization-settings', label: 'Organização' },
       { id: 'organization-members', label: 'Membros' },
       { id: 'organization-roles', label: 'Funções e acessos' },
-      { id: 'audit', label: 'Auditoria' },
       { id: 'platform-organizations', label: 'Plataforma' },
     ],
   },
@@ -148,7 +144,6 @@ export const pageTitles: Record<PageId, string> = {
   'sender-instagram': 'Perfis Instagram',
   'message-branches': 'Ramos',
   'message-templates': 'Templates de mensagens',
-  'message-variables': 'Variáveis',
   settings: 'Configurações',
   'config-contact-sources': 'Fontes de contato',
   'config-import-rules': 'Critérios de importação',
@@ -164,7 +159,6 @@ export const pageTitles: Record<PageId, string> = {
   account: 'Minha conta',
   tools: 'Ferramentas',
   monitoring: 'Monitoramento',
-  audit: 'Auditoria',
   homologation: 'Homologação final',
 };
 
@@ -180,7 +174,6 @@ export const pagePermissions: Partial<Record<PageId, string>> = {
   'sender-instagram': 'instagram.view',
   'message-branches': 'templates.view',
   'message-templates': 'templates.view',
-  'message-variables': 'templates.view',
   settings: 'settings.view',
   'config-contact-sources': 'settings.view',
   'config-import-rules': 'settings.view',
@@ -195,6 +188,5 @@ export const pagePermissions: Partial<Record<PageId, string>> = {
   'platform-organizations': 'platform.organizations.manage',
   tools: 'tools.view',
   monitoring: 'monitoring.view',
-  audit: 'audit.view',
   homologation: 'monitoring.view',
 };

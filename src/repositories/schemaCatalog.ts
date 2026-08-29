@@ -107,7 +107,7 @@ export async function channelId(channel: 'WhatsApp' | 'Instagram' | 'Sem destino
   if (channel === 'Instagram') return String(CANONICAL_CATALOG.channels.INSTAGRAM);
   const rows = await listChannels();
   const match = rows.find((row) => normalizeCatalogName(row.name) === 'sem destino');
-  if (!match) throw new Error('Canal Sem destino não encontrado na tabela channels. Aplique a migration R58.');
+  if (!match) throw new Error('Canal Sem destino não encontrado na tabela channels. O contrato R59 exige esse canal no catálogo.');
   return match.id;
 }
 

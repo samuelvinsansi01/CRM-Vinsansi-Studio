@@ -43,7 +43,6 @@ const NORMALIZED_LEADS_SELECT = `
   channels_id,
   lead_status_id,
   contact_sources_id,
-  apify_import_jobs_id,
   leads_name,
   leads_phone,
   leads_whatsapp,
@@ -436,7 +435,6 @@ async function persistExistingSchemaLeads(
     const lookup = lookupByLeadId.get(lead.id);
     if (!lookup) throw new Error(`Não foi possível resolver os relacionamentos do lead “${lead.empresa}”.`);
     return buildExistingLeadInsert(lead, lookup, userId, {
-      apifyImportJobId: options.apifyImportJobId,
       origin: options.origin,
     });
   });
@@ -611,7 +609,6 @@ export const supabaseImportRepository: ImportRepository = {
     const lookup = lookupById.get(id);
     if (!lookup) throw new Error('Não foi possível resolver os relacionamentos do lead.');
     const payload = buildExistingLeadUpdate(updated, lookup, {
-      apifyImportJobId: currentRow.apify_import_jobs_id,
       origin: currentRow.leads_origin,
     });
     const userId = await getCurrentUserId();

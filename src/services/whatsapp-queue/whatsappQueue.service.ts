@@ -15,7 +15,6 @@ import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { renderTemplateVariables } from '../templates/templateVariables';
 import { hasAllTemplateMessages } from '../templates/templateContract';
 import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle/supabaseLeadCycle.repository';
-import { queueRolloverService } from '../queue-rollover/queueRollover.service';
 
 function isChip(record: ConfigRecord): record is ChipConfigRecord {
   return record.kind === 'chips';
@@ -45,7 +44,6 @@ async function assertLeadsUseOperationalChips(leads: WhatsAppQueueLead[]) {
 }
 
 async function rolloverOverdueWhatsAppItems() {
-  await queueRolloverService.run();
 }
 
 function allowedIds(leads: WhatsAppQueueLead[], action: 'mark_sending' | 'mark_sent' | 'pause' | 'resume' | 'reprocess' | 'invalidate' | 'fail', toStatus: string) {

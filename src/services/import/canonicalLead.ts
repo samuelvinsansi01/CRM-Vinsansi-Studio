@@ -29,7 +29,6 @@ export type ExistingLeadInsert = {
   channels_id: number | null;
   lead_status_id: LeadStatusId;
   contact_sources_id: number;
-  apify_import_jobs_id: number | null;
   leads_name: string;
   leads_phone: string | null;
   leads_whatsapp: string | null;
@@ -105,7 +104,6 @@ function commonPayload(
   lead: ImportLead,
   lookup: CanonicalLeadLookup,
   options: {
-    apifyImportJobId?: number | null;
     origin?: LeadOrigin;
     allowFinalStatus?: boolean;
   },
@@ -130,7 +128,6 @@ function commonPayload(
     channels_id: statusId === LEAD_STATUS.NO_CONTACT ? null : lookup.channelId,
     lead_status_id: statusId,
     contact_sources_id: lookup.contactSourceId,
-    apify_import_jobs_id: options.apifyImportJobId ?? null,
     leads_name: lead.empresa.trim(),
     leads_phone: String(lead.whatsapp ?? '').trim() || null,
     leads_whatsapp: String(lead.whatsapp ?? '').trim() || null,
@@ -144,7 +141,7 @@ function commonPayload(
     leads_score: normalizeGoogleRating(lead.rating),
     leads_reviews_count: Math.max(0, Math.trunc(Number(lead.reviews ?? 0) || 0)),
     leads_priority_score: calculateLeadPriorityScore(lead),
-    leads_origin: options.origin ?? (options.apifyImportJobId ? 'apify' : 'api'),
+    leads_origin: options.origin ?? 'api',
     leads_updated_at: new Date().toISOString(),
   } as const;
 }
@@ -154,7 +151,6 @@ export function buildExistingLeadInsert(
   lookup: CanonicalLeadLookup,
   userId: string,
   options: {
-    apifyImportJobId?: number | null;
     origin?: LeadOrigin;
   } = {},
 ): ExistingLeadInsert {
@@ -171,7 +167,6 @@ export function buildExistingLeadUpdate(
   lead: ImportLead,
   lookup: CanonicalLeadLookup,
   options: {
-    apifyImportJobId?: number | null;
     origin?: LeadOrigin;
   } = {},
 ): ExistingLeadUpdate {

@@ -1,7 +1,6 @@
 import { dispatchRoute, type RoutedRequest, type RoutedResponse } from '../dispatch.js';
 import batch from './batch.js';
 import dispatch from './dispatch.js';
-import revalidate from './revalidate.js';
 import validate from './validate.js';
 import conversations from './conversations.js';
 import conversationMessages from './conversation-messages.js';
@@ -14,7 +13,7 @@ import conversationMedia from './conversation-media.js';
 import queueOperations from './queue-operations.js';
 
 const handlers = {
-  batch, dispatch, revalidate, validate,
+  batch, dispatch, validate,
   conversations,
   'conversation-messages': conversationMessages,
   'conversation-action': conversationAction,

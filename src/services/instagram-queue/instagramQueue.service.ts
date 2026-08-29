@@ -5,7 +5,6 @@ import { settingsService } from '../settings/settings.service';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import type { InstagramQueueFilters, InstagramQueueLead, UpdateInstagramQueueLeadInput } from './types';
-import { queueRolloverService } from '../queue-rollover/queueRollover.service';
 
 async function getSelectedLeads(ids: string[]) {
   const batches = await repositories.instagramQueue.listBatches({});
@@ -32,7 +31,6 @@ function assertAllAllowed(
 }
 
 async function rolloverOverdueInstagramItems() {
-  await queueRolloverService.run();
 }
 
 function logQueueEvent(action: string, lead: Partial<InstagramQueueLead>, status?: string, message?: string) {

@@ -11,7 +11,6 @@ import { LEAD_STATUS } from '../status/leadStatus';
 import { templateMessageContractIssue } from '../templates/templateContract';
 import { renderLeadMessages } from '../templates/templateVariables';
 import { selectTemplateForLead, templateTypeForLead } from '../templates/templateSelector';
-import { loadCurrentWhatsAppValidationProofs } from '../../repositories/queueSchema';
 import type { QueuePreparationChannel, QueuePreparationFailure } from './types';
 
 function one<T>(value: T | T[] | null): T | null {
@@ -80,11 +79,9 @@ function preparationReason(
   expectedChannelId: number,
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
-  hasWhatsAppProof = true,
 ) {
   if (row.lead_status_id !== LEAD_STATUS.REVIEW) return 'O lead não está mais na revisão aberta.';
   if (Number(row.channels_id) !== expectedChannelId) return 'O canal do lead foi alterado.';
-  if (channel === 'WhatsApp' && !hasWhatsAppProof) return 'Prova de validação WhatsApp ausente para o telefone atual.';
   if (channel === 'WhatsApp' && normalizePhone(getEffectiveWhatsAppPhone(row)).length < 10) return 'Telefone inválido para WhatsApp.';
   if (channel === 'Instagram' && !isValidInstagram(row.leads_instagram)) return 'Instagram inválido ou ausente.';
 
@@ -123,7 +120,6 @@ async function buildReviewLockItems(channel: QueuePreparationChannel, ids: strin
   const expectedChannelId = Number(await channelId(channel));
   const rows = await supabaseLeadCycleRepository.listByIds(uniqueIds);
   const byId = new Map(rows.map((row) => [String(row.leads_id), row]));
-  const proofs = channel === 'WhatsApp' ? await loadCurrentWhatsAppValidationProofs(uniqueIds) : new Set(uniqueIds);
   const items: Array<{ leadId: string; templateId: string }> = [];
   const failures: QueuePreparationFailure[] = [];
 
@@ -133,7 +129,7 @@ async function buildReviewLockItems(channel: QueuePreparationChannel, ids: strin
       failures.push({ id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
       continue;
     }
-    const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates, proofs.has(id));
+    const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates);
     if (reason) {
       failures.push({ id, company: row.leads_name, reason });
       continue;

@@ -11,7 +11,7 @@ export type LeadStatusName =
   | 'enviado'
   | 'invalido'
   | 'duplicado';
-export type LeadOrigin = 'manual' | 'apify' | 'csv' | 'api' | 'google_maps';
+export type LeadOrigin = 'manual' | 'csv' | 'api' | 'google_maps';
 
 export type LeadRelation<T> = T | T[] | null;
 
@@ -25,7 +25,6 @@ export type LeadDatabaseRow = {
   channels_id: number | null;
   lead_status_id: LeadStatusId;
   contact_sources_id: number;
-  apify_import_jobs_id: number | null;
   leads_name: string;
   leads_alternative_name?: string | null;
   leads_phone: string | null;

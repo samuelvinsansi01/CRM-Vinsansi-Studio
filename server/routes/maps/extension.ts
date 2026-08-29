@@ -9,7 +9,6 @@ const REVIEW_LEASE_STALE_MS = 2 * 60_000;
 const REVIEW_LEASE_MIN_EXTENSION_VERSION = '1.0.31';
 const REVIEW_GATE_VERSION = 'execution_aware_v2';
 const TERMINAL_COVERAGE = new Set(['completed', 'exhausted']);
-const MAX_SNAPSHOT_BYTES = 1_500_000;
 const AGGREGATORS = /(^|[/.])(linktr\.ee|linktree|beacons\.ai|carrd\.co|taplink|bio\.link|lnk\.bio)([/.]|$)/i;
 
 function integer(value: unknown, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
@@ -107,7 +106,6 @@ function normalizeWebsite(value: unknown) {
 }
 function websiteClassification(value: string) { return !value ? 'sem_site' : AGGREGATORS.test(value) ? 'agregador' : 'dominio_proprio'; }
 function itemKey(item: Row) { return text((item._operational as Row | undefined)?.key || item.operationalDedupeKey || item.placeId || item.mapsDataId || item.cid || item.googleMapsUrl || item.mapsUrl) || [item.name, item.address, item.phone].map(normalize).join('|'); }
-function jsonByteLength(value: unknown) { return new TextEncoder().encode(JSON.stringify(value)).byteLength; }
 
 function effectiveCandidate(raw: Row) {
   const phone = plausiblePhone(raw.phone);
@@ -284,16 +282,35 @@ async function captureBatchDecisions(
   const identities = raws.map(captureIdentity);
   const decisions = new Map<string, CaptureReviewDecision>();
   const values = (type: keyof Omit<CaptureIdentity,'key'>) => [...new Set(identities.map((i) => i[type]).filter(Boolean))];
-  const registryRows: Row[] = [];
+  // A identidade canônica vive diretamente em leads. Estados finais funcionam
+  // como supressão lógica; estados ativos funcionam como duplicidade.
+  const leadIdentityRows: Row[] = [];
+  const identityColumns = {
+    phone: 'leads_normalized_phone',
+    instagram: 'leads_normalized_instagram',
+    domain: 'leads_normalized_domain',
+    maps: 'leads_normalized_maps',
+  } as const;
   for (const type of ['phone','instagram','domain','maps'] as const) {
     const list = values(type);
     if (!list.length) continue;
-    const q = await client.from('lead_identity_registry').select('identity_type,identity_value,canonical_lead_id').eq('organizations_id', organizationId).eq('identity_type', type).in('identity_value', list);
+    const column = identityColumns[type];
+    const q = await client.from('leads')
+      .select('leads_id,canonical_lead_id,lead_status_id,leads_normalized_phone,leads_normalized_instagram,leads_normalized_domain,leads_normalized_maps')
+      .eq('organizations_id', organizationId)
+      .in(column, list);
     if (q.error) throw new Error(`maps_identity_batch_failed:${q.error.message}`);
-    registryRows.push(...(q.data ?? []));
+    leadIdentityRows.push(...(q.data ?? []));
   }
+  const finalStatuses = new Set([3,5,6,7]);
   for (const identity of identities) {
-    if (registryRows.some((r) => identityMatches(identity, text(r.identity_type), r.identity_value))) decisions.set(identity.key, 'exists_in_crm');
+    const matches = leadIdentityRows.filter((row) =>
+      (identity.phone && text(row.leads_normalized_phone) === identity.phone)
+      || (identity.instagram && text(row.leads_normalized_instagram) === identity.instagram)
+      || (identity.domain && text(row.leads_normalized_domain) === identity.domain)
+      || (identity.maps && text(row.leads_normalized_maps) === identity.maps));
+    if (matches.some((row) => finalStatuses.has(Number(row.lead_status_id)))) decisions.set(identity.key, 'suppressed');
+    else if (matches.length) decisions.set(identity.key, 'exists_in_crm');
   }
 
   const nowDate = new Date(); const now = nowDate.toISOString(); const nowMs = nowDate.getTime();
@@ -348,16 +365,7 @@ async function captureBatchDecisions(
     if (matched) decisions.set(identity.key, ['rejected','invalid'].includes(text(matched.review_state)) ? 'rejected_recently' : 'in_review');
   }
 
-  const suppressions: Row[] = [];
-  for (const type of ['phone','instagram','domain','maps'] as const) {
-    const list = values(type);
-    if (!list.length) continue;
-    const q = await client.from('contact_suppressions').select('identity_type,identity_value').eq('organizations_id', organizationId).eq('is_active', true).eq('identity_type', type).in('identity_value', list).or(`expires_at.is.null,expires_at.gt.${now}`);
-    if (q.error) throw new Error(`maps_suppression_batch_failed:${q.error.message}`);
-    suppressions.push(...(q.data ?? []));
-  }
   for (const identity of identities) {
-    if (!decisions.has(identity.key) && suppressions.some((row) => identityMatches(identity, text(row.identity_type), row.identity_value))) decisions.set(identity.key, 'suppressed');
     if (!decisions.has(identity.key)) decisions.set(identity.key, 'available');
   }
   return {
@@ -883,11 +891,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const execution = await ownedExecution(client, usersId, text(input.executionId));
       const coverageId = text(input.coverageId);
       const status = text(input.status);
-      const snapshotPayload = input.snapshot && typeof input.snapshot === 'object' ? input.snapshot : null;
-      if (snapshotPayload) {
-        const snapshotBytes = jsonByteLength(snapshotPayload);
-        if (snapshotBytes > MAX_SNAPSHOT_BYTES) throw new Error(`maps_snapshot_size_invalid:${snapshotBytes}:max_${MAX_SNAPSHOT_BYTES}`);
-      }
       const allowed = new Set(['navigating','waiting_maps_ready','running','scraping','finishing','syncing','completed','exhausted','error','stopped','paused']);
       if (!allowed.has(status)) throw new Error('maps_coverage_status_invalid');
       const patch: Row = { status, updated_at: new Date().toISOString(), last_error: text(input.lastError) || null, termination_reason: text(input.terminationReason) || null };
@@ -897,10 +900,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       for (const key of ['found_count','unique_count','eligible_count','rejected_count','duplicate_count','phone_whatsapp_candidate_count','instagram_candidate_count']) if (input[key] != null) patch[key] = integer(input[key]);
       const updated = await client.from('maps_search_coverage').update(patch).eq('maps_search_coverage_id', coverageId).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('users_id', usersId).select('*').maybeSingle();
       if (updated.error || !updated.data) throw new Error('maps_coverage_not_found');
-      if (snapshotPayload) {
-        const snapshot = await client.from('maps_search_snapshots').upsert({ users_id: usersId, maps_search_executions_id: execution.maps_search_executions_id, maps_search_coverage_id: coverageId, snapshot_payload: snapshotPayload }, { onConflict: 'maps_search_coverage_id' });
-        if (snapshot.error) throw new Error(`maps_snapshot_failed:${snapshot.error.message}`);
-      }
       const counts = await executionSummary(client, execution);
       const targetsReached = acquisitionTargetsReached(execution, counts);
       const desiredLimitReported = text(input.terminationReason) === 'desired_company_count_reached';
@@ -1091,8 +1090,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
             dedup_match_leads_id: gate.canonicalLeadId ? Number(gate.canonicalLeadId) : null,
             updated_at: new Date().toISOString(),
           }).eq('maps_search_candidates_id', candidateId);
-          await client.from('capture_execution_events').insert({ organizations_id: organizationId, maps_search_executions_id: execution.maps_search_executions_id, organization_tool_installations_id: scope.organizationToolInstallationId, organization_members_id: scope.memberId, event_type: text(gate.decision), payload: { candidateId, ...gate } });
-          if (gate.decision === 'duplicate' && gate.canonicalLeadId) await client.rpc('service_record_capture_memory', { p_organizations_id: organizationId, p_canonical_lead_id: Number(gate.canonicalLeadId), p_payload: { candidateId, executionId: execution.maps_search_executions_id, source: 'vinsansi_capture' } });
           failures.push({ candidateId, code: text(gate.decision) });
           continue;
         }
@@ -1136,7 +1133,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         }).select('leads_id').single();
         if (inserted.error) { failures.push({ candidateId, code: `lead_insert_failed:${inserted.error.message}` }); continue; }
         await client.from('maps_search_candidates').update({ promoted_leads_id: inserted.data.leads_id, promoted_at: new Date().toISOString(), identity_decision: 'accepted', review_state: 'saved', review_decided_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('maps_search_candidates_id', candidateId);
-        await client.from('capture_execution_events').insert({ organizations_id: organizationId, maps_search_executions_id: execution.maps_search_executions_id, organization_tool_installations_id: scope.organizationToolInstallationId, organization_members_id: scope.memberId, event_type: 'imported', payload: { candidateId, leadId: inserted.data.leads_id } });
         promoted += 1;
       }
       // Cada candidato pode vir de uma execução diferente; os resumos são recalculados sob demanda pelas próprias execuções.
@@ -1153,12 +1149,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (coverageId) {
         const coverage = await client.from('maps_search_coverage').select('*').eq('users_id', usersId).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('maps_search_coverage_id', coverageId).maybeSingle();
         if (coverage.error || !coverage.data) throw new Error('maps_coverage_not_found');
-        const [candidates, snapshots] = await Promise.all([
-          client.from('maps_search_candidates').select('*').eq('users_id', usersId).eq('maps_search_executions_id', execution.maps_search_executions_id).contains('coverage_ids_found', [coverageId]).order('created_at'),
-          client.from('maps_search_snapshots').select('*').eq('users_id', usersId).eq('maps_search_executions_id', execution.maps_search_executions_id).eq('maps_search_coverage_id', coverageId).order('created_at'),
-        ]);
-        if (candidates.error || snapshots.error) throw new Error('maps_history_detail_failed');
-        return send(req, res, 200, { ok: true, execution, coverage: coverage.data, candidates: candidates.data ?? [], snapshots: snapshots.data ?? [] });
+        const candidates = await client.from('maps_search_candidates').select('*').eq('users_id', usersId).eq('maps_search_executions_id', execution.maps_search_executions_id).contains('coverage_ids_found', [coverageId]).order('created_at');
+        if (candidates.error) throw new Error('maps_history_detail_failed');
+        return send(req, res, 200, { ok: true, execution, coverage: coverage.data, candidates: candidates.data ?? [], snapshots: [] });
       }
       const [coverage, candidates] = await Promise.all([
         client.from('maps_search_coverage').select('*').eq('users_id', usersId).eq('maps_search_executions_id', execution.maps_search_executions_id).order('cities_id').order('term_position').order('created_at'),

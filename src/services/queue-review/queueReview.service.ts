@@ -3,7 +3,6 @@ import { eventBus } from '../../lib/events';
 import { queuePreparationService } from '../queue-preparation';
 import { whatsappValidationService, type PreparedWhatsAppValidationLead } from '../whatsapp-validation/whatsappValidation.service';
 import type { QueueReviewBatch, QueueReviewChannel, QueueReviewItem, QueueReviewPullResult, QueueReviewResource } from './types';
-import { queueRolloverService } from '../queue-rollover/queueRollover.service';
 
 function rpcRow<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -11,10 +10,6 @@ function rpcRow<T>(value: T | T[] | null): T | null {
 
 function channelKey(channel: QueueReviewChannel) {
   return channel === 'Instagram' ? 'instagram' : 'whatsapp';
-}
-
-function numericIds(ids: string[]) {
-  return Array.from(new Set(ids.filter((id) => Number.isSafeInteger(Number(id)) && Number(id) > 0))).map(Number);
 }
 
 type PullCapacityBase = {
@@ -88,33 +83,6 @@ async function pullCapacity(channel: QueueReviewChannel, resourceKey: string, sc
   };
 }
 
-async function reconcileWhatsApp(batchId: string, approvedIds: string[], releaseIds: string[]) {
-  const { data, error } = await getSupabaseClient().rpc('reconcile_queue_review_whatsapp_validation', {
-    p_batch_id: Number(batchId),
-    p_approved_ids: numericIds(approvedIds),
-    p_release_ids: numericIds(releaseIds),
-  });
-  if (error) throw new Error(error.message);
-  return rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
-}
-
-function reconciledReadyIds(value: Record<string, unknown> | null) {
-  const raw = value?.retainedReadyIds ?? value?.retained_ready_ids;
-  if (!Array.isArray(raw)) return [] as string[];
-  return Array.from(new Set(raw.map((id) => String(id)).filter(Boolean)));
-}
-
-function assertExactReadyReconciliation(readyIds: string[], reconciled: Record<string, unknown> | null) {
-  if (String(reconciled?.contractVersion ?? reconciled?.contract_version ?? '') !== 'R58') {
-    throw new Error('O banco ainda não está com o contrato R58 de reconciliação. Aplique o SQL R58 antes de usar Puxar novamente.');
-  }
-  const expected = new Set(readyIds);
-  const retained = new Set(reconciledReadyIds(reconciled));
-  if (retained.size !== expected.size || Array.from(expected).some((id) => !retained.has(id))) {
-    throw new Error('A reconciliação R58 não confirmou exatamente os leads prontos na Revisão. A reserva deste clique foi interrompida sem fazer uma nova validação.');
-  }
-}
-
 async function pullToCapacity(
   channel: QueueReviewChannel,
   resourceKey: string,
@@ -122,7 +90,7 @@ async function pullToCapacity(
 ): Promise<QueueReviewPullResult> {
   const context = await pullCapacity(channel, resourceKey, scheduledDate);
   let { resource } = context;
-  const { batchId, reserved, capacityToFill } = context;
+  const { reserved, capacityToFill } = context;
   let invalidatedByProvider = 0;
   let redirectedToInstagram = 0;
   let errors = 0;
@@ -131,38 +99,28 @@ async function pullToCapacity(
   const movedLeadIds = new Set<string>();
   const redirectedLeadIds = new Set<string>();
 
-  // R55: o banco calcula a capacidade restante do recurso/data e faz UMA
-  // unica reserva ate essa capacidade. Nao existe quantidade manual, refill,
-  // oversampling, segunda passagem ou retry automatico dentro do clique.
+  // O banco reserva exatamente a capacidade restante do recurso/data.
+  // Não existe quantidade manual, oversampling, refill, segunda passagem ou retry automático.
   const exhausted = capacityToFill > 0 && reserved.length < capacityToFill;
 
   if (channel === 'WhatsApp' && reserved.length) {
-    try {
-      const validation = await whatsappValidationService.validatePreparedInitial(reserved, context.providerKey);
-      const readyIds = Array.from(new Set([...validation.approvedIds, ...validation.revalidatedIds]));
-      const readySet = new Set(readyIds);
-      // R58: todo ID reservado recebe um destino determinístico no mesmo clique.
-      // Se não ficou pronto, ele é liberado explicitamente; não existe prune genérico.
-      const releaseIds = reserved.map((lead) => lead.id).filter((id) => !readySet.has(id));
-      const reconciled = await reconcileWhatsApp(batchId, readyIds, releaseIds);
-      assertExactReadyReconciliation(readyIds, reconciled);
-      readyIds.forEach((id) => movedLeadIds.add(id));
-      validation.invalidatedIds.forEach((id) => movedLeadIds.add(id));
-      invalidatedByProvider += validation.invalidated;
-      validation.redirectedIds.forEach((id) => redirectedLeadIds.add(id));
-      redirectedToInstagram += validation.redirectedToInstagram;
-      errors += validation.errors + validation.failed;
-      technicalStop = validation.errorIds.length > 0 || validation.conflictIds.length > 0 || validation.failures.length > 0;
-      ready = readyIds.length;
+    const validation = await whatsappValidationService.validatePreparedInitial(reserved, context.providerKey);
+    const readyIds = Array.from(new Set(validation.approvedIds));
+    readyIds.forEach((id) => movedLeadIds.add(id));
+    // Sem contato saiu definitivamente da Importação. Redirecionados e erros técnicos
+    // continuam/importam novamente e portanto não são removidos da tabela local.
+    validation.invalidatedIds.forEach((id) => movedLeadIds.add(id));
+    validation.redirectedIds.forEach((id) => redirectedLeadIds.add(id));
+    invalidatedByProvider = validation.invalidated;
+    redirectedToInstagram = validation.redirectedToInstagram;
+    errors = validation.errors + validation.failed;
+    technicalStop = validation.errorIds.length > 0 || validation.failures.length > 0;
+    ready = readyIds.length;
 
-      const missingCount = Math.max(0, Number(reconciled?.missingCount ?? reconciled?.missing_count ?? resource.available));
-      resource = { ...resource, available: missingCount };
-    } catch (error) {
-      // Falha antes de um resultado persistido: libera somente estes reservados.
-      // Nao existe nova reserva nem retry dentro desta acao.
-      await reconcileWhatsApp(batchId, [], reserved.map((lead) => lead.id)).catch(() => undefined);
-      throw error;
-    }
+    // A validação pode liberar reservas (inválido/erro). Recarrega só o card de capacidade;
+    // a tabela de leads/revisão continua sendo atualizada localmente, sem piscar.
+    const refreshed = await resources(channel, scheduledDate);
+    resource = refreshed.find((item) => item.id === context.resource.id) ?? resource;
   }
 
   if (channel === 'Instagram') {
@@ -188,7 +146,6 @@ async function pullToCapacity(
 }
 
 async function pull(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string) {
-  await queueRolloverService.run();
   if (!preferredResourceId) {
     throw new Error(channel === 'WhatsApp'
       ? 'Selecione um chip específico antes de puxar e validar a fila WhatsApp.'
@@ -199,7 +156,6 @@ async function pull(channel: QueueReviewChannel, scheduledDate: string, preferre
 }
 
 async function list(channel: QueueReviewChannel, preferredResourceId = '', scheduledDate = ''): Promise<QueueReviewBatch[]> {
-  await queueRolloverService.run();
   if (!preferredResourceId || !scheduledDate) return [];
 
   const { data, error } = await getSupabaseClient().rpc('list_queue_review_for_resource', {
@@ -253,31 +209,14 @@ async function list(channel: QueueReviewChannel, preferredResourceId = '', sched
 }
 
 async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
-  let prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
-
-  // Reparacao rara/legada: se faltar prova, revalida somente este lead no chip
-  // do batch e reconcilia pelo contrato determinístico R58.
-  const missingWhatsAppProof = channel === 'WhatsApp'
-    && prepared.failures.some((failure) => failure.id === item.leadId && failure.reason.includes('Prova de validação WhatsApp ausente'));
-  if (missingWhatsAppProof) {
-    const validation = await whatsappValidationService.validateInitialWithChip([item.leadId], item.resourceId);
-    const readyIds = Array.from(new Set([...validation.approvedIds, ...validation.revalidatedIds]));
-    const releaseIds = readyIds.includes(item.leadId) ? [] : [item.leadId];
-    const reconciled = await reconcileWhatsApp(item.batchId, readyIds, releaseIds);
-    assertExactReadyReconciliation(readyIds, reconciled);
-    if (!readyIds.includes(item.leadId)) {
-      const failure = validation.failures.find((candidate) => candidate.id === item.leadId);
-      throw new Error(`${item.company}: ${failure?.reason || 'O telefone não foi confirmado no WhatsApp pelo chip selecionado.'}`);
-    }
-    prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
-  }
-
+  const prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
   if (prepared.failures.length) {
     const first = prepared.failures[0];
     throw new Error(`${first.company ? `${first.company}: ` : ''}${first.reason}`);
   }
   const preparedItem = prepared.items[0];
   if (!preparedItem) throw new Error('O lead não está pronto para aprovação.');
+
   const { data, error } = await getSupabaseClient().rpc('approve_queue_review_item', {
     p_review_item_id: Number(item.reviewItemId),
     p_template_id: Number(preparedItem.templateId),
@@ -285,17 +224,15 @@ async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
   if (error) throw new Error(error.message);
 
   const approval = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
-  if (!approval || approval.contractVersion !== 'R58' || approval.persisted !== true || approval.reviewStatus !== 'locked' || !approval.queueItemId) {
+  if (!approval || approval.persisted !== true || approval.reviewStatus !== 'locked' || !approval.queueItemId) {
     const { data: stateData, error: stateError } = await getSupabaseClient().rpc('queue_review_approval_state', {
       p_review_item_id: Number(item.reviewItemId),
     });
-    if (stateError) {
-      throw new Error(`A aprovação não retornou a confirmação R58 e o estado persistido não pôde ser conferido: ${stateError.message}. Aplique o SQL R58 no Supabase.`);
-    }
+    if (stateError) throw new Error(`A aprovação não pôde ser confirmada no banco: ${stateError.message}`);
     const state = rpcRow(stateData as Record<string, unknown> | Record<string, unknown>[] | null);
-    if (!state || state.contractVersion !== 'R58' || state.persisted !== true) {
+    if (!state || state.persisted !== true) {
       const detail = state?.reason ? ` (${String(state.reason)})` : '';
-      throw new Error(`A aprovação não foi persistida no banco${detail}. Aplique o SQL R58 no Supabase e tente novamente.`);
+      throw new Error(`A aprovação não foi persistida no banco${detail}.`);
     }
   }
 

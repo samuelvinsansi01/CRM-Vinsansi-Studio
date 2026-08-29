@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DashboardLayout } from './design-system/layouts/DashboardLayout';
 import { AccountPage } from './pages/AccountPage';
-import { AuditPage } from './pages/AuditPage';
 import { BasePage } from './pages/BasePage';
 import { SettingsOverviewPage } from './pages/ConfigurationPages';
 import { CatalogCrudPage } from './pages/CatalogCrudPage';
@@ -37,7 +36,6 @@ const legacyPageMap: Record<string, PageId> = {
   branches: 'message-branches',
   templates: 'message-templates',
   'import-settings': 'config-import-rules',
-  'config-import-apify': 'config-import-rules',
   'config-validation-rules': 'home',
   'validation-rules': 'home',
   'validation-settings': 'home',
@@ -146,7 +144,6 @@ export function App() {
       {activePage === 'sender-instagram' ? <ConfigTablePage kind="instagram" /> : null}
       {activePage === 'message-branches' ? <ConfigTablePage kind="branches" /> : null}
       {activePage === 'message-templates' ? <ConfigTablePage kind="templates" /> : null}
-      {activePage === 'message-variables' ? <CatalogCrudPage kind="template_variables" /> : null}
 
       {activePage === 'organization-settings' ? <OrganizationSettingsPage /> : null}
       {activePage === 'organization-members' ? <OrganizationMembersPage /> : null}
@@ -165,7 +162,6 @@ export function App() {
       {activePage === 'account' ? <AccountPage /> : null}
       {activePage === 'tools' ? <ToolsPage /> : null}
       {activePage === 'monitoring' ? <MonitoringPage /> : null}
-      {activePage === 'audit' ? <AuditPage /> : null}
       {activePage === 'homologation' ? <HomologationPage /> : null}
     </DashboardLayout>
   );

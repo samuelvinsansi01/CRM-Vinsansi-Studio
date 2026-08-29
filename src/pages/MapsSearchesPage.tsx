@@ -27,8 +27,6 @@ export function MapsSearchesPage() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [selectedCoverage, setSelectedCoverage] = useState<CoverageRow | null>(null);
   const [coverageTab, setCoverageTab] = useState('Resultados');
-  const [coverageSnapshots, setCoverageSnapshots] = useState<Record<string, unknown>[] | null>(null);
-  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -40,7 +38,6 @@ export function MapsSearchesPage() {
     setSelected(row);
     setDetail(null);
     setSelectedCoverage(null);
-    setCoverageSnapshots(null);
     setCoverageTab('Resultados');
     const id = row.maps_search_executions_id;
     const client = getSupabaseClient();
@@ -56,21 +53,10 @@ export function MapsSearchesPage() {
   const openCoverage = (coverage: CoverageRow) => {
     setSelectedCoverage(coverage);
     setCoverageTab('Resultados');
-    setCoverageSnapshots(null);
   };
 
-  const changeCoverageTab = async (nextTab: string) => {
+  const changeCoverageTab = (nextTab: string) => {
     setCoverageTab(nextTab);
-    if (nextTab !== 'JSON' || !selected || !selectedCoverage || coverageSnapshots !== null || snapshotsLoading) return;
-    setSnapshotsLoading(true);
-    const response = await getSupabaseClient().from('maps_search_snapshots')
-      .select('maps_search_snapshots_id,maps_search_coverage_id,snapshot_payload,created_at')
-      .eq('maps_search_executions_id', selected.maps_search_executions_id)
-      .eq('maps_search_coverage_id', selectedCoverage.maps_search_coverage_id)
-      .order('created_at');
-    setSnapshotsLoading(false);
-    if (response.error) { setError(response.error.message); return; }
-    setCoverageSnapshots(response.data || []);
   };
 
   const rows = useMemo<DisplayRow[]>(() => searches.map((row) => ({
@@ -131,7 +117,7 @@ export function MapsSearchesPage() {
           </section>)}
         </div> : null}
         {detail && selectedCoverage ? <>
-          <button type="button" className="maps-history-back" onClick={() => { setSelectedCoverage(null); setCoverageSnapshots(null); }}>← Voltar para cobertura</button>
+          <button type="button" className="maps-history-back" onClick={() => setSelectedCoverage(null)}>← Voltar para cobertura</button>
           <div className="maps-history-list">
             <article><strong>Status</strong><span>{`${selectedCoverage.status} • ${selectedCoverage.found_count || 0} mapeados • ${selectedCoverage.unique_count || selectedCoverage.eligible_count || 0} capturados • ${selectedCoverage.duplicate_count || 0} repetidos na busca`}</span></article>
             <article><strong>Encerramento</strong><span>{String(selectedCoverage.termination_reason || selectedCoverage.last_error || 'em andamento')}</span></article>
@@ -141,8 +127,7 @@ export function MapsSearchesPage() {
             <strong>{String(candidate.candidate_name || 'Empresa')}</strong>
             <span>{[candidate.maps_rating != null ? `★ ${candidate.maps_rating}` : '', candidate.maps_reviews_count != null ? `${candidate.maps_reviews_count} avaliações` : '', candidate.acquisition_bucket ? `bucket ${candidate.acquisition_bucket}` : '', candidate.business_status && candidate.business_status !== 'unknown' ? String(candidate.business_status) : '', candidate.effective_phone, candidate.effective_whatsapp, candidate.effective_instagram, candidate.effective_website].filter(Boolean).join(' • ') || 'Sem contato elegível'}</span>
           </article>) : <p>Nenhum candidato vinculado a esta cobertura.</p>}</div> : null}
-          {coverageTab === 'JSON' && snapshotsLoading ? <p>Carregando JSON da cobertura...</p> : null}
-          {coverageTab === 'JSON' && coverageSnapshots !== null ? <pre className="maps-history-json">{JSON.stringify({ coverage: selectedCoverage, snapshots: coverageSnapshots }, null, 2)}</pre> : null}
+          {coverageTab === 'JSON' ? <pre className="maps-history-json">{JSON.stringify({ coverage: selectedCoverage, candidates: coverageCandidates }, null, 2)}</pre> : null}
         </> : null}
       </Drawer>
     </>

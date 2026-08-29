@@ -1,0 +1,13 @@
+CRM - Vinsansi Studio v2.4.0-R59
+
+ARQUIVO OBRIGATÓRIO DE HOMOLOGAÇÃO
+- CHECK - CRM R59 - Homologacao final.sql
+
+VERIFICAÇÕES EXECUTADAS
+- npm run verify:release: APROVADO antes do empacotamento
+- Sintaxe TypeScript e contrato R59: APROVADOS
+- Banco auditado: 60 tabelas; 7 lead_status; 3 canais; 0 constraints não validadas; 0 resíduos conhecidos em funções/triggers.
+- Dados auditados: verificações operacionais 01–11 = OK; 22 enviados antigos sem canal = informativo/legado preservado.
+
+BUILD COMPLETO
+O build Vite/TypeScript não pôde ser executado neste ambiente porque o registry npm não resolveu DNS (EAI_AGAIN). Este pacote não inclui node_modules e não declara build homologado.

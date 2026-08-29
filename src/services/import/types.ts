@@ -107,7 +107,6 @@ export type ImportParseResult = {
 
 export type ImportExecutionOptions = {
   simulate?: boolean;
-  apifyImportJobId?: number | null;
   origin?: LeadOrigin;
   context?: {
     existingLeadIds?: string[];
