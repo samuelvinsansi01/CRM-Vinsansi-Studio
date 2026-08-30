@@ -586,7 +586,9 @@ button.batch__header {
 }
 
 .queue-tabs .segmented {
-  min-width: 280px;
+  min-width: 0;
+  width: max-content;
+  max-width: 100%;
 }
 
 .queue-review-actions,

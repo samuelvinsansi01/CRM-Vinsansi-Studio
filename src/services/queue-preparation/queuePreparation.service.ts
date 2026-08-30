@@ -73,43 +73,44 @@ function findBranch(row: LeadDatabaseRow, branches: BranchConfigRecord[]) {
   return branchForBoundRecord({ branch_id: String(row.branches_id), branch: rowBranch(row) }, branches);
 }
 
-function preparationReason(
+type PreparationEvaluation = {
+  reason: string;
+  templateId?: string;
+};
+
+function evaluatePreparation(
   row: LeadDatabaseRow,
   channel: QueuePreparationChannel,
   expectedChannelId: number,
   branches: BranchConfigRecord[],
   templates: TemplateConfigRecord[],
-) {
-  if (row.lead_status_id !== LEAD_STATUS.REVIEW) return 'O lead não está mais na revisão aberta.';
-  if (Number(row.channels_id) !== expectedChannelId) return 'O canal do lead foi alterado.';
-  if (channel === 'WhatsApp' && normalizePhone(getEffectiveWhatsAppPhone(row)).length < 10) return 'Telefone inválido para WhatsApp.';
-  if (channel === 'Instagram' && !isValidInstagram(row.leads_instagram)) return 'Instagram inválido ou ausente.';
+): PreparationEvaluation {
+  if (row.lead_status_id !== LEAD_STATUS.REVIEW) return { reason: 'O lead não está mais na revisão aberta.' };
+  if (Number(row.channels_id) !== expectedChannelId) return { reason: 'O canal do lead foi alterado.' };
+  if (channel === 'WhatsApp' && normalizePhone(getEffectiveWhatsAppPhone(row)).length < 10) return { reason: 'Telefone inválido para WhatsApp.' };
+  if (channel === 'Instagram' && !isValidInstagram(row.leads_instagram)) return { reason: 'Instagram inválido ou ausente.' };
 
   const context = leadContext(row, channel);
+  // R59 FIX 17: a seleção é feita uma única vez. O mesmo template validado aqui
+  // é o template encaminhado à RPC de aprovação; não existe segundo sorteio.
   const selection = selectTemplateForLead(context, templates);
   if (!selection) {
     const structuralSelection = selectTemplateForLead(context, templates, { requireMessages: false });
-    if (!structuralSelection) return `Nenhum template ${channel} compatível com o ramo e o tipo ${templateTypeForLead(context)}.`;
+    if (!structuralSelection) return { reason: `Nenhum template ${channel} compatível com o ramo e o tipo ${templateTypeForLead(context)}.` };
     const structuralMessages = renderLeadMessages(context, structuralSelection.template);
     const messageIssue = templateMessageContractIssue(structuralMessages, channel);
-    if (messageIssue) return messageIssue;
-    return `O template ${channel} compatível não está pronto para uso.`;
+    if (messageIssue) return { reason: messageIssue };
+    return { reason: `O template ${channel} compatível não está pronto para uso.` };
   }
   const messages = renderLeadMessages(context, selection.template);
   const messageIssue = templateMessageContractIssue(messages, channel);
-  if (messageIssue) return messageIssue;
+  if (messageIssue) return { reason: messageIssue };
 
   const branch = findBranch(row, branches);
   if (branch?.imageRequired && !String(branch.imageName ?? '').trim()) {
-    return 'O ramo exige imagem, mas nenhuma mídia foi configurada.';
+    return { reason: 'O ramo exige imagem, mas nenhuma mídia foi configurada.' };
   }
-  return '';
-}
-
-function templateIdForLead(row: LeadDatabaseRow, channel: QueuePreparationChannel, templates: TemplateConfigRecord[]) {
-  const selection = selectTemplateForLead(leadContext(row, channel), templates);
-  if (!selection) throw new Error(`Nenhum template ${channel} compatível com o lead.`);
-  return String(selection.template.id);
+  return { reason: '', templateId: String(selection.template.id) };
 }
 
 async function buildReviewLockItems(channel: QueuePreparationChannel, ids: string[]) {
@@ -129,12 +130,12 @@ async function buildReviewLockItems(channel: QueuePreparationChannel, ids: strin
       failures.push({ id, reason: 'Lead não encontrado ou sem permissão de acesso.' });
       continue;
     }
-    const reason = preparationReason(row, channel, expectedChannelId, config.branches, config.templates);
-    if (reason) {
-      failures.push({ id, company: row.leads_name, reason });
+    const evaluation = evaluatePreparation(row, channel, expectedChannelId, config.branches, config.templates);
+    if (evaluation.reason || !evaluation.templateId) {
+      failures.push({ id, company: row.leads_name, reason: evaluation.reason || 'Nenhum template canônico foi selecionado.' });
       continue;
     }
-    items.push({ leadId: id, templateId: templateIdForLead(row, channel, config.templates) });
+    items.push({ leadId: id, templateId: evaluation.templateId });
   }
   return { items, failures };
 }

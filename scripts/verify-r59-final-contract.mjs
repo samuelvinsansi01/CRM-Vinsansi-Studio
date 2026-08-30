@@ -248,25 +248,48 @@ for (const token of [
   'contrato_nome_alternativo_r59',
   'contrato_aprovacao_r59',
   'contrato_puxada_filtrada_r59',
+  'contrato_rollover_capacidade_r59',
   'SOMENTE LEITURA',
 ]) if (!homolog.includes(token)) fail(`homolog_sql_incompleto:${token}`);
 
 
-// R59 midnight rollover contract: no 22h early cutoff and no empty rollover stubs.
+// R59 midnight rollover contract: corte 00:00 e capacidade canônica no banco.
 {
   const whatsappRollover = read('src/services/whatsapp-queue/whatsappQueue.service.ts');
   const instagramRollover = read('src/services/instagram-queue/instagramQueue.service.ts');
+  const rolloverService = read('src/services/queue-rollover/queueCapacityRollover.service.ts');
   const midnightHook = read('src/hooks/useMidnightRefresh.ts');
+  const rolloverPatch = read('APLICAR - CRM R59 BUILD FIX 17 - Aprovacao e rollover.sql');
   if (!whatsappRollover.includes("return toLocalDateInputValue();")) fail('rollover_whatsapp_sem_meia_noite');
   if (!instagramRollover.includes("return toLocalDateInputValue();")) fail('rollover_instagram_sem_meia_noite');
   if (whatsappRollover.includes('getHours() >= 22')) fail('rollover_whatsapp_ainda_antecipa_22h');
   if (instagramRollover.includes('getHours() >= 22')) fail('rollover_instagram_ainda_antecipa_22h');
-  if (!whatsappRollover.includes('scheduled_date < targetDate')) fail('rollover_whatsapp_nao_restringe_vencidos');
-  if (!instagramRollover.includes('scheduled_date < targetDate')) fail('rollover_instagram_nao_restringe_vencidos');
-  if (!whatsappRollover.includes("isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')")) fail('rollover_whatsapp_status_incorreto');
-  if (!instagramRollover.includes("isStatusGroup(lead.status, 'queued') || isStatusGroup(lead.status, 'paused')")) fail('rollover_instagram_status_incorreto');
+  if (!rolloverService.includes("rpc('rollover_queue_items_to_capacity'")) fail('rollover_nao_canonico_no_banco');
+  for (const token of ['list_queue_review_resources', "('pendente', 'pending', 'queued', 'pausado', 'paused')", "'unresolvedOverflow'", "'contractVersion', 'R59'"]) {
+    if (!rolloverPatch.includes(token)) fail(`rollover_fix17_incompleto:${token}`);
+  }
   if (!midnightHook.includes('next.setHours(24, 0, 1, 0)')) fail('rollover_sem_refresh_meia_noite');
-  if (!instagramRollover.includes('profileLimits.get(normalizedProfile)')) fail('rollover_instagram_nao_respeita_limite_perfil');
+}
+
+// R59 FIX 17: template único por aprovação + FK de ramo canônica + melhorias da fila.
+{
+  const selector = read('src/services/templates/templateSelector.ts');
+  const preparation = read('src/services/queue-preparation/queuePreparation.service.ts');
+  const reviewTable = read('src/components/QueueReviewPanel.tsx');
+  const finalTable = read('src/components/QueueFinalTable.tsx');
+  const queueCss = read('src/styles/queue.css');
+  const queuePage17 = read('src/pages/QueuePage.tsx');
+  const fix17 = read('APLICAR - CRM R59 BUILD FIX 17 - Aprovacao e rollover.sql');
+  if (!selector.includes('leadBranchId && templateBranchId && leadBranchId === templateBranchId')) fail('template_branch_id_nao_canonico');
+  if (selector.includes('leadBranch && templateBranch && leadBranch === templateBranch')) fail('template_ainda_autoriza_por_nome');
+  if (!preparation.includes('const selection = selectTemplateForLead(context, templates);')) fail('template_selecao_unica_ausente');
+  if (preparation.includes('templateIdForLead(')) fail('template_segundo_sorteio_ainda_presente');
+  if (!fix17.includes("'templateFallbackUsed'")) fail('template_fallback_canonico_ausente');
+  if (fix17.includes('queue_review_resource_capacity_reached')) fail('aprovacao_ainda_exige_segunda_vaga');
+  if (!reviewTable.includes("label: 'Instagram'")) fail('instagram_revisao_whatsapp_ausente');
+  if (!finalTable.includes("label:'Instagram'")) fail('instagram_fila_final_whatsapp_ausente');
+  if (!queueCss.includes('width: max-content;')) fail('tabs_fila_ainda_largas');
+  if ((queuePage17.match(/<SegmentedControl compact items=\{\['Revisão','Fila final'\]\}/g) ?? []).length < 2) fail('tabs_fila_nao_compactas');
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

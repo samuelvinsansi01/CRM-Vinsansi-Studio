@@ -116,16 +116,11 @@ function isGlobalBranch(template: TemplateConfigRecord) {
 
 function matchesBranch(template: TemplateConfigRecord, lead: LeadTemplateContext) {
   if (isGlobalBranch(template)) return false;
+  // R59 FIX 17: branches_id é a identidade operacional canônica. Nome de ramo
+  // é somente apresentação e nunca pode autorizar template de outra FK.
   const leadBranchId = normalize(lead.branch_id);
-  const leadBranch = normalize(lead.branch);
   const templateBranchId = normalize(template.branchId);
-  const templateBranch = normalize(template.branchName);
-
-  return Boolean(
-    (leadBranchId && templateBranchId && leadBranchId === templateBranchId) ||
-    (leadBranch && templateBranch && leadBranch === templateBranch) ||
-    (leadBranch && templateBranchId && leadBranch === templateBranchId),
-  );
+  return Boolean(leadBranchId && templateBranchId && leadBranchId === templateBranchId);
 }
 
 function matchesChannel(template: TemplateConfigRecord, channel: LeadTemplateContext['channel'], expected: TemplateChannel) {

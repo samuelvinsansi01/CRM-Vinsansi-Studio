@@ -75,13 +75,19 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
   const rows = useMemo<ReviewRow[]>(() => reviewItems.map((item, index) => ({
     id: item.reviewItemId, position: index + 1, company: companyLink(item), branch: item.branch || '—', state: item.state || '—', city: item.city || '—',
     rating: item.rating.toFixed(1), reviews: item.reviews.toLocaleString('pt-BR'), channel: channelAvailability(item, channel),
+    instagram: availabilityTag(Boolean(item.instagram.trim()), instagramHref(item.instagram), 'Abrir Instagram'),
     site: availabilityTag(Boolean(item.website.trim()), externalHttpHref(item.website), 'Abrir site'),
   })), [channel, reviewItems]);
-  const columns = useMemo<TableColumn<ReviewRow>[]>(() => [
-    { key: 'position', label: '#', width: '5%' }, { key: 'company', label: 'Empresa', width: '25%' }, { key: 'branch', label: 'Ramo', width: '14%' },
-    { key: 'state', label: 'Estado', width: '7%' }, { key: 'city', label: 'Cidade', width: '12%' }, { key: 'rating', label: 'Nota', width: '7%' },
-    { key: 'reviews', label: 'Avaliações', width: '9%' }, { key: 'channel', label: channel, width: '9%' }, { key: 'site', label: 'Site', width: '7%' },
-  ], [channel]);
+  const columns = useMemo<TableColumn<ReviewRow>[]>(() => {
+    const base: TableColumn<ReviewRow>[] = [
+      { key: 'position', label: '#', width: '5%' }, { key: 'company', label: 'Empresa', width: '21%' }, { key: 'branch', label: 'Ramo', width: '12%' },
+      { key: 'state', label: 'Estado', width: '6%' }, { key: 'city', label: 'Cidade', width: '10%' }, { key: 'rating', label: 'Nota', width: '6%' },
+      { key: 'reviews', label: 'Avaliações', width: '8%' }, { key: 'channel', label: channel, width: '8%' },
+    ];
+    if (channel === 'WhatsApp') base.push({ key: 'instagram', label: 'Instagram', width: '8%' });
+    base.push({ key: 'site', label: 'Site', width: '7%' });
+    return base;
+  }, [channel]);
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
   useEffect(() => { resetPage(); }, [preferredResourceId, scheduledDate, resetPage]);
 
