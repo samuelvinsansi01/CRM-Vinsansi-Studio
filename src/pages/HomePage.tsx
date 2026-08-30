@@ -20,7 +20,7 @@ import {
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { QueuePullDrawer } from '../components/QueuePullDrawer';
-import { useClientPagination } from '../hooks/useClientPagination';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useLeadCycle } from '../hooks/useLeadCycle';
 import { useOperationalQueueDate } from '../hooks/useOperationalQueueDate';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
@@ -28,7 +28,7 @@ import { configService } from '../services/config/config.service';
 import type { BranchConfigRecord } from '../services/config/types';
 import type { LeadCycleLead } from '../services/lead-cycle/types';
 import { externalHttpHref, instagramHref, mapsHref, phoneHref } from '../utils/externalLinks';
-import { normalizeBrazilState } from '../services/geo/brazilState';
+import { BRAZIL_STATE_OPTIONS } from '../services/geo/brazilState';
 import type { QueueReviewChannel, QueueReviewPullResult } from '../services/queue-review';
 
 type Row = Record<string, ReactNode> & { id: string };
@@ -99,12 +99,21 @@ export function HomePage() {
   const canPrepare = hasPermission('queues.prepare');
   const canEdit = hasPermission('leads.edit');
   const canInvalidate = hasPermission('leads.delete');
-  const imported = useLeadCycle('imported');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [branch, setBranch] = useState('Todos');
   const [state, setState] = useState('Todos');
   const [siteFilter, setSiteFilter] = useState('Todos');
   const [instagramFilter, setInstagramFilter] = useState('Todos');
+  const imported = useLeadCycle('imported', {
+    search: debouncedSearch,
+    branchId: branch === 'Todos' ? undefined : branch,
+    state,
+    site: siteFilter as 'Todos' | 'Com site' | 'Sem site',
+    instagram: instagramFilter as 'Todos' | 'Com Instagram' | 'Sem Instagram',
+  }, { page, pageSize: rowsPerPage });
   const [pullDrawerOpen, setPullDrawerOpen] = useState(false);
   const [scheduledDate, setScheduledDate] = useOperationalQueueDate();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -139,32 +148,12 @@ export function HomePage() {
       .map((item) => ({ label: item.name, value: item.id }));
   }, [branches]);
 
-  const sorted = useMemo(() => [...imported.records].sort((a, b) =>
-    b.rating - a.rating || b.reviews - a.reviews || Number(a.id) - Number(b.id)
-  ), [imported.records]);
+  const stateFilters = useMemo(() => [
+    { label: 'Todos', value: 'Todos' },
+    ...BRAZIL_STATE_OPTIONS,
+  ], []);
 
-  const branchFilters = useMemo(() => ['Todos', ...Array.from(new Set(sorted.map((lead) => lead.branch).filter(Boolean))).sort()], [sorted]);
-  const stateFilters = useMemo(() => {
-    const states = Array.from(new Set(sorted.map((lead) => lead.state).filter(Boolean)));
-    return [
-      { label: 'Todos', value: 'Todos' },
-      ...states
-        .map((code) => ({ label: normalizeBrazilState(code), value: code }))
-        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' })),
-    ];
-  }, [sorted]);
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return sorted.filter((lead) =>
-      (!q || lead.displayCompany.toLowerCase().includes(q) || lead.company.toLowerCase().includes(q) || lead.phone.toLowerCase().includes(q) || lead.instagram.toLowerCase().includes(q))
-      && (branch === 'Todos' || lead.branch === branch)
-      && (state === 'Todos' || lead.state === state)
-      && (siteFilter === 'Todos' || (siteFilter === 'Com site' ? Boolean(lead.website.trim()) : !lead.website.trim()))
-      && (instagramFilter === 'Todos' || (instagramFilter === 'Com Instagram' ? Boolean(lead.instagram.trim()) : !lead.instagram.trim()))
-    );
-  }, [branch, instagramFilter, search, siteFilter, sorted, state]);
-
-  const rows = useMemo<Row[]>(() => visible.map((lead) => {
+  const rows = useMemo<Row[]>(() => imported.records.map((lead) => {
     const phone = lead.rawPhone || lead.phone;
     const instagram = instagramHref(lead.instagram);
     const website = externalHttpHref(lead.website);
@@ -181,14 +170,17 @@ export function HomePage() {
       site: availabilityTag(Boolean(lead.website.trim()), website, 'Abrir site'),
       status: <Tag tone="neutral">Importado</Tag>,
     };
-  }), [visible]);
+  }), [imported.records]);
 
-  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
+  const totalPages = Math.max(1, Math.ceil(imported.total / rowsPerPage));
+  const resetPage = () => setPage(1);
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
   const handlePulled = (channel: QueueReviewChannel, result: QueueReviewPullResult) => {
     setScheduledDate(result.scheduledDate);
     imported.removeLocally(result.movedLeadIds);
     imported.patchChannelLocally(result.redirectedLeadIds, 'Instagram');
+    imported.refresh();
     resetPage();
     const formattedDate = new Date(`${result.scheduledDate}T12:00:00`).toLocaleDateString('pt-BR');
     const details = `${result.ready} pronto(s) para revisão · ${result.reserved} reservado(s) · ${result.resource.label} · ${formattedDate}.`;
@@ -240,11 +232,6 @@ export function HomePage() {
     if (action === 'invalidate') setInvalidatingLead(lead);
   };
 
-  const noDestinationCount = sorted.filter((lead) => lead.channel === 'Sem destino').length;
-  const whatsappCount = sorted.filter((lead) => lead.channel === 'WhatsApp').length;
-  const instagramCount = sorted.filter((lead) => lead.channel === 'Instagram').length;
-
-
   return (
     <div className="dashboard-table-page lead-list-page home-leads-page">
       <PageHeader
@@ -254,14 +241,14 @@ export function HomePage() {
       />
 
       <section className="metric-grid metric-grid--4">
-        <MetricCard icon={Users} value={String(sorted.length)} label="Importados" tone="neutral" />
-        <MetricCard icon={Unplug} value={String(noDestinationCount)} label="Sem destino" tone="warning" />
-        <MetricCard icon={MessageCircle} value={String(whatsappCount)} label="WhatsApp" tone="success" />
-        <MetricCard icon={Instagram} value={String(instagramCount)} label="Instagram" tone="primary" />
+        <MetricCard icon={Users} value={String(imported.summary.total)} label="Importados" tone="neutral" />
+        <MetricCard icon={Unplug} value={String(imported.summary.noDestination)} label="Sem destino" tone="warning" />
+        <MetricCard icon={MessageCircle} value={String(imported.summary.whatsapp)} label="WhatsApp" tone="success" />
+        <MetricCard icon={Instagram} value={String(imported.summary.instagram)} label="Instagram" tone="primary" />
       </section>
 
       <FiltersBar>
-        <SelectField value={branch} options={branchFilters} placeholder="Ramo" onChange={(value) => { setBranch(value); resetPage(); }} />
+        <SelectField value={branch} options={[{ label: 'Todos', value: 'Todos' }, ...branchOptions]} placeholder="Ramo" onChange={(value) => { setBranch(value); resetPage(); }} />
         <SelectField value={state} options={stateFilters} placeholder="Estado" onChange={(value) => { setState(value); resetPage(); }} />
         <SelectField value={siteFilter} options={['Todos', 'Sem site', 'Com site']} placeholder="Site" onChange={(value) => { setSiteFilter(value); resetPage(); }} />
         <SelectField value={instagramFilter} options={['Todos', 'Sem Instagram', 'Com Instagram']} placeholder="Instagram" onChange={(value) => { setInstagramFilter(value); resetPage(); }} />
@@ -270,8 +257,8 @@ export function HomePage() {
 
       <TableCard
         title="Leads importados"
-        footerText={`Mostrando ${pageItems.length} de ${rows.length} lead(s) · ordenação por nota e avaliações`}
-        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} />}
+        footerText={`${imported.refreshing ? 'Atualizando · ' : ''}Mostrando ${rows.length} de ${imported.total} lead(s) · ordenação por nota e avaliações`}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setPage(1); }} />}
         page={page}
         totalPages={totalPages}
         onPageChange={setPage}
@@ -279,10 +266,10 @@ export function HomePage() {
         {imported.error ? <div className="table-message">{imported.error}</div> : null}
         {!imported.error && imported.loading ? <div className="table-message">Carregando leads importados...</div> : null}
         {!imported.error && !imported.loading && !rows.length ? <div className="table-message">Nenhum lead importado disponível.</div> : null}
-        {!imported.error && !imported.loading && pageItems.length ? (
+        {!imported.error && !imported.loading && rows.length ? (
           <DataTable
             columns={columns}
-            rows={pageItems}
+            rows={rows}
             actionsLabel="Ações"
             getRowActions={() => [
               ...(canEdit ? ['edit' as const] : []),

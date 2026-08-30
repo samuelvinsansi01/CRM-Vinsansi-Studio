@@ -73,3 +73,11 @@ export type QueueReviewPullPreview = {
   eligible: number;
   willPull: number;
 };
+
+
+export type QueueReviewPage = {
+  batches: QueueReviewBatch[];
+  total: number;
+  page: number;
+  pageSize: number;
+};

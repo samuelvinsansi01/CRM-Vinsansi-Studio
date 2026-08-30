@@ -74,6 +74,9 @@ async function batchStatusForScope(chip: string, chips: string[]): Promise<Whats
 export function useWhatsAppQueue(chip: string, scheduledDate: string) {
   const [chips, setChips] = useState<string[]>([]);
   const [batches, setBatches] = useState<WhatsAppQueueBatch[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPageState] = useState(20);
   const [summary, setSummary] = useState<WhatsAppQueueSummary>(emptySummary);
   const [batchState, setBatchState] = useState<WhatsAppBatchState>(idleBatchState);
   const [loading, setLoading] = useState(true);
@@ -81,6 +84,7 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const hasLoadedRef = useRef(false);
+  const scopeRef = useRef('');
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
   useMidnightRefresh(refresh);
@@ -100,6 +104,15 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
     let active = true;
 
     async function load() {
+      const scopeKey = `${chip}:${scheduledDate}`;
+      const scopeChanged = scopeRef.current !== scopeKey;
+      if (scopeChanged) {
+        scopeRef.current = scopeKey;
+        hasLoadedRef.current = false;
+        setBatches([]);
+        setTotal(0);
+        setSummary(emptySummary);
+      }
       const isInitialLoad = !hasLoadedRef.current;
       if (isInitialLoad) setLoading(true);
       else setRefreshing(true);
@@ -107,17 +120,19 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
 
       try {
         const nextChips = await whatsappQueueService.listChips();
-        const [nextBatches, nextSummary, nextBatchState] = chip
+        const [pageResult, nextBatchState] = chip
           ? await Promise.all([
-              whatsappQueueService.listBatches({ chip, scheduledDate }),
-              whatsappQueueService.summary({ chip, scheduledDate }),
+              whatsappQueueService.page({ chip, scheduledDate }, { page, pageSize: rowsPerPage }),
               batchStatusForScope(chip, nextChips),
             ])
-          : [[], emptySummary, idleBatchState];
+          : [{ batches: [], total: 0, summary: emptySummary }, idleBatchState];
+        const nextBatches = pageResult.batches;
+        const nextSummary = pageResult.summary;
 
         if (!active) return;
         setChips(nextChips);
         setBatches(nextBatches);
+        setTotal(pageResult.total);
         setSummary(nextSummary);
         setBatchState(nextBatchState);
       } catch (err) {
@@ -126,6 +141,7 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
         if (isInitialLoad) {
           setChips([]);
           setBatches([]);
+          setTotal(0);
           setSummary(emptySummary);
           setBatchState(idleBatchState);
         }
@@ -140,7 +156,10 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
 
     void load();
     return () => { active = false; };
-  }, [chip, scheduledDate, refreshKey]);
+  }, [chip, scheduledDate, page, rowsPerPage, refreshKey]);
+
+  useEffect(() => { setPage(1); }, [chip, scheduledDate]);
+  const setRowsPerPage = useCallback((value: number) => { setRowsPerPageState(value); setPage(1); }, []);
 
   const updateLead = useCallback(async (id: string, input: UpdateWhatsAppQueueLeadInput) => {
     await whatsappQueueService.updateLead(id, input);
@@ -195,6 +214,12 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
     refresh();
   }, [refresh]);
 
+  const reprocessScope = useCallback(async () => {
+    const count = await whatsappQueueService.reprocessScope({ chip, scheduledDate });
+    if (count) refresh();
+    return count;
+  }, [chip, scheduledDate, refresh]);
+
   const patchLeadLocally = useCallback((id: string, patch: Partial<WhatsAppQueueLead>) => {
     setBatches((current) => current.map((batch) => ({
       ...batch,
@@ -207,6 +232,7 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
     setBatches((current) => current
       .map((batch) => ({ ...batch, leads: batch.leads.filter((candidate) => candidate.id !== lead.id) }))
       .filter((batch) => batch.leads.length > 0));
+    setTotal((current) => Math.max(0, current - 1));
     setSummary((current) => ({
       ...current,
       total: Math.max(0, current.total - 1),
@@ -220,6 +246,11 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
   return {
     chips,
     batches,
+    total,
+    page,
+    setPage,
+    rowsPerPage,
+    setRowsPerPage,
     summary,
     batchState,
     loading,
@@ -235,6 +266,7 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
     pause,
     resume,
     reprocess,
+    reprocessScope,
     patchLeadLocally,
     invalidate,
   };

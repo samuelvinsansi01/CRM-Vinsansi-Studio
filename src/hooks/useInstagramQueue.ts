@@ -14,12 +14,16 @@ const emptySummary: InstagramQueueSummary = {
 export function useInstagramQueue(profile: string, scheduledDate: string) {
   const [profiles, setProfiles] = useState<string[]>([]);
   const [batches, setBatches] = useState<InstagramQueueBatch[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPageState] = useState(20);
   const [summary, setSummary] = useState<InstagramQueueSummary>(emptySummary);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const hasLoadedRef = useRef(false);
+  const scopeRef = useRef('');
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
   useMidnightRefresh(refresh);
@@ -28,6 +32,15 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
     let active = true;
 
     async function load() {
+      const scopeKey = `${profile}:${scheduledDate}`;
+      const scopeChanged = scopeRef.current !== scopeKey;
+      if (scopeChanged) {
+        scopeRef.current = scopeKey;
+        hasLoadedRef.current = false;
+        setBatches([]);
+        setTotal(0);
+        setSummary(emptySummary);
+      }
       const isInitialLoad = !hasLoadedRef.current;
       if (isInitialLoad) setLoading(true);
       else setRefreshing(true);
@@ -35,16 +48,16 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
 
       try {
         const nextProfiles = await instagramQueueService.listProfiles();
-        const [nextBatches, nextSummary] = profile
-          ? await Promise.all([
-              instagramQueueService.listBatches({ profile, scheduledDate }),
-              instagramQueueService.summary({ profile, scheduledDate }),
-            ])
-          : [[], emptySummary];
+        const pageResult = profile
+          ? await instagramQueueService.page({ profile, scheduledDate }, { page, pageSize: rowsPerPage })
+          : { batches: [], total: 0, summary: emptySummary };
+        const nextBatches = pageResult.batches;
+        const nextSummary = pageResult.summary;
 
         if (!active) return;
         setProfiles(nextProfiles);
         setBatches(nextBatches);
+        setTotal(pageResult.total);
         setSummary(nextSummary);
       } catch (err) {
         if (!active) return;
@@ -52,6 +65,7 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
         if (isInitialLoad) {
           setProfiles([]);
           setBatches([]);
+          setTotal(0);
           setSummary(emptySummary);
         }
       } finally {
@@ -68,7 +82,10 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
     return () => {
       active = false;
     };
-  }, [profile, scheduledDate, refreshKey]);
+  }, [profile, scheduledDate, page, rowsPerPage, refreshKey]);
+
+  useEffect(() => { setPage(1); }, [profile, scheduledDate]);
+  const setRowsPerPage = useCallback((value: number) => { setRowsPerPageState(value); setPage(1); }, []);
 
   const updateLead = useCallback(
     async (id: string, input: UpdateInstagramQueueLeadInput) => {
@@ -102,6 +119,12 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
     [refresh],
   );
 
+  const reprocessScope = useCallback(async () => {
+    const count = await instagramQueueService.reprocessScope({ profile, scheduledDate });
+    if (count) refresh();
+    return count;
+  }, [profile, scheduledDate, refresh]);
+
   const patchLeadLocally = useCallback((id: string, patch: Partial<InstagramQueueLead>) => {
     setBatches((current) => current.map((batch) => ({
       ...batch,
@@ -115,6 +138,7 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
       setBatches((current) => current
         .map((batch) => ({ ...batch, leads: batch.leads.filter((candidate) => candidate.id !== lead.id) }))
         .filter((batch) => batch.leads.length > 0));
+      setTotal((current) => Math.max(0, current - 1));
       setSummary((current) => ({
         ...current,
         total: Math.max(0, current.total - 1),
@@ -130,6 +154,11 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
   return {
     profiles,
     batches,
+    total,
+    page,
+    setPage,
+    rowsPerPage,
+    setRowsPerPage,
     summary,
     loading,
     refreshing,
@@ -139,6 +168,7 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
     pause,
     resume,
     reprocess,
+    reprocessScope,
     patchLeadLocally,
     invalidate,
   };

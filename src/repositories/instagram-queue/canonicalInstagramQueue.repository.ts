@@ -4,12 +4,14 @@ import type {
   InstagramQueueBatch,
   InstagramQueueFilters,
   InstagramQueueLead,
+  InstagramQueuePage,
   UpdateInstagramQueueLeadInput,
 } from '../../services/instagram-queue/types';
 import { normalizeInstagramUsername } from '../../services/instagram/instagram.utils';
-import { currentUserIdNumber, queueStatusId } from '../schemaCatalog';
+import { currentUserIdNumber, operationalStatusFromName, queueStatusId } from '../schemaCatalog';
 import { canonicalQueueStatus, dateOnly, loadCanonicalQueue, prepareQueueItems, queuePayloadSnapshot, queueSnapshotMessage, queueSnapshotPart, updateQueueItemStatus } from '../queueSchema';
 import { nowIso } from '../supabase.helpers';
+import { normalizePageRequest, type PageRequest } from '../../services/pagination/types';
 import type { InstagramQueueRepository } from './instagramQueue.repository';
 
 type Row = Record<string, unknown>;
@@ -115,6 +117,60 @@ function mapLead(row: Awaited<ReturnType<typeof loadCanonicalQueue>>[number], pr
   };
 }
 
+
+function pagedInstagramStatus(row: Row): InstagramQueueLead['status'] {
+  const queueStatus = operationalStatusFromName(row.status_name) as InstagramQueueLead['status'];
+  const step = String(row.progress_step ?? '').trim();
+  if (!step) return queueStatus;
+  if (queueStatus === 'queued' && step === 'error') return 'queued';
+  if (step === 'reconciliation_required') return 'reconciliation_required';
+  if (step === 'sent') return 'sent';
+  if (step === 'invalid') return 'invalid';
+  if (step === 'error') return 'error';
+  if (['claimed','profile_opened','following','followed'].includes(step)) return 'following';
+  if (['dm_opened','messages_sending','media_sending'].includes(step)) return 'dm_opened';
+  return 'queued';
+}
+
+function pagedInstagramLead(row: Row): InstagramQueueLead {
+  const snapshot = queuePayloadSnapshot(row.payload_snapshot);
+  const snapshotLead = queueSnapshotPart(snapshot, 'lead');
+  const snapshotRecipient = queueSnapshotPart(snapshot, 'recipient');
+  const snapshotMedia = queueSnapshotPart(snapshot, 'media');
+  const position = Number(row.position ?? 1);
+  const instagram = String(snapshotRecipient.instagram ?? snapshotLead.instagram ?? row.instagram ?? '');
+  const username = normalizeInstagramUsername(instagram);
+  const originalCompany = String(snapshotLead.original_company_name ?? row.company ?? '');
+  const alternativeName = String(snapshotLead.alternative_company_name ?? row.alternative_name ?? '');
+  const sendCompanyName = String(snapshotLead.company_name ?? (alternativeName || originalCompany));
+  const website = String(snapshotLead.site ?? row.website ?? '');
+  const message1 = queueSnapshotMessage(snapshot,1) || String(row.message_1 ?? '');
+  const message2 = queueSnapshotMessage(snapshot,2) || String(row.message_2 ?? '');
+  const message3 = queueSnapshotMessage(snapshot,3) || String(row.message_3 ?? '');
+  const message4 = queueSnapshotMessage(snapshot,4) || String(row.message_4 ?? '');
+  const imageName = String(snapshotMedia.name ?? '');
+  const status = pagedInstagramStatus(row);
+  return {
+    id:String(row.id ?? ''), lead_id:String(row.lead_id ?? ''), order:position, position, company:originalCompany, company_name:sendCompanyName, original_company_name:originalCompany, alternative_name:alternativeName,
+    channel:'instagram', instagram, profile:String(row.profile_username ?? ''), profile_id:String(row.resource_id ?? ''), branch:String(snapshotLead.branch_name ?? row.branch ?? ''), branch_id:String(snapshotLead.branch_id ?? row.branch_id ?? ''), branch_slug:'',
+    type:'Instagram', original_destination:'Instagram', send_instagram:true, instagram_url:instagram, instagram_username:username, status, batchId:String(row.queue_id ?? ''), batch_id:String(row.queue_id ?? ''), batch_number:1,
+    scheduled_date:String(row.scheduled_date ?? ''), template_id:String(row.template_id ?? ''), message1,message_1:message1,message2,message_2:message2,message3,message_3:message3,message4,message_4:message4,
+    imageName,imageRequired:Boolean(snapshotMedia.required),image_url:imageName,image_id:String(snapshotMedia.sha256 ?? ''), city:String(snapshotLead.city ?? row.city ?? ''),state:String(snapshotLead.state ?? row.state ?? ''),rating:Number(row.rating ?? 0),reviews:Number(row.reviews ?? 0),
+    phone:String(snapshotLead.phone ?? row.phone ?? ''),site:website,mapsUrl:String(snapshotLead.maps_url ?? row.maps_url ?? ''),retry_count:Number(row.progress_attempts ?? row.retry_count ?? 0),error_message:String(row.progress_error ?? row.error_message ?? ''),sent_at:status==='sent'?String(row.finished_at ?? ''):'',created_at:String(row.created_at ?? ''),updated_at:String(row.updated_at ?? ''),
+  };
+}
+
+async function page(filters: InstagramQueueFilters, request: PageRequest): Promise<InstagramQueuePage> {
+  const normalized=normalizePageRequest(request);
+  if(!filters.profile||!filters.scheduledDate)return {batches:[],total:0,page:normalized.page,pageSize:normalized.pageSize,summary:{total:0,queued:0,sent:0,errors:0,invalid:0}};
+  const {data,error}=await getSupabaseClient().rpc('list_queue_final_page_r59',{p_channel:'instagram',p_resource_key:filters.profile,p_scheduled_date:filters.scheduledDate,p_page:normalized.page,p_page_size:normalized.pageSize,p_search:filters.search?.trim()||null});
+  if(error)throw new Error(`Não foi possível carregar a Fila final Instagram: ${error.message}`);
+  const payload=(data&&typeof data==='object'&&!Array.isArray(data)?data:{}) as Row;
+  const items=(Array.isArray(payload.items)?payload.items:[]).filter((item):item is Row=>Boolean(item)&&typeof item==='object'&&!Array.isArray(item)).map(pagedInstagramLead);
+  const summary=payload.summary&&typeof payload.summary==='object'&&!Array.isArray(payload.summary)?payload.summary as Row:{};
+  return {batches:batches(items),total:Number(payload.total??0),page:Number(payload.page??normalized.page),pageSize:Number(payload.pageSize??payload.page_size??normalized.pageSize),summary:{total:Number(summary.total??0),queued:Number(summary.queued??0),sent:Number(summary.sent??0),errors:Number(summary.errors??0),invalid:Number(summary.invalid??0)}};
+}
+
 async function all(filters: InstagramQueueFilters = {}) {
   const rows = await loadCanonicalQueue('Instagram');
   const itemIds = rows.map((row) => Number(row.item.queue_items_id)).filter((id) => Number.isSafeInteger(id) && id > 0);
@@ -157,6 +213,7 @@ async function resolveSocial(input: CreateInstagramQueueLeadInput) {
 }
 
 export const canonicalInstagramQueueRepository: InstagramQueueRepository = {
+  page,
   async listProfiles() {
     const userId = await currentUserIdNumber();
     const response = await getSupabaseClient().from('socials').select('socials_username').eq('users_id', userId);

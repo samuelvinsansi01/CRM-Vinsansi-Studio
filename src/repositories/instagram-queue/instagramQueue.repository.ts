@@ -1,8 +1,10 @@
-import type { CreateInstagramQueueLeadInput, InstagramQueueBatch, InstagramQueueFilters, InstagramQueueSummary, UpdateInstagramQueueLeadInput } from '../../services/instagram-queue/types';
+import type { CreateInstagramQueueLeadInput, InstagramQueueBatch, InstagramQueueFilters, InstagramQueuePage, InstagramQueueSummary, UpdateInstagramQueueLeadInput } from '../../services/instagram-queue/types';
+import type { PageRequest } from '../../services/pagination/types';
 
 export interface InstagramQueueRepository {
   listProfiles(): Promise<string[]>;
   listBatches(filters: InstagramQueueFilters): Promise<InstagramQueueBatch[]>;
+  page(filters: InstagramQueueFilters, request: PageRequest): Promise<InstagramQueuePage>;
   summary(filters?: InstagramQueueFilters): Promise<InstagramQueueSummary>;
   /** Retorna somente os IDs realmente criados. Duplicidades ignoradas não aparecem no resultado. */
   enqueue(leads: CreateInstagramQueueLeadInput[]): Promise<string[]>;

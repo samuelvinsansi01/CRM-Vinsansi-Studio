@@ -1,4 +1,4 @@
-const BRAZIL_STATE_NAMES: Record<string, string> = {
+export const BRAZIL_STATE_NAMES: Record<string, string> = {
   AC: 'Acre',
   AL: 'Alagoas',
   AP: 'Amapá',
@@ -72,3 +72,7 @@ export function normalizeBrazilState(value: unknown) {
   const normalized = normalizeComparable(raw);
   return NAME_TO_STATE.get(normalized) ?? raw;
 }
+
+export const BRAZIL_STATE_OPTIONS = Object.entries(BRAZIL_STATE_NAMES)
+  .map(([value, label]) => ({ value, label }))
+  .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' }));

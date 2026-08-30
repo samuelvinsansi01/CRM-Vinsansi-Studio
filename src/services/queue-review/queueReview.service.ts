@@ -3,6 +3,7 @@ import { eventBus } from '../../lib/events';
 import { queuePreparationService } from '../queue-preparation';
 import { whatsappValidationService, type PreparedWhatsAppValidationLead } from '../whatsapp-validation/whatsappValidation.service';
 import type { QueueReviewBatch, QueueReviewChannel, QueueReviewItem, QueueReviewPullFilters, QueueReviewPullPreview, QueueReviewPullResult, QueueReviewResource } from './types';
+import { normalizePageRequest, type PageRequest } from '../pagination/types';
 
 function rpcRow<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -245,6 +246,39 @@ async function list(channel: QueueReviewChannel, preferredResourceId = '', sched
   return Array.from(grouped.values());
 }
 
+
+async function listPage(channel: QueueReviewChannel, preferredResourceId = '', scheduledDate = '', request: Partial<PageRequest> = {}) {
+  const normalized = normalizePageRequest(request);
+  if (!preferredResourceId || !scheduledDate) return { batches: [], total: 0, page: normalized.page, pageSize: normalized.pageSize };
+  const { data, error } = await getSupabaseClient().rpc('list_queue_review_page_r59', {
+    p_channel: channelKey(channel), p_resource_key: preferredResourceId, p_scheduled_date: scheduledDate,
+    p_page: normalized.page, p_page_size: normalized.pageSize,
+  });
+  if (error) throw new Error(error.message);
+  const payload = (data && typeof data === 'object' && !Array.isArray(data) ? data : {}) as Record<string, unknown>;
+  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  const items = rawItems.filter((value): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value)).map<QueueReviewItem & { resourceLabel: string }>((row) => ({
+    batchId: String(row.batch_id ?? ''), reviewItemId: String(row.review_item_id ?? ''), channel: String(row.channel_key ?? '') === 'instagram' ? 'instagram' : 'whatsapp',
+    resourceId: String(row.resource_id ?? ''), resourceLabel: String(row.resource_label ?? row.resource_id ?? ''), scheduledDate: String(row.scheduled_date ?? ''), targetCount: Number(row.target_count ?? 0),
+    leadId: String(row.lead_id ?? ''), position: Number(row.position ?? 0), company: String(row.company ?? ''), branchId: String(row.branch_id ?? ''), branch: String(row.branch_name ?? ''), city: String(row.city ?? ''), state: String(row.state ?? ''),
+    phone: String(row.phone ?? ''), whatsapp: String(row.whatsapp ?? ''), instagram: String(row.instagram ?? ''), website: String(row.website ?? ''), mapsUrl: String(row.maps_url ?? ''), rating: Number(row.rating ?? 0), reviews: Number(row.reviews ?? 0),
+  }));
+  const grouped = new Map<string, QueueReviewBatch>();
+  for (const item of items) {
+    let batch = grouped.get(item.batchId);
+    if (!batch) { batch = { batchId:item.batchId, channel, resourceId:item.resourceId, resourceLabel:item.resourceLabel, scheduledDate:item.scheduledDate, targetCount:item.targetCount, items:[] }; grouped.set(item.batchId,batch); }
+    batch.items.push(item);
+  }
+  return { batches:Array.from(grouped.values()), total:Math.max(0,Number(payload.total??0)), page:Math.max(1,Number(payload.page??normalized.page)), pageSize:Math.max(1,Number(payload.pageSize??payload.page_size??normalized.pageSize)) };
+}
+
+async function count(channel: QueueReviewChannel, preferredResourceId = '', scheduledDate = '') {
+  if (!preferredResourceId || !scheduledDate) return 0;
+  const { data, error } = await getSupabaseClient().rpc('queue_review_count_r59', { p_channel:channelKey(channel), p_resource_key:preferredResourceId, p_scheduled_date:scheduledDate });
+  if (error) throw new Error(error.message);
+  return Math.max(0, Number(data ?? 0));
+}
+
 async function approve(item: QueueReviewItem, channel: QueueReviewChannel) {
   const prepared = await queuePreparationService.buildReviewLockItems(channel, [item.leadId]);
   if (prepared.failures.length) {
@@ -284,4 +318,4 @@ async function invalidate(item: QueueReviewItem, channel: QueueReviewChannel) {
   eventBus.emit('import:changed', { source: 'move' });
 }
 
-export const queueReviewService = { resources, preview, pull, list, approve, invalidate };
+export const queueReviewService = { resources, preview, pull, list, listPage, count, approve, invalidate };

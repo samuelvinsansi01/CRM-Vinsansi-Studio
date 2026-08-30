@@ -1,15 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { baseService } from '../services/base/base.service';
 import type { BaseFilters, BaseLead, BaseSummary } from '../services/base/types';
-
-type BaseOptions = {
-  origins: string[];
-  branches: string[];
-  states: string[];
-  cities: string[];
-  destinations: string[];
-  statuses: string[];
-};
+import { normalizePageRequest, type PageRequest } from '../services/pagination/types';
 
 const emptySummary: BaseSummary = {
   total: 0,
@@ -21,59 +13,52 @@ const emptySummary: BaseSummary = {
   duplicates: 0,
 };
 
-const emptyOptions: BaseOptions = {
-  origins: ['Todos'],
-  branches: ['Todos'],
-  states: ['Todos'],
-  cities: ['Todos'],
-  destinations: ['Todos'],
-  statuses: ['Todos'],
-};
-
-export function useBaseRecords(filters: BaseFilters) {
+export function useBaseRecords(filters: BaseFilters, request: Partial<PageRequest> = {}) {
+  const normalized = normalizePageRequest(request);
   const [records, setRecords] = useState<BaseLead[]>([]);
+  const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<BaseSummary>(emptySummary);
-  const [options, setOptions] = useState<BaseOptions>(emptyOptions);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const hasLoadedRef = useRef(false);
+  const requestIdRef = useRef(0);
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
 
   useEffect(() => {
     let active = true;
+    const requestId = ++requestIdRef.current;
     async function load() {
-      setLoading(!hasLoadedRef.current);
+      if (!hasLoadedRef.current) setLoading(true);
+      else setRefreshing(true);
       setError(null);
       try {
-        const [nextRecords, nextSummary, nextOptions] = await Promise.all([
-          baseService.list(filters),
-          baseService.summary(),
-          baseService.options(),
-        ]);
-        if (!active) return;
-        setRecords(nextRecords);
-        setSummary(nextSummary);
-        setOptions(nextOptions);
+        const result = await baseService.page(filters, normalized);
+        if (!active || requestId !== requestIdRef.current) return;
+        setRecords(result.items);
+        setTotal(result.total);
+        setSummary(result.summary);
       } catch (err) {
-        if (!active) return;
+        if (!active || requestId !== requestIdRef.current) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar Base Permanente.');
         if (!hasLoadedRef.current) {
           setRecords([]);
+          setTotal(0);
           setSummary(emptySummary);
-          setOptions(emptyOptions);
         }
       } finally {
-        if (active) {
+        if (active && requestId === requestIdRef.current) {
           hasLoadedRef.current = true;
           setLoading(false);
+          setRefreshing(false);
         }
       }
     }
     void load();
     return () => { active = false; };
-  }, [filters, refreshKey]);
+  }, [filters.origin, filters.search, filters.status, normalized.page, normalized.pageSize, refreshKey]);
 
-  return { records, summary, options, loading, error, refresh };
+  return { records, total, summary, loading, refreshing, error, refresh };
 }

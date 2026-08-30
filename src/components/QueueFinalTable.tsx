@@ -1,6 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
 import { DataTable, RowsPerPageControl, TableCard, Tag, type TableAction, type TableColumn } from '../design-system/components';
-import { useClientPagination } from '../hooks/useClientPagination';
 import { permissionsFor } from '../services/permissions';
 import { statusLabel, statusTone } from '../services/status/status.mapper';
 import { hasWhatsAppOperationalIssue } from '../services/whatsapp-queue/whatsappQueue.guards';
@@ -15,15 +14,16 @@ function company(lead: FinalLead) { const href=mapsHref(lead.mapsUrl); return hr
 function channelCell(lead: FinalLead) { if(lead.channel==='instagram'){const value=lead.instagram_username||lead.instagram||lead.instagram_url||'';return availability(Boolean(String(value).trim()),instagramHref(value),'Abrir Instagram');} return availability(Boolean(String(lead.phone).replace(/\D/g,'')),whatsappHref(lead.phone),'Abrir WhatsApp'); }
 function queueStatus(lead: FinalLead) { const issue=lead.channel==='whatsapp'&&hasWhatsAppOperationalIssue(lead); return <Tag tone={issue?'danger':statusTone(lead.status)}>{issue?'Dados incompletos':statusLabel(lead.status)}</Tag>; }
 
-export function QueueFinalTable({ channel, leads, resourceLabel, canEdit, canInvalidate, onView, onEdit, onInvalidate }: {
-  channel:'WhatsApp'|'Instagram'; leads:FinalLead[]; resourceLabel:string; canEdit:boolean; canInvalidate:boolean;
+export function QueueFinalTable({ channel, leads, total, page, rowsPerPage, refreshing=false, resourceLabel, canEdit, canInvalidate, onPageChange, onRowsPerPageChange, onView, onEdit, onInvalidate }: {
+  channel:'WhatsApp'|'Instagram'; leads:FinalLead[]; total:number; page:number; rowsPerPage:number; refreshing?:boolean; resourceLabel:string; canEdit:boolean; canInvalidate:boolean;
+  onPageChange:(page:number)=>void; onRowsPerPageChange:(size:number)=>void;
   onView:(lead:FinalLead)=>void; onEdit:(lead:FinalLead)=>void; onInvalidate:(lead:FinalLead)=>void;
 }) {
-  // A posição persistida é a ordem histórica usada pelo runtime. Na tela, a Fila final
-  // sempre exibe a posição operacional atual, sem lacunas após cancelamentos/invalidações.
+  const offset=(page-1)*rowsPerPage;
+  // A posição persistida continua sendo histórica; a apresentação é contínua em toda a paginação server-side.
   const displayLeads=useMemo<FinalLead[]>(()=>[...leads]
     .sort((a,b)=>a.position-b.position||Number(a.id)-Number(b.id))
-    .map((lead,index)=>({...lead,position:index+1})),[leads]);
+    .map((lead,index)=>({...lead,position:offset+index+1})),[leads,offset]);
   const rows=useMemo<FinalRow[]>(()=>displayLeads.map((lead)=>({ id:lead.id, position:lead.position, company:company(lead), branch:lead.branch||'—', state:lead.state||'—', city:lead.city||'—', rating:Number(lead.rating||0).toFixed(1), reviews:Number(lead.reviews||0).toLocaleString('pt-BR'), channel:channelCell(lead), instagram:availability(Boolean(String(lead.instagram_username||lead.instagram_url||lead.instagram||'').trim()),instagramHref(lead.instagram_username||lead.instagram_url||lead.instagram||''),'Abrir Instagram'), site:availability(Boolean(String(lead.site||'').trim()),externalHttpHref(lead.site),'Abrir site'), status:queueStatus(lead) })),[displayLeads]);
   const columns=useMemo<TableColumn<FinalRow>[]>(()=>{
     const base:TableColumn<FinalRow>[]=[
@@ -33,11 +33,11 @@ export function QueueFinalTable({ channel, leads, resourceLabel, canEdit, canInv
     base.push({key:'site',label:'Site',width:'7%'},{key:'status',label:'Status',width:'10%'});
     return base;
   },[channel]);
-  const {page,setPage,rowsPerPage,setRowsPerPage,totalPages,pageItems}=useClientPagination(rows,20);
+  const totalPages=Math.max(1,Math.ceil(total/rowsPerPage));
   const handleAction=(action:TableAction,row:FinalRow)=>{const lead=displayLeads.find((candidate)=>candidate.id===row.id);if(!lead)return;if(action==='view')onView(lead);if(action==='edit')onEdit(lead);if(action==='invalidate')onInvalidate(lead);};
-  return <TableCard title={`Listagem de disparos · ${resourceLabel}`} footerText={`Mostrando ${pageItems.length} de ${leads.length} lead(s)`} footerLeft={leads.length?<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage}/>:undefined} page={page} totalPages={totalPages} onPageChange={setPage}>
-    {!leads.length?<div className="table-message">Nenhum item aprovado para este recurso.</div>:null}
-    {pageItems.length?<DataTable columns={columns} rows={pageItems} selectable={false} actions={['view','edit','invalidate']} actionsLabel="Ações"
+  return <TableCard title={`Listagem de disparos · ${resourceLabel}`} footerText={`${refreshing?'Atualizando · ':''}Mostrando ${rows.length} de ${total} lead(s)`} footerLeft={total?<RowsPerPageControl value={rowsPerPage} onChange={onRowsPerPageChange}/>:undefined} page={page} totalPages={totalPages} onPageChange={onPageChange}>
+    {!total?<div className="table-message">Nenhum item aprovado para este recurso.</div>:null}
+    {rows.length?<DataTable columns={columns} rows={rows} selectable={false} actions={['view','edit','invalidate']} actionsLabel="Ações"
       getRowActions={(row)=>{const lead=displayLeads.find((candidate)=>candidate.id===row.id);if(!lead)return[];const canInvalidateLead=lead.channel==='whatsapp'?permissionsFor('whatsapp-queue',lead.status).canInvalidate():permissionsFor('instagram-queue',lead.status).canInvalidate();return ['view' as const,...(canEdit?['edit' as const]:[]),...(canInvalidate&&canInvalidateLead?['invalidate' as const]:[])];}}
       onAction={handleAction}/>:null}
   </TableCard>;

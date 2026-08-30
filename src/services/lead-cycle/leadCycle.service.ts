@@ -9,10 +9,13 @@ import { getEffectiveWhatsAppPhone } from '../leads/leadContact';
 import type {
   LeadCycleDetailsInput,
   LeadCycleLead,
+  LeadCyclePage,
+  LeadCyclePageFilters,
   LeadRoutingCommand,
   LeadRoutingFailure,
   LeadRoutingResult,
 } from './types';
+import { normalizePageRequest, type PageRequest } from '../pagination/types';
 
 function normalizeEditedPhone(value: string) {
   return value.replace(/\D/g, '');
@@ -62,6 +65,58 @@ function mapRow(row: LeadDatabaseRow, whatsappId: number, instagramId: number, n
     updatedAt: row.leads_updated_at ?? row.leads_created_at,
     rating: Number(row.leads_score ?? 0),
     reviews: Number(row.leads_reviews_count ?? 0),
+  };
+}
+
+
+function pagedLead(value: Record<string, unknown>): LeadCycleLead {
+  const channel = String(value.channel ?? '').trim();
+  return {
+    id: String(value.id ?? ''),
+    company: String(value.company ?? ''),
+    alternativeName: String(value.alternative_name ?? ''),
+    displayCompany: String(value.company ?? ''),
+    branchId: String(value.branch_id ?? ''),
+    branch: String(value.branch ?? ''),
+    state: String(value.state ?? ''),
+    city: String(value.city ?? ''),
+    phone: String(value.phone ?? ''),
+    rawPhone: String(value.raw_phone ?? ''),
+    whatsapp: String(value.whatsapp ?? ''),
+    instagram: String(value.instagram ?? ''),
+    website: String(value.website ?? ''),
+    mapsUrl: String(value.maps_url ?? ''),
+    channelId: value.channel_id == null ? null : Number(value.channel_id),
+    channel: channel === 'Instagram' || channel === 'WhatsApp' || channel === 'Sem destino' ? channel : null,
+    contactSourceId: Number(value.contact_source_id ?? 0),
+    contactSource: String(value.contact_source ?? ''),
+    statusId: Number(value.status_id ?? LEAD_STATUS.IMPORTED) as LeadStatusId,
+    status: String(value.status ?? 'Importado') as LeadStatusName,
+    createdAt: String(value.created_at ?? ''),
+    updatedAt: String(value.updated_at ?? value.created_at ?? ''),
+    rating: Number(value.rating ?? 0),
+    reviews: Number(value.reviews ?? 0),
+  };
+}
+
+async function listImportedPage(filters: LeadCyclePageFilters, request: Partial<PageRequest> = {}): Promise<LeadCyclePage> {
+  const normalized = normalizePageRequest(request);
+  const payload = await supabaseLeadCycleRepository.listImportedPage(filters, normalized);
+  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  const summary = payload.summary && typeof payload.summary === 'object' && !Array.isArray(payload.summary)
+    ? payload.summary as Record<string, unknown>
+    : {};
+  return {
+    items: rawItems.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item)).map(pagedLead),
+    total: Math.max(0, Number(payload.total ?? 0)),
+    page: Math.max(1, Number(payload.page ?? normalized.page)),
+    pageSize: Math.max(1, Number(payload.pageSize ?? payload.page_size ?? normalized.pageSize)),
+    summary: {
+      total: Math.max(0, Number(summary.total ?? 0)),
+      noDestination: Math.max(0, Number(summary.noDestination ?? summary.no_destination ?? 0)),
+      whatsapp: Math.max(0, Number(summary.whatsapp ?? 0)),
+      instagram: Math.max(0, Number(summary.instagram ?? 0)),
+    },
   };
 }
 
@@ -206,6 +261,7 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
 
 export const leadCycleService = {
   listImported: () => listByStatuses([LEAD_STATUS.IMPORTED]),
+  listImportedPage,
   executeRoutingCommand,
   updateDetails,
 };

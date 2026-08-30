@@ -1,5 +1,7 @@
 import { getSupabaseClient } from '../../lib/supabase';
 import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
+import type { LeadCyclePageFilters } from '../../services/lead-cycle/types';
+import type { PageRequest } from '../../services/pagination/types';
 import { getCurrentUserId } from '../supabase.helpers';
 import type { LeadCycleRepository, LeadCycleTransitionPatch } from './leadCycle.repository';
 
@@ -52,6 +54,22 @@ async function listByStatuses(statusIds: LeadStatusId[], channelId?: number) {
   return rows;
 }
 
+
+async function listImportedPage(filters: LeadCyclePageFilters, request: PageRequest): Promise<Record<string, unknown>> {
+  const branchId = Number(filters.branchId);
+  const { data, error } = await getSupabaseClient().rpc('list_imported_leads_page_r59', {
+    p_page: request.page,
+    p_page_size: request.pageSize,
+    p_search: filters.search?.trim() || null,
+    p_branch_id: Number.isSafeInteger(branchId) && branchId > 0 ? branchId : null,
+    p_state: filters.state && filters.state !== 'Todos' ? filters.state : null,
+    p_site_filter: filters.site ?? 'Todos',
+    p_instagram_filter: filters.instagram ?? 'Todos',
+  });
+  if (error) throw new Error(`Não foi possível carregar a página de leads importados: ${error.message}`);
+  return (data && typeof data === 'object' && !Array.isArray(data) ? data : {}) as Record<string, unknown>;
+}
+
 async function listByIds(ids: string[]) {
   if (!ids.length) return [];
   const userId = await getCurrentUserId();
@@ -83,6 +101,7 @@ async function compareAndSet(id: string, expectedStatus: LeadStatusId, patch: Le
 
 export const supabaseLeadCycleRepository: LeadCycleRepository = {
   listByStatuses,
+  listImportedPage,
   listByIds,
   compareAndSet,
 };

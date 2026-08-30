@@ -1,8 +1,9 @@
 import { getSupabaseClient } from '../../lib/supabase';
 import { normalizeInstagramUsername } from '../../services/instagram/instagram.utils';
 import { normalizePhone, normalizeSiteIdentity } from '../../services/import/importValidation';
-import type { BaseFilters, BaseFinalStatusId, BaseLead, BaseSummary, FinalLeadIdentities } from '../../services/base/types';
+import type { BaseFilters, BaseFinalStatusId, BaseLead, BasePage, BaseSummary, FinalLeadIdentities } from '../../services/base/types';
 import { getCurrentUserId } from '../supabase.helpers';
+import { normalizePageRequest, type PageRequest } from '../../services/pagination/types';
 import type { BaseRepository } from './base.repository';
 
 type Row = Record<string, unknown>;
@@ -70,6 +71,70 @@ async function latestSentByLead(userId: string, leadIds: number[]) {
     }
   }
   return result;
+}
+
+
+function pageLead(value: Row): BaseLead {
+  const statusId = Number(value.status_id) as BaseFinalStatusId;
+  const origin = String(value.origin ?? 'Sem canal') as BaseLead['origin'];
+  const phone = String(value.phone ?? '').trim();
+  const site = String(value.site ?? '').trim();
+  const instagram = String(value.instagram ?? '').trim();
+  return {
+    id: String(value.id ?? ''),
+    canonicalId: String(value.id ?? ''),
+    company: String(value.company ?? ''),
+    branch: String(value.branch ?? ''),
+    branch_id: String(value.branch_id ?? ''),
+    state: String(value.state ?? ''),
+    city: String(value.city ?? ''),
+    phone,
+    normalizedPhone: normalizePhone(phone),
+    site,
+    normalizedSite: normalizeSiteIdentity(site),
+    instagram,
+    normalizedInstagram: normalizeInstagramUsername(instagram),
+    mapsUrl: String(value.maps_url ?? '').trim(),
+    origin,
+    destination: origin,
+    status: statusName(statusId),
+    statusId,
+    finalizedAt: String(value.finalized_at ?? ''),
+    totalLeads: 1,
+    totalDispatches: Number(value.total_dispatches ?? 0),
+    lastSentAt: String(value.last_sent_at ?? ''),
+    suppressed: true,
+  };
+}
+
+async function page(filters: BaseFilters = {}, request: PageRequest): Promise<BasePage> {
+  const normalized = normalizePageRequest(request);
+  const { data, error } = await getSupabaseClient().rpc('list_base_permanent_page_r59', {
+    p_page: normalized.page,
+    p_page_size: normalized.pageSize,
+    p_search: filters.search?.trim() || null,
+    p_origin: filters.origin && filters.origin !== 'Todos' ? filters.origin : null,
+    p_status: filters.status && filters.status !== 'Todos' ? filters.status : null,
+  });
+  if (error) throw new Error(`Não foi possível carregar a Base Permanente: ${error.message}`);
+  const payload = (data && typeof data === 'object' && !Array.isArray(data) ? data : {}) as Row;
+  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  const rawSummary = payload.summary && typeof payload.summary === 'object' && !Array.isArray(payload.summary) ? payload.summary as Row : {};
+  return {
+    items: rawItems.filter((item): item is Row => Boolean(item) && typeof item === 'object' && !Array.isArray(item)).map(pageLead),
+    total: Math.max(0, Number(payload.total ?? 0)),
+    page: Math.max(1, Number(payload.page ?? normalized.page)),
+    pageSize: Math.max(1, Number(payload.pageSize ?? payload.page_size ?? normalized.pageSize)),
+    summary: {
+      total: Math.max(0, Number(rawSummary.total ?? 0)),
+      sent: Math.max(0, Number(rawSummary.sent ?? 0)),
+      sentWhatsApp: Math.max(0, Number(rawSummary.sentWhatsApp ?? rawSummary.sent_whatsapp ?? 0)),
+      sentInstagram: Math.max(0, Number(rawSummary.sentInstagram ?? rawSummary.sent_instagram ?? 0)),
+      noContact: Math.max(0, Number(rawSummary.noContact ?? rawSummary.no_contact ?? 0)),
+      invalid: Math.max(0, Number(rawSummary.invalid ?? 0)),
+      duplicates: Math.max(0, Number(rawSummary.duplicates ?? 0)),
+    },
+  };
 }
 
 async function all(): Promise<BaseLead[]> {
@@ -174,6 +239,7 @@ function finalIdentities(records: BaseLead[]): FinalLeadIdentities {
 }
 
 export const supabaseBaseRepository: BaseRepository = {
+  page,
   async list(filters = {}) {
     return filtered(await all(), filters);
   },
@@ -193,6 +259,29 @@ export const supabaseBaseRepository: BaseRepository = {
     };
   },
   async listFinalIdentities() {
-    return finalIdentities(await all());
+    const userId = await getCurrentUserId();
+    const pageSize = 1000;
+    const phones: string[] = [];
+    const sites: string[] = [];
+    const instagrams: string[] = [];
+    const mapsUrls: string[] = [];
+    for (let from = 0; ; from += pageSize) {
+      const response = await getSupabaseClient()
+        .from('leads')
+        .select('leads_phone,leads_whatsapp,leads_website,leads_instagram,leads_maps')
+        .eq('users_id', userId)
+        .in('lead_status_id', FINAL_STATUS_IDS)
+        .range(from, from + pageSize - 1);
+      if (response.error) throw new Error(`Não foi possível carregar as identidades finais: ${response.error.message}`);
+      const rows = (response.data ?? []) as Row[];
+      for (const row of rows) {
+        const phone = normalizePhone(String(row.leads_whatsapp ?? row.leads_phone ?? '')); if (phone) phones.push(phone);
+        const site = normalizeSiteIdentity(String(row.leads_website ?? '')); if (site) sites.push(site);
+        const instagram = normalizeInstagramUsername(String(row.leads_instagram ?? '')); if (instagram) instagrams.push(instagram);
+        const maps = String(row.leads_maps ?? '').trim().toLowerCase(); if (maps) mapsUrls.push(maps);
+      }
+      if (rows.length < pageSize) break;
+    }
+    return { phones: unique(phones), sites: unique(sites), instagrams: unique(instagrams), mapsUrls: unique(mapsUrls) };
   },
 };

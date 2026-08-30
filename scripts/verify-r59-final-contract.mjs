@@ -92,7 +92,7 @@ for (const token of ['leads_normalized_phone','leads_normalized_instagram','lead
 const pull = read('src/services/queue-review/queueReview.service.ts');
 for (const token of ['pull_queue_review_to_capacity','validatePreparedInitial','capacityToFill','redirectedLeadIds']) if (!pull.includes(token)) fail(`puxada_final_incompleta:${token}`);
 const homePage = read('src/pages/HomePage.tsx');
-for (const token of ['label="Importados"', 'label="Sem destino"', 'label="WhatsApp"', 'label="Instagram"', "lead.channel === 'Sem destino'", "lead.channel === 'WhatsApp'", "lead.channel === 'Instagram'"]) {
+for (const token of ['label="Importados"', 'label="Sem destino"', 'label="WhatsApp"', 'label="Instagram"', 'imported.summary.total', 'imported.summary.noDestination', 'imported.summary.whatsapp', 'imported.summary.instagram']) {
   if (!homePage.includes(token)) fail(`cards_inicio_incompletos:${token}`);
 }
 for (const legacyCard of ['label="Com número"', 'label="Com Instagram"', 'label="Com site"']) {
@@ -122,7 +122,7 @@ if (!queueSchema.includes(".neq('status_id', CANONICAL_CATALOG.status.CANCELED)"
 const whatsappQueueHook = read('src/hooks/useWhatsAppQueue.ts');
 if (!whatsappQueueHook.includes('total: Math.max(0, current.total - 1)')) fail('resumo_whatsapp_nao_remove_invalidado_do_total');
 const queueFinalTable = read('src/components/QueueFinalTable.tsx');
-for (const token of ['const displayLeads=useMemo<FinalLead[]>', '.map((lead,index)=>({...lead,position:index+1}))', 'displayLeads.find']) {
+for (const token of ['const displayLeads=useMemo<FinalLead[]>', 'const offset=(page-1)*rowsPerPage;', '.map((lead,index)=>({...lead,position:offset+index+1}))', 'displayLeads.find']) {
   if (!queueFinalTable.includes(token)) fail(`posicao_operacional_fila_final_incompleta:${token}`);
 }
 if (queueFinalTable.includes('()=>leads.map((lead)=>({ id:lead.id, position:lead.position')) fail('fila_final_ainda_exibe_posicao_historica');
@@ -173,8 +173,8 @@ for (const successNotice of [
 ]) if (queuePage.includes(successNotice)) fail(`aviso_sucesso_fila_ainda_presente:${successNotice}`);
 const queueReviewPanel = read('src/components/QueueReviewPanel.tsx');
 for (const token of [
-  "onToast('Lead aprovado', 'Lead enviado para a Fila final.', 'success')",
-  "onToast('Lead invalidado', 'Lead movido para a Base Permanente.', 'success')",
+  "onToast('Lead aprovado','Lead enviado para a Fila final.','success')",
+  "onToast('Lead invalidado','Lead movido para a Base Permanente.','success')",
 ]) if (!queueReviewPanel.includes(token)) fail(`toast_revisao_ausente:${token}`);
 for (const legacyNotice of ['foi persistido na Fila final.', 'Aprovando lead…', 'A vaga foi liberada. Um novo lead só será puxado', 'queue-action-notice']) {
   if (queueReviewPanel.includes(legacyNotice)) fail(`aviso_inline_revisao_ainda_presente:${legacyNotice}`);
@@ -204,8 +204,8 @@ const homePull = read('src/pages/HomePage.tsx');
 if (!homePull.includes('iconLeft={ListPlus}')) fail('botao_puxar_inicio_sem_icone');
 if (!homePull.includes('<QueuePullDrawer')) fail('inicio_sem_drawer_puxada');
 if (!homePull.includes("placeholder=\"Site\"") || !homePull.includes("placeholder=\"Instagram\"")) fail('filtros_site_instagram_inicio_ausentes');
-if (!homePull.includes('normalizeBrazilState(code)')) fail('estado_dropdown_sem_nome_completo');
-if (!homePull.includes("siteFilter === 'Com site'") || !homePull.includes("instagramFilter === 'Com Instagram'")) fail('filtros_site_instagram_inicio_sem_logica');
+if (!homePull.includes('BRAZIL_STATE_OPTIONS')) fail('estado_dropdown_sem_nome_completo');
+if (!homePull.includes('site: siteFilter') || !homePull.includes('instagram: instagramFilter')) fail('filtros_site_instagram_inicio_sem_logica');
 const componentsCss = read('src/styles/components.css');
 for (const token of ['text-overflow: ellipsis;', 'white-space: nowrap;', 'min-width: max(100%, 220px);']) {
   if (!componentsCss.includes(token)) fail(`select_dropdown_sem_truncamento_padrao:${token}`);
@@ -216,7 +216,7 @@ if ((queuePullUi.match(/label=\"Revisão\"/g) ?? []).length < 2) fail('card_revi
 if ((queuePullUi.match(/metric-grid--6/g) ?? []).length < 2) fail('grid_metricas_filas_nao_comporta_revisao');
 if ((queuePullUi.match(/onReviewCountChange=\{setReviewCount\}/g) ?? []).length < 2) fail('card_revisao_sem_contagem_viva');
 const queueReviewPanelForCount = read('src/components/QueueReviewPanel.tsx');
-if (!queueReviewPanelForCount.includes('onReviewCountChange?.(reviewItems.length)')) fail('painel_revisao_nao_publica_contagem');
+if (!queueReviewPanelForCount.includes('onReviewCountChange?.(total)')) fail('painel_revisao_nao_publica_contagem');
 for (const legacyPull of ['Puxar WhatsApp', 'Puxar Instagram', 'home-pull-date', 'home-pull-group']) {
   if (homePull.includes(legacyPull)) fail(`puxada_inicio_legada:${legacyPull}`);
 }
@@ -249,6 +249,7 @@ for (const token of [
   'contrato_aprovacao_r59',
   'contrato_puxada_filtrada_r59',
   'contrato_rollover_capacidade_r59',
+  'contrato_paginacao_server_side_r59',
   'SOMENTE LEITURA',
 ]) if (!homolog.includes(token)) fail(`homolog_sql_incompleto:${token}`);
 
@@ -286,10 +287,42 @@ for (const token of [
   if (preparation.includes('templateIdForLead(')) fail('template_segundo_sorteio_ainda_presente');
   if (!fix17.includes("'templateFallbackUsed'")) fail('template_fallback_canonico_ausente');
   if (fix17.includes('queue_review_resource_capacity_reached')) fail('aprovacao_ainda_exige_segunda_vaga');
-  if (!reviewTable.includes("label: 'Instagram'")) fail('instagram_revisao_whatsapp_ausente');
+  if (!reviewTable.includes("label:'Instagram'")) fail('instagram_revisao_whatsapp_ausente');
   if (!finalTable.includes("label:'Instagram'")) fail('instagram_fila_final_whatsapp_ausente');
   if (!queueCss.includes('width: max-content;')) fail('tabs_fila_ainda_largas');
   if ((queuePage17.match(/<SegmentedControl compact items=\{\['Revisão','Fila final'\]\}/g) ?? []).length < 2) fail('tabs_fila_nao_compactas');
+}
+
+
+// R59 FIX 18: leitura operacional paginada no banco, sem paginação visual sobre coleções completas.
+{
+  const home18 = read('src/pages/HomePage.tsx');
+  const base18 = read('src/pages/BasePage.tsx');
+  const review18 = read('src/components/QueueReviewPanel.tsx');
+  const final18 = read('src/components/QueueFinalTable.tsx');
+  const leadRepo18 = read('src/repositories/lead-cycle/supabaseLeadCycle.repository.ts');
+  const baseRepo18 = read('src/repositories/base/supabaseBase.repository.ts');
+  const waRepo18 = read('src/repositories/whatsapp-queue/canonicalWhatsAppQueue.repository.ts');
+  const igRepo18 = read('src/repositories/instagram-queue/canonicalInstagramQueue.repository.ts');
+  const reviewService18 = read('src/services/queue-review/queueReview.service.ts');
+  const sql18 = read('APLICAR - CRM R59 BUILD FIX 18 - Paginacao server-side.sql');
+  for (const [name, source] of [['home',home18],['base',base18],['review',review18],['final',final18]]) {
+    if (source.includes('useClientPagination')) fail(`paginacao_cliente_operacional_ainda_presente:${name}`);
+  }
+  for (const token of ['useDebouncedValue(search, 300)', 'imported.total', 'imported.summary.total']) if (!home18.includes(token)) fail(`inicio_server_side_incompleto:${token}`);
+  for (const token of ['useDebouncedValue(search, 300)', 'total', 'refreshing']) if (!base18.includes(token)) fail(`base_server_side_incompleta:${token}`);
+  if (!leadRepo18.includes("rpc('list_imported_leads_page_r59'")) fail('inicio_sem_rpc_paginada');
+  if (!baseRepo18.includes("rpc('list_base_permanent_page_r59'")) fail('base_sem_rpc_paginada');
+  if (!waRepo18.includes("rpc('list_queue_final_page_r59'")) fail('fila_whatsapp_sem_rpc_paginada');
+  if (!igRepo18.includes("rpc('list_queue_final_page_r59'")) fail('fila_instagram_sem_rpc_paginada');
+  if (!reviewService18.includes("rpc('list_queue_review_page_r59'")) fail('revisao_sem_rpc_paginada');
+  if (!reviewService18.includes("rpc('queue_review_count_r59'")) fail('card_revisao_ainda_carrega_lista');
+  for (const token of ['list_imported_leads_page_r59','list_base_permanent_page_r59','list_queue_review_page_r59','queue_review_count_r59','list_queue_final_page_r59','queue_final_retryable_ids_r59']) {
+    if (!sql18.includes(`FUNCTION public.${token}`)) fail(`sql_fix18_incompleto:${token}`);
+  }
+  if (!sql18.includes("coalesce(ip.step,'')='reconciliation_required'")) fail('reprocessamento_instagram_nao_cobre_reconciliacao');
+  if (!review18.includes('Mostrando ${rows.length} de ${total}')) fail('revisao_footer_nao_server_side');
+  if (!final18.includes('Mostrando ${rows.length} de ${total}')) fail('fila_final_footer_nao_server_side');
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

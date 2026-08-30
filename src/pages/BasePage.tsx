@@ -1,5 +1,5 @@
 import { Instagram, MessageCircle, RefreshCcw, Send, Unplug, Users, X } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
   DataTable,
@@ -17,7 +17,7 @@ import {
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useBaseRecords } from '../hooks/useBaseRecords';
-import { useClientPagination } from '../hooks/useClientPagination';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import type { BaseLead } from '../services/base/types';
 
 const STATUS_LABEL = { 3: 'Sem contato', 5: 'Enviado', 6: 'Inválido', 7: 'Duplicado' } as const;
@@ -64,15 +64,18 @@ function whatsappContact(lead: BaseLead) {
 
 export function BasePage() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [status, setStatus] = useState('Todos');
   const [channel, setChannel] = useState('Todos');
+  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [viewingLead, setViewingLead] = useState<BaseLead | null>(null);
   const filters = useMemo(() => ({
-    search,
+    search: debouncedSearch,
     status: status === 'Todos' ? 'Todos' : ({ 'Sem contato': 'sem_contato', Enviado: 'enviado', Inválido: 'invalido', Duplicado: 'duplicado' } as Record<string, string>)[status],
     origin: channel,
-  }), [search, status, channel]);
-  const { records, summary, loading, error, refresh } = useBaseRecords(filters);
+  }), [debouncedSearch, status, channel]);
+  const { records, total, summary, loading, refreshing, error, refresh } = useBaseRecords(filters, { page, pageSize: rowsPerPage });
 
   const rows = useMemo<Row[]>(() => records.map((lead) => ({
     id: lead.id,
@@ -87,7 +90,9 @@ export function BasePage() {
     status: statusTag(lead),
   })), [records]);
 
-  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
+  const totalPages = Math.max(1, Math.ceil(total / rowsPerPage));
+  const resetPage = () => setPage(1);
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
   const handleAction = (action: TableAction, row: Row) => {
     if (action !== 'view') return;
@@ -120,8 +125,8 @@ export function BasePage() {
 
       <TableCard
         title="Empresas finalizadas"
-        footerText={loading ? 'Carregando...' : `Mostrando ${pageItems.length} de ${rows.length} empresa(s).`}
-        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} />}
+        footerText={loading ? 'Carregando...' : `${refreshing ? 'Atualizando · ' : ''}Mostrando ${rows.length} de ${total} empresa(s).`}
+        footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setPage(1); }} />}
         page={page}
         totalPages={totalPages}
         onPageChange={setPage}
@@ -132,7 +137,7 @@ export function BasePage() {
         {!error && !loading && rows.length ? (
           <DataTable
             columns={columns}
-            rows={pageItems}
+            rows={rows}
             selectable={false}
             actions={['view']}
             actionsLabel="Ações"

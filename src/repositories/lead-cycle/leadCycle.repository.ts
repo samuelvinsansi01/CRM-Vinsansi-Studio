@@ -1,4 +1,6 @@
 import type { LeadDatabaseRow, LeadStatusId } from '../../types/lead.types';
+import type { LeadCyclePageFilters } from '../../services/lead-cycle/types';
+import type { PageRequest } from '../../services/pagination/types';
 
 export type LeadCycleTransitionPatch = Partial<{
   branches_id: number;
@@ -15,6 +17,7 @@ export type LeadCycleTransitionPatch = Partial<{
 
 export interface LeadCycleRepository {
   listByStatuses(statusIds: LeadStatusId[], channelId?: number): Promise<LeadDatabaseRow[]>;
+  listImportedPage(filters: LeadCyclePageFilters, request: PageRequest): Promise<Record<string, unknown>>;
   listByIds(ids: string[]): Promise<LeadDatabaseRow[]>;
   compareAndSet(
     id: string,

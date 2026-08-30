@@ -1,4 +1,5 @@
 import { eventBus } from '../../lib/events';
+import { getSupabaseClient } from '../../lib/supabase';
 import { repositories } from '../../repositories';
 import { permissionsFor } from '../permissions';
 import { assertTransition } from '../state-machine';
@@ -6,6 +7,7 @@ import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { toLocalDateInputValue } from '../../utils/date';
 import { queueCapacityRollover } from '../queue-rollover/queueCapacityRollover.service';
 import type { InstagramQueueFilters, InstagramQueueLead, UpdateInstagramQueueLeadInput } from './types';
+import type { PageRequest } from '../pagination/types';
 
 async function getSelectedLeads(ids: string[]) {
   const batches = await repositories.instagramQueue.listBatches({});
@@ -61,6 +63,11 @@ export const instagramQueueService = {
     return repositories.instagramQueue.listBatches(filters);
   },
 
+  async page(filters: InstagramQueueFilters, request: PageRequest) {
+    await rolloverOverdueInstagramItems();
+    return repositories.instagramQueue.page(filters, request);
+  },
+
   async summary(filters: InstagramQueueFilters = {}) {
     await rolloverOverdueInstagramItems();
     return repositories.instagramQueue.summary(filters);
@@ -88,6 +95,21 @@ export const instagramQueueService = {
     const allowed = assertAllAllowed(leads, 'resume', 'queued', 'Todos os itens selecionados precisam estar pausados.');
     await repositories.instagramQueue.resume(allowed);
     eventBus.emit('instagram-queue:changed', { action: 'resume' });
+  },
+
+  async reprocessScope(filters: InstagramQueueFilters) {
+    if (!filters.profile || !filters.scheduledDate) return 0;
+    const { data, error } = await getSupabaseClient().rpc('queue_final_retryable_ids_r59', {
+      p_channel: 'instagram',
+      p_resource_key: filters.profile,
+      p_scheduled_date: filters.scheduledDate,
+    });
+    if (error) throw new Error(error.message);
+    const ids = (Array.isArray(data) ? data : []).map((value) => String(value)).filter(Boolean);
+    if (!ids.length) return 0;
+    await repositories.instagramQueue.reprocess(ids);
+    eventBus.emit('instagram-queue:changed', { action: 'reprocess' });
+    return ids.length;
   },
 
   async reprocess(ids: string[]) {

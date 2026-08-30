@@ -1,8 +1,10 @@
-import type { CreateWhatsAppQueueLeadInput, UpdateWhatsAppQueueLeadInput, WhatsAppQueueBatch, WhatsAppQueueFilters, WhatsAppQueueSummary } from '../../services/whatsapp-queue/types';
+import type { CreateWhatsAppQueueLeadInput, UpdateWhatsAppQueueLeadInput, WhatsAppQueueBatch, WhatsAppQueueFilters, WhatsAppQueuePage, WhatsAppQueueSummary } from '../../services/whatsapp-queue/types';
+import type { PageRequest } from '../../services/pagination/types';
 
 export interface WhatsAppQueueRepository {
   listChips(): Promise<string[]>;
   listBatches(filters: WhatsAppQueueFilters): Promise<WhatsAppQueueBatch[]>;
+  page(filters: WhatsAppQueueFilters, request: PageRequest): Promise<WhatsAppQueuePage>;
   summary(filters?: WhatsAppQueueFilters): Promise<WhatsAppQueueSummary>;
   /** Retorna somente os IDs realmente criados. Duplicidades ignoradas não aparecem no resultado. */
   enqueue(leads: CreateWhatsAppQueueLeadInput[]): Promise<string[]>;

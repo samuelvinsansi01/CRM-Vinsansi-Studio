@@ -122,3 +122,12 @@ export type WhatsAppQueueFilters = {
 export type UpdateWhatsAppQueueLeadInput = Partial<
   Pick<WhatsAppQueueLead, 'status' | 'retry_count' | 'error_message' | 'scheduled_date' | 'position'>
 >;
+
+
+export type WhatsAppQueuePage = {
+  batches: WhatsAppQueueBatch[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: WhatsAppQueueSummary;
+};

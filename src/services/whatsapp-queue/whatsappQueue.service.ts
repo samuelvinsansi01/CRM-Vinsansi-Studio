@@ -1,5 +1,6 @@
 import { LEAD_STATUS } from '../status/leadStatus';
 import { eventBus } from '../../lib/events';
+import { getSupabaseClient } from '../../lib/supabase';
 import { repositories } from '../../repositories';
 import { normalizePhone } from '../import/importValidation';
 import { permissionsFor } from '../permissions';
@@ -20,6 +21,7 @@ import { supabaseLeadCycleRepository } from '../../repositories/lead-cycle/supab
 function isChip(record: ConfigRecord): record is ChipConfigRecord {
   return record.kind === 'chips';
 }
+import type { PageRequest } from '../pagination/types';
 
 async function getSelectedLeads(ids: string[]) {
   const batches = await repositories.whatsappQueue.listBatches({});
@@ -180,6 +182,11 @@ export const whatsappQueueService = {
     return repositories.whatsappQueue.listBatches(filters);
   },
 
+  async page(filters: WhatsAppQueueFilters, request: PageRequest) {
+    await rolloverOverdueWhatsAppItems();
+    return repositories.whatsappQueue.page(filters, request);
+  },
+
   async summary(filters: WhatsAppQueueFilters = {}) {
     await rolloverOverdueWhatsAppItems();
     return repositories.whatsappQueue.summary(filters);
@@ -308,6 +315,21 @@ export const whatsappQueueService = {
     const allowed = assertAllAllowed(leads, 'resume', 'queued', 'Todos os itens selecionados precisam poder ser retomados.');
     await repositories.whatsappQueue.resume(allowed);
     eventBus.emit('whatsapp-queue:changed', { action: 'resume' });
+  },
+
+  async reprocessScope(filters: WhatsAppQueueFilters) {
+    if (!filters.chip || !filters.scheduledDate) return 0;
+    const { data, error } = await getSupabaseClient().rpc('queue_final_retryable_ids_r59', {
+      p_channel: 'whatsapp',
+      p_resource_key: filters.chip,
+      p_scheduled_date: filters.scheduledDate,
+    });
+    if (error) throw new Error(error.message);
+    const ids = (Array.isArray(data) ? data : []).map((value) => String(value)).filter(Boolean);
+    if (!ids.length) return 0;
+    await repositories.whatsappQueue.reprocess(ids);
+    eventBus.emit('whatsapp-queue:changed', { action: 'reprocess' });
+    return ids.length;
   },
 
   async reprocess(ids: string[]) {

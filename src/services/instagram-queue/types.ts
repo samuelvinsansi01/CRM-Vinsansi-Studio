@@ -115,3 +115,12 @@ export type InstagramQueueFilters = {
 export type UpdateInstagramQueueLeadInput = Partial<
   Pick<InstagramQueueLead, 'status' | 'retry_count' | 'error_message' | 'scheduled_date' | 'position'>
 >;
+
+
+export type InstagramQueuePage = {
+  batches: InstagramQueueBatch[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: InstagramQueueSummary;
+};

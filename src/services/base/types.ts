@@ -57,3 +57,12 @@ export type BaseSummary = {
   invalid: number;
   duplicates: number;
 };
+
+
+export type BasePage = {
+  items: BaseLead[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: BaseSummary;
+};

@@ -1,166 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DataTable, RowsPerPageControl, TableCard, Tag, type TableAction, type TableColumn, type ToastItem } from '../design-system/components';
-import { useClientPagination } from '../hooks/useClientPagination';
 import { queueReviewService, type QueueReviewBatch, type QueueReviewChannel, type QueueReviewItem } from '../services/queue-review';
 import { externalHttpHref, instagramHref, mapsHref, whatsappHref } from '../utils/externalLinks';
 
 type ReviewRow = Record<string, ReactNode> & { id: string };
+function availabilityTag(available:boolean,href?:string,title?:string){const tag=<Tag tone={available?'success':'neutral'}>{available?'Sim':'Não'}</Tag>;return !available||!href?tag:<a className="availability-link" href={href} target="_blank" rel="noreferrer" title={title}>{tag}</a>;}
+function companyLink(item:QueueReviewItem){const href=mapsHref(item.mapsUrl);return !href?<strong title={item.company}>{item.company}</strong>:<a className="company-map-link" href={href} target="_blank" rel="noreferrer" title={`Abrir ${item.company} no Google Maps`}><strong>{item.company}</strong></a>;}
+function channelAvailability(item:QueueReviewItem,channel:QueueReviewChannel){if(channel==='Instagram')return availabilityTag(Boolean(item.instagram.trim()),instagramHref(item.instagram),'Abrir Instagram');const phone=item.whatsapp||item.phone;return availabilityTag(Boolean(String(phone).replace(/\D/g,'')),whatsappHref(phone),'Abrir WhatsApp');}
 
-function availabilityTag(available: boolean, href?: string, title?: string) {
-  const tag = <Tag tone={available ? 'success' : 'neutral'}>{available ? 'Sim' : 'Não'}</Tag>;
-  if (!available || !href) return tag;
-  return <a className="availability-link" href={href} target="_blank" rel="noreferrer" title={title}>{tag}</a>;
-}
-
-function companyLink(item: QueueReviewItem) {
-  const href = mapsHref(item.mapsUrl);
-  if (!href) return <strong title={item.company}>{item.company}</strong>;
-  return <a className="company-map-link" href={href} target="_blank" rel="noreferrer" title={`Abrir ${item.company} no Google Maps`}><strong>{item.company}</strong></a>;
-}
-
-function channelAvailability(item: QueueReviewItem, channel: QueueReviewChannel) {
-  if (channel === 'Instagram') return availabilityTag(Boolean(item.instagram.trim()), instagramHref(item.instagram), 'Abrir Instagram');
-  const phone = item.whatsapp || item.phone;
-  return availabilityTag(Boolean(String(phone).replace(/\D/g, '')), whatsappHref(phone), 'Abrir WhatsApp');
-}
-
-export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId = '', canPrepare, canInvalidate, refreshKey = 0, onReviewCountChange, onQueueChanged, onToast }: {
-  channel: QueueReviewChannel;
-  scheduledDate: string;
-  preferredResourceId?: string;
-  canPrepare: boolean;
-  canInvalidate: boolean;
-  refreshKey?: number;
-  onReviewCountChange?: (count: number) => void;
-  onQueueChanged: () => void;
-  onToast: (title: string, description: string, tone?: ToastItem['tone']) => void;
-}) {
-  const [batches, setBatches] = useState<QueueReviewBatch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const pendingItemsRef = useRef(new Set<string>());
-  const toastRef = useRef(onToast);
-  const scopeRef = useRef('');
-  const requestRef = useRef(0);
-
-  useEffect(() => { toastRef.current = onToast; }, [onToast]);
-
-  const refresh = useCallback(async () => {
-    const requestId = ++requestRef.current;
-    if (!preferredResourceId) { scopeRef.current = ''; setBatches([]); setLoading(false); return; }
-    const scopeKey = `${channel}:${preferredResourceId}:${scheduledDate}`;
-    const scopeChanged = scopeRef.current !== scopeKey;
-    if (scopeChanged) {
-      scopeRef.current = scopeKey;
-      setBatches([]);
-      setLoading(true);
-    }
-    try {
-      const nextBatches = await queueReviewService.list(channel, preferredResourceId, scheduledDate);
-      if (requestRef.current === requestId && scopeRef.current === scopeKey) setBatches(nextBatches);
-    }
-    catch (error) {
-      if (requestRef.current === requestId && scopeRef.current === scopeKey) {
-        toastRef.current('Não foi possível carregar a revisão', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
-      }
-    }
-    finally { if (requestRef.current === requestId && scopeRef.current === scopeKey) setLoading(false); }
-  }, [channel, preferredResourceId, scheduledDate]);
-
-  // R40: atualizações do componente pai (cards, toasts e Fila final) não podem
-  // transformar uma ação local em novo carregamento visual da tabela de revisão.
-  useEffect(() => { void refresh(); }, [refresh, refreshKey]);
-  const currentBatch = batches[0];
-  const reviewItems = useMemo(() => currentBatch?.items ?? [], [currentBatch]);
-  useEffect(() => { onReviewCountChange?.(reviewItems.length); }, [onReviewCountChange, reviewItems.length]);
-  const rows = useMemo<ReviewRow[]>(() => reviewItems.map((item, index) => ({
-    id: item.reviewItemId, position: index + 1, company: companyLink(item), branch: item.branch || '—', state: item.state || '—', city: item.city || '—',
-    rating: item.rating.toFixed(1), reviews: item.reviews.toLocaleString('pt-BR'), channel: channelAvailability(item, channel),
-    instagram: availabilityTag(Boolean(item.instagram.trim()), instagramHref(item.instagram), 'Abrir Instagram'),
-    site: availabilityTag(Boolean(item.website.trim()), externalHttpHref(item.website), 'Abrir site'),
-  })), [channel, reviewItems]);
-  const columns = useMemo<TableColumn<ReviewRow>[]>(() => {
-    const base: TableColumn<ReviewRow>[] = [
-      { key: 'position', label: '#', width: '5%' }, { key: 'company', label: 'Empresa', width: '21%' }, { key: 'branch', label: 'Ramo', width: '12%' },
-      { key: 'state', label: 'Estado', width: '6%' }, { key: 'city', label: 'Cidade', width: '10%' }, { key: 'rating', label: 'Nota', width: '6%' },
-      { key: 'reviews', label: 'Avaliações', width: '8%' }, { key: 'channel', label: channel, width: '8%' },
-    ];
-    if (channel === 'WhatsApp') base.push({ key: 'instagram', label: 'Instagram', width: '8%' });
-    base.push({ key: 'site', label: 'Site', width: '7%' });
-    return base;
-  }, [channel]);
-  const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
-  useEffect(() => { resetPage(); }, [preferredResourceId, scheduledDate, resetPage]);
-
-  const removeItemLocally = useCallback((reviewItemId: string) => {
-    setBatches((current) => current
-      .map((batch) => ({ ...batch, items: batch.items.filter((candidate) => candidate.reviewItemId !== reviewItemId) })));
-  }, []);
-
-  const restoreItemLocally = useCallback((item: QueueReviewItem, sourceBatch: QueueReviewBatch) => {
-    setBatches((current) => {
-      if (current.some((batch) => batch.items.some((candidate) => candidate.reviewItemId === item.reviewItemId))) return current;
-      const existingIndex = current.findIndex((batch) => batch.batchId === sourceBatch.batchId);
-      if (existingIndex < 0) return [...current, { ...sourceBatch, items: [item] }];
-      return current.map((batch, index) => index !== existingIndex ? batch : {
-        ...batch,
-        items: [...batch.items, item].sort((a, b) => a.position - b.position),
-      });
-    });
-  }, []);
-
-  const approve = async (item: QueueReviewItem) => {
-    if (!canPrepare || pendingItemsRef.current.has(item.reviewItemId)) return;
-    const sourceBatch = batches.find((batch) => batch.items.some((candidate) => candidate.reviewItemId === item.reviewItemId));
-    if (!sourceBatch) return;
-    pendingItemsRef.current.add(item.reviewItemId);
-    // Aprovação mantém resposta visual imediata removendo a linha localmente;
-    // apenas falhas geram aviso, para não deslocar a estrutura da tabela.
-    removeItemLocally(item.reviewItemId);
-    try {
-      await queueReviewService.approve(item, channel);
-      onQueueChanged();
-      onToast('Lead aprovado', 'Lead enviado para a Fila final.', 'success');
-    }
-    catch (error) {
-      const message = error instanceof Error ? error.message : 'Revise o lead e tente novamente.';
-      restoreItemLocally(item, sourceBatch);
-      onToast('Não foi possível aprovar', message, 'danger');
-    }
-    finally { pendingItemsRef.current.delete(item.reviewItemId); }
-  };
-  const invalidate = async (item: QueueReviewItem) => {
-    if (!canInvalidate || pendingItemsRef.current.has(item.reviewItemId)) return;
-    const sourceBatch = batches.find((batch) => batch.items.some((candidate) => candidate.reviewItemId === item.reviewItemId));
-    if (!sourceBatch) return;
-    pendingItemsRef.current.add(item.reviewItemId);
-    removeItemLocally(item.reviewItemId);
-    try {
-      await queueReviewService.invalidate(item, channel);
-      onQueueChanged();
-      onToast('Lead invalidado', 'Lead movido para a Base Permanente.', 'success');
-    }
-    catch (error) {
-      restoreItemLocally(item, sourceBatch);
-      onToast('Não foi possível invalidar', error instanceof Error ? error.message : 'Tente novamente.', 'danger');
-    }
-    finally { pendingItemsRef.current.delete(item.reviewItemId); }
-  };
-  const handleAction = (action: TableAction, row: ReviewRow) => {
-    const item = reviewItems.find((candidate) => candidate.reviewItemId === row.id); if (!item) return;
-    if (action === 'approve') void approve(item); if (action === 'invalidate') void invalidate(item);
-  };
-
-  return <TableCard
-    title={currentBatch ? `Revisão antes do disparo · ${currentBatch.resourceLabel}` : 'Revisão antes do disparo'}
-    footerText={currentBatch ? `Mostrando ${pageItems.length} de ${rows.length} lead(s) · ${currentBatch.items.length} aguardando aprovação · ${currentBatch.scheduledDate}` : undefined}
-    footerLeft={rows.length ? <RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} /> : undefined}
-    page={page} totalPages={totalPages} onPageChange={setPage}
-  >
-    {!preferredResourceId ? <div className="table-message">Selecione {channel === 'WhatsApp' ? 'um chip' : 'um perfil'} para revisar a fila.</div> : null}
-    {preferredResourceId && loading && !batches.length ? <div className="table-message">Carregando revisão...</div> : null}
-    {preferredResourceId && !loading && !reviewItems.length ? <div className="table-message">Nenhum lead aguardando revisão para este recurso.</div> : null}
-    {!loading && pageItems.length ? <DataTable columns={columns} rows={pageItems} selectable={false} actions={['approve','invalidate']} actionsLabel="Ações"
-      getRowActions={() => [...(canPrepare ? ['approve' as const] : []), ...(canInvalidate ? ['invalidate' as const] : [])]}
-      onAction={handleAction} /> : null}
+export function QueueReviewPanel({channel,scheduledDate,preferredResourceId='',canPrepare,canInvalidate,refreshKey=0,onReviewCountChange,onQueueChanged,onToast}:{channel:QueueReviewChannel;scheduledDate:string;preferredResourceId?:string;canPrepare:boolean;canInvalidate:boolean;refreshKey?:number;onReviewCountChange?:(count:number)=>void;onQueueChanged:()=>void;onToast:(title:string,description:string,tone?:ToastItem['tone'])=>void;}){
+  const[batches,setBatches]=useState<QueueReviewBatch[]>([]);const[total,setTotal]=useState(0);const[page,setPage]=useState(1);const[rowsPerPage,setRowsPerPageState]=useState(20);const[loading,setLoading]=useState(true);const[refreshing,setRefreshing]=useState(false);
+  const pendingItemsRef=useRef(new Set<string>());const toastRef=useRef(onToast);const scopeRef=useRef('');const requestRef=useRef(0);const loadedRef=useRef(false);
+  useEffect(()=>{toastRef.current=onToast;},[onToast]);
+  const refresh=useCallback(async()=>{const requestId=++requestRef.current;if(!preferredResourceId){scopeRef.current='';setBatches([]);setTotal(0);setLoading(false);return;}const scopeKey=`${channel}:${preferredResourceId}:${scheduledDate}`;const scopeChanged=scopeRef.current!==scopeKey;if(scopeChanged){scopeRef.current=scopeKey;setBatches([]);setTotal(0);setPage(1);loadedRef.current=false;}if(!loadedRef.current)setLoading(true);else setRefreshing(true);try{const result=await queueReviewService.listPage(channel,preferredResourceId,scheduledDate,{page,pageSize:rowsPerPage});if(requestRef.current===requestId&&scopeRef.current===scopeKey){setBatches(result.batches);setTotal(result.total);loadedRef.current=true;}}catch(error){if(requestRef.current===requestId&&scopeRef.current===scopeKey)toastRef.current('Não foi possível carregar a revisão',error instanceof Error?error.message:'Tente novamente.','danger');}finally{if(requestRef.current===requestId&&scopeRef.current===scopeKey){setLoading(false);setRefreshing(false);}}},[channel,page,preferredResourceId,rowsPerPage,scheduledDate]);
+  useEffect(()=>{void refresh();},[refresh,refreshKey]);
+  useEffect(()=>{onReviewCountChange?.(total);},[onReviewCountChange,total]);
+  const currentBatch=batches[0];const reviewItems=useMemo(()=>currentBatch?.items??[],[currentBatch]);
+  const rows=useMemo<ReviewRow[]>(()=>reviewItems.map((item)=>({id:item.reviewItemId,position:item.position,company:companyLink(item),branch:item.branch||'—',state:item.state||'—',city:item.city||'—',rating:item.rating.toFixed(1),reviews:item.reviews.toLocaleString('pt-BR'),channel:channelAvailability(item,channel),instagram:availabilityTag(Boolean(item.instagram.trim()),instagramHref(item.instagram),'Abrir Instagram'),site:availabilityTag(Boolean(item.website.trim()),externalHttpHref(item.website),'Abrir site')})),[channel,reviewItems]);
+  const columns=useMemo<TableColumn<ReviewRow>[]>(()=>{const base:TableColumn<ReviewRow>[]=[{key:'position',label:'#',width:'5%'},{key:'company',label:'Empresa',width:'21%'},{key:'branch',label:'Ramo',width:'12%'},{key:'state',label:'Estado',width:'6%'},{key:'city',label:'Cidade',width:'10%'},{key:'rating',label:'Nota',width:'6%'},{key:'reviews',label:'Avaliações',width:'8%'},{key:'channel',label:channel,width:'8%'}];if(channel==='WhatsApp')base.push({key:'instagram',label:'Instagram',width:'8%'});base.push({key:'site',label:'Site',width:'7%'});return base;},[channel]);
+  const totalPages=Math.max(1,Math.ceil(total/rowsPerPage));useEffect(()=>{if(page>totalPages)setPage(totalPages);},[page,totalPages]);const setRowsPerPage=(value:number)=>{setRowsPerPageState(value);setPage(1);};
+  const removeItemLocally=useCallback((reviewItemId:string)=>{setBatches((current)=>current.map((batch)=>({...batch,items:batch.items.filter((candidate)=>candidate.reviewItemId!==reviewItemId)})));setTotal((current)=>Math.max(0,current-1));},[]);
+  const restoreItemLocally=useCallback((item:QueueReviewItem,sourceBatch:QueueReviewBatch)=>{setBatches((current)=>{if(current.some((batch)=>batch.items.some((candidate)=>candidate.reviewItemId===item.reviewItemId)))return current;const existingIndex=current.findIndex((batch)=>batch.batchId===sourceBatch.batchId);if(existingIndex<0)return[...current,{...sourceBatch,items:[item]}];return current.map((batch,index)=>index!==existingIndex?batch:{...batch,items:[...batch.items,item].sort((a,b)=>a.position-b.position)});});setTotal((current)=>current+1);},[]);
+  const approve=async(item:QueueReviewItem)=>{if(!canPrepare||pendingItemsRef.current.has(item.reviewItemId))return;const sourceBatch=batches.find((batch)=>batch.items.some((candidate)=>candidate.reviewItemId===item.reviewItemId));if(!sourceBatch)return;pendingItemsRef.current.add(item.reviewItemId);removeItemLocally(item.reviewItemId);try{await queueReviewService.approve(item,channel);onQueueChanged();onToast('Lead aprovado','Lead enviado para a Fila final.','success');void refresh();}catch(error){restoreItemLocally(item,sourceBatch);onToast('Não foi possível aprovar',error instanceof Error?error.message:'Revise o lead e tente novamente.','danger');}finally{pendingItemsRef.current.delete(item.reviewItemId);}};
+  const invalidate=async(item:QueueReviewItem)=>{if(!canInvalidate||pendingItemsRef.current.has(item.reviewItemId))return;const sourceBatch=batches.find((batch)=>batch.items.some((candidate)=>candidate.reviewItemId===item.reviewItemId));if(!sourceBatch)return;pendingItemsRef.current.add(item.reviewItemId);removeItemLocally(item.reviewItemId);try{await queueReviewService.invalidate(item,channel);onQueueChanged();onToast('Lead invalidado','Lead movido para a Base Permanente.','success');void refresh();}catch(error){restoreItemLocally(item,sourceBatch);onToast('Não foi possível invalidar',error instanceof Error?error.message:'Tente novamente.','danger');}finally{pendingItemsRef.current.delete(item.reviewItemId);}};
+  const handleAction=(action:TableAction,row:ReviewRow)=>{const item=reviewItems.find((candidate)=>candidate.reviewItemId===row.id);if(!item)return;if(action==='approve')void approve(item);if(action==='invalidate')void invalidate(item);};
+  return <TableCard title={currentBatch?`Revisão antes do disparo · ${currentBatch.resourceLabel}`:'Revisão antes do disparo'} footerText={currentBatch?`${refreshing?'Atualizando · ':''}Mostrando ${rows.length} de ${total} lead(s) · ${currentBatch.scheduledDate}`:undefined} footerLeft={total?<RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage}/>:undefined} page={page} totalPages={totalPages} onPageChange={setPage}>
+    {!preferredResourceId?<div className="table-message">Selecione {channel==='WhatsApp'?'um chip':'um perfil'} para revisar a fila.</div>:null}
+    {preferredResourceId&&loading&&!batches.length?<div className="table-message">Carregando revisão...</div>:null}
+    {preferredResourceId&&!loading&&!total?<div className="table-message">Nenhum lead aguardando revisão para este recurso.</div>:null}
+    {rows.length?<DataTable columns={columns} rows={rows} selectable={false} actions={['approve','invalidate']} actionsLabel="Ações" getRowActions={()=>[...(canPrepare?['approve' as const]:[]),...(canInvalidate?['invalidate' as const]:[])]} onAction={handleAction}/>:null}
   </TableCard>;
 }

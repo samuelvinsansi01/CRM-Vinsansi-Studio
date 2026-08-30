@@ -60,3 +60,26 @@ export type LeadRoutingResult = {
   failures: LeadRoutingFailure[];
   auditWarnings: string[];
 };
+
+export type LeadCyclePageFilters = {
+  search?: string;
+  branchId?: string;
+  state?: string;
+  site?: 'Todos' | 'Com site' | 'Sem site';
+  instagram?: 'Todos' | 'Com Instagram' | 'Sem Instagram';
+};
+
+export type LeadCycleImportedSummary = {
+  total: number;
+  noDestination: number;
+  whatsapp: number;
+  instagram: number;
+};
+
+export type LeadCyclePage = {
+  items: LeadCycleLead[];
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: LeadCycleImportedSummary;
+};
