@@ -18,8 +18,10 @@ function groupItems(group: NavGroup) {
 export function Header({ activePage, onNavigate }: HeaderProps) {
   const [openGroup, setOpenGroup] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [organizationOpen, setOrganizationOpen] = useState(false);
   const navRef = useRef<HTMLElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
+  const organizationRef = useRef<HTMLDivElement | null>(null);
   const { user, signOut } = useAuthContext();
   const { organizationId, organizations, loading: organizationLoading, hasPermission, switchOrganization } = useOrganizationContext();
   const canAccessPage = (page: PageId) => {
@@ -33,6 +35,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
       sections: group.sections?.map((section) => ({ ...section, items: section.items.filter((item) => canAccessPage(item.id)) })).filter((section) => section.items.length > 0),
     }))
     .filter((group) => canAccessPage(group.id) || Boolean(group.items?.length) || Boolean(group.sections?.length));
+  const activeOrganization = organizations.find((organization) => organization.id === organizationId) ?? organizations[0];
   const firstName = user?.name?.split(' ')[0] || 'Usuário';
   const initials = (user?.name || user?.email || 'U')
     .split(/\s+/)
@@ -44,11 +47,13 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
     const closeProfileOnOutsideClick = (event: MouseEvent) => {
       const target = event.target as Node;
       if (profileRef.current && !profileRef.current.contains(target)) setProfileOpen(false);
+      if (organizationRef.current && !organizationRef.current.contains(target)) setOrganizationOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setOpenGroup('');
       setProfileOpen(false);
+      setOrganizationOpen(false);
     };
 
     document.addEventListener('mousedown', closeProfileOnOutsideClick);
@@ -63,6 +68,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
     onNavigate(page);
     setOpenGroup('');
     setProfileOpen(false);
+    setOrganizationOpen(false);
   };
 
   return (
@@ -158,20 +164,46 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
 
         <div className="app-header__actions">
           {organizations.length ? (
-            <label className="organization-switcher" title="Organização ativa">
-              <Building2 size={14} strokeWidth={1.8} aria-hidden="true" />
-              <select
+            <div className={`organization-switcher ${organizationOpen ? 'organization-switcher--open' : ''}`} ref={organizationRef}>
+              <button
+                className="organization-switcher__trigger"
+                type="button"
                 aria-label="Organização ativa"
-                value={organizationId ?? ''}
+                aria-haspopup="listbox"
+                aria-expanded={organizationOpen}
                 disabled={organizationLoading}
-                onChange={(event) => void switchOrganization(event.target.value)}
+                onClick={() => { setOrganizationOpen((current) => !current); setProfileOpen(false); }}
               >
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>{organization.name}</option>
-                ))}
-              </select>
-              <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
-            </label>
+                <Building2 size={14} strokeWidth={1.8} aria-hidden="true" />
+                <strong title={activeOrganization?.name}>{activeOrganization?.name ?? 'Organização'}</strong>
+                <ChevronDown size={13} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+              {organizationOpen ? (
+                <div className="organization-switcher__dropdown" role="listbox" aria-label="Selecionar organização">
+                  {organizations.map((organization) => {
+                    const selected = organization.id === organizationId;
+                    return (
+                      <button
+                        key={organization.id}
+                        className={selected ? 'organization-switcher__option organization-switcher__option--active' : 'organization-switcher__option'}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        title={organization.name}
+                        onClick={() => {
+                          setOrganizationOpen(false);
+                          if (!selected) void switchOrganization(organization.id);
+                        }}
+                      >
+                        <Building2 size={14} strokeWidth={1.8} aria-hidden="true" />
+                        <span>{organization.name}</span>
+                        {selected ? <span className="organization-switcher__check" aria-hidden="true">✓</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
           ) : null}
           <span className="notification">
             <IconButton icon={Bell} label="Notificações" className="app-header__notification-button" />

@@ -55,6 +55,10 @@ const header = read('src/design-system/layouts/Header.tsx');
 for (const token of ["canAccessPage('audit')", "navigate('audit')", 'ClipboardList']) {
   if (header.includes(token)) fail(`header_auditoria_regrediu:${token}`);
 }
+if (header.includes('<select') && header.includes('organization-switcher')) fail('seletor_organizacao_nativo_regrediu');
+for (const token of ['organization-switcher__trigger','organization-switcher__dropdown','organization-switcher__option']) {
+  if (!header.includes(token)) fail(`seletor_organizacao_custom_ausente:${token}`);
+}
 const catalog = read('src/pages/CatalogCrudPage.tsx');
 if ((catalog.match(/return \{ name: record\.name, statusId: record\.statusId \};/g) ?? []).length > 1) fail('catalog_never_fallback_regrediu');
 const repositoryIndex = read('src/repositories/index.ts');
