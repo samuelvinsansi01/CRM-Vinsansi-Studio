@@ -24,13 +24,14 @@ function channelAvailability(item: QueueReviewItem, channel: QueueReviewChannel)
   return availabilityTag(Boolean(String(phone).replace(/\D/g, '')), whatsappHref(phone), 'Abrir WhatsApp');
 }
 
-export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId = '', canPrepare, canInvalidate, refreshKey = 0, onQueueChanged, onToast }: {
+export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId = '', canPrepare, canInvalidate, refreshKey = 0, onReviewCountChange, onQueueChanged, onToast }: {
   channel: QueueReviewChannel;
   scheduledDate: string;
   preferredResourceId?: string;
   canPrepare: boolean;
   canInvalidate: boolean;
   refreshKey?: number;
+  onReviewCountChange?: (count: number) => void;
   onQueueChanged: () => void;
   onToast: (title: string, description: string, tone?: ToastItem['tone']) => void;
 }) {
@@ -70,6 +71,7 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
   useEffect(() => { void refresh(); }, [refresh, refreshKey]);
   const currentBatch = batches[0];
   const reviewItems = useMemo(() => currentBatch?.items ?? [], [currentBatch]);
+  useEffect(() => { onReviewCountChange?.(reviewItems.length); }, [onReviewCountChange, reviewItems.length]);
   const rows = useMemo<ReviewRow[]>(() => reviewItems.map((item, index) => ({
     id: item.reviewItemId, position: index + 1, company: companyLink(item), branch: item.branch || '—', state: item.state || '—', city: item.city || '—',
     rating: item.rating.toFixed(1), reviews: item.reviews.toLocaleString('pt-BR'), channel: channelAvailability(item, channel),

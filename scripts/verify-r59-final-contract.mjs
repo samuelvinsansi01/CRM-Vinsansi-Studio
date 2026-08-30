@@ -212,6 +212,11 @@ for (const token of ['text-overflow: ellipsis;', 'white-space: nowrap;', 'min-wi
 }
 const queuePullUi = read('src/pages/QueuePage.tsx');
 if (!queuePullUi.includes('iconLeft={ListPlus}')) fail('botao_puxar_fila_sem_icone');
+if ((queuePullUi.match(/label=\"Revisão\"/g) ?? []).length < 2) fail('card_revisao_ausente_nas_duas_filas');
+if ((queuePullUi.match(/metric-grid--6/g) ?? []).length < 2) fail('grid_metricas_filas_nao_comporta_revisao');
+if ((queuePullUi.match(/onReviewCountChange=\{setReviewCount\}/g) ?? []).length < 2) fail('card_revisao_sem_contagem_viva');
+const queueReviewPanelForCount = read('src/components/QueueReviewPanel.tsx');
+if (!queueReviewPanelForCount.includes('onReviewCountChange?.(reviewItems.length)')) fail('painel_revisao_nao_publica_contagem');
 for (const legacyPull of ['Puxar WhatsApp', 'Puxar Instagram', 'home-pull-date', 'home-pull-group']) {
   if (homePull.includes(legacyPull)) fail(`puxada_inicio_legada:${legacyPull}`);
 }
