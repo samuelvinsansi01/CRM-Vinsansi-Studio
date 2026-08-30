@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMidnightRefresh } from './useMidnightRefresh';
 import { whatsappQueueService } from '../services/whatsapp-queue/whatsappQueue.service';
 import type { WhatsAppBatchState } from '../services/whatsapp-queue/whatsapp.batch.gateway';
 import type { UpdateWhatsAppQueueLeadInput, WhatsAppQueueBatch, WhatsAppQueueLead, WhatsAppQueueSummary } from '../services/whatsapp-queue/types';
@@ -82,6 +83,7 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
   const hasLoadedRef = useRef(false);
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
+  useMidnightRefresh(refresh);
 
   // A tela só consulta automaticamente enquanto existe um lote realmente em execução.
   // Quando o Worker conclui todos os itens, o status muda para completed e o timer

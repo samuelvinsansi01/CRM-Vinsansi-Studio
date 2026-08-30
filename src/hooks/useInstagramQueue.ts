@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMidnightRefresh } from './useMidnightRefresh';
 import { instagramQueueService } from '../services/instagram-queue/instagramQueue.service';
 import type { InstagramQueueBatch, InstagramQueueLead, InstagramQueueSummary, UpdateInstagramQueueLeadInput } from '../services/instagram-queue/types';
 
@@ -21,6 +22,7 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
   const hasLoadedRef = useRef(false);
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
+  useMidnightRefresh(refresh);
 
   useEffect(() => {
     let active = true;
