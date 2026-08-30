@@ -1,4 +1,4 @@
-import { Instagram, MessageCircle, Unplug, Users } from 'lucide-react';
+import { Instagram, ListPlus, MessageCircle, Unplug, Users } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
@@ -19,7 +19,7 @@ import {
   type ToastItem,
 } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
-import { QueuePullModal } from '../components/QueuePullModal';
+import { QueuePullDrawer } from '../components/QueuePullDrawer';
 import { useClientPagination } from '../hooks/useClientPagination';
 import { useLeadCycle } from '../hooks/useLeadCycle';
 import { useOperationalQueueDate } from '../hooks/useOperationalQueueDate';
@@ -102,7 +102,7 @@ export function HomePage() {
   const [search, setSearch] = useState('');
   const [branch, setBranch] = useState('Todos');
   const [state, setState] = useState('Todos');
-  const [pullModalOpen, setPullModalOpen] = useState(false);
+  const [pullDrawerOpen, setPullDrawerOpen] = useState(false);
   const [scheduledDate, setScheduledDate] = useOperationalQueueDate();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [branches, setBranches] = useState<BranchConfigRecord[]>([]);
@@ -237,7 +237,7 @@ export function HomePage() {
       <PageHeader
         title="Início"
         description="Leads importados aguardando seleção. Os melhores avaliados são puxados primeiro, independentemente da data de entrada."
-        action={canPrepare ? <div className="home-leads-actions home-leads-actions--compact"><Button onClick={() => setPullModalOpen(true)}>Puxar leads</Button></div> : undefined}
+        action={canPrepare ? <div className="home-leads-actions home-leads-actions--compact"><Button iconLeft={ListPlus} onClick={() => setPullDrawerOpen(true)}>Puxar leads</Button></div> : undefined}
       />
 
       <section className="metric-grid metric-grid--4">
@@ -321,7 +321,7 @@ export function HomePage() {
         {invalidatingLead ? <strong>{invalidatingLead.company}</strong> : null}
       </ConfirmDialog>
 
-      <QueuePullModal open={pullModalOpen} initialDate={scheduledDate} onClose={() => setPullModalOpen(false)} onPulled={handlePulled} onError={(title, description) => toast(title, description, 'danger')} />
+      <QueuePullDrawer open={pullDrawerOpen} initialDate={scheduledDate} onClose={() => setPullDrawerOpen(false)} onPulled={handlePulled} onError={(title, description) => toast(title, description, 'danger')} />
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((toastItem) => toastItem.id !== id))} />
     </div>
   );

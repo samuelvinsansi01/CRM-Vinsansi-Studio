@@ -176,7 +176,7 @@ for (const legacyNotice of ['foi persistido na Fila final.', 'Aprovando lead…'
   if (queueReviewPanel.includes(legacyNotice)) fail(`aviso_inline_revisao_ainda_presente:${legacyNotice}`);
 }
 
-const pullModal = read('src/components/QueuePullModal.tsx');
+const pullDrawer = read('src/components/QueuePullDrawer.tsx');
 for (const token of [
   'Puxar leads',
   'Leads compatíveis com os filtros',
@@ -186,14 +186,21 @@ for (const token of [
   'queueReviewService.preview',
   'queueReviewService.pull',
   'Puxar ${preview?.willPull ?? 0}',
-]) if (!pullModal.includes(token)) fail(`modal_puxada_incompleto:${token}`);
+]) if (!pullDrawer.includes(token)) fail(`drawer_puxada_incompleto:${token}`);
 for (const token of [
   '(preview?.resource.available ?? 0) <= 0',
   'preview.resource.available > preview.eligible',
-]) if (!pullModal.includes(token)) fail(`modal_puxada_capacidade_incompleta:${token}`);
-if (/preview\?*\.available/.test(pullModal)) fail('modal_puxada_available_fora_de_resource');
+]) if (!pullDrawer.includes(token)) fail(`drawer_puxada_capacidade_incompleta:${token}`);
+if (/preview\?*\.available/.test(pullDrawer)) fail('drawer_puxada_available_fora_de_resource');
+if (!pullDrawer.includes('<Drawer')) fail('drawer_puxada_nao_usa_design_system');
+if (pullDrawer.includes('<Modal')) fail('modal_central_puxada_ainda_presente');
+if (!pullDrawer.includes('iconLeft={ListPlus}')) fail('cta_drawer_puxada_sem_icone');
+if (!pullDrawer.includes('options={siteOptions}') || !pullDrawer.includes('options={instagramOptions}')) fail('filtros_puxada_nao_usam_select_padrao');
 const homePull = read('src/pages/HomePage.tsx');
-if (!homePull.includes('<QueuePullModal')) fail('inicio_sem_modal_puxada');
+if (!homePull.includes('iconLeft={ListPlus}')) fail('botao_puxar_inicio_sem_icone');
+if (!homePull.includes('<QueuePullDrawer')) fail('inicio_sem_drawer_puxada');
+const queuePullUi = read('src/pages/QueuePage.tsx');
+if (!queuePullUi.includes('iconLeft={ListPlus}')) fail('botao_puxar_fila_sem_icone');
 for (const legacyPull of ['Puxar WhatsApp', 'Puxar Instagram', 'home-pull-date', 'home-pull-group']) {
   if (homePull.includes(legacyPull)) fail(`puxada_inicio_legada:${legacyPull}`);
 }

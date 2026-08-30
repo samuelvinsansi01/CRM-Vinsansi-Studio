@@ -90,3 +90,12 @@ BUILD FIX 10 — MODAL ÚNICO DE PUXADA + FILTROS
 VERIFICAÇÕES BUILD FIX 10
 - node scripts/verify-syntax.mjs: APROVADO em 235 arquivos TypeScript.
 - node scripts/verify-r59-final-contract.mjs: APROVADO.
+
+BUILD FIX 12 — DRAWER PADRÃO PARA PUXAR LEADS
+- QueuePullModal removido; o fluxo usa QueuePullDrawer baseado no Drawer oficial do design system.
+- Puxar leads abre painel lateral direito com cabeçalho, corpo rolável e rodapé fixo iguais aos demais cadastros do CRM.
+- Canal permanece em controle segmentado; Site e Instagram usam SelectField padrão.
+- Botões Puxar leads do Início e das Filas usam ícone ListPlus.
+- CTA Puxar N leads no drawer também usa ícone ListPlus.
+- A lógica R59 de prévia, filtros, capacidade e reserva atômica do BUILD FIX 10 permanece inalterada.
+- Nenhuma alteração de banco/RPC/trigger nesta revisão visual.
