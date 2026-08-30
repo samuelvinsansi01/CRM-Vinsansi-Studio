@@ -1,10 +1,19 @@
 export type QueueReviewChannel = 'WhatsApp' | 'Instagram';
+export type QueueReviewPresenceFilter = 'any' | 'with' | 'without';
+
+export type QueueReviewPullFilters = {
+  site: QueueReviewPresenceFilter;
+  instagram: QueueReviewPresenceFilter;
+};
 
 export type QueueReviewResource = {
   id: string;
   label: string;
   channel: QueueReviewChannel;
   dailyLimit: number;
+  finalUsed: number;
+  reviewOpen: number;
+  used: number;
   available: number;
 };
 
@@ -44,6 +53,7 @@ export type QueueReviewBatch = {
 export type QueueReviewPullResult = {
   scheduledDate: string;
   resource: QueueReviewResource;
+  resourceSelectionKey: string;
   capacityToFill: number;
   reserved: number;
   ready: number;
@@ -55,4 +65,11 @@ export type QueueReviewPullResult = {
   technicalReasons: string[];
   movedLeadIds: string[];
   redirectedLeadIds: string[];
+};
+
+export type QueueReviewPullPreview = {
+  scheduledDate: string;
+  resource: QueueReviewResource;
+  eligible: number;
+  willPull: number;
 };

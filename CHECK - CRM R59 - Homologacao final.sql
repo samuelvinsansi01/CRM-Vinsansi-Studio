@@ -103,6 +103,32 @@ approval_contract_diff AS (
     ) THEN 1 ELSE 0 END
   )::bigint AS total
 ),
+pull_filter_contract_diff AS (
+  SELECT (
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='pull_queue_review_to_capacity' AND pg_get_function_identity_arguments(p.oid)='p_channel text, p_resource_key text, p_scheduled_date date, p_site_filter text, p_instagram_filter text') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='preview_queue_review_pull' AND pg_get_function_identity_arguments(p.oid)='p_channel text, p_resource_key text, p_scheduled_date date, p_site_filter text, p_instagram_filter text') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='pull_queue_review_to_capacity' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) LIKE '%''contractversion'',''r58''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''contractversion'',''r59''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%p_site_filter%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%p_instagram_filter%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%leads_website%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%leads_instagram%'
+      )
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='preview_queue_review_pull' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%list_queue_review_resources%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''willpull''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''eligible''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%''contractversion'',''r59''%'
+      )
+    ) THEN 1 ELSE 0 END
+  )::bigint AS total
+),
 channel_diff AS (
   WITH esperado(nome) AS (VALUES ('whatsapp'::text),('instagram'::text),('sem_destino'::text)), atual AS (
     SELECT regexp_replace(lower(public.unaccent(trim(channels_name))), '[^a-z0-9]+','_','g') nome FROM public.channels
@@ -196,6 +222,7 @@ checks AS (
     AND regexp_replace(lower(public.unaccent(trim(coalesce(qi.queue_items_error_message,'')))), '[^a-z0-9]+','','g')='invalidadopelooperador'
   UNION ALL SELECT '23_contrato_nome_alternativo_r59',(SELECT total FROM alternative_name_contract_diff),0,false
   UNION ALL SELECT '24_contrato_aprovacao_r59',(SELECT total FROM approval_contract_diff),0,false
+  UNION ALL SELECT '25_contrato_puxada_filtrada_r59',(SELECT total FROM pull_filter_contract_diff),0,false
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado

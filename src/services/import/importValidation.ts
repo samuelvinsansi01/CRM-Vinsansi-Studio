@@ -662,7 +662,7 @@ function approveDraft(
   sourceDestination: ImportLeadDestination = destination,
 ) {
   // R23: todo lead aceito entra apenas como Importado. O canal operacional só é
-  // escolhido quando o operador usa Puxar WhatsApp/Instagram.
+  // escolhido quando o operador usa Puxar leads para o canal selecionado.
   draft.status = 'pending';
   draft.destino = destination;
   draft.original_destination = draft.original_destination && draft.original_destination !== 'Recusado'

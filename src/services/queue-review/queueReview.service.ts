@@ -2,7 +2,7 @@ import { getSupabaseClient } from '../../lib/supabase';
 import { eventBus } from '../../lib/events';
 import { queuePreparationService } from '../queue-preparation';
 import { whatsappValidationService, type PreparedWhatsAppValidationLead } from '../whatsapp-validation/whatsappValidation.service';
-import type { QueueReviewBatch, QueueReviewChannel, QueueReviewItem, QueueReviewPullResult, QueueReviewResource } from './types';
+import type { QueueReviewBatch, QueueReviewChannel, QueueReviewItem, QueueReviewPullFilters, QueueReviewPullPreview, QueueReviewPullResult, QueueReviewResource } from './types';
 
 function rpcRow<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -17,6 +17,7 @@ type PullCapacityBase = {
   scheduledDate: string;
   resource: QueueReviewResource;
   providerKey: string;
+  selectionKey: string;
 };
 
 function resourceFromRow(channel: QueueReviewChannel, value: Record<string, unknown>): QueueReviewResource {
@@ -25,6 +26,9 @@ function resourceFromRow(channel: QueueReviewChannel, value: Record<string, unkn
     label: String(value.resource_label ?? value.resourceLabel ?? value.resource_id ?? ''),
     channel,
     dailyLimit: Number(value.daily_limit ?? value.dailyLimit ?? 0),
+    finalUsed: Math.max(0, Number(value.final_used ?? value.finalUsed ?? 0)),
+    reviewOpen: Math.max(0, Number(value.review_open ?? value.reviewOpen ?? 0)),
+    used: Math.max(0, Number(value.used ?? 0)),
     available: Math.max(0, Number(value.available ?? value.missingCount ?? value.missing_count ?? 0)),
   };
 }
@@ -59,11 +63,13 @@ function reservedLeadFrom(value: Record<string, unknown>): ReservedReviewLead {
   };
 }
 
-async function pullCapacity(channel: QueueReviewChannel, resourceKey: string, scheduledDate: string): Promise<PullCapacityContext> {
+async function pullCapacity(channel: QueueReviewChannel, resourceKey: string, scheduledDate: string, filters: QueueReviewPullFilters): Promise<PullCapacityContext> {
   const { data, error } = await getSupabaseClient().rpc('pull_queue_review_to_capacity', {
     p_channel: channelKey(channel),
     p_resource_key: resourceKey,
     p_scheduled_date: scheduledDate,
+    p_site_filter: filters.site,
+    p_instagram_filter: filters.instagram,
   });
   if (error) throw new Error(error.message);
   const row = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
@@ -78,6 +84,7 @@ async function pullCapacity(channel: QueueReviewChannel, resourceKey: string, sc
     scheduledDate: String(row.scheduledDate ?? row.scheduled_date ?? ''),
     resource: resourceFromRow(channel, row),
     providerKey: String(row.providerKey ?? row.provider_key ?? ''),
+    selectionKey: String(row.selectionKey ?? row.selection_key ?? row.resourceLabel ?? row.resource_label ?? ''),
     capacityToFill: Math.max(0, Number(row.capacityToFill ?? row.capacity_to_fill ?? 0)),
     reserved,
   };
@@ -87,8 +94,9 @@ async function pullToCapacity(
   channel: QueueReviewChannel,
   resourceKey: string,
   scheduledDate: string,
+  filters: QueueReviewPullFilters,
 ): Promise<QueueReviewPullResult> {
-  const context = await pullCapacity(channel, resourceKey, scheduledDate);
+  const context = await pullCapacity(channel, resourceKey, scheduledDate, filters);
   let { resource } = context;
   const { reserved, capacityToFill } = context;
   let invalidatedByProvider = 0;
@@ -137,6 +145,7 @@ async function pullToCapacity(
   return {
     scheduledDate: context.scheduledDate,
     resource,
+    resourceSelectionKey: context.selectionKey,
     capacityToFill,
     reserved: reserved.length,
     ready,
@@ -151,14 +160,36 @@ async function pullToCapacity(
   };
 }
 
-async function pull(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string) {
+const DEFAULT_PULL_FILTERS: QueueReviewPullFilters = { site: 'any', instagram: 'any' };
+
+async function preview(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string, filters: QueueReviewPullFilters = DEFAULT_PULL_FILTERS): Promise<QueueReviewPullPreview> {
+  if (!preferredResourceId) throw new Error(channel === 'WhatsApp' ? 'Selecione um chip.' : 'Selecione um perfil.');
+  const { data, error } = await getSupabaseClient().rpc('preview_queue_review_pull', {
+    p_channel: channelKey(channel),
+    p_resource_key: preferredResourceId,
+    p_scheduled_date: scheduledDate,
+    p_site_filter: filters.site,
+    p_instagram_filter: filters.instagram,
+  });
+  if (error) throw new Error(error.message);
+  const row = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
+  if (!row) throw new Error('O banco não retornou a prévia da puxada.');
+  return {
+    scheduledDate: String(row.scheduledDate ?? row.scheduled_date ?? scheduledDate),
+    resource: resourceFromRow(channel, row),
+    eligible: Math.max(0, Number(row.eligible ?? 0)),
+    willPull: Math.max(0, Number(row.willPull ?? row.will_pull ?? 0)),
+  };
+}
+
+async function pull(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string, filters: QueueReviewPullFilters = DEFAULT_PULL_FILTERS) {
   if (!preferredResourceId) {
     throw new Error(channel === 'WhatsApp'
       ? 'Selecione um chip específico antes de puxar e validar a fila WhatsApp.'
       : 'Selecione um perfil específico antes de puxar a fila Instagram.');
   }
   if (!scheduledDate) throw new Error('Selecione a data que receberá os leads.');
-  return pullToCapacity(channel, preferredResourceId, scheduledDate);
+  return pullToCapacity(channel, preferredResourceId, scheduledDate, filters);
 }
 
 async function list(channel: QueueReviewChannel, preferredResourceId = '', scheduledDate = ''): Promise<QueueReviewBatch[]> {
@@ -253,4 +284,4 @@ async function invalidate(item: QueueReviewItem, channel: QueueReviewChannel) {
   eventBus.emit('import:changed', { source: 'move' });
 }
 
-export const queueReviewService = { resources, pull, list, approve, invalidate };
+export const queueReviewService = { resources, preview, pull, list, approve, invalidate };

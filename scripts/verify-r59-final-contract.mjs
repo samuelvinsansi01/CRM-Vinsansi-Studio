@@ -168,13 +168,44 @@ for (const successNotice of [
   'saiu da Fila final. Os itens seguintes subiram uma posição.',
 ]) if (queuePage.includes(successNotice)) fail(`aviso_sucesso_fila_ainda_presente:${successNotice}`);
 const queueReviewPanel = read('src/components/QueueReviewPanel.tsx');
-for (const successNotice of [
-  'Lead aprovado',
-  'foi persistido na Fila final.',
-  'Aprovando lead…',
-  'A vaga foi liberada. Um novo lead só será puxado',
-  'queue-action-notice',
-]) if (queueReviewPanel.includes(successNotice)) fail(`aviso_sucesso_revisao_ainda_presente:${successNotice}`);
+for (const token of [
+  "onToast('Lead aprovado', 'Lead enviado para a Fila final.', 'success')",
+  "onToast('Lead invalidado', 'Lead movido para a Base Permanente.', 'success')",
+]) if (!queueReviewPanel.includes(token)) fail(`toast_revisao_ausente:${token}`);
+for (const legacyNotice of ['foi persistido na Fila final.', 'Aprovando lead…', 'A vaga foi liberada. Um novo lead só será puxado', 'queue-action-notice']) {
+  if (queueReviewPanel.includes(legacyNotice)) fail(`aviso_inline_revisao_ainda_presente:${legacyNotice}`);
+}
+
+const pullModal = read('src/components/QueuePullModal.tsx');
+for (const token of [
+  'Puxar leads',
+  'Leads compatíveis com os filtros',
+  'Serão puxados',
+  "site: siteFilter",
+  "instagram: channel === 'Instagram' ? 'any' : instagramFilter",
+  'queueReviewService.preview',
+  'queueReviewService.pull',
+  'Puxar ${preview?.willPull ?? 0}',
+]) if (!pullModal.includes(token)) fail(`modal_puxada_incompleto:${token}`);
+const homePull = read('src/pages/HomePage.tsx');
+if (!homePull.includes('<QueuePullModal')) fail('inicio_sem_modal_puxada');
+for (const legacyPull of ['Puxar WhatsApp', 'Puxar Instagram', 'home-pull-date', 'home-pull-group']) {
+  if (homePull.includes(legacyPull)) fail(`puxada_inicio_legada:${legacyPull}`);
+}
+const pullPatch = 'APLICAR - CRM R59 BUILD FIX 10 - Modal e filtros da puxada.sql';
+if (!exists(pullPatch)) fail('sql_puxada_filtrada_fix10_ausente');
+const pullSql = read(pullPatch);
+for (const token of [
+  'CREATE FUNCTION public.pull_queue_review_to_capacity',
+  'CREATE OR REPLACE FUNCTION public.preview_queue_review_pull',
+  'p_site_filter text DEFAULT',
+  'p_instagram_filter text DEFAULT',
+  "'contractVersion','R59'",
+  'leads_website',
+  'leads_instagram',
+  "FOR UPDATE OF l SKIP LOCKED",
+]) if (!pullSql.includes(token)) fail(`sql_puxada_filtrada_fix10_incompleto:${token}`);
+if (pullSql.includes("'contractVersion','R58'")) fail('sql_puxada_filtrada_fix10_contrato_r58');
 
 const homolog = read(homologSql);
 for (const token of [
@@ -188,6 +219,7 @@ for (const token of [
   'invalidacao_manual_marcada_como_erro',
   'contrato_nome_alternativo_r59',
   'contrato_aprovacao_r59',
+  'contrato_puxada_filtrada_r59',
   'SOMENTE LEITURA',
 ]) if (!homolog.includes(token)) fail(`homolog_sql_incompleto:${token}`);
 console.log('CRM R59 final contract + homologacao: OK');

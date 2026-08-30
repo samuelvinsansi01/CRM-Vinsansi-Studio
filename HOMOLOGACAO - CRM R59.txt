@@ -5,6 +5,7 @@ ARQUIVOS OBRIGATÓRIOS DE HOMOLOGAÇÃO
 - CHECK - CRM R59 - Homologacao final.sql
 - APLICAR - CRM R59 BUILD FIX 6 - Corrigir invalidacao.sql
 - APLICAR - CRM R59 BUILD FIX 8 - Nome alternativo e snapshot.sql
+- APLICAR - CRM R59 BUILD FIX 10 - Modal e filtros da puxada.sql
 
 CONTRATO ATUAL
 - Banco estrutural congelado em 60 tabelas.
@@ -70,3 +71,22 @@ BUILD FIX 9 — FEEDBACK VISUAL SEM DESLOCAR TABELAS
 - Editar nome alternativo não exibe mais toast de sucesso; o drawer fecha e as mensagens/linha são atualizadas localmente.
 - Avisos de erro e bloqueio permanecem, pois são necessários para diagnóstico.
 - Nenhuma alteração de banco, RPC, trigger, Gateway, Worker ou Gerenciador.
+
+BUILD FIX 10 — MODAL ÚNICO DE PUXADA + FILTROS
+- Início usa um único botão Puxar leads; os controles antigos Puxar WhatsApp/Puxar Instagram foram removidos da página.
+- Modal transacional permite escolher canal, data, chip/perfil e perfil das empresas antes da reserva.
+- WhatsApp: Site = Qualquer/Sem site/Com site e Instagram = Qualquer/Sem Instagram/Com Instagram.
+- Instagram: Site = Qualquer/Sem site/Com site; presença de Instagram continua requisito estrutural do canal.
+- Modal mostra capacidade, ocupação, vagas, leads compatíveis e quantidade exata que será puxada.
+- Não existe campo manual de quantidade, oversampling, refill ou fallback para lead fora do filtro.
+- preview_queue_review_pull apenas conta; não reserva nem altera lead.
+- pull_queue_review_to_capacity continua a reserva atômica com FOR UPDATE ... SKIP LOCKED e passa a aplicar os filtros dentro da própria transação.
+- pull_queue_review_to_capacity declara contractVersion R59; resíduo R58 removido.
+- Filas WhatsApp/Instagram também usam o mesmo modal ao acionar Puxar leads.
+- Feedback de sucesso volta como toast flutuante no canto para Aprovar, Invalidar e Editar, sem alterar a altura das tabelas.
+- CHECK 25 valida o contrato da puxada filtrada R59.
+- Nenhuma tabela, coluna, trigger, Gateway, Worker ou Gerenciador foi alterado.
+
+VERIFICAÇÕES BUILD FIX 10
+- node scripts/verify-syntax.mjs: APROVADO em 235 arquivos TypeScript.
+- node scripts/verify-r59-final-contract.mjs: APROVADO.

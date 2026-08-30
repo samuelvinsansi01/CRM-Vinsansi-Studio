@@ -1836,3 +1836,55 @@ button.checkbox {
 .queue-action-notice--danger {
   border-color: var(--color-danger-border, var(--border-subtle));
 }
+
+.modal-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(620px, 100%);
+  max-height: min(760px, calc(100vh - var(--space-48)));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 10%, transparent);
+  border-radius: var(--radius-16);
+  background: color-mix(in srgb, var(--surface-card) 98%, var(--app-bg));
+  box-shadow: 0 24px 70px color-mix(in srgb, var(--color-pure-black) 62%, transparent);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+  padding: var(--space-24);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.modal-header p {
+  margin: var(--space-06) 0 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-24);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-12);
+  padding: var(--space-16) var(--space-24) var(--space-20);
+  border-top: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+}

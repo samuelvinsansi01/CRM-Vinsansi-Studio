@@ -13,3 +13,5 @@ export * from './navigation/SegmentedControl';
 export * from './overlay/Drawer';
 export * from './overlay/ConfirmDialog';
 export * from './overlay/Toast';
+
+export * from './overlay/Modal';

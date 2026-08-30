@@ -111,6 +111,7 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
     try {
       await queueReviewService.approve(item, channel);
       onQueueChanged();
+      onToast('Lead aprovado', 'Lead enviado para a Fila final.', 'success');
     }
     catch (error) {
       const message = error instanceof Error ? error.message : 'Revise o lead e tente novamente.';
@@ -128,6 +129,7 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
     try {
       await queueReviewService.invalidate(item, channel);
       onQueueChanged();
+      onToast('Lead invalidado', 'Lead movido para a Base Permanente.', 'success');
     }
     catch (error) {
       restoreItemLocally(item, sourceBatch);
