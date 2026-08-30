@@ -28,6 +28,7 @@ import { configService } from '../services/config/config.service';
 import type { BranchConfigRecord } from '../services/config/types';
 import type { LeadCycleLead } from '../services/lead-cycle/types';
 import { externalHttpHref, instagramHref, mapsHref, phoneHref } from '../utils/externalLinks';
+import { normalizeBrazilState } from '../services/geo/brazilState';
 import type { QueueReviewChannel, QueueReviewPullResult } from '../services/queue-review';
 
 type Row = Record<string, ReactNode> & { id: string };
@@ -102,6 +103,8 @@ export function HomePage() {
   const [search, setSearch] = useState('');
   const [branch, setBranch] = useState('Todos');
   const [state, setState] = useState('Todos');
+  const [siteFilter, setSiteFilter] = useState('Todos');
+  const [instagramFilter, setInstagramFilter] = useState('Todos');
   const [pullDrawerOpen, setPullDrawerOpen] = useState(false);
   const [scheduledDate, setScheduledDate] = useOperationalQueueDate();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -141,15 +144,25 @@ export function HomePage() {
   ), [imported.records]);
 
   const branchFilters = useMemo(() => ['Todos', ...Array.from(new Set(sorted.map((lead) => lead.branch).filter(Boolean))).sort()], [sorted]);
-  const stateFilters = useMemo(() => ['Todos', ...Array.from(new Set(sorted.map((lead) => lead.state).filter(Boolean))).sort()], [sorted]);
+  const stateFilters = useMemo(() => {
+    const states = Array.from(new Set(sorted.map((lead) => lead.state).filter(Boolean)));
+    return [
+      { label: 'Todos', value: 'Todos' },
+      ...states
+        .map((code) => ({ label: normalizeBrazilState(code), value: code }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' })),
+    ];
+  }, [sorted]);
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return sorted.filter((lead) =>
       (!q || lead.displayCompany.toLowerCase().includes(q) || lead.company.toLowerCase().includes(q) || lead.phone.toLowerCase().includes(q) || lead.instagram.toLowerCase().includes(q))
       && (branch === 'Todos' || lead.branch === branch)
       && (state === 'Todos' || lead.state === state)
+      && (siteFilter === 'Todos' || (siteFilter === 'Com site' ? Boolean(lead.website.trim()) : !lead.website.trim()))
+      && (instagramFilter === 'Todos' || (instagramFilter === 'Com Instagram' ? Boolean(lead.instagram.trim()) : !lead.instagram.trim()))
     );
-  }, [branch, search, sorted, state]);
+  }, [branch, instagramFilter, search, siteFilter, sorted, state]);
 
   const rows = useMemo<Row[]>(() => visible.map((lead) => {
     const phone = lead.rawPhone || lead.phone;
@@ -250,6 +263,8 @@ export function HomePage() {
       <FiltersBar>
         <SelectField value={branch} options={branchFilters} placeholder="Ramo" onChange={(value) => { setBranch(value); resetPage(); }} />
         <SelectField value={state} options={stateFilters} placeholder="Estado" onChange={(value) => { setState(value); resetPage(); }} />
+        <SelectField value={siteFilter} options={['Todos', 'Sem site', 'Com site']} placeholder="Site" onChange={(value) => { setSiteFilter(value); resetPage(); }} />
+        <SelectField value={instagramFilter} options={['Todos', 'Sem Instagram', 'Com Instagram']} placeholder="Instagram" onChange={(value) => { setInstagramFilter(value); resetPage(); }} />
         <SearchInput value={search} placeholder="Buscar empresa ou contato" onChange={(value) => { setSearch(value); resetPage(); }} />
       </FiltersBar>
 

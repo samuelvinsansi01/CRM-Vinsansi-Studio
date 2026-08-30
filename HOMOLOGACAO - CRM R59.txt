@@ -99,3 +99,11 @@ BUILD FIX 12 — DRAWER PADRÃO PARA PUXAR LEADS
 - CTA Puxar N leads no drawer também usa ícone ListPlus.
 - A lógica R59 de prévia, filtros, capacidade e reserva atômica do BUILD FIX 10 permanece inalterada.
 - Nenhuma alteração de banco/RPC/trigger nesta revisão visual.
+
+BUILD FIX 13 — FILTROS DA BASE E DROPDOWNS
+- Filtro Estado da tela Início mantém UF na tabela, mas exibe nomes completos dos estados no dropdown.
+- Menus SelectField ganham largura mínima confortável e opções em uma única linha, com ellipsis quando necessário.
+- Adicionados filtros Site (Todos / Sem site / Com site) e Instagram (Todos / Sem Instagram / Com Instagram) na base de Importados.
+- Os novos filtros são somente de visualização da base; não alteram Motor de Captura nem contrato da puxada filtrada.
+- Nenhuma alteração de banco/RPC/trigger/Gateway/Worker/Gerenciador.
+

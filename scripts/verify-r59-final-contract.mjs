@@ -199,6 +199,13 @@ if (!pullDrawer.includes('options={siteOptions}') || !pullDrawer.includes('optio
 const homePull = read('src/pages/HomePage.tsx');
 if (!homePull.includes('iconLeft={ListPlus}')) fail('botao_puxar_inicio_sem_icone');
 if (!homePull.includes('<QueuePullDrawer')) fail('inicio_sem_drawer_puxada');
+if (!homePull.includes("placeholder=\"Site\"") || !homePull.includes("placeholder=\"Instagram\"")) fail('filtros_site_instagram_inicio_ausentes');
+if (!homePull.includes('normalizeBrazilState(code)')) fail('estado_dropdown_sem_nome_completo');
+if (!homePull.includes("siteFilter === 'Com site'") || !homePull.includes("instagramFilter === 'Com Instagram'")) fail('filtros_site_instagram_inicio_sem_logica');
+const componentsCss = read('src/styles/components.css');
+for (const token of ['text-overflow: ellipsis;', 'white-space: nowrap;', 'min-width: max(100%, 220px);']) {
+  if (!componentsCss.includes(token)) fail(`select_dropdown_sem_truncamento_padrao:${token}`);
+}
 const queuePullUi = read('src/pages/QueuePage.tsx');
 if (!queuePullUi.includes('iconLeft={ListPlus}')) fail('botao_puxar_fila_sem_icone');
 for (const legacyPull of ['Puxar WhatsApp', 'Puxar Instagram', 'home-pull-date', 'home-pull-group']) {

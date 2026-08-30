@@ -202,7 +202,7 @@ export function SelectField({
           setIsOpen((current) => !current);
         }}
       >
-        <span>{selectedLabel}</span>
+        <span title={String(selectedLabel ?? '')}>{selectedLabel}</span>
         <ChevronDown size={16} strokeWidth={1.8} />
       </button>
 
@@ -231,7 +231,7 @@ export function SelectField({
               key={option.value}
               onClick={() => selectOption(option.value)}
             >
-              <span>{option.label}</span>
+              <span title={option.label}>{option.label}</span>
               {option.value === selectedValue ? <Check size={14} strokeWidth={1.8} /> : null}
             </button>
           )) : (

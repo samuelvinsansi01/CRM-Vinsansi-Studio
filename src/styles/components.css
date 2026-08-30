@@ -1040,13 +1040,22 @@
   width: 100%;
 }
 
+.select-field > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .select-field__menu {
   position: absolute;
   z-index: 30;
   top: 100%;
   right: 0;
   display: grid;
-  min-width: 160px;
+  min-width: max(100%, 220px);
+  width: max-content;
+  max-width: min(360px, calc(100vw - var(--space-32)));
   max-height: min(320px, calc(100vh - var(--space-32)));
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1096,6 +1105,13 @@
   font-size: 12px;
   line-height: 14px;
   text-align: left;
+}
+
+.select-field__option > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .select-field__option:hover,
