@@ -110,7 +110,7 @@ export function QueuePullModal({ open, initialChannel = 'WhatsApp', lockChannel 
       ? 'Selecione um recurso'
       : loadingPreview
         ? 'Calculando...'
-        : (preview?.available ?? 0) <= 0
+        : (preview?.resource.available ?? 0) <= 0
           ? 'Fila sem vagas disponíveis'
           : (preview?.eligible ?? 0) <= 0
             ? 'Nenhum lead compatível'
@@ -136,7 +136,7 @@ export function QueuePullModal({ open, initialChannel = 'WhatsApp', lockChannel 
         <div className="queue-pull-modal__summary-row"><span>Leads compatíveis com os filtros</span><strong>{preview?.eligible ?? '—'}</strong></div>
         <div className="queue-pull-modal__summary-row queue-pull-modal__summary-row--total"><span>Serão puxados</span><strong>{preview?.willPull ?? '—'}</strong></div>
       </div>
-      {preview && preview.available > preview.eligible ? <p className="queue-pull-modal__hint">Existem apenas {preview.eligible} lead(s) compatível(is). As vagas restantes continuarão livres; nenhum lead fora do filtro será usado para completar.</p> : null}
+      {preview && preview.resource.available > preview.eligible ? <p className="queue-pull-modal__hint">Existem apenas {preview.eligible} lead(s) compatível(is). As vagas restantes continuarão livres; nenhum lead fora do filtro será usado para completar.</p> : null}
     </div>
   </Modal>;
 }

@@ -187,6 +187,11 @@ for (const token of [
   'queueReviewService.pull',
   'Puxar ${preview?.willPull ?? 0}',
 ]) if (!pullModal.includes(token)) fail(`modal_puxada_incompleto:${token}`);
+for (const token of [
+  '(preview?.resource.available ?? 0) <= 0',
+  'preview.resource.available > preview.eligible',
+]) if (!pullModal.includes(token)) fail(`modal_puxada_capacidade_incompleta:${token}`);
+if (/preview\?*\.available/.test(pullModal)) fail('modal_puxada_available_fora_de_resource');
 const homePull = read('src/pages/HomePage.tsx');
 if (!homePull.includes('<QueuePullModal')) fail('inicio_sem_modal_puxada');
 for (const legacyPull of ['Puxar WhatsApp', 'Puxar Instagram', 'home-pull-date', 'home-pull-group']) {
