@@ -250,6 +250,8 @@ for (const token of [
   'contrato_puxada_filtrada_r59',
   'contrato_rollover_capacidade_r59',
   'contrato_paginacao_server_side_r59',
+  'contrato_lotes_e_ramos_r59',
+  'contrato_protecao_downgrade_nivel_r59',
   'SOMENTE LEITURA',
 ]) if (!homolog.includes(token)) fail(`homolog_sql_incompleto:${token}`);
 
@@ -323,6 +325,67 @@ for (const token of [
   if (!sql18.includes("coalesce(ip.step,'')='reconciliation_required'")) fail('reprocessamento_instagram_nao_cobre_reconciliacao');
   if (!review18.includes('Mostrando ${rows.length} de ${total}')) fail('revisao_footer_nao_server_side');
   if (!final18.includes('Mostrando ${rows.length} de ${total}')) fail('fila_final_footer_nao_server_side');
+}
+
+
+// R59 FIX 19: page size real, filtro multi-ramos, navegação semântica e lotes visuais.
+{
+  const paginationTypes19 = read('src/services/pagination/types.ts');
+  const rowsControl19 = read('src/design-system/components/navigation/RowsPerPageControl.tsx');
+  const pullDrawer19 = read('src/components/QueuePullDrawer.tsx');
+  const queueReviewService19 = read('src/services/queue-review/queueReview.service.ts');
+  const header19 = read('src/design-system/layouts/Header.tsx');
+  const registry19 = read('src/pages/pageRegistry.ts');
+  const componentsCss19 = read('src/styles/components.css');
+  const dataTable19 = read('src/design-system/components/data-display/DataTable.tsx');
+  const finalTable19 = read('src/components/QueueFinalTable.tsx');
+  const sql19 = read('APLICAR - CRM R59 BUILD FIX 19 - Paginacao, ramos e lotes.sql');
+
+  for (const token of ['[10, 20, 50, 100]', "options={['10', '20', '50', '100']}"]) {
+    const source = token.startsWith('[') && token.includes(', 20') ? paginationTypes19 : rowsControl19;
+    if (!source.includes(token)) fail(`page_size_10_ausente:${token}`);
+  }
+  for (const token of ['MultiSelectField', 'branchIds', 'Ramos', 'Todos os ramos']) if (!pullDrawer19.includes(token)) fail(`drawer_ramos_incompleto:${token}`);
+  for (const token of ["rpc('list_queue_review_branches_r59'", 'p_branch_ids: filters.branchIds']) if (!queueReviewService19.includes(token)) fail(`servico_ramos_incompleto:${token}`);
+  if (!header19.includes('ChevronRight')) fail('submenu_interno_sem_chevron_direita');
+  if (!componentsCss19.includes('left: calc(100% - var(--space-02));')) fail('submenu_interno_nao_abre_direita');
+  if ((registry19.match(/label: 'Filas'/g) ?? []).length < 2) fail('menus_disparos_nao_renomeados_para_filas');
+  if (!dataTable19.includes(`<span className="sr-only">{actionsLabel ?? 'Ações'}</span>`)) fail('cabecalho_acoes_sem_rotulo_acessivel');
+  if (dataTable19.includes('<th className="data-table__actions">Ações</th>')) fail('cabecalho_acoes_visivel');
+  for (const token of ['actionColumnWidth', 'data-table__actions-list', 'getRowClassName']) if (!dataTable19.includes(token)) fail(`tabela_acoes_proporcionais_incompleta:${token}`);
+  for (const token of ["label:'Lote'", 'dispatch_batch_position', 'lotStart', 'data-table__row--group-start']) if (!finalTable19.includes(token)) fail(`lotes_visuais_incompletos:${token}`);
+  for (const token of ['p_branch_ids bigint[] DEFAULT NULL', 'list_queue_review_branches_r59', 'dispatch_batch_number', 'levels_queues', 'dispatch_batch_position', 'p_page_size IN(10,20,50,100)', 'v_wanted:=greatest(0,coalesce(v_capacity.available,0));', 'v_available_after:=greatest(0,coalesce(v_capacity.available,0)-v_reserved_count);']) {
+    if (!sql19.includes(token)) fail(`sql_fix19_incompleto:${token}`);
+  }
+  if (!sql19.includes('l.branches_id=ANY(v_branch_ids)')) fail('sql_fix19_filtro_ramo_nao_atomico');
+  if (!sql19.includes("WHEN r.display_position > (v_batch_size * greatest(0,v_batch_count-1))")) fail('sql_fix19_ultimo_lote_nao_absorve_resto');
+}
+
+
+// R59 FIX 20: downgrade de nível respeita ocupação canônica em hoje + datas futuras.
+{
+  const canonicalConfig20 = read('src/repositories/config/canonicalConfig.repository.ts');
+  const catalogConfig20 = read('src/repositories/configuration/configuration.repository.ts');
+  const sql20 = read('APLICAR - CRM R59 BUILD FIX 20 - Protecao de nivel, paginacao, ramos e lotes.sql');
+  for (const token of ["rpc('validate_resource_level_change_r59'", "assertResourceLevelChangeAllowed('whatsapp'", "assertResourceLevelChangeAllowed('instagram'"]) {
+    if (!canonicalConfig20.includes(token)) fail(`frontend_protecao_nivel_recurso_incompleta:${token}`);
+  }
+  for (const token of ["rpc('validate_level_daily_limit_change_r59'", 'assertLevelDailyLimitChangeAllowed']) {
+    if (!catalogConfig20.includes(token)) fail(`frontend_protecao_limite_nivel_incompleta:${token}`);
+  }
+  for (const token of [
+    'FUNCTION public._resource_capacity_conflict_r59',
+    'FUNCTION public.validate_resource_level_change_r59',
+    'FUNCTION public.validate_level_daily_limit_change_r59',
+    'trg_chips_level_capacity_r59',
+    'trg_socials_level_capacity_r59',
+    'trg_levels_daily_limit_capacity_r59',
+    "i.review_status='open'",
+    "'concluido','completed','sent'",
+    'p_from_date',
+    'queue_operational_today_r59',
+  ]) if (!sql20.includes(token)) fail(`sql_fix20_protecao_nivel_incompleta:${token}`);
+  if (!sql20.includes('v_new_limit>=coalesce(v_current_limit,0)')) fail('fix20_aumento_nivel_nao_livre');
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

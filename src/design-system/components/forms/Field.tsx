@@ -244,3 +244,121 @@ export function SelectField({
     </div>
   );
 }
+
+export function MultiSelectField({
+  options,
+  values,
+  onChange,
+  placeholder = 'Todos',
+  searchable = true,
+  searchPlaceholder = 'Buscar...',
+  className = '',
+}: {
+  options: SelectOption[];
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  className?: string;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const selectedSet = useMemo(() => new Set(values), [values]);
+
+  const normalizeSearchValue = (text: string) => text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const filteredOptions = useMemo(() => {
+    const query = normalizeSearchValue(searchQuery);
+    if (!searchable || !query) return options;
+    return options.filter((option) => normalizeSearchValue(option.label).includes(query));
+  }, [options, searchQuery, searchable]);
+
+  const selectedLabel = useMemo(() => {
+    if (!values.length) return placeholder;
+    const labels = values.map((value) => options.find((option) => option.value === value)?.label).filter(Boolean) as string[];
+    if (labels.length <= 2) return labels.join(', ') || placeholder;
+    return `${values.length} ramos selecionados`;
+  }, [options, placeholder, values]);
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) setIsOpen(false);
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, []);
+
+  const toggleValue = (nextValue: string) => {
+    const next = new Set(values);
+    if (next.has(nextValue)) next.delete(nextValue);
+    else next.add(nextValue);
+    onChange(Array.from(next));
+  };
+
+  return (
+    <div className={`select-field-wrap multi-select-field ${className}`} ref={rootRef}>
+      <button
+        className={`select-field ${isOpen ? 'select-field--open' : ''}`}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => { setSearchQuery(''); setIsOpen((current) => !current); }}
+      >
+        <span title={selectedLabel}>{selectedLabel}</span>
+        <ChevronDown size={16} strokeWidth={1.8} />
+      </button>
+      {isOpen ? (
+        <div className="select-field__menu multi-select-field__menu" role="listbox" aria-multiselectable="true" onMouseDown={(event: import('react').MouseEvent<HTMLDivElement>) => event.preventDefault()}>
+          {searchable ? (
+            <div className="select-field__search">
+              <Search size={15} strokeWidth={1.8} />
+              <input
+                autoFocus
+                type="search"
+                value={searchQuery}
+                placeholder={searchPlaceholder}
+                onChange={(event: import('react').ChangeEvent<HTMLInputElement>) => setSearchQuery(event.target.value)}
+                onMouseDown={(event: import('react').MouseEvent<HTMLInputElement>) => event.stopPropagation()}
+              />
+            </div>
+          ) : null}
+          <button
+            className="select-field__option"
+            type="button"
+            role="option"
+            aria-selected={!values.length}
+            onClick={() => onChange([])}
+          >
+            <span>{placeholder}</span>
+            {!values.length ? <Check size={14} strokeWidth={1.8} /> : null}
+          </button>
+          {filteredOptions.length ? filteredOptions.map((option) => (
+            <button
+              className="select-field__option"
+              type="button"
+              role="option"
+              aria-selected={selectedSet.has(option.value)}
+              key={option.value}
+              onClick={() => toggleValue(option.value)}
+            >
+              <span title={option.label}>{option.label}</span>
+              {selectedSet.has(option.value) ? <Check size={14} strokeWidth={1.8} /> : null}
+            </button>
+          )) : <div className="select-field__empty">Nenhum resultado encontrado.</div>}
+          {values.length ? <div className="multi-select-field__footer">{values.length} ramo(s) selecionado(s)</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}

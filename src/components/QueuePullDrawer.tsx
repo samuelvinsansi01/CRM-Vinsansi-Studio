@@ -1,8 +1,9 @@
 import { Calendar, ListPlus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Drawer, Field, SegmentedControl, SelectField } from '../design-system/components';
+import { Button, Drawer, Field, MultiSelectField, SegmentedControl, SelectField } from '../design-system/components';
 import {
   queueReviewService,
+  type QueueReviewBranch,
   type QueueReviewChannel,
   type QueueReviewPresenceFilter,
   type QueueReviewPullFilters,
@@ -50,6 +51,8 @@ export function QueuePullDrawer({
   const [resourceId, setResourceId] = useState(initialResourceId);
   const [siteFilter, setSiteFilter] = useState<QueueReviewPresenceFilter>('any');
   const [instagramFilter, setInstagramFilter] = useState<QueueReviewPresenceFilter>('any');
+  const [branchIds, setBranchIds] = useState<string[]>([]);
+  const [branches, setBranches] = useState<QueueReviewBranch[]>([]);
   const [resources, setResources] = useState<QueueReviewResource[]>([]);
   const [preview, setPreview] = useState<QueueReviewPullPreview | null>(null);
   const [loadingResources, setLoadingResources] = useState(false);
@@ -68,8 +71,20 @@ export function QueuePullDrawer({
     setResourceId(initialResourceId);
     setSiteFilter('any');
     setInstagramFilter('any');
+    setBranchIds([]);
     setPreview(null);
   }, [open, initialChannel, initialDate, initialResourceId]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void queueReviewService.branches()
+      .then((next) => { if (!cancelled) setBranches(next); })
+      .catch((error) => {
+        if (!cancelled) errorRef.current('Não foi possível carregar os ramos', error instanceof Error ? error.message : 'Tente novamente.');
+      });
+    return () => { cancelled = true; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -103,8 +118,9 @@ export function QueuePullDrawer({
     () => ({
       site: siteFilter,
       instagram: channel === 'Instagram' ? 'any' : instagramFilter,
+      branchIds,
     }),
-    [channel, instagramFilter, siteFilter],
+    [branchIds, channel, instagramFilter, siteFilter],
   );
 
   useEffect(() => {
@@ -131,6 +147,8 @@ export function QueuePullDrawer({
       cancelled = true;
     };
   }, [channel, filters, open, resourceId, scheduledDate]);
+
+  const branchOptions = branches.map((branch) => ({ label: branch.name, value: branch.id }));
 
   const resourceOptions = resources.length
     ? resources.map((resource) => ({ label: resource.label, value: resource.id }))
@@ -222,6 +240,17 @@ export function QueuePullDrawer({
             <strong>Perfil das empresas</strong>
             <span>Os filtros restringem a reserva. Leads fora do perfil não serão usados para completar vagas.</span>
           </div>
+
+          <label className="drawer-field">
+            <span>Ramos</span>
+            <MultiSelectField
+              options={branchOptions}
+              values={branchIds}
+              placeholder="Todos os ramos"
+              searchPlaceholder="Buscar ramo..."
+              onChange={setBranchIds}
+            />
+          </label>
 
           <label className="drawer-field">
             <span>Site</span>

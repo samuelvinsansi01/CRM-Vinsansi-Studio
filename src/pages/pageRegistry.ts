@@ -59,7 +59,7 @@ export const navGroups: readonly NavGroup[] = [
   },
   {
     id: 'whatsapp',
-    label: 'Disparos',
+    label: 'Filas',
     items: [
       { id: 'whatsapp', label: 'Fila WhatsApp' },
       { id: 'instagram', label: 'Fila Instagram' },
@@ -105,7 +105,7 @@ export const navGroups: readonly NavGroup[] = [
         ],
       },
       {
-        label: 'Disparos',
+        label: 'Filas',
         items: [
           { id: 'config-channels', label: 'Canais do sistema' },
           { id: 'config-levels', label: 'Níveis' },

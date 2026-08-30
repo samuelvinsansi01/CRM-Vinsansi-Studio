@@ -42,3 +42,23 @@
 .maps-history-back { margin: 0 0 12px; border: 0; background: transparent; color: var(--text-link); cursor: pointer; font-weight: 600; padding: 4px 0; }
 
 .home-leads-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* R59 FIX 19 — largura e respiro das ações independem da página/tabela. */
+.app-shell .data-table .data-table__actions {
+  padding-left: var(--space-08);
+  padding-right: var(--space-12);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.app-shell .data-table .data-table__actions .icon-button {
+  margin-left: 0;
+}
+
+.app-shell .data-table .data-table__actions-list {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-08);
+  width: 100%;
+}

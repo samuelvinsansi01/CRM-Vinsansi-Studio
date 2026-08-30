@@ -19,7 +19,7 @@ const pageDescriptions: Record<string, string> = {
   Templates: 'Gerencie os templates usados por canal, ramo e tipo de lead.',
   Importação: 'Configure regras usadas na importacao e validacao dos leads.',
   Importacao: 'Configure regras usadas na importacao e validacao dos leads.',
-  Disparos: 'Configure limites, intervalos e regras dos envios automaticos.',
+  Filas: 'Configure limites, intervalos e regras dos envios automaticos.',
 };
 
 export function PageHeader({ title, description, action }: PageHeaderProps) {

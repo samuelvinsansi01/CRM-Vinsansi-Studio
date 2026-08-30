@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Building2, ChevronDown, ChevronLeft, LogOut, UserRound } from 'lucide-react';
+import { Bell, Building2, ChevronDown, ChevronRight, LogOut, UserRound } from 'lucide-react';
 import { IconButton } from '../components';
 import { navGroups, pagePermissions, type NavGroup, type PageId } from '../../pages/pageRegistry';
 import { useAuthContext } from '../../providers/AuthProvider';
@@ -127,7 +127,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                           aria-haspopup="menu"
                         >
                           <span>{section.label}</span>
-                          <ChevronLeft size={14} strokeWidth={1.8} aria-hidden="true" />
+                          <ChevronRight size={14} strokeWidth={1.8} aria-hidden="true" />
                         </button>
 
                         <div className="nav-menu__submenu" role="menu" aria-label={section.label}>

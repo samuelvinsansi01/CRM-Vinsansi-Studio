@@ -4,6 +4,23 @@ import { getCurrentUserId, nowIso } from '../supabase.helpers';
 export type StatusOption = { id: string; name: string };
 export type ChannelOption = { id: string; name: string };
 
+type LevelLimitValidation = {
+  allowed?: boolean;
+  message?: string;
+};
+
+async function assertLevelDailyLimitChangeAllowed(levelId: number, newDailyLimit: number) {
+  const { data, error } = await getSupabaseClient().rpc('validate_level_daily_limit_change_r59', {
+    p_level_id: levelId,
+    p_new_daily_limit: newDailyLimit,
+  });
+  if (error) throw new Error(error.message);
+  const validation = (data && typeof data === 'object' && !Array.isArray(data) ? data : {}) as LevelLimitValidation;
+  if (validation.allowed === false) {
+    throw new Error(validation.message || 'O novo limite diário é incompatível com a ocupação atual dos recursos deste nível.');
+  }
+}
+
 export type ContactSourceRecord = {
   id: string;
   kind: 'contact_sources';
@@ -324,9 +341,11 @@ export async function updateCatalogRecord(kind: CatalogKind, id: string, input: 
   }
 
   if (kind === 'levels') {
+    const newDailyLimit = Math.max(1, number(input.dailyLimit, 1));
+    await assertLevelDailyLimitChangeAllowed(numericId, newDailyLimit);
     const { error } = await client.from('levels').update({
       status_id: statusId, levels_name: text(input.name).trim(), channels_id: Number(input.channelId),
-      levels_daily_limit: Math.max(1, number(input.dailyLimit, 1)),
+      levels_daily_limit: newDailyLimit,
       levels_queues: text(input.queues) ? Math.max(1, number(input.queues, 1)) : null,
       levels_updated_at: nowIso(),
     }).eq('levels_id', numericId).eq('users_id', usersId);

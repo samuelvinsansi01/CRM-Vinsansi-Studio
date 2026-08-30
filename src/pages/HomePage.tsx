@@ -270,7 +270,7 @@ export function HomePage() {
           <DataTable
             columns={columns}
             rows={rows}
-            actionsLabel="Ações"
+           
             getRowActions={() => [
               ...(canEdit ? ['edit' as const] : []),
               ...(canInvalidate ? ['invalidate' as const] : []),

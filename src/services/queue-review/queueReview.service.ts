@@ -2,7 +2,7 @@ import { getSupabaseClient } from '../../lib/supabase';
 import { eventBus } from '../../lib/events';
 import { queuePreparationService } from '../queue-preparation';
 import { whatsappValidationService, type PreparedWhatsAppValidationLead } from '../whatsapp-validation/whatsappValidation.service';
-import type { QueueReviewBatch, QueueReviewChannel, QueueReviewItem, QueueReviewPullFilters, QueueReviewPullPreview, QueueReviewPullResult, QueueReviewResource } from './types';
+import type { QueueReviewBatch, QueueReviewBranch, QueueReviewChannel, QueueReviewItem, QueueReviewPullFilters, QueueReviewPullPreview, QueueReviewPullResult, QueueReviewResource } from './types';
 import { normalizePageRequest, type PageRequest } from '../pagination/types';
 
 function rpcRow<T>(value: T | T[] | null): T | null {
@@ -32,6 +32,15 @@ function resourceFromRow(channel: QueueReviewChannel, value: Record<string, unkn
     used: Math.max(0, Number(value.used ?? 0)),
     available: Math.max(0, Number(value.available ?? value.missingCount ?? value.missing_count ?? 0)),
   };
+}
+
+async function branches(): Promise<QueueReviewBranch[]> {
+  const { data, error } = await getSupabaseClient().rpc('list_queue_review_branches_r59');
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.branch_id ?? row.branches_id ?? ''),
+    name: String(row.branch_name ?? row.branches_name ?? ''),
+  })).filter((branch) => branch.id && branch.name);
 }
 
 async function resources(channel: QueueReviewChannel, scheduledDate: string) {
@@ -71,6 +80,7 @@ async function pullCapacity(channel: QueueReviewChannel, resourceKey: string, sc
     p_scheduled_date: scheduledDate,
     p_site_filter: filters.site,
     p_instagram_filter: filters.instagram,
+    p_branch_ids: filters.branchIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0),
   });
   if (error) throw new Error(error.message);
   const row = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
@@ -161,7 +171,7 @@ async function pullToCapacity(
   };
 }
 
-const DEFAULT_PULL_FILTERS: QueueReviewPullFilters = { site: 'any', instagram: 'any' };
+const DEFAULT_PULL_FILTERS: QueueReviewPullFilters = { site: 'any', instagram: 'any', branchIds: [] };
 
 async function preview(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string, filters: QueueReviewPullFilters = DEFAULT_PULL_FILTERS): Promise<QueueReviewPullPreview> {
   if (!preferredResourceId) throw new Error(channel === 'WhatsApp' ? 'Selecione um chip.' : 'Selecione um perfil.');
@@ -171,6 +181,7 @@ async function preview(channel: QueueReviewChannel, scheduledDate: string, prefe
     p_scheduled_date: scheduledDate,
     p_site_filter: filters.site,
     p_instagram_filter: filters.instagram,
+    p_branch_ids: filters.branchIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0),
   });
   if (error) throw new Error(error.message);
   const row = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
@@ -318,4 +329,4 @@ async function invalidate(item: QueueReviewItem, channel: QueueReviewChannel) {
   eventBus.emit('import:changed', { source: 'move' });
 }
 
-export const queueReviewService = { resources, preview, pull, list, listPage, count, approve, invalidate };
+export const queueReviewService = { branches, resources, preview, pull, list, listPage, count, approve, invalidate };

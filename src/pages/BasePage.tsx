@@ -140,7 +140,7 @@ export function BasePage() {
             rows={rows}
             selectable={false}
             actions={['view']}
-            actionsLabel="Ações"
+           
             onAction={handleAction}
           />
         ) : null}

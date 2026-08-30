@@ -4,6 +4,12 @@ export type QueueReviewPresenceFilter = 'any' | 'with' | 'without';
 export type QueueReviewPullFilters = {
   site: QueueReviewPresenceFilter;
   instagram: QueueReviewPresenceFilter;
+  branchIds: string[];
+};
+
+export type QueueReviewBranch = {
+  id: string;
+  name: string;
 };
 
 export type QueueReviewResource = {

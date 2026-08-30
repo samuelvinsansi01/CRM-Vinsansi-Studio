@@ -1507,7 +1507,8 @@ button.checkbox {
 .nav-menu__submenu {
   position: absolute;
   top: calc(var(--space-04) * -1);
-  right: calc(100% - var(--space-02));
+  left: calc(100% - var(--space-02));
+  right: auto;
   z-index: 2;
   display: none;
   min-width: 224px;
@@ -1903,4 +1904,45 @@ button.checkbox {
   gap: var(--space-12);
   padding: var(--space-16) var(--space-24) var(--space-20);
   border-top: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent);
+}
+
+/* R59 FIX 19 — ações compactas e proporcionais em todas as tabelas. */
+.data-table__actions {
+  padding-left: var(--space-08);
+  padding-right: var(--space-12);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.data-table__actions-list {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-08);
+  width: 100%;
+}
+
+.data-table__actions .icon-button {
+  margin-left: 0;
+  flex: 0 0 auto;
+}
+
+.data-table tbody tr.data-table__row--group-start td {
+  border-top: var(--space-08) solid var(--app-bg);
+}
+
+.multi-select-field {
+  width: 100%;
+}
+
+.multi-select-field__menu {
+  width: max(100%, 280px);
+}
+
+.multi-select-field__footer {
+  padding: var(--space-08) var(--space-12);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 16px;
 }

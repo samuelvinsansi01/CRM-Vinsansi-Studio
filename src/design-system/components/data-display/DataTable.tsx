@@ -22,6 +22,7 @@ type DataTableProps<T> = {
   onAction?: (action: TableAction, row: T, index: number) => void;
   getRowActions?: (row: T, index: number) => TableAction[];
   actionsLabel?: string;
+  getRowClassName?: (row: T, index: number) => string;
 };
 
 const actionIcon = {
@@ -106,12 +107,14 @@ export function DataTable<T extends Record<string, ReactNode>>({
   onAction,
   getRowActions,
   actionsLabel,
+  getRowClassName,
 }: DataTableProps<T>) {
   const [internalSelectedRows, setInternalSelectedRows] = useState<number[]>([]);
   const currentSelectedRows = selectedRows ?? internalSelectedRows;
   const selectedSet = useMemo(() => new Set(currentSelectedRows), [currentSelectedRows]);
   const allSelected = rows.length > 0 && rows.every((_, index) => selectedSet.has(index));
   const partiallySelected = currentSelectedRows.length > 0 && !allSelected;
+  const actionColumnWidth = actions.length ? Math.max(48, actions.length * 32 + 24) : 0;
 
   const setSelection = (nextRows: number[]) => {
     if (selectedRows === undefined) {
@@ -155,12 +158,12 @@ export function DataTable<T extends Record<string, ReactNode>>({
                 {column.label}
               </th>
             ))}
-            {actions.length ? <th className="data-table__actions">{actionsLabel}</th> : null}
+            {actions.length ? <th className="data-table__actions" style={{ width: actionColumnWidth }}><span className="sr-only">{actionsLabel ?? 'Ações'}</span></th> : null}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr className={selectedSet.has(rowIndex) ? 'data-table__row--selected' : ''} key={rowIndex}>
+            <tr className={[selectedSet.has(rowIndex) ? 'data-table__row--selected' : '', getRowClassName?.(row, rowIndex) ?? ''].filter(Boolean).join(' ')} key={rowIndex}>
               {selectable ? (
                 <td className="data-table__check">
                   <button
@@ -178,8 +181,8 @@ export function DataTable<T extends Record<string, ReactNode>>({
                 </td>
               ))}
               {actions.length ? (
-                <td className="data-table__actions">
-                  {(getRowActions?.(row, rowIndex) ?? actions).map((action) => {
+                <td className="data-table__actions" style={{ width: actionColumnWidth }}>
+                  <div className="data-table__actions-list">{(getRowActions?.(row, rowIndex) ?? actions).map((action) => {
                     const Icon = actionIcon[action];
                     return (
                       <IconButton
@@ -191,7 +194,7 @@ export function DataTable<T extends Record<string, ReactNode>>({
                         onClick={() => onAction?.(action, row, rowIndex)}
                       />
                     );
-                  })}
+                  })}</div>
                 </td>
               ) : null}
             </tr>

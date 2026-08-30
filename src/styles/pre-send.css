@@ -272,9 +272,6 @@
   text-align: left;
 }
 
-.pre-send-page .queue-grid thead .data-table__actions::before {
-  content: "Ações";
-}
 
 .pre-send-page .validation-list__footer {
   padding-top: var(--space-20);

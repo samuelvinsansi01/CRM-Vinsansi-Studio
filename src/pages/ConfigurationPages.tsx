@@ -25,7 +25,7 @@ const sections: SettingsSection[] = [
     ],
   },
   {
-    title: 'Disparos',
+    title: 'Filas',
     description: 'Catálogos e limites herdados pelos remetentes.',
     icon: Settings2,
     items: [

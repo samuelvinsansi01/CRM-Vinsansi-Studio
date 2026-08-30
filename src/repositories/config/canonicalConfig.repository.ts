@@ -24,6 +24,24 @@ import { assertTemplateMessagesForChannel, type TemplateMessageChannel } from '.
 
 type Row = Record<string, unknown>;
 
+type LevelChangeValidation = {
+  allowed?: boolean;
+  message?: string;
+};
+
+async function assertResourceLevelChangeAllowed(resourceType: 'whatsapp' | 'instagram', resourceId: number, newLevelId: number) {
+  const { data, error } = await getSupabaseClient().rpc('validate_resource_level_change_r59', {
+    p_resource_type: resourceType,
+    p_resource_id: resourceId,
+    p_new_level_id: newLevelId,
+  });
+  if (error) throw new Error(error.message);
+  const validation = (data && typeof data === 'object' && !Array.isArray(data) ? data : {}) as LevelChangeValidation;
+  if (validation.allowed === false) {
+    throw new Error(validation.message || 'O novo nível é incompatível com a ocupação atual deste recurso.');
+  }
+}
+
 function bool(value: unknown, fallback = true) {
   if (typeof value === 'boolean') return value;
   const normalized = normalizeCatalogName(value);
@@ -410,6 +428,9 @@ async function updateRecord(kind: ConfigKind, id: string, input: Record<string, 
     const levelId = Number(input.levelId ?? current.levelId);
     if (!Number.isSafeInteger(instanceId)) throw new Error('Selecione uma instancia valida.');
     if (!Number.isSafeInteger(levelId)) throw new Error('Selecione um nivel valido.');
+    if (String(levelId) !== String(current.levelId)) {
+      await assertResourceLevelChangeAllowed('whatsapp', numericId, levelId);
+    }
     const chipUpdate = await client.from('chips').update({
       status_id: statusId,
       instances_id: instanceId,
@@ -428,6 +449,9 @@ async function updateRecord(kind: ConfigKind, id: string, input: Record<string, 
   const username = String(input.username ?? current.username).replace(/^@/, '').trim();
   const levelId = Number(input.levelId ?? current.levelId);
   if (!Number.isSafeInteger(levelId)) throw new Error('Selecione um nivel valido para o Instagram.');
+  if (String(levelId) !== String(current.levelId)) {
+    await assertResourceLevelChangeAllowed('instagram', numericId, levelId);
+  }
   const update = await client.from('socials').update({
     status_id: statusId,
     levels_id: levelId,

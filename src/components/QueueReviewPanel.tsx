@@ -28,6 +28,6 @@ export function QueueReviewPanel({channel,scheduledDate,preferredResourceId='',c
     {!preferredResourceId?<div className="table-message">Selecione {channel==='WhatsApp'?'um chip':'um perfil'} para revisar a fila.</div>:null}
     {preferredResourceId&&loading&&!batches.length?<div className="table-message">Carregando revisão...</div>:null}
     {preferredResourceId&&!loading&&!total?<div className="table-message">Nenhum lead aguardando revisão para este recurso.</div>:null}
-    {rows.length?<DataTable columns={columns} rows={rows} selectable={false} actions={['approve','invalidate']} actionsLabel="Ações" getRowActions={()=>[...(canPrepare?['approve' as const]:[]),...(canInvalidate?['invalidate' as const]:[])]} onAction={handleAction}/>:null}
+    {rows.length?<DataTable columns={columns} rows={rows} selectable={false} actions={['approve','invalidate']} getRowActions={()=>[...(canPrepare?['approve' as const]:[]),...(canInvalidate?['invalidate' as const]:[])]} onAction={handleAction}/>:null}
   </TableCard>;
 }
