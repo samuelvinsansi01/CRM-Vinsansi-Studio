@@ -2,7 +2,7 @@ import type { ApiRequest,ApiResponse,Row } from '../../../maps/shared.js';
 import { body,send,setCors,text } from '../../../maps/shared.js';
 import { executorStatus,installationScope } from '../../../tools/executor.js';
 
-const TABLES=new Set(['status','lead_status','channels','chips','instances','queue_items','leads','templates','branches','sents','worker_batches','service_worker_heartbeats']);
+const TABLES=new Set(['status','lead_status','channels','chips','levels','instances','queue_items','leads','templates','branches','sents','worker_batches','service_worker_heartbeats']);
 const GLOBAL_TABLES=new Set(['status','lead_status','channels']);
 const RPCS=new Set(['service_get_evolution_instances','worker_claim_dispatch_part','worker_complete_dispatch_part','worker_finalize_whatsapp_queue_item','worker_fail_whatsapp_queue_item','worker_start_whatsapp_batch','worker_set_whatsapp_batch_state','worker_claim_next_batch_item','worker_complete_batch_item','refresh_operational_alerts','service_worker_heartbeat','service_claim_recovery_request','service_complete_recovery_request','worker_recover_stale_whatsapp_v2','instagram_recover_stale_items_v2','service_stage5_converge_automatic_message']);
 const OPERATORS=new Set(['eq','neq','gt','gte','lt','lte','in','is','not.eq','not.is']);

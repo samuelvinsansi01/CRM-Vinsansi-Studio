@@ -229,19 +229,30 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
 
   const invalidate = useCallback(async (lead: WhatsAppQueueLead) => {
     await whatsappQueueService.invalidate(lead.id);
-    setBatches((current) => current
-      .map((batch) => ({ ...batch, leads: batch.leads.filter((candidate) => candidate.id !== lead.id) }))
-      .filter((batch) => batch.leads.length > 0));
-    setTotal((current) => Math.max(0, current - 1));
-    setSummary((current) => ({
-      ...current,
-      total: Math.max(0, current.total - 1),
-      queued: Math.max(0, current.queued - (['queued', 'paused', 'sending'].includes(lead.status) ? 1 : 0)),
-      sent: current.sent,
-      finished: current.finished,
-      errors: Math.max(0, current.errors - (lead.status === 'error' ? 1 : 0)),
-    }));
-  }, []);
+
+    // A fila final e os lotes são derivados da posição operacional ativa no banco.
+    // Depois da invalidação, releia silenciosamente a mesma página para que o
+    // próximo item ocupe a vaga e atravesse o limite do lote quando necessário.
+    // Não há reposição automática com um novo lead: somente compactação da fila ativa.
+    const expectedTotal = Math.max(0, total - 1);
+    const targetPage = Math.min(page, Math.max(1, Math.ceil(expectedTotal / rowsPerPage)));
+    setRefreshing(true);
+    try {
+      const result = chip
+        ? await whatsappQueueService.page({ chip, scheduledDate }, { page: targetPage, pageSize: rowsPerPage })
+        : { batches: [], total: 0, summary: emptySummary };
+      setBatches(result.batches);
+      setTotal(result.total);
+      setSummary(result.summary);
+      if (targetPage !== page) setPage(targetPage);
+    } catch {
+      // A invalidação já foi confirmada pelo banco. Se a releitura transitória falhar,
+      // o refresh normal recompõe a tela sem transformar uma ação concluída em erro.
+      refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [chip, page, refresh, rowsPerPage, scheduledDate, total]);
 
   return {
     chips,

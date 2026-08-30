@@ -120,7 +120,23 @@ if (schemaCatalog.includes('invalid: CANONICAL_CATALOG.status.ERROR')) fail('inv
 const queueSchema = read('src/repositories/queueSchema.ts');
 if (!queueSchema.includes(".neq('status_id', CANONICAL_CATALOG.status.CANCELED)")) fail('cancelados_ainda_retornam_na_fila_ativa');
 const whatsappQueueHook = read('src/hooks/useWhatsAppQueue.ts');
-if (!whatsappQueueHook.includes('total: Math.max(0, current.total - 1)')) fail('resumo_whatsapp_nao_remove_invalidado_do_total');
+for (const token of [
+  'await whatsappQueueService.invalidate(lead.id);',
+  'await whatsappQueueService.page({ chip, scheduledDate }, { page: targetPage, pageSize: rowsPerPage })',
+  'setBatches(result.batches);',
+  'setTotal(result.total);',
+  'setSummary(result.summary);',
+]) if (!whatsappQueueHook.includes(token)) fail(`compactacao_whatsapp_pos_invalidacao_incompleta:${token}`);
+if (whatsappQueueHook.includes("leads: batch.leads.filter((candidate) => candidate.id !== lead.id)")) fail('whatsapp_ainda_compacta_apenas_a_pagina_local');
+const instagramQueueHook = read('src/hooks/useInstagramQueue.ts');
+for (const token of [
+  'await instagramQueueService.invalidate(lead.id);',
+  'await instagramQueueService.page({ profile, scheduledDate }, { page: targetPage, pageSize: rowsPerPage })',
+  'setBatches(result.batches);',
+  'setTotal(result.total);',
+  'setSummary(result.summary);',
+]) if (!instagramQueueHook.includes(token)) fail(`compactacao_instagram_pos_invalidacao_incompleta:${token}`);
+if (instagramQueueHook.includes("leads: batch.leads.filter((candidate) => candidate.id !== lead.id)")) fail('instagram_ainda_compacta_apenas_a_pagina_local');
 const queueFinalTable = read('src/components/QueueFinalTable.tsx');
 for (const token of ['const displayLeads=useMemo<FinalLead[]>', 'const offset=(page-1)*rowsPerPage;', '.map((lead,index)=>({...lead,position:offset+index+1}))', 'displayLeads.find']) {
   if (!queueFinalTable.includes(token)) fail(`posicao_operacional_fila_final_incompleta:${token}`);
@@ -388,4 +404,8 @@ for (const token of [
   if (!sql20.includes('v_new_limit>=coalesce(v_current_limit,0)')) fail('fix20_aumento_nivel_nao_livre');
 }
 
+
+// R59 FIX 21: Worker pode ler o nível operacional do chip pelo runtime organizacional.
+const executorRuntimeFix21 = read('server/routes/tools/executor/runtime.ts');
+if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtime_worker_sem_levels_para_lotes');
 console.log('CRM R59 final contract + homologacao: OK');

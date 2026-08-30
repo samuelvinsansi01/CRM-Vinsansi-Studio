@@ -135,20 +135,28 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
   const invalidate = useCallback(
     async (lead: InstagramQueueLead) => {
       await instagramQueueService.invalidate(lead.id);
-      setBatches((current) => current
-        .map((batch) => ({ ...batch, leads: batch.leads.filter((candidate) => candidate.id !== lead.id) }))
-        .filter((batch) => batch.leads.length > 0));
-      setTotal((current) => Math.max(0, current - 1));
-      setSummary((current) => ({
-        ...current,
-        total: Math.max(0, current.total - 1),
-        queued: Math.max(0, current.queued - (['queued', 'paused', 'following', 'dm_opened'].includes(lead.status) ? 1 : 0)),
-        sent: current.sent,
-        errors: Math.max(0, current.errors - (['error', 'reconciliation_required'].includes(lead.status) ? 1 : 0)),
-        invalid: current.invalid,
-      }));
+
+      // A fila final e os lotes são derivados da posição operacional ativa no banco.
+      // A releitura silenciosa compacta a página e faz o próximo item preencher a
+      // vaga, sem puxar automaticamente um novo lead da Base de Importados.
+      const expectedTotal = Math.max(0, total - 1);
+      const targetPage = Math.min(page, Math.max(1, Math.ceil(expectedTotal / rowsPerPage)));
+      setRefreshing(true);
+      try {
+        const result = profile
+          ? await instagramQueueService.page({ profile, scheduledDate }, { page: targetPage, pageSize: rowsPerPage })
+          : { batches: [], total: 0, summary: emptySummary };
+        setBatches(result.batches);
+        setTotal(result.total);
+        setSummary(result.summary);
+        if (targetPage !== page) setPage(targetPage);
+      } catch {
+        refresh();
+      } finally {
+        setRefreshing(false);
+      }
     },
-    [],
+    [page, profile, refresh, rowsPerPage, scheduledDate, total],
   );
 
   return {
