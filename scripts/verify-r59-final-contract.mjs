@@ -161,9 +161,20 @@ for (const token of [
   'message1:result.message1',
   'message4:result.message4',
   'Nome usado no envio" value={lead.company_name||lead.alternative_name||lead.original_company_name||lead.company}',
-  'As mensagens deste item foram regeneradas. A tabela mantém o nome original da empresa.',
 ]) if (!queuePage.includes(token)) fail(`ui_nome_alternativo_incompleta:${token}`);
 if (queuePage.includes('const displayName=alternativeName||original')) fail('ui_nome_alternativo_legado_ainda_presente');
+for (const successNotice of [
+  'As mensagens deste item foram regeneradas. A tabela mantém o nome original da empresa.',
+  'saiu da Fila final. Os itens seguintes subiram uma posição.',
+]) if (queuePage.includes(successNotice)) fail(`aviso_sucesso_fila_ainda_presente:${successNotice}`);
+const queueReviewPanel = read('src/components/QueueReviewPanel.tsx');
+for (const successNotice of [
+  'Lead aprovado',
+  'foi persistido na Fila final.',
+  'Aprovando lead…',
+  'A vaga foi liberada. Um novo lead só será puxado',
+  'queue-action-notice',
+]) if (queueReviewPanel.includes(successNotice)) fail(`aviso_sucesso_revisao_ainda_presente:${successNotice}`);
 
 const homolog = read(homologSql);
 for (const token of [

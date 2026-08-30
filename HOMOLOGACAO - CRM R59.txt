@@ -1,5 +1,5 @@
 CRM - Vinsansi Studio v2.4.0-R59
-BUILD FIX 8 — 29/08/2026
+BUILD FIX 9 — 29/08/2026
 
 ARQUIVOS OBRIGATÓRIOS DE HOMOLOGAÇÃO
 - CHECK - CRM R59 - Homologacao final.sql
@@ -61,3 +61,12 @@ BUILD FIX 8 — NOME ALTERNATIVO E SNAPSHOT
 - approve_queue_review_item passa a declarar contrato R59, sem resíduo de versão anterior.
 - CHECK 23 valida o contrato do nome alternativo/snapshot.
 - CHECK 24 valida o contrato R59 da aprovação Revisão -> Fila final.
+
+
+BUILD FIX 9 — FEEDBACK VISUAL SEM DESLOCAR TABELAS
+- Aprovar na Revisão não exibe mais aviso inline de sucesso nem toast de sucesso; a linha some localmente e a Fila final é atualizada normalmente.
+- Invalidar na Revisão não exibe mais aviso de sucesso; erros continuam sendo informados.
+- Invalidar na Fila final (WhatsApp/Instagram) não exibe mais toast de sucesso; a remoção local e compactação da fila continuam imediatas.
+- Editar nome alternativo não exibe mais toast de sucesso; o drawer fecha e as mensagens/linha são atualizadas localmente.
+- Avisos de erro e bloqueio permanecem, pois são necessários para diagnóstico.
+- Nenhuma alteração de banco, RPC, trigger, Gateway, Worker ou Gerenciador.

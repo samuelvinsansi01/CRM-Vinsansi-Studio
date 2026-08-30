@@ -36,7 +36,6 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
 }) {
   const [batches, setBatches] = useState<QueueReviewBatch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionNotice, setActionNotice] = useState<{ title: string; description: string; tone: 'info' | 'success' | 'danger' } | null>(null);
   const pendingItemsRef = useRef(new Set<string>());
   const toastRef = useRef(onToast);
   const scopeRef = useRef('');
@@ -106,20 +105,16 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
     const sourceBatch = batches.find((batch) => batch.items.some((candidate) => candidate.reviewItemId === item.reviewItemId));
     if (!sourceBatch) return;
     pendingItemsRef.current.add(item.reviewItemId);
-    // R46: resposta visual continua imediata, mas o painel deixa explícito que a
-    // aprovação só termina quando o banco confirmar review locked + queue_item.
+    // Aprovação mantém resposta visual imediata removendo a linha localmente;
+    // apenas falhas geram aviso, para não deslocar a estrutura da tabela.
     removeItemLocally(item.reviewItemId);
-    setActionNotice({ title: 'Aprovando lead…', description: `${item.company}: aguardando confirmação persistente do banco.`, tone: 'info' });
     try {
       await queueReviewService.approve(item, channel);
       onQueueChanged();
-      setActionNotice({ title: 'Lead aprovado', description: `${item.company} foi persistido na Fila final.`, tone: 'success' });
-      onToast('Lead aprovado', 'O lead entrou na Fila final e o snapshot foi criado.', 'success');
     }
     catch (error) {
       const message = error instanceof Error ? error.message : 'Revise o lead e tente novamente.';
       restoreItemLocally(item, sourceBatch);
-      setActionNotice({ title: 'Aprovação não persistida', description: message, tone: 'danger' });
       onToast('Não foi possível aprovar', message, 'danger');
     }
     finally { pendingItemsRef.current.delete(item.reviewItemId); }
@@ -133,7 +128,6 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
     try {
       await queueReviewService.invalidate(item, channel);
       onQueueChanged();
-      onToast('Lead invalidado', `A vaga foi liberada. Um novo lead só será puxado quando você clicar em Puxar ${channel}.`, 'warning');
     }
     catch (error) {
       restoreItemLocally(item, sourceBatch);
@@ -152,7 +146,6 @@ export function QueueReviewPanel({ channel, scheduledDate, preferredResourceId =
     footerLeft={rows.length ? <RowsPerPageControl value={rowsPerPage} onChange={setRowsPerPage} /> : undefined}
     page={page} totalPages={totalPages} onPageChange={setPage}
   >
-    {actionNotice ? <div className={`table-message queue-action-notice queue-action-notice--${actionNotice.tone}`}><strong>{actionNotice.title}</strong><br />{actionNotice.description}</div> : null}
     {!preferredResourceId ? <div className="table-message">Selecione {channel === 'WhatsApp' ? 'um chip' : 'um perfil'} para revisar a fila.</div> : null}
     {preferredResourceId && loading && !batches.length ? <div className="table-message">Carregando revisão...</div> : null}
     {preferredResourceId && !loading && !reviewItems.length ? <div className="table-message">Nenhum lead aguardando revisão para este recurso.</div> : null}
