@@ -1,4 +1,4 @@
-import { Calendar, ListPlus } from 'lucide-react';
+import { Calendar, ListPlus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Drawer, Field, MultiSelectField, SegmentedControl, SelectField } from '../design-system/components';
 import {
@@ -11,6 +11,7 @@ import {
   type QueueReviewPullResult,
   type QueueReviewResource,
 } from '../services/queue-review';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { toLocalDateInputValue } from '../utils/date';
 
 type Props = {
@@ -52,6 +53,8 @@ export function QueuePullDrawer({
   const [siteFilter, setSiteFilter] = useState<QueueReviewPresenceFilter>('any');
   const [instagramFilter, setInstagramFilter] = useState<QueueReviewPresenceFilter>('any');
   const [branchIds, setBranchIds] = useState<string[]>([]);
+  const [nameKeyword, setNameKeyword] = useState('');
+  const debouncedNameKeyword = useDebouncedValue(nameKeyword, 300);
   const [branches, setBranches] = useState<QueueReviewBranch[]>([]);
   const [resources, setResources] = useState<QueueReviewResource[]>([]);
   const [preview, setPreview] = useState<QueueReviewPullPreview | null>(null);
@@ -72,6 +75,7 @@ export function QueuePullDrawer({
     setSiteFilter('any');
     setInstagramFilter('any');
     setBranchIds([]);
+    setNameKeyword('');
     setPreview(null);
   }, [open, initialChannel, initialDate, initialResourceId]);
 
@@ -114,18 +118,26 @@ export function QueuePullDrawer({
     };
   }, [channel, scheduledDate, open]);
 
+  const trimmedNameKeyword = nameKeyword.trim();
+  const debouncedTrimmedNameKeyword = debouncedNameKeyword.trim();
+  const keywordLength = Array.from(trimmedNameKeyword).length;
+  const keywordValid = keywordLength === 0 || keywordLength >= 3;
+  const keywordReady = keywordValid && debouncedTrimmedNameKeyword === trimmedNameKeyword;
+
   const filters: QueueReviewPullFilters = useMemo(
     () => ({
       site: siteFilter,
       instagram: channel === 'Instagram' ? 'any' : instagramFilter,
       branchIds,
+      nameKeyword: debouncedTrimmedNameKeyword,
     }),
-    [branchIds, channel, instagramFilter, siteFilter],
+    [branchIds, channel, debouncedTrimmedNameKeyword, instagramFilter, siteFilter],
   );
 
   useEffect(() => {
-    if (!open || !resourceId) {
+    if (!open || !resourceId || !keywordReady) {
       setPreview(null);
+      setLoadingPreview(false);
       return;
     }
     let cancelled = false;
@@ -146,7 +158,7 @@ export function QueuePullDrawer({
     return () => {
       cancelled = true;
     };
-  }, [channel, filters, open, resourceId, scheduledDate]);
+  }, [channel, filters, keywordReady, open, resourceId, scheduledDate]);
 
   const branchOptions = branches.map((branch) => ({ label: branch.name, value: branch.id }));
 
@@ -172,9 +184,11 @@ export function QueuePullDrawer({
     ? 'Puxando leads...'
     : !resourceId
       ? 'Selecione um recurso'
-      : loadingPreview
-        ? 'Calculando...'
-        : (preview?.resource.available ?? 0) <= 0
+      : !keywordValid
+        ? 'Digite ao menos 3 caracteres'
+        : !keywordReady || loadingPreview
+          ? 'Calculando...'
+          : (preview?.resource.available ?? 0) <= 0
           ? 'Fila sem vagas disponíveis'
           : (preview?.eligible ?? 0) <= 0
             ? 'Nenhum lead compatível'
@@ -192,7 +206,7 @@ export function QueuePullDrawer({
           <Button
             iconLeft={ListPlus}
             loading={pulling}
-            disabled={!resourceId || loadingPreview || !preview || preview.willPull <= 0}
+            disabled={!resourceId || !keywordValid || !keywordReady || loadingPreview || !preview || preview.willPull <= 0}
             onClick={() => void confirm()}
           >
             {ctaLabel}
@@ -251,6 +265,27 @@ export function QueuePullDrawer({
               onChange={setBranchIds}
             />
           </label>
+
+          <div className="queue-pull-drawer__keyword">
+            <Field
+              label="Palavra-chave no nome"
+              placeholder="Ex.: Planejados"
+              iconLeft={Search}
+              value={nameKeyword}
+              maxLength={80}
+              autoComplete="off"
+              onChange={setNameKeyword}
+            />
+            {trimmedNameKeyword && !keywordValid ? (
+              <p className="queue-pull-drawer__field-hint queue-pull-drawer__field-hint--error">
+                Digite ao menos 3 caracteres para filtrar pelo nome da empresa.
+              </p>
+            ) : (
+              <p className="queue-pull-drawer__field-hint">
+                Opcional. Busca somente no nome da empresa e ignora maiúsculas, minúsculas e acentos.
+              </p>
+            )}
+          </div>
 
           <label className="drawer-field">
             <span>Site</span>

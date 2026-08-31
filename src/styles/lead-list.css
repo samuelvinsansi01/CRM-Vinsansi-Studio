@@ -258,6 +258,22 @@
   flex: 1;
 }
 
+.queue-pull-drawer__keyword {
+  display: grid;
+  gap: var(--space-06);
+}
+
+.queue-pull-drawer__field-hint {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.queue-pull-drawer__field-hint--error {
+  color: var(--status-error-text, #ff7777);
+}
+
 .queue-pull-drawer__summary {
   display: grid;
   gap: var(--space-08);

@@ -5,6 +5,7 @@ export type QueueReviewPullFilters = {
   site: QueueReviewPresenceFilter;
   instagram: QueueReviewPresenceFilter;
   branchIds: string[];
+  nameKeyword: string;
 };
 
 export type QueueReviewBranch = {

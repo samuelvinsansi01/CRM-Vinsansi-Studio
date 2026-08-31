@@ -414,4 +414,24 @@ for (const token of [
 // R59 FIX 21: Worker pode ler o nível operacional do chip pelo runtime organizacional.
 const executorRuntimeFix21 = read('server/routes/tools/executor/runtime.ts');
 if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtime_worker_sem_levels_para_lotes');
+
+
+// R59 FIX 23: palavra-chave literal no nome precisa valer igualmente na prévia e na reserva real.
+{
+  const pullDrawer23 = read('src/components/QueuePullDrawer.tsx');
+  const queueReviewTypes23 = read('src/services/queue-review/types.ts');
+  const queueReviewService23 = read('src/services/queue-review/queueReview.service.ts');
+  const sql23 = read('APLICAR - CRM R59 BUILD FIX 23 - Palavra-chave no nome da puxada.sql');
+  for (const token of ['Palavra-chave no nome', 'useDebouncedValue(nameKeyword, 300)', 'keywordLength', 'keywordValid', 'Digite ao menos 3 caracteres']) {
+    if (!pullDrawer23.includes(token)) fail(`drawer_palavra_chave_incompleto:${token}`);
+  }
+  if (!queueReviewTypes23.includes('nameKeyword: string;')) fail('tipo_filtro_palavra_chave_ausente');
+  for (const token of ['p_name_keyword: filters.nameKeyword.trim() || null']) {
+    if ((queueReviewService23.match(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) ?? []).length < 2) fail(`servico_palavra_chave_preview_pull_incompleto:${token}`);
+  }
+  for (const token of ['p_name_keyword text DEFAULT NULL', 'queue_review_name_keyword_min_3', 'leads_name', 'public.unaccent', 'strpos(', "'nameKeyword',nullif(v_name_keyword,'')"]) {
+    if (!sql23.includes(token)) fail(`sql_fix23_palavra_chave_incompleto:${token}`);
+  }
+}
+
 console.log('CRM R59 final contract + homologacao: OK');

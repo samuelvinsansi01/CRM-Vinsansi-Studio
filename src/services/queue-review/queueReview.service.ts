@@ -81,6 +81,7 @@ async function pullCapacity(channel: QueueReviewChannel, resourceKey: string, sc
     p_site_filter: filters.site,
     p_instagram_filter: filters.instagram,
     p_branch_ids: filters.branchIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0),
+    p_name_keyword: filters.nameKeyword.trim() || null,
   });
   if (error) throw new Error(error.message);
   const row = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
@@ -171,7 +172,7 @@ async function pullToCapacity(
   };
 }
 
-const DEFAULT_PULL_FILTERS: QueueReviewPullFilters = { site: 'any', instagram: 'any', branchIds: [] };
+const DEFAULT_PULL_FILTERS: QueueReviewPullFilters = { site: 'any', instagram: 'any', branchIds: [], nameKeyword: '' };
 
 async function preview(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string, filters: QueueReviewPullFilters = DEFAULT_PULL_FILTERS): Promise<QueueReviewPullPreview> {
   if (!preferredResourceId) throw new Error(channel === 'WhatsApp' ? 'Selecione um chip.' : 'Selecione um perfil.');
@@ -182,6 +183,7 @@ async function preview(channel: QueueReviewChannel, scheduledDate: string, prefe
     p_site_filter: filters.site,
     p_instagram_filter: filters.instagram,
     p_branch_ids: filters.branchIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0),
+    p_name_keyword: filters.nameKeyword.trim() || null,
   });
   if (error) throw new Error(error.message);
   const row = rpcRow(data as Record<string, unknown> | Record<string, unknown>[] | null);
