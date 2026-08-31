@@ -9,8 +9,7 @@ import { whatsappBatchGateway, type WhatsAppBatchState } from './whatsapp.batch.
 import { hasWhatsAppWorkerContract, missingWhatsAppWorkerFields } from './whatsappQueue.guards';
 import type { UpdateWhatsAppQueueLeadInput, WhatsAppQueueFilters, WhatsAppQueueLead } from './types';
 import type { ChipConfigRecord, ConfigRecord } from '../config/types';
-import { chipInstance, chipLevelDefaults, isOperationalWhatsAppChip } from '../config/chipOperational';
-import { settingsService } from '../settings';
+import { chipInstance, isOperationalWhatsAppChip } from '../config/chipOperational';
 import { assertTransition } from '../state-machine';
 import { isStatusGroup, normalizeStatusGroup } from '../status/status.mapper';
 import { hasAllTemplateMessages } from '../templates/templateContract';
@@ -30,12 +29,9 @@ async function getSelectedLeads(ids: string[]) {
 }
 
 async function loadActiveChips() {
-  const settings = await settingsService.getDispatchSettings();
-  const chips = (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
-  return chips.map((chip) => ({
-    ...chip,
-    ...chipLevelDefaults(chip.level, settings.chipLevels),
-  }));
+  // R59 FIX 24: limite diário e lotes vêm do nível canônico já resolvido
+  // pelo repositório de chips. As configurações globais não podem sobrescrever o nível.
+  return (await repositories.config.list('chips')).filter(isChip).filter(isOperationalWhatsAppChip);
 }
 
 async function assertLeadsUseOperationalChips(leads: WhatsAppQueueLead[]) {

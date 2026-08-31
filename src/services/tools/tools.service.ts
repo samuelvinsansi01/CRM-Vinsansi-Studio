@@ -53,6 +53,18 @@ export type OrganizationToolDetails = {
   installations: ToolInstallation[];
 };
 
+
+export type OperationalLevelSummary = {
+  id: string;
+  name: string;
+  channelId: string;
+  channelName: string;
+  dailyLimit: number;
+  queues: number;
+  active: boolean;
+  updatedAt: string | null;
+};
+
 export type OrganizationToolSettings = {
   toolId: ToolId;
   settings: Record<string, unknown>;
@@ -169,6 +181,40 @@ export const toolsService = {
       defaultSettings: object(row.defaultSettings),
       updatedAt: nullableText(row.updatedAt),
     };
+  },
+
+  async operationalLevels(organizationId: string): Promise<OperationalLevelSummary[]> {
+    if (!organizationId) return [];
+    const client = getSupabaseClient();
+    const { data: levelsData, error: levelsError } = await client
+      .from('levels')
+      .select('levels_id,channels_id,status_id,levels_name,levels_daily_limit,levels_queues,levels_updated_at')
+      .eq('organizations_id', organizationId)
+      .order('levels_name');
+    if (levelsError) throw new Error(`Não foi possível carregar os níveis canônicos: ${levelsError.message}`);
+
+    const rows = (levelsData ?? []) as Array<Record<string, unknown>>;
+    const channelIds = [...new Set(rows.map((row) => text(row.channels_id)).filter(Boolean))];
+    const channels = new Map<string, string>();
+    if (channelIds.length) {
+      const { data: channelsData, error: channelsError } = await client
+        .from('channels')
+        .select('channels_id,channels_name')
+        .in('channels_id', channelIds);
+      if (channelsError) throw new Error(`Não foi possível identificar os canais dos níveis: ${channelsError.message}`);
+      for (const row of (channelsData ?? []) as Array<Record<string, unknown>>) channels.set(text(row.channels_id), text(row.channels_name));
+    }
+
+    return rows.map((row) => ({
+      id: text(row.levels_id),
+      name: text(row.levels_name),
+      channelId: text(row.channels_id),
+      channelName: channels.get(text(row.channels_id)) ?? '—',
+      dailyLimit: Math.max(1, Number(row.levels_daily_limit ?? 1)),
+      queues: Math.max(1, Number(row.levels_queues ?? 1)),
+      active: Number(row.status_id ?? 0) === 1,
+      updatedAt: nullableText(row.levels_updated_at),
+    }));
   },
 
   async saveSettings(toolId: ToolId, settings: Record<string, unknown>, expectedSettingsVersion: number) {

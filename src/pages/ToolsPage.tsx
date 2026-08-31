@@ -11,6 +11,7 @@ import {
   type OrganizationToolDetails,
   type OrganizationToolSettings,
   type OrganizationToolSummary,
+  type OperationalLevelSummary,
   type ToolCompatibility,
   type ToolId,
   type ToolPresence,
@@ -98,6 +99,75 @@ function SettingsFields({ value, path = [], onChange }: { value: Record<string, 
   );
 }
 
+
+function whatsappLevelDistribution(level: OperationalLevelSummary) {
+  const queues = Math.max(1, Number(level.queues || 1));
+  const daily = Math.max(1, Number(level.dailyLimit || 1));
+  const base = Math.max(1, Math.floor(daily / queues));
+  const last = Math.max(1, daily - (base * Math.max(0, queues - 1)));
+  if (queues === 1) return `${daily} lead(s) no lote`;
+  if (last === base) return `${base} lead(s) por lote`;
+  return `${base} nos ${queues - 1} primeiros · ${last} no último`;
+}
+
+function WhatsAppManagerSettingsFields({
+  value,
+  onChange,
+  levels,
+  loadingLevels,
+  levelsError,
+}: {
+  value: Record<string, unknown>;
+  onChange: (path: string[], value: unknown) => void;
+  levels: OperationalLevelSummary[];
+  loadingLevels: boolean;
+  levelsError: string;
+}) {
+  const whatsapp = value.whatsapp && typeof value.whatsapp === 'object' && !Array.isArray(value.whatsapp)
+    ? value.whatsapp as Record<string, unknown>
+    : {};
+  const activeLevels = levels.filter((level) => level.active && String(level.channelName).toLocaleLowerCase('pt-BR').includes('whatsapp'));
+  const numberValue = (key: string, fallback: number) => {
+    const parsed = Number(whatsapp[key]);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return <div className="tool-settings-manager">
+    <fieldset className="tool-settings-group tool-settings-manager__rules">
+      <legend>WhatsApp · Regras globais</legend>
+      <p className="tool-settings-source-note">Somente os tempos de execução são globais. Limites, quantidade de lotes e itens por lote vêm sempre do nível vinculado a cada chip.</p>
+      <div className="tool-settings-fields tool-settings-fields--nested">
+        <Field label="Atraso mínimo (segundos)" type="number" value={String(numberValue('delayMinSeconds', 120))} onChange={(input) => onChange(['whatsapp', 'delayMinSeconds'], Number(input))} />
+        <Field label="Atraso máximo (segundos)" type="number" value={String(numberValue('delayMaxSeconds', 120))} onChange={(input) => onChange(['whatsapp', 'delayMaxSeconds'], Number(input))} />
+        <Field label="Intervalo entre lotes (minutos)" type="number" value={String(numberValue('batchDelayMinutes', 60))} onChange={(input) => onChange(['whatsapp', 'batchDelayMinutes'], Number(input))} />
+      </div>
+    </fieldset>
+
+    <fieldset className="tool-settings-group tool-settings-manager__levels">
+      <legend>Níveis dos chips · fonte canônica</legend>
+      <div className="tool-settings-source-callout"><ShieldCheck size={18}/><div><strong>Configurações → Filas → Níveis</strong><span>Esta área é somente leitura. Alterações de limite ou quantidade de lotes devem ser feitas no cadastro do nível.</span></div></div>
+      {loadingLevels ? <div className="table-message">Carregando níveis do CRM...</div> : null}
+      {!loadingLevels && levelsError ? <div className="table-message table-message--error">{levelsError}</div> : null}
+      {!loadingLevels && !levelsError && !activeLevels.length ? <div className="table-message">Nenhum nível WhatsApp ativo encontrado.</div> : null}
+      {!loadingLevels && activeLevels.length ? <div className="tool-levels-readonly-grid">
+        {activeLevels.map((level) => <article className="tool-level-readonly-card" key={level.id}>
+          <div className="tool-level-readonly-card__head"><strong>{level.name}</strong><Tag tone="success">Ativo</Tag></div>
+          <div className="tool-level-readonly-card__metrics">
+            <span><small>Limite diário</small><strong>{level.dailyLimit}</strong></span>
+            <span><small>Lotes</small><strong>{level.queues}</strong></span>
+            <span className="tool-level-readonly-card__distribution"><small>Distribuição</small><strong>{whatsappLevelDistribution(level)}</strong></span>
+          </div>
+          <small className="tool-level-readonly-card__updated">Atualizado em {formatDate(level.updatedAt)}</small>
+        </article>)}
+      </div> : null}
+    </fieldset>
+
+    <fieldset className="tool-settings-group tool-settings-manager__timezone">
+      <legend>Fuso operacional</legend>
+      <Field label="Timezone" value={String(value.operationalTimezone ?? 'America/Sao_Paulo')} onChange={(input) => onChange(['operationalTimezone'], input)} />
+    </fieldset>
+  </div>;
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return 'Nunca';
   const date = new Date(value);
@@ -139,6 +209,9 @@ export function ToolsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [whatsappLevels, setWhatsappLevels] = useState<OperationalLevelSummary[]>([]);
+  const [whatsappLevelsLoading, setWhatsappLevelsLoading] = useState(false);
+  const [whatsappLevelsError, setWhatsappLevelsError] = useState('');
 
   const canManageTools = hasPermission('tools.manage');
   const canViewSettings = hasPermission('settings.view');
@@ -152,6 +225,19 @@ export function ToolsPage() {
   }, []);
 
   useEffect(() => { void loadTools(); }, [loadTools, organizationId]);
+
+  const loadWhatsappLevels = useCallback(async () => {
+    if (!organizationId) { setWhatsappLevels([]); return; }
+    setWhatsappLevelsLoading(true); setWhatsappLevelsError('');
+    try { setWhatsappLevels(await toolsService.operationalLevels(organizationId)); }
+    catch (cause) { setWhatsappLevelsError(cause instanceof Error ? cause.message : 'Não foi possível carregar os níveis do CRM.'); }
+    finally { setWhatsappLevelsLoading(false); }
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (selectedToolId === 'vinsansi_whatsapp_manager') void loadWhatsappLevels();
+    else { setWhatsappLevels([]); setWhatsappLevelsError(''); }
+  }, [loadWhatsappLevels, selectedToolId]);
   useEffect(() => {
     void fetch(`/tools/manifest.json?v=${Date.now()}`, { cache: 'no-store' })
       .then((response) => response.ok ? response.json() as Promise<ToolsManifest> : Promise.reject(new Error('Manifesto indisponível.')))
@@ -277,7 +363,9 @@ export function ToolsPage() {
             !canViewSettings ? <div className="table-message">A permissão settings.view é necessária para visualizar configurações.</div>
               : toolSettings ? <div className="tool-settings-editor">
                 <div className="tool-settings-editor__meta"><span>Schema v{toolSettings.settingsSchemaVersion}</span><span>Settings v{toolSettings.settingsVersion}</span><span>Atualizado em {formatDate(toolSettings.updatedAt)}</span></div>
-                <SettingsFields value={draft} onChange={(path, value) => setDraft((current) => updatePath(current, path, value))} />
+                {selectedToolId === 'vinsansi_whatsapp_manager'
+                  ? <WhatsAppManagerSettingsFields value={draft} levels={whatsappLevels} loadingLevels={whatsappLevelsLoading} levelsError={whatsappLevelsError} onChange={(path, value) => setDraft((current) => updatePath(current, path, value))} />
+                  : <SettingsFields value={draft} onChange={(path, value) => setDraft((current) => updatePath(current, path, value))} />}
                 <div className="tool-settings-editor__actions">
                   <Button variant="secondary" iconLeft={RotateCcw} loading={saving} disabled={!canEditSelected} onClick={() => void resetSettings()}>Restaurar padrão</Button>
                   <Button iconLeft={Save} loading={saving} disabled={!canEditSelected} onClick={() => void saveSettings()}>Salvar configuração</Button>

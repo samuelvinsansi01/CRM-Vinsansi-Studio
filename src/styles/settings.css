@@ -659,6 +659,29 @@
 .tool-settings-fields .field { min-width: 0; margin-bottom: 0 !important; }
 .tool-settings-editor__actions { justify-content: flex-end; flex-wrap: wrap; }
 
+.tool-settings-manager { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--space-16); align-items: start; }
+.tool-settings-manager__rules,
+.tool-settings-manager__levels { min-height: 100%; }
+.tool-settings-manager__timezone { grid-column: 1 / -1; }
+.tool-settings-source-note { margin: 0 0 var(--space-16); color: var(--app-muted); font-size: 12px; line-height: 18px; }
+.tool-settings-source-callout { display: flex; gap: var(--space-12); align-items: flex-start; margin-bottom: var(--space-16); padding: var(--space-12); border: 1px solid color-mix(in srgb, var(--action-active) 28%, transparent); border-radius: var(--radius-08); background: color-mix(in srgb, var(--action-active) 7%, transparent); }
+.tool-settings-source-callout > svg { flex: 0 0 auto; margin-top: 1px; color: var(--action-active); }
+.tool-settings-source-callout > div { display: grid; gap: var(--space-02); }
+.tool-settings-source-callout strong { color: var(--app-text); font-size: 12px; }
+.tool-settings-source-callout span { color: var(--app-muted); font-size: 11px; line-height: 17px; }
+.tool-levels-readonly-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-12); }
+.tool-level-readonly-card { min-width: 0; padding: var(--space-14); border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent); border-radius: var(--radius-08); background: color-mix(in srgb, var(--color-pure-white) 2.5%, transparent); }
+.tool-level-readonly-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-08); margin-bottom: var(--space-12); }
+.tool-level-readonly-card__head > strong { min-width: 0; overflow: hidden; color: var(--app-text); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.tool-level-readonly-card__metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-10); }
+.tool-level-readonly-card__metrics > span { display: grid; gap: var(--space-02); }
+.tool-level-readonly-card__metrics small,
+.tool-level-readonly-card__updated { color: var(--app-muted); font-size: 10px; }
+.tool-level-readonly-card__metrics strong { color: var(--app-text); font-size: 13px; font-weight: 600; }
+.tool-level-readonly-card__distribution { grid-column: 1 / -1; padding-top: var(--space-08); border-top: 1px solid color-mix(in srgb, var(--color-pure-white) 6%, transparent); }
+.tool-level-readonly-card__distribution strong { font-size: 11px; line-height: 16px; }
+.tool-level-readonly-card__updated { display: block; margin-top: var(--space-10); }
+
 .tools-download-grid { display: grid; gap: var(--space-12); margin-top: var(--space-16); }
 .tool-download-card { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); padding: var(--space-16); border: 1px solid color-mix(in srgb, var(--color-pure-white) 8%, transparent); border-radius: var(--radius-08); }
 .tool-download-card > div { display: flex; align-items: center; gap: var(--space-12); }
@@ -675,7 +698,9 @@
   .tool-status-grid,
   .tool-overview-grid,
   .tool-settings-fields,
-  .tool-settings-fields--nested { grid-template-columns: 1fr; }
+  .tool-settings-fields--nested,
+  .tool-settings-manager,
+  .tool-levels-readonly-grid { grid-template-columns: 1fr; }
   .tool-download-card { align-items: stretch; flex-direction: column; }
   .tool-download-card .button { width: 100%; }
 }

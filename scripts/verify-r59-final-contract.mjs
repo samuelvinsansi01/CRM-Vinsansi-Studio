@@ -434,4 +434,22 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 }
 
+
+// R59 FIX 24: níveis do WhatsApp são canônicos; somente delays/fuso continuam globais na ferramenta.
+{
+  const toolsPage24 = read('src/pages/ToolsPage.tsx');
+  const toolsService24 = read('src/services/tools/tools.service.ts');
+  const whatsappQueue24 = read('src/services/whatsapp-queue/whatsappQueue.service.ts');
+  const platformConfig24 = read('src/services/platform-config/platformConfig.service.ts');
+  for (const token of ['WhatsApp · Regras globais', 'Níveis dos chips · fonte canônica', 'Configurações → Filas → Níveis', 'Intervalo entre lotes (minutos)', 'whatsappLevelDistribution']) {
+    if (!toolsPage24.includes(token)) fail(`fix24_editor_niveis_incompleto:${token}`);
+  }
+  if (!toolsService24.includes('async operationalLevels(organizationId: string)')) fail('fix24_sem_leitura_niveis_canonicos');
+  if (whatsappQueue24.includes('settings.chipLevels')) fail('fix24_fila_whatsapp_ainda_sobrescreve_nivel');
+  if (platformConfig24.includes('dispatch.chipLevels')) fail('fix24_runtime_legado_ainda_sobrescreve_nivel');
+  for (const token of ['dailyLimit: chip.dailyLimit', 'blockSize: chip.blockSize', 'batches: chip.batches']) {
+    if (!platformConfig24.includes(token)) fail(`fix24_platform_config_nao_canonico:${token}`);
+  }
+}
+
 console.log('CRM R59 final contract + homologacao: OK');
