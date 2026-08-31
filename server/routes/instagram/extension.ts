@@ -103,7 +103,7 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
   const queues = (queuesResponse.data ?? []) as RecordValue[];
   const queueIds = queues.map((row) => Number(row.queues_id));
   if (!queueIds.length) return [];
-  const itemsResponse = await client.from('queue_items').select('*').eq('organizations_id', scope.organizationId).eq('socials_id', Number(social.socials_id)).in('queues_id', queueIds).order('queue_items_position');
+  const itemsResponse = await client.from('queue_items').select('*').eq('organizations_id', scope.organizationId).eq('socials_id', Number(social.socials_id)).in('queues_id', queueIds).order('queue_items_position').order('queue_items_id');
   if (itemsResponse.error) throw new Error(itemsResponse.error.message);
   const items = (itemsResponse.data ?? []) as RecordValue[];
   const unique = (key: string) => Array.from(new Set(items.map((row) => Number(row[key])).filter(Number.isSafeInteger)));
@@ -122,12 +122,10 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
   const branchMap = new Map<string, RecordValue>(branches.map((row: RecordValue) => [String(row.branches_id), row]));
   const statusMap = new Map<string, string>(((statusesResponse.data ?? []) as RecordValue[]).map((row: RecordValue) => [String(row.status_id), String(row.status_name)]));
   const queueMap = new Map(queues.map((row) => [String(row.queues_id), row]));
-  const queueOrder = new Map([...queues]
-    .sort((a, b) => text(a.queues_scheduled_at).localeCompare(text(b.queues_scheduled_at)) || Number(a.queues_id) - Number(b.queues_id))
-    .map((row, index) => [String(row.queues_id), index]));
+  // A Fila final é a fonte canônica da ordem operacional. O lote/fila de origem
+  // permanece apenas como histórico e nunca precede a posição do item.
   const orderedItems = [...items].sort((a, b) =>
-    Number(queueOrder.get(String(a.queues_id)) ?? 0) - Number(queueOrder.get(String(b.queues_id)) ?? 0)
-    || Number(a.queue_items_position ?? 0) - Number(b.queue_items_position ?? 0)
+    Number(a.queue_items_position ?? 0) - Number(b.queue_items_position ?? 0)
     || Number(a.queue_items_id ?? 0) - Number(b.queue_items_id ?? 0));
   const progressMap = new Map(progressRows.map((row) => [String(row.queue_items_id), row]));
   return orderedItems.map((item, dailyIndex) => {

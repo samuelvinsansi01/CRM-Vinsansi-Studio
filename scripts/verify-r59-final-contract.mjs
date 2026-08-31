@@ -137,6 +137,12 @@ for (const token of [
   'setSummary(result.summary);',
 ]) if (!instagramQueueHook.includes(token)) fail(`compactacao_instagram_pos_invalidacao_incompleta:${token}`);
 if (instagramQueueHook.includes("leads: batch.leads.filter((candidate) => candidate.id !== lead.id)")) fail('instagram_ainda_compacta_apenas_a_pagina_local');
+const instagramExtensionOrder = read('server/routes/instagram/extension.ts');
+if (instagramExtensionOrder.includes('queueOrder')) fail('instagram_ainda_prioriza_fila_de_origem_na_ordem');
+for (const token of [".order('queue_items_position').order('queue_items_id')", 'Number(a.queue_items_position ?? 0) - Number(b.queue_items_position ?? 0)', 'Number(a.queue_items_id ?? 0) - Number(b.queue_items_id ?? 0)']) {
+  if (!instagramExtensionOrder.includes(token)) fail(`instagram_ordem_canonica_ausente:${token}`);
+}
+
 const queueFinalTable = read('src/components/QueueFinalTable.tsx');
 for (const token of ['const displayLeads=useMemo<FinalLead[]>', 'const offset=(page-1)*rowsPerPage;', '.map((lead,index)=>({...lead,position:offset+index+1}))', 'displayLeads.find']) {
   if (!queueFinalTable.includes(token)) fail(`posicao_operacional_fila_final_incompleta:${token}`);
