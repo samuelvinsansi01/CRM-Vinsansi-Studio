@@ -500,4 +500,35 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 }
 
+
+// R59 BUILD FIX 27: Instagram usa a mesma contagem canônica da Fila final e,
+// como no WhatsApp, nível é autoridade de limite/lotes enquanto delays são globais.
+{
+  const instagramExtension27 = read('server/routes/instagram/extension.ts');
+  const toolsPage27 = read('src/pages/ToolsPage.tsx');
+  for (const token of [
+    'function displayStatus(',
+    'function queueSummary(',
+    'display_status: displayStatus(queueStatus, progressStep)',
+    'summary: queueSummary(items)',
+    'instagramBatchSize(client: SupabaseClient, scope: TokenScope)',
+    "from('levels')",
+    'levels_daily_limit,levels_queues,status_id',
+    'utcDate(row.queue_items_scheduled_at ?? queueMap.get(String(row.queues_id))?.queues_scheduled_at) === scheduledDate',
+  ]) {
+    if (!instagramExtension27.includes(token)) fail(`fix27_instagram_fila_canonica_incompleta:${token}`);
+  }
+  if (instagramExtension27.includes("effectiveConfig(client, organizationId, 'vinsansi_instagram')")) fail('fix27_instagram_lote_ainda_vem_da_config_global');
+  for (const token of [
+    'Instagram · Regras globais',
+    'Níveis dos perfis · fonte canônica',
+    'Intervalo entre lotes (minutos)',
+    'Somente os tempos de execução são globais',
+    "selectedToolId === 'vinsansi_whatsapp_manager' || selectedToolId === 'vinsansi_instagram'",
+    "selectedToolId === 'vinsansi_instagram'",
+  ]) {
+    if (!toolsPage27.includes(token)) fail(`fix27_editor_instagram_incompleto:${token}`);
+  }
+}
+
 console.log('CRM R59 final contract + homologacao: OK');

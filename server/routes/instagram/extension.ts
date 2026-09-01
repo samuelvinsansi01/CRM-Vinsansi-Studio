@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { normalizeInstagramUsername } from '../../instagram/identity.js';
-import { effectiveConfig, executorStatus, sessionScope } from '../../tools/executor.js';
+import { executorStatus, sessionScope } from '../../tools/executor.js';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void; end(): void };
@@ -46,6 +46,39 @@ function semanticStatus(name: unknown): QueueStatus {
   return 'queued';
 }
 
+function utcDate(value: unknown) {
+  const raw = text(value);
+  if (!raw) return '';
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? raw.slice(0, 10) : parsed.toISOString().slice(0, 10);
+}
+
+function displayStatus(queueStatus: QueueStatus, progressStepValue: unknown) {
+  const step = text(progressStepValue);
+  if (queueStatus === 'sent') return 'sent';
+  if (queueStatus === 'invalid') return 'invalid';
+  if (queueStatus === 'error') return 'error';
+  if (queueStatus === 'paused') return 'paused';
+  if (step === 'reconciliation_required') return 'reconciliation_required';
+  if (step === 'sent') return 'sent';
+  if (step === 'invalid') return 'invalid';
+  if (step === 'error' && queueStatus !== 'queued') return 'error';
+  if (['claimed', 'profile_opened', 'following', 'followed'].includes(step)) return 'following';
+  if (['dm_opened', 'messages_sending', 'media_sending'].includes(step)) return 'dm_opened';
+  return 'queued';
+}
+
+function queueSummary(items: RecordValue[]) {
+  const statuses = items.map((item) => text(item.display_status || item.status));
+  return {
+    total: items.length,
+    queued: statuses.filter((status) => ['queued', 'paused', 'following', 'dm_opened'].includes(status)).length,
+    sent: statuses.filter((status) => status === 'sent').length,
+    errors: statuses.filter((status) => ['error', 'reconciliation_required'].includes(status)).length,
+    invalid: statuses.filter((status) => status === 'invalid').length,
+  };
+}
+
 async function tokenScope(req: ApiRequest): Promise<TokenScope> {
   const scope=await sessionScope(req);
   if(scope.toolId!=='vinsansi_instagram')throw new Error('tool_scope_mismatch');
@@ -86,26 +119,39 @@ async function socialForScope(client: SupabaseClient, scope: TokenScope) {
   return row;
 }
 
-async function instagramBatchSize(client: SupabaseClient, organizationId: number) {
-  const config = await effectiveConfig(client, organizationId, 'vinsansi_instagram');
-  const instagram = bodyRecord(bodyRecord(config.settings).instagram);
-  const configured = Number(instagram.perBatch ?? 15);
-  return Number.isFinite(configured) && configured >= 1 ? Math.floor(configured) : 15;
+async function instagramBatchSize(client: SupabaseClient, scope: TokenScope) {
+  const social = await socialForScope(client, scope);
+  const levelId = Number(social.levels_id ?? 0);
+  if (!Number.isSafeInteger(levelId) || levelId <= 0) throw new Error('instagram_profile_level_missing');
+  const response = await client.from('levels')
+    .select('levels_daily_limit,levels_queues,status_id')
+    .eq('organizations_id', scope.organizationId)
+    .eq('levels_id', levelId)
+    .eq('status_id', 1)
+    .maybeSingle();
+  if (response.error) throw new Error(`instagram_level_read_failed:${response.error.message}`);
+  if (!response.data) throw new Error('instagram_level_not_available');
+  const row = response.data as RecordValue;
+  const dailyLimit = Math.max(1, Number(row.levels_daily_limit ?? 1));
+  const batches = Math.max(1, Number(row.levels_queues ?? 1));
+  return Math.max(1, Math.floor(dailyLimit / batches));
 }
 
 async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDate?: string) {
   const social = await socialForScope(client, scope);
-  const [channelId, blockSize] = await Promise.all([instagramChannelId(client), instagramBatchSize(client, scope.organizationId)]);
-  let queuesQuery = client.from('queues').select('*').eq('organizations_id', scope.organizationId).eq('channels_id', channelId);
-  if (scheduledDate) queuesQuery = queuesQuery.gte('queues_scheduled_at', `${scheduledDate}T00:00:00.000Z`).lt('queues_scheduled_at', `${scheduledDate}T23:59:59.999Z`);
-  const queuesResponse = await queuesQuery;
+  const [channelId, blockSize] = await Promise.all([instagramChannelId(client), instagramBatchSize(client, scope)]);
+  const queuesResponse = await client.from('queues').select('*').eq('organizations_id', scope.organizationId).eq('channels_id', channelId);
   if (queuesResponse.error) throw new Error(queuesResponse.error.message);
   const queues = (queuesResponse.data ?? []) as RecordValue[];
   const queueIds = queues.map((row) => Number(row.queues_id));
   if (!queueIds.length) return [];
+  const queueMap = new Map(queues.map((row) => [String(row.queues_id), row]));
   const itemsResponse = await client.from('queue_items').select('*').eq('organizations_id', scope.organizationId).eq('socials_id', Number(social.socials_id)).in('queues_id', queueIds).order('queue_items_position').order('queue_items_id');
   if (itemsResponse.error) throw new Error(itemsResponse.error.message);
-  const items = (itemsResponse.data ?? []) as RecordValue[];
+  const allItems = (itemsResponse.data ?? []) as RecordValue[];
+  const items = scheduledDate
+    ? allItems.filter((row) => utcDate(row.queue_items_scheduled_at ?? queueMap.get(String(row.queues_id))?.queues_scheduled_at) === scheduledDate)
+    : allItems;
   const unique = (key: string) => Array.from(new Set(items.map((row) => Number(row[key])).filter(Number.isSafeInteger)));
   const load = async (table: string, key: string, values: number[]) => { if (!values.length) return [] as RecordValue[]; const response = await client.from(table).select('*').in(key, values); if (response.error) throw new Error(response.error.message); return (response.data ?? []) as RecordValue[]; };
   const [leads, templates, progressRows] = await Promise.all<RecordValue[]>([
@@ -121,10 +167,10 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
   const templateMap = new Map<string, RecordValue>(templates.map((row: RecordValue) => [String(row.templates_id), row]));
   const branchMap = new Map<string, RecordValue>(branches.map((row: RecordValue) => [String(row.branches_id), row]));
   const statusMap = new Map<string, string>(((statusesResponse.data ?? []) as RecordValue[]).map((row: RecordValue) => [String(row.status_id), String(row.status_name)]));
-  const queueMap = new Map(queues.map((row) => [String(row.queues_id), row]));
+  const activeItems = items.filter((item) => !['cancelado', 'cancelled', 'canceled'].includes(normalize(statusMap.get(String(item.status_id)) ?? item.status_id)));
   // A Fila final é a fonte canônica da ordem operacional. O lote/fila de origem
   // permanece apenas como histórico e nunca precede a posição do item.
-  const orderedItems = [...items].sort((a, b) =>
+  const orderedItems = [...activeItems].sort((a, b) =>
     Number(a.queue_items_position ?? 0) - Number(b.queue_items_position ?? 0)
     || Number(a.queue_items_id ?? 0) - Number(b.queue_items_id ?? 0));
   const progressMap = new Map(progressRows.map((row) => [String(row.queue_items_id), row]));
@@ -141,7 +187,8 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
     const queuePosition = Number(item.queue_items_position ?? 1);
     const position = dailyIndex + 1;
     const progress = progressMap.get(String(item.queue_items_id)) ?? {};
-    const queueStatus = semanticStatus(statusMap.get(String(item.status_id)) ?? item.status_id);
+    const statusName = statusMap.get(String(item.status_id)) ?? item.status_id;
+    const queueStatus = semanticStatus(statusName);
     const progressStep = text(progress.step);
     // Recovery devolve a fila para pendente sem apagar o checkpoint. O status da
     // fila mantém o item reclamável; resume_step informa de onde continuar.
@@ -154,12 +201,13 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
       queue_item_id: String(item.queue_items_id),
       lead_id: String(item.leads_id),
       profile_username: scope.profile,
-      scheduled_date: text(item.queue_items_scheduled_at ?? queue.queues_scheduled_at).slice(0,10),
+      scheduled_date: utcDate(item.queue_items_scheduled_at ?? queue.queues_scheduled_at),
       block_number: Math.floor((position - 1) / blockSize) + 1,
       block_size: blockSize,
       position,
       queue_position: queuePosition,
       status,
+      display_status: displayStatus(queueStatus, progressStep),
       claim_token: text(progress.claim_token),
       resume_step: text(progress.step) || 'claimed',
       progress_metadata: bodyRecord(progress.metadata),
@@ -248,7 +296,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const client = scope.client;
     const consumerId = text(body.consumer_id) || text(body.browser_id) || 'instagram-extension';
     if (action === 'queue') await client.rpc('instagram_recover_stale_items_v2', { p_organizations_id: scope.organizationId, p_stale_before: new Date(Date.now() - 15 * 60 * 1000).toISOString() });
-    if (action === 'queue') return send(req, res, 200, { ok: true, request_id: requestId, items: await loadItems(client, scope, text(body.scheduled_date)) });
+    if (action === 'queue') {
+      const items = await loadItems(client, scope, text(body.scheduled_date));
+      return send(req, res, 200, { ok: true, request_id: requestId, items, summary: queueSummary(items) });
+    }
     if (action === 'claim_next') {
       const items = await loadItems(client, scope, text(body.scheduled_date));
       const block = Number(body.block_number ?? 0);

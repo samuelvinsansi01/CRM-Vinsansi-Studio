@@ -168,6 +168,64 @@ function WhatsAppManagerSettingsFields({
   </div>;
 }
 
+function InstagramManagerSettingsFields({
+  value,
+  onChange,
+  levels,
+  loadingLevels,
+  levelsError,
+}: {
+  value: Record<string, unknown>;
+  onChange: (path: string[], value: unknown) => void;
+  levels: OperationalLevelSummary[];
+  loadingLevels: boolean;
+  levelsError: string;
+}) {
+  const instagram = value.instagram && typeof value.instagram === 'object' && !Array.isArray(value.instagram)
+    ? value.instagram as Record<string, unknown>
+    : {};
+  const activeLevels = levels.filter((level) => level.active && String(level.channelName).toLocaleLowerCase('pt-BR').includes('instagram'));
+  const numberValue = (key: string, fallback: number) => {
+    const parsed = Number(instagram[key]);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return <div className="tool-settings-manager">
+    <fieldset className="tool-settings-group tool-settings-manager__rules">
+      <legend>Instagram · Regras globais</legend>
+      <p className="tool-settings-source-note">Somente os tempos de execução são globais. Limite diário, quantidade de lotes e itens por lote vêm sempre do nível vinculado a cada perfil remetente.</p>
+      <div className="tool-settings-fields tool-settings-fields--nested">
+        <Field label="Atraso mínimo entre leads (segundos)" type="number" value={String(numberValue('delayMinSeconds', 120))} onChange={(input) => onChange(['instagram', 'delayMinSeconds'], Number(input))} />
+        <Field label="Atraso máximo entre leads (segundos)" type="number" value={String(numberValue('delayMaxSeconds', 120))} onChange={(input) => onChange(['instagram', 'delayMaxSeconds'], Number(input))} />
+        <Field label="Intervalo entre lotes (minutos)" type="number" value={String(numberValue('batchDelayMinutes', 120))} onChange={(input) => onChange(['instagram', 'batchDelayMinutes'], Number(input))} />
+      </div>
+    </fieldset>
+
+    <fieldset className="tool-settings-group tool-settings-manager__levels">
+      <legend>Níveis dos perfis · fonte canônica</legend>
+      <div className="tool-settings-source-callout"><ShieldCheck size={18}/><div><strong>Configurações → Filas → Níveis</strong><span>Esta área é somente leitura. Alterações de limite diário ou quantidade de lotes devem ser feitas no nível Instagram vinculado ao perfil.</span></div></div>
+      {loadingLevels ? <div className="table-message">Carregando níveis do CRM...</div> : null}
+      {!loadingLevels && levelsError ? <div className="table-message table-message--error">{levelsError}</div> : null}
+      {!loadingLevels && !levelsError && !activeLevels.length ? <div className="table-message">Nenhum nível Instagram ativo encontrado.</div> : null}
+      {!loadingLevels && activeLevels.length ? <div className="tool-levels-readonly-grid">
+        {activeLevels.map((level) => <article className="tool-level-readonly-card" key={level.id}>
+          <div className="tool-level-readonly-card__head"><strong>{level.name}</strong><Tag tone="success">Ativo</Tag></div>
+          <div className="tool-level-readonly-card__metrics">
+            <span><small>Limite diário</small><strong>{level.dailyLimit}</strong></span>
+            <span><small>Lotes</small><strong>{level.queues}</strong></span>
+            <span className="tool-level-readonly-card__distribution"><small>Distribuição</small><strong>{whatsappLevelDistribution(level)}</strong></span>
+          </div>
+          <small className="tool-level-readonly-card__updated">Atualizado em {formatDate(level.updatedAt)}</small>
+        </article>)}
+      </div> : null}
+    </fieldset>
+
+    <fieldset className="tool-settings-group tool-settings-manager__timezone">
+      <legend>Fuso operacional</legend>
+      <Field label="Timezone" value={String(value.operationalTimezone ?? 'America/Sao_Paulo')} onChange={(input) => onChange(['operationalTimezone'], input)} />
+    </fieldset>
+  </div>;
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return 'Nunca';
   const date = new Date(value);
@@ -235,7 +293,7 @@ export function ToolsPage() {
   }, [organizationId]);
 
   useEffect(() => {
-    if (selectedToolId === 'vinsansi_whatsapp_manager') void loadWhatsappLevels();
+    if (selectedToolId === 'vinsansi_whatsapp_manager' || selectedToolId === 'vinsansi_instagram') void loadWhatsappLevels();
     else { setWhatsappLevels([]); setWhatsappLevelsError(''); }
   }, [loadWhatsappLevels, selectedToolId]);
   useEffect(() => {
@@ -365,7 +423,9 @@ export function ToolsPage() {
                 <div className="tool-settings-editor__meta"><span>Schema v{toolSettings.settingsSchemaVersion}</span><span>Settings v{toolSettings.settingsVersion}</span><span>Atualizado em {formatDate(toolSettings.updatedAt)}</span></div>
                 {selectedToolId === 'vinsansi_whatsapp_manager'
                   ? <WhatsAppManagerSettingsFields value={draft} levels={whatsappLevels} loadingLevels={whatsappLevelsLoading} levelsError={whatsappLevelsError} onChange={(path, value) => setDraft((current) => updatePath(current, path, value))} />
-                  : <SettingsFields value={draft} onChange={(path, value) => setDraft((current) => updatePath(current, path, value))} />}
+                  : selectedToolId === 'vinsansi_instagram'
+                    ? <InstagramManagerSettingsFields value={draft} levels={whatsappLevels} loadingLevels={whatsappLevelsLoading} levelsError={whatsappLevelsError} onChange={(path, value) => setDraft((current) => updatePath(current, path, value))} />
+                    : <SettingsFields value={draft} onChange={(path, value) => setDraft((current) => updatePath(current, path, value))} />}
                 <div className="tool-settings-editor__actions">
                   <Button variant="secondary" iconLeft={RotateCcw} loading={saving} disabled={!canEditSelected} onClick={() => void resetSettings()}>Restaurar padrão</Button>
                   <Button iconLeft={Save} loading={saving} disabled={!canEditSelected} onClick={() => void saveSettings()}>Salvar configuração</Button>
