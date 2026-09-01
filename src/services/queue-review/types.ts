@@ -5,12 +5,19 @@ export type QueueReviewPullFilters = {
   site: QueueReviewPresenceFilter;
   instagram: QueueReviewPresenceFilter;
   branchIds: string[];
+  stateIds: string[];
   nameKeyword: string;
 };
 
 export type QueueReviewBranch = {
   id: string;
   name: string;
+};
+
+export type QueueReviewState = {
+  id: string;
+  name: string;
+  code: string;
 };
 
 export type QueueReviewResource = {

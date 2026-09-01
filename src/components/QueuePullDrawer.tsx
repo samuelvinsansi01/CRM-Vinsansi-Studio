@@ -10,6 +10,7 @@ import {
   type QueueReviewPullPreview,
   type QueueReviewPullResult,
   type QueueReviewResource,
+  type QueueReviewState,
 } from '../services/queue-review';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { toLocalDateInputValue } from '../utils/date';
@@ -53,9 +54,11 @@ export function QueuePullDrawer({
   const [siteFilter, setSiteFilter] = useState<QueueReviewPresenceFilter>('any');
   const [instagramFilter, setInstagramFilter] = useState<QueueReviewPresenceFilter>('any');
   const [branchIds, setBranchIds] = useState<string[]>([]);
+  const [stateIds, setStateIds] = useState<string[]>([]);
   const [nameKeyword, setNameKeyword] = useState('');
   const debouncedNameKeyword = useDebouncedValue(nameKeyword, 300);
   const [branches, setBranches] = useState<QueueReviewBranch[]>([]);
+  const [states, setStates] = useState<QueueReviewState[]>([]);
   const [resources, setResources] = useState<QueueReviewResource[]>([]);
   const [preview, setPreview] = useState<QueueReviewPullPreview | null>(null);
   const [loadingResources, setLoadingResources] = useState(false);
@@ -75,6 +78,7 @@ export function QueuePullDrawer({
     setSiteFilter('any');
     setInstagramFilter('any');
     setBranchIds([]);
+    setStateIds([]);
     setNameKeyword('');
     setPreview(null);
   }, [open, initialChannel, initialDate, initialResourceId]);
@@ -82,10 +86,14 @@ export function QueuePullDrawer({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void queueReviewService.branches()
-      .then((next) => { if (!cancelled) setBranches(next); })
+    void Promise.all([queueReviewService.branches(), queueReviewService.states()])
+      .then(([nextBranches, nextStates]) => {
+        if (cancelled) return;
+        setBranches(nextBranches);
+        setStates(nextStates);
+      })
       .catch((error) => {
-        if (!cancelled) errorRef.current('Não foi possível carregar os ramos', error instanceof Error ? error.message : 'Tente novamente.');
+        if (!cancelled) errorRef.current('Não foi possível carregar os filtros da puxada', error instanceof Error ? error.message : 'Tente novamente.');
       });
     return () => { cancelled = true; };
   }, [open]);
@@ -129,9 +137,10 @@ export function QueuePullDrawer({
       site: siteFilter,
       instagram: channel === 'Instagram' ? 'any' : instagramFilter,
       branchIds,
+      stateIds,
       nameKeyword: debouncedTrimmedNameKeyword,
     }),
-    [branchIds, channel, debouncedTrimmedNameKeyword, instagramFilter, siteFilter],
+    [branchIds, channel, debouncedTrimmedNameKeyword, instagramFilter, siteFilter, stateIds],
   );
 
   useEffect(() => {
@@ -160,6 +169,10 @@ export function QueuePullDrawer({
     };
   }, [channel, filters, keywordReady, open, resourceId, scheduledDate]);
 
+  const stateOptions = states.map((state) => ({
+    label: state.code ? `${state.name} (${state.code})` : state.name,
+    value: state.id,
+  }));
   const branchOptions = branches.map((branch) => ({ label: branch.name, value: branch.id }));
 
   const resourceOptions = resources.length
@@ -256,12 +269,25 @@ export function QueuePullDrawer({
           </div>
 
           <label className="drawer-field">
+            <span>Estados</span>
+            <MultiSelectField
+              options={stateOptions}
+              values={stateIds}
+              placeholder="Todos os estados"
+              searchPlaceholder="Buscar estado..."
+              selectedNoun="estados"
+              onChange={setStateIds}
+            />
+          </label>
+
+          <label className="drawer-field">
             <span>Ramos</span>
             <MultiSelectField
               options={branchOptions}
               values={branchIds}
               placeholder="Todos os ramos"
               searchPlaceholder="Buscar ramo..."
+              selectedNoun="ramos"
               onChange={setBranchIds}
             />
           </label>

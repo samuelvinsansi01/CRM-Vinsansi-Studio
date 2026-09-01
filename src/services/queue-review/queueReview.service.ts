@@ -2,7 +2,7 @@ import { getSupabaseClient } from '../../lib/supabase';
 import { eventBus } from '../../lib/events';
 import { queuePreparationService } from '../queue-preparation';
 import { whatsappValidationService, type PreparedWhatsAppValidationLead } from '../whatsapp-validation/whatsappValidation.service';
-import type { QueueReviewBatch, QueueReviewBranch, QueueReviewChannel, QueueReviewItem, QueueReviewPullFilters, QueueReviewPullPreview, QueueReviewPullResult, QueueReviewResource } from './types';
+import type { QueueReviewBatch, QueueReviewBranch, QueueReviewChannel, QueueReviewItem, QueueReviewPullFilters, QueueReviewPullPreview, QueueReviewPullResult, QueueReviewResource, QueueReviewState } from './types';
 import { normalizePageRequest, type PageRequest } from '../pagination/types';
 
 function rpcRow<T>(value: T | T[] | null): T | null {
@@ -43,6 +43,19 @@ async function branches(): Promise<QueueReviewBranch[]> {
   })).filter((branch) => branch.id && branch.name);
 }
 
+async function states(): Promise<QueueReviewState[]> {
+  const { data, error } = await getSupabaseClient()
+    .from('states')
+    .select('states_id,states_name,states_code')
+    .order('states_name', { ascending: true });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.states_id ?? ''),
+    name: String(row.states_name ?? ''),
+    code: String(row.states_code ?? ''),
+  })).filter((state) => state.id && state.name);
+}
+
 async function resources(channel: QueueReviewChannel, scheduledDate: string) {
   const { data, error } = await getSupabaseClient().rpc('list_queue_review_resources', {
     p_channel: channelKey(channel),
@@ -81,6 +94,7 @@ async function pullCapacity(channel: QueueReviewChannel, resourceKey: string, sc
     p_site_filter: filters.site,
     p_instagram_filter: filters.instagram,
     p_branch_ids: filters.branchIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0),
+    p_state_ids: filters.stateIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0),
     p_name_keyword: filters.nameKeyword.trim() || null,
   });
   if (error) throw new Error(error.message);
@@ -172,7 +186,7 @@ async function pullToCapacity(
   };
 }
 
-const DEFAULT_PULL_FILTERS: QueueReviewPullFilters = { site: 'any', instagram: 'any', branchIds: [], nameKeyword: '' };
+const DEFAULT_PULL_FILTERS: QueueReviewPullFilters = { site: 'any', instagram: 'any', branchIds: [], stateIds: [], nameKeyword: '' };
 
 async function preview(channel: QueueReviewChannel, scheduledDate: string, preferredResourceId: string, filters: QueueReviewPullFilters = DEFAULT_PULL_FILTERS): Promise<QueueReviewPullPreview> {
   if (!preferredResourceId) throw new Error(channel === 'WhatsApp' ? 'Selecione um chip.' : 'Selecione um perfil.');
@@ -183,6 +197,7 @@ async function preview(channel: QueueReviewChannel, scheduledDate: string, prefe
     p_site_filter: filters.site,
     p_instagram_filter: filters.instagram,
     p_branch_ids: filters.branchIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0),
+    p_state_ids: filters.stateIds.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0),
     p_name_keyword: filters.nameKeyword.trim() || null,
   });
   if (error) throw new Error(error.message);
@@ -331,4 +346,4 @@ async function invalidate(item: QueueReviewItem, channel: QueueReviewChannel) {
   eventBus.emit('import:changed', { source: 'move' });
 }
 
-export const queueReviewService = { branches, resources, preview, pull, list, listPage, count, approve, invalidate };
+export const queueReviewService = { branches, states, resources, preview, pull, list, listPage, count, approve, invalidate };

@@ -452,4 +452,30 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 }
 
+
+// R59 FIX 25: filtro multiestado precisa valer igualmente na prévia e na reserva real.
+{
+  const pullDrawer25 = read('src/components/QueuePullDrawer.tsx');
+  const queueReviewTypes25 = read('src/services/queue-review/types.ts');
+  const queueReviewService25 = read('src/services/queue-review/queueReview.service.ts');
+  const field25 = read('src/design-system/components/forms/Field.tsx');
+  const sql25 = read('APLICAR - CRM R59 BUILD FIX 25 - Filtro por estados na puxada.sql');
+  for (const token of ['Estados', 'Todos os estados', 'stateIds', 'queueReviewService.states()', 'selectedNoun="estados"']) {
+    if (!pullDrawer25.includes(token)) fail(`drawer_estados_incompleto:${token}`);
+  }
+  if (!queueReviewTypes25.includes('stateIds: string[];')) fail('tipo_filtro_estados_ausente');
+  for (const token of [".from('states')", 'p_state_ids: filters.stateIds']) {
+    if (!queueReviewService25.includes(token)) fail(`servico_estados_incompleto:${token}`);
+  }
+  if ((queueReviewService25.match(/p_state_ids: filters\.stateIds/g) ?? []).length < 2) fail('servico_estados_preview_pull_divergente');
+  for (const token of ['selectedNoun', '${values.length} ${selectedNoun} selecionados']) {
+    if (!field25.includes(token)) fail(`multiselect_generico_incompleto:${token}`);
+  }
+  for (const token of ['p_state_ids bigint[] DEFAULT NULL', "v_state_ids bigint[]:=coalesce(p_state_ids,'{}'::bigint[])", 'l.states_id=ANY(v_state_ids)', "'stateIds',to_jsonb(v_state_ids)"]) {
+    if (!sql25.includes(token)) fail(`sql_estados_incompleto:${token}`);
+  }
+  const statePredicates = (sql25.match(/l\.states_id=ANY\(v_state_ids\)/g) || []).length;
+  if (statePredicates < 4) fail(`sql_estados_preview_pull_divergente:${statePredicates}`);
+}
+
 console.log('CRM R59 final contract + homologacao: OK');

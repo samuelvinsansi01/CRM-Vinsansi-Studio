@@ -252,6 +252,7 @@ export function MultiSelectField({
   placeholder = 'Todos',
   searchable = true,
   searchPlaceholder = 'Buscar...',
+  selectedNoun = 'itens',
   className = '',
 }: {
   options: SelectOption[];
@@ -260,6 +261,7 @@ export function MultiSelectField({
   placeholder?: string;
   searchable?: boolean;
   searchPlaceholder?: string;
+  selectedNoun?: string;
   className?: string;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -284,8 +286,8 @@ export function MultiSelectField({
     if (!values.length) return placeholder;
     const labels = values.map((value) => options.find((option) => option.value === value)?.label).filter(Boolean) as string[];
     if (labels.length <= 2) return labels.join(', ') || placeholder;
-    return `${values.length} ramos selecionados`;
-  }, [options, placeholder, values]);
+    return `${values.length} ${selectedNoun} selecionados`;
+  }, [options, placeholder, selectedNoun, values]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent | TouchEvent) {
@@ -356,7 +358,7 @@ export function MultiSelectField({
               {selectedSet.has(option.value) ? <Check size={14} strokeWidth={1.8} /> : null}
             </button>
           )) : <div className="select-field__empty">Nenhum resultado encontrado.</div>}
-          {values.length ? <div className="multi-select-field__footer">{values.length} ramo(s) selecionado(s)</div> : null}
+          {values.length ? <div className="multi-select-field__footer">{values.length} {selectedNoun} selecionado(s)</div> : null}
         </div>
       ) : null}
     </div>
