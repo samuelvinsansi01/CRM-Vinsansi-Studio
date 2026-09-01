@@ -561,4 +561,22 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   if (transition28.includes('loadItems(')) fail('fix28_transition_ainda_reconstroi_fila');
 }
 
+
+// R59 BUILD FIX 29: o loader dinâmico do Supabase não pode fazer cast direto
+// de GenericStringError[] para RecordValue[]; deve fazer narrowing em runtime.
+{
+  const instagramExtension29 = read('server/routes/instagram/extension.ts');
+  for (const token of [
+    'R59 BUILD FIX 29',
+    'const data: unknown = response.data;',
+    'if (!Array.isArray(data)) return [];',
+    'data.filter((row): row is RecordValue',
+  ]) {
+    if (!instagramExtension29.includes(token)) fail(`fix29_instagram_dynamic_loader_typing_incompleto:${token}`);
+  }
+  if (instagramExtension29.includes('return (response.data ?? []) as RecordValue[];')) {
+    fail('fix29_cast_direto_generic_string_error_reintroduzido');
+  }
+}
+
 console.log('CRM R59 final contract + homologacao: OK');

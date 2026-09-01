@@ -223,11 +223,20 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
   const items = [...itemById.values()];
 
   const unique = (key: string) => Array.from(new Set(items.map((row) => Number(row[key])).filter(Number.isSafeInteger)));
-  const load = async (table: string, key: string, values: number[], select = '*') => {
-    if (!values.length) return [] as RecordValue[];
+  // R59 BUILD FIX 29: tabelas/selects dinâmicos do Supabase precisam de narrowing
+  // explícito para não gerar GenericStringError[] no tsc da Vercel.
+  const load = async (table: string, key: string, values: number[], select = '*'): Promise<RecordValue[]> => {
+    if (!values.length) return [];
     const response = await client.from(table).select(select).in(key, values);
     if (response.error) throw new Error(response.error.message);
-    return (response.data ?? []) as RecordValue[];
+
+    // Com nome de tabela/select dinâmicos, o SDK do Supabase não consegue
+    // inferir o schema e tipa `data` como GenericStringError[]. Não devemos
+    // fingir compatibilidade estrutural com RecordValue; validamos o formato
+    // recebido em runtime e só então devolvemos objetos de linha.
+    const data: unknown = response.data;
+    if (!Array.isArray(data)) return [];
+    return data.filter((row): row is RecordValue => Boolean(row && typeof row === 'object' && !Array.isArray(row)));
   };
 
   const [leads, templates, progressRows, statusesResponse] = await Promise.all([
