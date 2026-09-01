@@ -139,7 +139,7 @@ for (const token of [
 if (instagramQueueHook.includes("leads: batch.leads.filter((candidate) => candidate.id !== lead.id)")) fail('instagram_ainda_compacta_apenas_a_pagina_local');
 const instagramExtensionOrder = read('server/routes/instagram/extension.ts');
 if (instagramExtensionOrder.includes('queueOrder')) fail('instagram_ainda_prioriza_fila_de_origem_na_ordem');
-for (const token of [".order('queue_items_position').order('queue_items_id')", 'Number(a.queue_items_position ?? 0) - Number(b.queue_items_position ?? 0)', 'Number(a.queue_items_id ?? 0) - Number(b.queue_items_id ?? 0)']) {
+for (const token of [".order('queue_items_position')", ".order('queue_items_id')", 'Number(a.queue_items_position ?? 0) - Number(b.queue_items_position ?? 0)', 'Number(a.queue_items_id ?? 0) - Number(b.queue_items_id ?? 0)']) {
   if (!instagramExtensionOrder.includes(token)) fail(`instagram_ordem_canonica_ausente:${token}`);
 }
 
@@ -514,7 +514,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     'instagramBatchSize(client: SupabaseClient, scope: TokenScope)',
     "from('levels')",
     'levels_daily_limit,levels_queues,status_id',
-    'utcDate(row.queue_items_scheduled_at ?? queueMap.get(String(row.queues_id))?.queues_scheduled_at) === scheduledDate',
+    'scheduled_date: utcDate(item.queue_items_scheduled_at ?? queue.queues_scheduled_at)',
   ]) {
     if (!instagramExtension27.includes(token)) fail(`fix27_instagram_fila_canonica_incompleta:${token}`);
   }
@@ -529,6 +529,36 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   ]) {
     if (!toolsPage27.includes(token)) fail(`fix27_editor_instagram_incompleto:${token}`);
   }
+}
+
+
+// R59 BUILD FIX 28: fila Instagram é data-scoped no banco, transition não
+// reconstrói a fila inteira e retry do claim do mesmo executor é idempotente.
+{
+  const instagramExtension28 = read('server/routes/instagram/extension.ts');
+  for (const token of [
+    'R59 BUILD FIX 28',
+    'function utcDayRange(',
+    "let queuesQuery = client.from('queues')",
+    "if (range) queuesQuery = queuesQuery",
+    ".eq('users_id', scope.legacyScopeUsersId)",
+    ".gte('queue_items_scheduled_at', range.start)",
+    ".lt('queue_items_scheduled_at', range.end)",
+    ".is('queue_items_scheduled_at', null)",
+    "claimed_by,organization_tool_installations_id",
+    'const sameConsumer = text(itemBeforeClaim.claimed_by) === text(consumerId)',
+    'const sameInstallation = text(itemBeforeClaim.claim_installation_id) === text(scope.installationId)',
+    "select('queue_items_id,step,claim_token,metadata,attempts,error_message,last_heartbeat_at,finished_at,instagram_queue_progress_updated_at')",
+    "iteration_status: 'resumed_existing_claim'",
+    'server_elapsed_ms: elapsed',
+    '[instagram-extension] slow action=',
+  ]) {
+    if (!instagramExtension28.includes(token)) fail(`fix28_instagram_timeout_hardening_incompleto:${token}`);
+  }
+  const transitionStart = instagramExtension28.indexOf('async function transition(');
+  const transitionEnd = instagramExtension28.indexOf('export default async function handler', transitionStart);
+  const transition28 = instagramExtension28.slice(transitionStart, transitionEnd);
+  if (transition28.includes('loadItems(')) fail('fix28_transition_ainda_reconstroi_fila');
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

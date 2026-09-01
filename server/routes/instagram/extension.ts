@@ -53,6 +53,17 @@ function utcDate(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? raw.slice(0, 10) : parsed.toISOString().slice(0, 10);
 }
 
+// R59 BUILD FIX 28: a fila operacional deve consultar o dia pelo índice de
+// queue_items_scheduled_at, sem varrer todo o histórico do perfil a cada poll.
+function utcDayRange(value: string) {
+  const raw = text(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const start = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(start.getTime())) return null;
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 function displayStatus(queueStatus: QueueStatus, progressStepValue: unknown) {
   const step = text(progressStepValue);
   if (queueStatus === 'sent') return 'sent';
@@ -139,41 +150,106 @@ async function instagramBatchSize(client: SupabaseClient, scope: TokenScope) {
 
 async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDate?: string) {
   const social = await socialForScope(client, scope);
+  const socialId = Number(social.socials_id);
   const [channelId, blockSize] = await Promise.all([instagramChannelId(client), instagramBatchSize(client, scope)]);
-  const queuesResponse = await client.from('queues').select('*').eq('organizations_id', scope.organizationId).eq('channels_id', channelId);
+
+  // Queues são necessárias apenas para o fallback legado em que
+  // queue_items_scheduled_at ainda é nulo. Quando há data operacional, a própria
+  // consulta das queues também fica limitada ao dia para não crescer com o histórico.
+  const range = scheduledDate ? utcDayRange(scheduledDate) : null;
+  let queuesQuery = client.from('queues')
+    .select('queues_id,queues_scheduled_at')
+    .eq('organizations_id', scope.organizationId)
+    .eq('users_id', scope.legacyScopeUsersId)
+    .eq('channels_id', channelId);
+  if (range) queuesQuery = queuesQuery
+    .gte('queues_scheduled_at', range.start)
+    .lt('queues_scheduled_at', range.end);
+  const queuesResponse = await queuesQuery;
   if (queuesResponse.error) throw new Error(queuesResponse.error.message);
   const queues = (queuesResponse.data ?? []) as RecordValue[];
-  const queueIds = queues.map((row) => Number(row.queues_id));
-  if (!queueIds.length) return [];
+  const queueIds = queues.map((row) => Number(row.queues_id)).filter(Number.isSafeInteger);
   const queueMap = new Map(queues.map((row) => [String(row.queues_id), row]));
-  const itemsResponse = await client.from('queue_items').select('*').eq('organizations_id', scope.organizationId).eq('socials_id', Number(social.socials_id)).in('queues_id', queueIds).order('queue_items_position').order('queue_items_id');
-  if (itemsResponse.error) throw new Error(itemsResponse.error.message);
-  const allItems = (itemsResponse.data ?? []) as RecordValue[];
-  const items = scheduledDate
-    ? allItems.filter((row) => utcDate(row.queue_items_scheduled_at ?? queueMap.get(String(row.queues_id))?.queues_scheduled_at) === scheduledDate)
-    : allItems;
+
+  let allItems: RecordValue[] = [];
+
+  if (range) {
+    const scheduledQuery = client.from('queue_items')
+      .select('*')
+      .eq('organizations_id', scope.organizationId)
+      .eq('users_id', scope.legacyScopeUsersId)
+      .eq('socials_id', socialId)
+      .gte('queue_items_scheduled_at', range.start)
+      .lt('queue_items_scheduled_at', range.end)
+      .order('queue_items_position')
+      .order('queue_items_id');
+
+    const legacyQuery = queueIds.length
+      ? client.from('queue_items')
+          .select('*')
+          .eq('organizations_id', scope.organizationId)
+          .eq('users_id', scope.legacyScopeUsersId)
+          .eq('socials_id', socialId)
+          .is('queue_items_scheduled_at', null)
+          .in('queues_id', queueIds)
+          .order('queue_items_position')
+          .order('queue_items_id')
+      : Promise.resolve({ data: [], error: null } as { data: RecordValue[]; error: null });
+
+    const [scheduledResponse, legacyResponse] = await Promise.all([scheduledQuery, legacyQuery]);
+    if (scheduledResponse.error) throw new Error(scheduledResponse.error.message);
+    if (legacyResponse.error) throw new Error(legacyResponse.error.message);
+
+    const legacyForDay = ((legacyResponse.data ?? []) as RecordValue[])
+      .filter((row) => utcDate(queueMap.get(String(row.queues_id))?.queues_scheduled_at) === scheduledDate);
+    allItems = [...((scheduledResponse.data ?? []) as RecordValue[]), ...legacyForDay];
+  } else {
+    if (!queueIds.length) return [];
+    const itemsResponse = await client.from('queue_items')
+      .select('*')
+      .eq('organizations_id', scope.organizationId)
+      .eq('users_id', scope.legacyScopeUsersId)
+      .eq('socials_id', socialId)
+      .in('queues_id', queueIds)
+      .order('queue_items_position')
+      .order('queue_items_id');
+    if (itemsResponse.error) throw new Error(itemsResponse.error.message);
+    allItems = (itemsResponse.data ?? []) as RecordValue[];
+  }
+
+  // Deduplica o raro caso legado em que um item pudesse aparecer nas duas fontes.
+  const itemById = new Map<string, RecordValue>();
+  for (const row of allItems) itemById.set(String(row.queue_items_id), row);
+  const items = [...itemById.values()];
+
   const unique = (key: string) => Array.from(new Set(items.map((row) => Number(row[key])).filter(Number.isSafeInteger)));
-  const load = async (table: string, key: string, values: number[]) => { if (!values.length) return [] as RecordValue[]; const response = await client.from(table).select('*').in(key, values); if (response.error) throw new Error(response.error.message); return (response.data ?? []) as RecordValue[]; };
-  const [leads, templates, progressRows] = await Promise.all<RecordValue[]>([
-    load('leads','leads_id',unique('leads_id')),
-    load('templates','templates_id',unique('templates_id')),
-    load('instagram_queue_progress','queue_items_id',items.map((row) => Number(row.queue_items_id))),
+  const load = async (table: string, key: string, values: number[], select = '*') => {
+    if (!values.length) return [] as RecordValue[];
+    const response = await client.from(table).select(select).in(key, values);
+    if (response.error) throw new Error(response.error.message);
+    return (response.data ?? []) as RecordValue[];
+  };
+
+  const [leads, templates, progressRows, statusesResponse] = await Promise.all([
+    load('leads', 'leads_id', unique('leads_id'), 'leads_id,leads_name,leads_phone,leads_instagram,leads_website,branches_id'),
+    load('templates', 'templates_id', unique('templates_id'), 'templates_id,templates_message_1,templates_message_2,templates_message_3,templates_message_4'),
+    load('instagram_queue_progress', 'queue_items_id', items.map((row) => Number(row.queue_items_id)), 'queue_items_id,step,claim_token,metadata,attempts,error_message,last_heartbeat_at,finished_at,claimed_by,organization_tool_installations_id'),
+    client.from('status').select('status_id,status_name'),
   ]);
-  const statusesResponse = await client.from('status').select('status_id,status_name');
   if (statusesResponse.error) throw new Error(statusesResponse.error.message);
+
   const branchIds = Array.from(new Set(leads.map((row: RecordValue) => Number(row.branches_id)).filter(Number.isSafeInteger)));
-  const branches: RecordValue[] = await load('branches','branches_id',branchIds);
+  const branches: RecordValue[] = await load('branches', 'branches_id', branchIds, 'branches_id,branches_name');
   const leadMap = new Map<string, RecordValue>(leads.map((row: RecordValue) => [String(row.leads_id), row]));
   const templateMap = new Map<string, RecordValue>(templates.map((row: RecordValue) => [String(row.templates_id), row]));
   const branchMap = new Map<string, RecordValue>(branches.map((row: RecordValue) => [String(row.branches_id), row]));
   const statusMap = new Map<string, string>(((statusesResponse.data ?? []) as RecordValue[]).map((row: RecordValue) => [String(row.status_id), String(row.status_name)]));
   const activeItems = items.filter((item) => !['cancelado', 'cancelled', 'canceled'].includes(normalize(statusMap.get(String(item.status_id)) ?? item.status_id)));
-  // A Fila final é a fonte canônica da ordem operacional. O lote/fila de origem
-  // permanece apenas como histórico e nunca precede a posição do item.
   const orderedItems = [...activeItems].sort((a, b) =>
     Number(a.queue_items_position ?? 0) - Number(b.queue_items_position ?? 0)
     || Number(a.queue_items_id ?? 0) - Number(b.queue_items_id ?? 0));
   const progressMap = new Map(progressRows.map((row) => [String(row.queue_items_id), row]));
+
   return orderedItems.map((item, dailyIndex) => {
     const lead = leadMap.get(String(item.leads_id)) ?? {};
     const template = templateMap.get(String(item.templates_id)) ?? {};
@@ -190,8 +266,6 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
     const statusName = statusMap.get(String(item.status_id)) ?? item.status_id;
     const queueStatus = semanticStatus(statusName);
     const progressStep = text(progress.step);
-    // Recovery devolve a fila para pendente sem apagar o checkpoint. O status da
-    // fila mantém o item reclamável; resume_step informa de onde continuar.
     const status = queueStatus === 'queued' ? 'queued' : (progressStep || queueStatus);
     const instagramRecipient = text(snapshotRecipient.instagram ?? snapshotLead.instagram ?? lead.leads_instagram);
     const instagramUsername = normalizeInstagramUsername(instagramRecipient);
@@ -209,6 +283,8 @@ async function loadItems(client: SupabaseClient, scope: TokenScope, scheduledDat
       status,
       display_status: displayStatus(queueStatus, progressStep),
       claim_token: text(progress.claim_token),
+      claimed_by: text(progress.claimed_by),
+      claim_installation_id: text(progress.organization_tool_installations_id),
       resume_step: text(progress.step) || 'claimed',
       progress_metadata: bodyRecord(progress.metadata),
       progress_attempts: Number(progress.attempts ?? 0),
@@ -243,6 +319,24 @@ async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, 
   const itemBeforeClaim = (await loadItems(client, scope, scheduledDate)).find((row) => row.id === id) ?? null;
   if (!itemBeforeClaim) return null;
   if (!itemBeforeClaim.instagram_username) throw new Error('invalid_instagram_recipient_contract');
+
+  // R59 BUILD FIX 28: retry do mesmo claim é idempotente para o mesmo executor.
+  // Se a primeira resposta se perdeu depois do commit, devolvemos o token já
+  // persistido em vez de criar novo claim ou deixar o item preso até recovery.
+  if (itemBeforeClaim.claim_token) {
+    const sameConsumer = text(itemBeforeClaim.claimed_by) === text(consumerId);
+    const sameInstallation = text(itemBeforeClaim.claim_installation_id) === text(scope.installationId);
+    if (sameConsumer && sameInstallation) {
+      return {
+        ...itemBeforeClaim,
+        status: 'claimed',
+        resume_step: text(itemBeforeClaim.resume_step) || 'claimed',
+        claim_token: text(itemBeforeClaim.claim_token),
+      };
+    }
+    return null;
+  }
+
   const social = await socialForScope(client, scope);
   const response = await client.rpc('instagram_claim_queue_item_v2', {
     p_organizations_id: scope.organizationId,
@@ -258,13 +352,12 @@ async function claimItem(client: SupabaseClient, scope: TokenScope, id: string, 
   }
   const claimed = Array.isArray(response.data) ? response.data[0] : response.data;
   await client.from('queue_items').update({dispatched_by_member_id:scope.memberId}).eq('organizations_id',scope.organizationId).eq('queue_items_id',Number(id)).is('dispatched_by_member_id',null);
-  const item = (await loadItems(client, scope, scheduledDate)).find((row) => row.id === id) ?? null;
-  return item ? {
-    ...item,
+  return {
+    ...itemBeforeClaim,
     claim_token: text((claimed as RecordValue)?.claim_token),
     status: 'claimed',
-    resume_step: text((claimed as RecordValue)?.step ?? item.resume_step) || 'claimed',
-  } : null;
+    resume_step: text((claimed as RecordValue)?.step ?? itemBeforeClaim.resume_step) || 'claimed',
+  };
 }
 
 async function transition(client: SupabaseClient, scope: TokenScope, body: RecordValue) {
@@ -281,27 +374,71 @@ async function transition(client: SupabaseClient, scope: TokenScope, body: Recor
     p_metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : {},
   });
   if (response.error) throw new Error(response.error.message);
-  return (await loadItems(client, scope, text(body.scheduled_date))).find((row) => row.id === id) ?? null;
+
+  // R59 BUILD FIX 28: a transição não precisa reconstruir a fila inteira.
+  // O Motor já possui o payload congelado do item; após o RPC ele precisa apenas
+  // do checkpoint atualizado. Isso remove várias consultas por mensagem/etapa.
+  const progressResponse = await client.from('instagram_queue_progress')
+    .select('queue_items_id,step,claim_token,metadata,attempts,error_message,last_heartbeat_at,finished_at,instagram_queue_progress_updated_at')
+    .eq('organizations_id', scope.organizationId)
+    .eq('queue_items_id', Number(id))
+    .maybeSingle();
+  if (progressResponse.error) throw new Error(progressResponse.error.message);
+  const progress = (progressResponse.data ?? {}) as RecordValue;
+  return {
+    id,
+    queue_item_id: id,
+    status: text(progress.step) || step,
+    claim_token: text(progress.claim_token) || claimToken,
+    resume_step: text(progress.step) || step,
+    progress_metadata: bodyRecord(progress.metadata),
+    progress_attempts: Number(progress.attempts ?? 0),
+    progress_error: text(progress.error_message),
+    last_heartbeat_at: text(progress.last_heartbeat_at),
+    finished_at: text(progress.finished_at),
+    updated_at: text(progress.instagram_queue_progress_updated_at),
+  };
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method === 'OPTIONS') { setCors(req, res); return res.status(204).end(); }
-  if (req.method !== 'POST') return send(req, res, 405, { ok: false, error: 'method_not_allowed' });
+  const startedAt = Date.now();
+  let requestId = '';
+  let action = 'request';
+  const reply = (status: number, payload: RecordValue) => {
+    const elapsed = Date.now() - startedAt;
+    const responsePayload = { ...payload, request_id: requestId || text(payload.request_id), server_elapsed_ms: elapsed };
+    if (elapsed >= 5_000) console.warn(`[instagram-extension] slow action=${action} elapsed=${elapsed}ms request_id=${requestId || '-'} status=${status}`);
+    return send(req, res, status, responsePayload);
+  };
+  if (req.method !== 'POST') return reply(405, { ok: false, error: 'method_not_allowed' });
   try {
     const scope = await tokenScope(req);
     const body = bodyRecord(req.body);
-    const action = text(body.action);
-    const requestId = text(body.request_id);
+    action = text(body.action) || 'request';
+    requestId = text(body.request_id);
     if (normalizeInstagramUsername(body.profile_username) !== scope.profile) throw new Error('profile_scope_mismatch');
     const client = scope.client;
     const consumerId = text(body.consumer_id) || text(body.browser_id) || 'instagram-extension';
     if (action === 'queue') await client.rpc('instagram_recover_stale_items_v2', { p_organizations_id: scope.organizationId, p_stale_before: new Date(Date.now() - 15 * 60 * 1000).toISOString() });
     if (action === 'queue') {
       const items = await loadItems(client, scope, text(body.scheduled_date));
-      return send(req, res, 200, { ok: true, request_id: requestId, items, summary: queueSummary(items) });
+      return reply(200, { ok: true, items, summary: queueSummary(items) });
     }
     if (action === 'claim_next') {
       const items = await loadItems(client, scope, text(body.scheduled_date));
+      const ownedClaim = items.find((item) =>
+        Boolean(item.claim_token)
+        && text(item.claimed_by) === consumerId
+        && text(item.claim_installation_id) === text(scope.installationId));
+      if (ownedClaim) {
+        return reply(200, {
+          ok: true,
+          item: ownedClaim,
+          iteration_status: 'resumed_existing_claim',
+          skipped_invalid_recipient: [],
+        });
+      }
       const block = Number(body.block_number ?? 0);
       const candidates = items.filter((item) => item.status === 'queued' && (!block || item.block_number === block));
       const skippedInvalidRecipient = candidates
@@ -323,20 +460,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           : skippedInvalidRecipient.length
             ? 'invalid_instagram_recipients_only'
             : 'empty';
-      return send(req, res, 200, {
+      return reply(200, {
         ok: true,
-        request_id: requestId,
         item: claimedItem,
         iteration_status: iterationStatus,
         skipped_invalid_recipient: skippedInvalidRecipient,
       });
     }
-    if (action === 'claim_item') return send(req, res, 200, { ok: true, request_id: requestId, item: await claimItem(client, scope, text(body.id), consumerId, text(body.scheduled_date)) });
-    if (action === 'transition') return send(req, res, 200, { ok: true, request_id: requestId, item: await transition(client, scope, body) });
-    return send(req, res, 400, { ok: false, request_id: requestId, error: 'action_invalid' });
+    if (action === 'claim_item') return reply(200, { ok: true, item: await claimItem(client, scope, text(body.id), consumerId, text(body.scheduled_date)) });
+    if (action === 'transition') return reply(200, { ok: true, item: await transition(client, scope, body) });
+    return reply(400, { ok: false, error: 'action_invalid' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'instagram_extension_error';
     const status = message === 'invalid_instagram_recipient_contract' ? 422 : executorStatus(error);
-    return send(req, res, status, { ok: false, error: message, message });
+    const elapsed = Date.now() - startedAt;
+    console.error(`[instagram-extension] error action=${action} elapsed=${elapsed}ms request_id=${requestId || '-'} status=${status} detail=${message}`);
+    return reply(status, { ok: false, error: message, message });
   }
 }
