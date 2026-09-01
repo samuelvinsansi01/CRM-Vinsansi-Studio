@@ -314,11 +314,16 @@ async function captureBatchDecisions(
   }
 
   const nowDate = new Date(); const now = nowDate.toISOString(); const nowMs = nowDate.getTime();
-  const activeReview = await client.from('maps_search_candidates')
+  let activeReviewQuery = client.from('maps_search_candidates')
     .select('maps_search_candidates_id,maps_search_executions_id,dedupe_key,effective_phone,effective_whatsapp,effective_instagram,effective_website,maps_url,review_state,review_expires_at,execution:maps_search_executions_id(maps_search_executions_id,status,last_heartbeat_at,updated_at,created_at,extension_version)')
     .eq('organizations_id', organizationId)
     .in('review_state', ['pending','rejected','invalid'])
     .gt('review_expires_at', now);
+  // A revisão da execução corrente nunca bloqueia a si própria: duplicidade
+  // interna já é tratada pelo dedupe_key da própria execução. Excluí-la aqui
+  // evita reler centenas de cards da Revisão a cada candidato confirmado.
+  if (text(currentExecutionId)) activeReviewQuery = activeReviewQuery.neq('maps_search_executions_id', text(currentExecutionId));
+  const activeReview = await activeReviewQuery;
   if (activeReview.error) throw new Error(`maps_review_batch_failed:${activeReview.error.message}`);
 
   const activeRows: Row[] = [];
@@ -578,11 +583,78 @@ async function nextCoverage(client: ReturnType<typeof import('../../maps/shared.
     return { blocked: false, coverage: null };
   }
 
-  const cities = await client.from('cities').select('cities_id,cities_name,states_id').eq('states_id', Number(execution.states_id)).order('cities_name');
+  // R59 BUILD FIX 26: no modo automático, carregamos a cobertura atual e o
+  // histórico do estado em lote. A implementação anterior chamava
+  // nextCoverageForCity() para cada cidade e fazia até duas consultas por
+  // cidade, criando um N+1 que ficava progressivamente mais lento conforme a
+  // captura avançava ou o histórico crescia.
+  const [cities, currentCoverageRows, historicalCoverageRows] = await Promise.all([
+    client.from('cities')
+      .select('cities_id,cities_name,states_id')
+      .eq('states_id', Number(execution.states_id))
+      .order('cities_name'),
+    client.from('maps_search_coverage')
+      .select('*')
+      .eq('maps_search_executions_id', execution.maps_search_executions_id),
+    client.from('maps_search_coverage')
+      .select('cities_id,normalized_search_term,status')
+      .eq('users_id', Number(execution.users_id))
+      .eq('branches_id', Number(execution.branches_id))
+      .eq('states_id', Number(execution.states_id))
+      .in('status', ['completed','exhausted']),
+  ]);
   if (cities.error) throw new Error(cities.error.message);
+  if (currentCoverageRows.error) throw new Error(`maps_coverage_query_failed:${currentCoverageRows.error.message}`);
+  if (historicalCoverageRows.error) throw new Error(historicalCoverageRows.error.message);
+
+  const currentByCity = new Map<number, Map<string, Row>>();
+  for (const row of (currentCoverageRows.data ?? []) as Row[]) {
+    const cityId = Number(row.cities_id || 0);
+    const termKey = text(row.normalized_search_term);
+    if (!cityId || !termKey) continue;
+    let byTerm = currentByCity.get(cityId);
+    if (!byTerm) {
+      byTerm = new Map<string, Row>();
+      currentByCity.set(cityId, byTerm);
+    }
+    byTerm.set(termKey, row);
+  }
+
+  const historicalByCity = new Map<number, Set<string>>();
+  for (const row of (historicalCoverageRows.data ?? []) as Row[]) {
+    const cityId = Number(row.cities_id || 0);
+    const termKey = text(row.normalized_search_term);
+    if (!cityId || !termKey) continue;
+    let termsForCity = historicalByCity.get(cityId);
+    if (!termsForCity) {
+      termsForCity = new Set<string>();
+      historicalByCity.set(cityId, termsForCity);
+    }
+    termsForCity.add(termKey);
+  }
+
   for (const cityRow of cities.data ?? []) {
-    const next = await nextCoverageForCity(client, execution, { ...cityRow, ...state.data }, terms, true);
-    if (next.blocked || next.coverage) return next;
+    const cityId = Number(cityRow.cities_id);
+    const currentTerms = currentByCity.get(cityId) || new Map<string, Row>();
+    const historicalTerms = historicalByCity.get(cityId) || new Set<string>();
+
+    for (let index = 0; index < terms.length; index += 1) {
+      const term = text(terms[index]);
+      const key = normalize(term);
+      if (!key) continue;
+
+      const current = currentTerms.get(key);
+      if (current) {
+        if (text(current.status) === 'error') return { blocked: true, reason: 'coverage_error_requires_operator', coverage: current };
+        if (!TERMINAL_COVERAGE.has(text(current.status))) return { blocked: false, coverage: current };
+        continue;
+      }
+
+      if (historicalTerms.has(key)) continue;
+
+      const created = await createCoverageTerm(client, execution, { ...cityRow, ...state.data }, term, index + 1);
+      return { blocked: false, coverage: created };
+    }
   }
   return { blocked: false, coverage: null };
 }
@@ -853,10 +925,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           review_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           excluded_by_user: false,
           collected_at: text(raw.extractedAt) || new Date().toISOString(),
-        });
+        }).select('maps_search_candidates_id').single();
         if (inserted.error) throw new Error(`maps_candidate_create_failed:${inserted.error.message}`);
-        const createdCandidate = await client.from('maps_search_candidates').select('maps_search_candidates_id').eq('maps_search_executions_id', execution.maps_search_executions_id).eq('dedupe_key', dedupeKey).maybeSingle();
-        if (createdCandidate.data?.maps_search_candidates_id) candidateIds.push(text(createdCandidate.data.maps_search_candidates_id));
+        if (inserted.data?.maps_search_candidates_id) candidateIds.push(text(inserted.data.maps_search_candidates_id));
         if (bucket === 'whatsapp') allocationCounts.whatsapp += 1;
         if (bucket === 'instagram') allocationCounts.instagram += 1;
         accepted += 1;

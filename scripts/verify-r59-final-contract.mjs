@@ -478,4 +478,26 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   if (statePredicates < 4) fail(`sql_estados_preview_pull_divergente:${statePredicates}`);
 }
 
+
+// R59 BUILD FIX 26: modo Automático não pode fazer N+1 por cidade e o gate
+// não deve reler a própria Revisão corrente a cada candidato.
+{
+  const mapsExtension26 = read('server/routes/maps/extension.ts');
+  for (const token of [
+    'R59 BUILD FIX 26',
+    'const [cities, currentCoverageRows, historicalCoverageRows] = await Promise.all([',
+    "client.from('maps_search_coverage')",
+    "currentByCity",
+    "historicalByCity",
+    "activeReviewQuery = activeReviewQuery.neq('maps_search_executions_id', text(currentExecutionId))",
+    ".select('maps_search_candidates_id').single()",
+  ]) {
+    if (!mapsExtension26.includes(token)) fail(`fix26_maps_automatico_incompleto:${token}`);
+  }
+  const automaticTail = mapsExtension26.slice(mapsExtension26.indexOf('R59 BUILD FIX 26'));
+  if (/for \(const cityRow of cities\.data \?\? \[\]\) \{\s*const next = await nextCoverageForCity/.test(automaticTail)) {
+    fail('fix26_n_plus_one_automatico_ainda_presente');
+  }
+}
+
 console.log('CRM R59 final contract + homologacao: OK');
