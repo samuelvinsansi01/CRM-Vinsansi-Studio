@@ -259,7 +259,7 @@ if (pullSql.includes("'contractVersion','R58'")) fail('sql_puxada_filtrada_fix10
 
 const homolog = read(homologSql);
 for (const token of [
-  '60::bigint esperado',
+  '61::bigint esperado',
   'status_antigos_funcoes',
   'revisao_com_canal_invalido',
   'revisao_canal_divergente_batch',
@@ -577,6 +577,65 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   if (instagramExtension29.includes('return (response.data ?? []) as RecordValue[];')) {
     fail('fix29_cast_direto_generic_string_error_reintroduzido');
   }
+}
+
+// R59 FIX 30: central de notificações do CRM sem mensuração de DMs recebidas no Instagram.
+{
+  const header30 = read('src/design-system/layouts/Header.tsx');
+  const provider30 = read('src/providers/NotificationCenterProvider.tsx');
+  const repo30 = read('src/repositories/notifications/notifications.repository.ts');
+  const conversations30 = read('src/pages/ConversationsPage.tsx');
+  const queue30 = read('src/pages/QueuePage.tsx');
+  const sql30 = read('APLICAR - CRM R59 BUILD FIX 30 - Central de notificacoes.sql');
+
+  for (const token of ['useNotificationCenter', 'notification-center', 'notification__dot', 'Marcar todas como lidas', "notificationFilter === 'unread'"]) {
+    if (!header30.includes(token)) fail(`notificacoes_header_incompleto:${token}`);
+  }
+  if (!header30.includes("hasUnreadNotifications ? <span className=\"notification__dot\"")) fail('bolinha_notificacao_nao_condicional');
+  for (const token of ['5_000', 'inFlight', 'markCrmNotificationRead', 'markAllCrmNotificationsRead']) if (!provider30.includes(token)) fail(`notificacoes_provider_incompleto:${token}`);
+  for (const token of ["from('crm_notifications')", "rpc('mark_crm_notification_read'", "rpc('mark_all_crm_notifications_read'"]) if (!repo30.includes(token)) fail(`notificacoes_repositorio_incompleto:${token}`);
+  if (!conversations30.includes('crm:notification:conversation-target')) fail('notificacao_conversa_sem_deep_link');
+  if (!queue30.includes('crm:notification:queue-target')) fail('notificacao_fila_sem_deep_link');
+  for (const token of ['crm_notifications', 'crm_notify_inbound_whatsapp_message_trigger', 'crm_notify_whatsapp_runtime_status_trigger', 'ON public.instance_runtime_states', 'crm_notify_dispatch_error_trigger', "'whatsapp_message'", "'whatsapp_disconnected'", "'dispatch_error'", 'chips_phone', 'stage5_member_has_permission']) {
+    if (!sql30.includes(token)) fail(`sql_notificacoes_incompleto:${token}`);
+  }
+  if (/instagram.*inbound|inbound.*instagram/i.test(sql30)) fail('instagram_dm_recebida_indevidamente_mensurada');
+}
+
+
+// R59 BUILD FIX 30: central persistente de notificacoes do CRM.
+{
+  const notificationSqlPath = 'APLICAR - CRM R59 BUILD FIX 30 - Central de notificacoes.sql';
+  if (!exists(notificationSqlPath)) fail('sql_notificacoes_fix30_ausente');
+  const notificationSql = read(notificationSqlPath);
+  for (const token of [
+    'CREATE TABLE IF NOT EXISTS public.crm_notifications',
+    'crm_notifications_own_select',
+    'mark_crm_notification_read',
+    'mark_all_crm_notifications_read',
+    'crm_notify_inbound_whatsapp_message_trigger',
+    'crm_notify_whatsapp_runtime_status_trigger',
+    'ON public.instance_runtime_states',
+    'crm_notify_dispatch_error_trigger',
+    "'whatsapp_message'",
+    "'whatsapp_disconnected'",
+    "'dispatch_error'",
+    "v_channel:='instagram'",
+  ]) if (!notificationSql.includes(token)) fail(`notificacoes_fix30_incompleto:${token}`);
+  for (const forbiddenToken of [
+    'instagram_message', 'instagram_dm', 'instagram_reply',
+    'CREATE TRIGGER crm_notify_whatsapp_instance_status_trigger',
+  ]) if (notificationSql.includes(forbiddenToken)) fail(`notificacoes_fix30_regressao:${forbiddenToken}`);
+
+  const notificationProvider = read('src/providers/NotificationCenterProvider.tsx');
+  for (const token of ['items.some((item) => !item.readAt)', '5_000', 'markAllRead', 'visibilityState']) {
+    if (!notificationProvider.includes(token)) fail(`notification_provider_incompleto:${token}`);
+  }
+  const notificationHeader = read('src/design-system/layouts/Header.tsx');
+  for (const token of ['notification__dot', 'Todas', 'Não lidas', 'Marcar todas como lidas', "target === 'conversations'"]) {
+    if (!notificationHeader.includes(token)) fail(`notification_header_incompleto:${token}`);
+  }
+  if (/notification[^\n]{0,120}(count|badge|9\+)/i.test(notificationHeader)) fail('notification_header_contador_numerico_regrediu');
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

@@ -21,3 +21,5 @@ export * from './instagram-queue';
 export * from './base';
 export * from './settings';
 export * from './lead-cycle';
+
+export * from './notifications';

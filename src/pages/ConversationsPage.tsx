@@ -32,6 +32,21 @@ function displayContact(conversation: Conversation) {
   return conversation.contactName || conversation.phone || conversation.remoteJid || 'Contato sem nome';
 }
 
+
+function readNotificationConversationTarget() {
+  const raw = window.sessionStorage.getItem('crm:notification:conversation-target');
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    const conversationId = String(value.conversationId ?? '').trim();
+    const chipId = String(value.chipId ?? '').trim();
+    return conversationId ? { conversationId, chipId } : null;
+  } catch {
+    window.sessionStorage.removeItem('crm:notification:conversation-target');
+    return null;
+  }
+}
+
 function MessageStatus({ status }: { status: ConversationMessage['status'] }) {
   if (status === 'read') return <CheckCheck size={14} aria-label="Lida" />;
   if (status === 'delivered') return <CheckCheck size={14} aria-label="Entregue" />;
@@ -57,6 +72,7 @@ export function ConversationsPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const threadRef = useRef<HTMLDivElement>(null);
+  const notificationTargetRef = useRef(readNotificationConversationTarget());
 
   const selectedConversation = conversations.find((item) => item.id === selectedConversationId) ?? null;
   const visibleConversations = useMemo(() => {
@@ -70,7 +86,11 @@ export function ConversationsPage() {
     const [next, unread] = await Promise.all([listChatChips(), listConversationUnreadCounts()]);
     setChips(next);
     setUnreadByChip(unread);
-    setSelectedChipId((current) => current && next.some((chip) => chip.id === current) ? current : next[0]?.id ?? null);
+    setSelectedChipId((current) => {
+      const targetChipId = notificationTargetRef.current?.chipId;
+      if (targetChipId && next.some((chip) => chip.id === targetChipId)) return targetChipId;
+      return current && next.some((chip) => chip.id === current) ? current : next[0]?.id ?? null;
+    });
   }, []);
 
   const loadConversations = useCallback(async (quiet = false) => {
@@ -78,7 +98,15 @@ export function ConversationsPage() {
     try {
       const next = await listConversations(selectedChipId, includeArchived);
       setConversations(next);
-      setSelectedConversationId((current) => current && next.some((conversation) => conversation.id === current) ? current : next[0]?.id ?? null);
+      setSelectedConversationId((current) => {
+        const targetConversationId = notificationTargetRef.current?.conversationId;
+        if (targetConversationId && next.some((conversation) => conversation.id === targetConversationId)) {
+          notificationTargetRef.current = null;
+          window.sessionStorage.removeItem('crm:notification:conversation-target');
+          return targetConversationId;
+        }
+        return current && next.some((conversation) => conversation.id === current) ? current : next[0]?.id ?? null;
+      });
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar as conversas.');

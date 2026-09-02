@@ -5,3 +5,5 @@ export * from './NotificationProvider';
 export * from './UIProvider';
 
 export * from './OrganizationProvider';
+
+export * from './NotificationCenterProvider';
