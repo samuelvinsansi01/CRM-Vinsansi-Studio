@@ -259,7 +259,7 @@ if (pullSql.includes("'contractVersion','R58'")) fail('sql_puxada_filtrada_fix10
 
 const homolog = read(homologSql);
 for (const token of [
-  '61::bigint esperado',
+  '62::bigint esperado',
   'status_antigos_funcoes',
   'revisao_com_canal_invalido',
   'revisao_canal_divergente_batch',
@@ -369,9 +369,10 @@ for (const token of [
   }
   for (const token of ['MultiSelectField', 'branchIds', 'Ramos', 'Todos os ramos']) if (!pullDrawer19.includes(token)) fail(`drawer_ramos_incompleto:${token}`);
   for (const token of ["rpc('list_queue_review_branches_r59'", 'p_branch_ids: filters.branchIds']) if (!queueReviewService19.includes(token)) fail(`servico_ramos_incompleto:${token}`);
-  if (!header19.includes('ChevronRight')) fail('submenu_interno_sem_chevron_direita');
+  // FIX31 removeu submenus do header: navegação primária agora é direta e task-based.
+  if (!header19.includes('ChevronRight') && !registry19.includes("{ id: 'sends', label: 'Envios' }")) fail('navegacao_semantica_ausente');
   if (!componentsCss19.includes('left: calc(100% - var(--space-02));')) fail('submenu_interno_nao_abre_direita');
-  if ((registry19.match(/label: 'Filas'/g) ?? []).length < 2) fail('menus_disparos_nao_renomeados_para_filas');
+  if ((registry19.match(/label: 'Filas'/g) ?? []).length < 2 && !registry19.includes("{ id: 'sends', label: 'Envios' }")) fail('menu_operacional_envios_ausente');
   if (!dataTable19.includes(`<span className="sr-only">{actionsLabel ?? 'Ações'}</span>`)) fail('cabecalho_acoes_sem_rotulo_acessivel');
   if (dataTable19.includes('<th className="data-table__actions">Ações</th>')) fail('cabecalho_acoes_visivel');
   for (const token of ['actionColumnWidth', 'data-table__actions-list', 'getRowClassName']) if (!dataTable19.includes(token)) fail(`tabela_acoes_proporcionais_incompleta:${token}`);
@@ -636,6 +637,74 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     if (!notificationHeader.includes(token)) fail(`notification_header_incompleto:${token}`);
   }
   if (/notification[^\n]{0,120}(count|badge|9\+)/i.test(notificationHeader)) fail('notification_header_contador_numerico_regrediu');
+}
+
+
+// R59 BUILD FIX 31: IA task-based + Leads consolidados + Comercial estritamente manual.
+{
+  const sql31Path = 'APLICAR - CRM R59 BUILD FIX 31 - Estrutura CRM e Comercial.sql';
+  if (!exists(sql31Path)) fail('sql_estrutura_comercial_fix31_ausente');
+  const sql31 = read(sql31Path);
+  for (const token of [
+    'CREATE TABLE IF NOT EXISTS public.lead_commercial',
+    'lead_commercial_org_select',
+    'set_lead_commercial_stage_r59',
+    'list_leads_page_r59',
+    "'aguardando_resposta'",
+    "'aguardando_design'",
+    "'design_enviado'",
+    "'fechado'",
+    "'recusado'",
+    "coalesce(lc.commercial_stage, 'aguardando_resposta')",
+    "PERFORM public.require_organization_permission('leads.edit')",
+    "PERFORM public.require_organization_permission('leads.view')",
+  ]) if (!sql31.includes(token)) fail(`fix31_sql_comercial_incompleto:${token}`);
+  if (/conversation_messages|instagram_message|instagram_dm|instagram_reply/i.test(sql31)) fail('fix31_comercial_ligado_a_mensagens');
+  if (/CREATE\s+TRIGGER/i.test(sql31)) fail('fix31_comercial_nao_pode_ter_trigger_automatico');
+
+  const registry31 = read('src/pages/pageRegistry.ts');
+  for (const token of [
+    "{ id: 'dashboard', label: 'Dashboard' }",
+    "{ id: 'leads', label: 'Leads' }",
+    "{ id: 'commercial', label: 'Comercial' }",
+    "{ id: 'conversations', label: 'Conversas' }",
+    "{ id: 'sends', label: 'Envios' }",
+    'settingsPageIds',
+  ]) if (!registry31.includes(token)) fail(`fix31_navegacao_incompleta:${token}`);
+  const visibleNavBlock = registry31.slice(registry31.indexOf('export const navGroups'), registry31.indexOf('export const pageTitles'));
+  for (const forbidden of ['Importação', 'Pesquisas Google Maps', 'Remetentes', 'Organização', 'Configurações']) {
+    if (visibleNavBlock.includes(forbidden)) fail(`fix31_menu_primario_tecnico:${forbidden}`);
+  }
+
+  const header31 = read('src/design-system/layouts/Header.tsx');
+  for (const token of ['icon={Settings}', 'label="Configurações"', "navigate('settings')", "navigate('dashboard')"]) {
+    if (!header31.includes(token)) fail(`fix31_header_incompleto:${token}`);
+  }
+
+  const leads31 = read('src/pages/LeadsPage.tsx');
+  for (const token of ['title="Leads"', 'Inserir lead', 'setInsertOpen(true)', 'createFromImport', 'commercialStage']) {
+    if (!leads31.includes(token)) fail(`fix31_leads_incompleto:${token}`);
+  }
+  const commercial31 = read('src/pages/CommercialPage.tsx');
+  for (const token of ['title="Comercial"', 'Aguardando resposta', 'Aguardando design', 'Design enviado', 'Fechado', 'Recusado', 'setCommercialStage']) {
+    if (!commercial31.includes(token)) fail(`fix31_comercial_ui_incompleto:${token}`);
+  }
+  if (!/nenhuma mensagem|nenhum evento técnico|somente você|manual/i.test(commercial31)) fail('fix31_comercial_ui_sem_regra_manual_explicita');
+
+  const sends31 = read('src/pages/SendsPage.tsx');
+  for (const token of ['title="Envios"', "['WhatsApp', 'Instagram']", '<QueuePage', 'embedded']) {
+    if (!sends31.includes(token)) fail(`fix31_envios_incompleto:${token}`);
+  }
+
+  const app31 = read('src/App.tsx');
+  for (const token of ["<DashboardPage", "<LeadsPage", "<CommercialPage", "<SendsPage", "'maps-searches': 'leads'", "base: 'leads'"]) {
+    if (!app31.includes(token)) fail(`fix31_app_rotas_incompleto:${token}`);
+  }
+
+  const homolog31 = read('CHECK - CRM R59 - Homologacao final.sql');
+  for (const token of ['62::bigint esperado', 'commercial_contract_diff', '32_contrato_comercial_r59']) {
+    if (!homolog31.includes(token)) fail(`fix31_homologacao_incompleta:${token}`);
+  }
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

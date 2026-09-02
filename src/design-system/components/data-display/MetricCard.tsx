@@ -8,11 +8,13 @@ type MetricCardProps = {
   label: string;
   tone?: MetricTone;
   active?: boolean;
+  onClick?: () => void;
 };
 
-export function MetricCard({ icon: Icon, value, label, tone = 'neutral', active = false }: MetricCardProps) {
-  return (
-    <article className={`metric-card metric-card--${tone} ${active ? 'metric-card--active' : ''}`}>
+export function MetricCard({ icon: Icon, value, label, tone = 'neutral', active = false, onClick }: MetricCardProps) {
+  const className = `metric-card metric-card--${tone} ${active ? 'metric-card--active' : ''} ${onClick ? 'metric-card--interactive' : ''}`;
+  const content = (
+    <>
       {Icon ? (
         <span className="metric-card__icon">
           <Icon size={20} strokeWidth={1.8} />
@@ -22,6 +24,11 @@ export function MetricCard({ icon: Icon, value, label, tone = 'neutral', active 
         <strong>{value}</strong>
         <small>{label}</small>
       </span>
-    </article>
+    </>
   );
+
+  if (onClick) {
+    return <button type="button" className={className} onClick={onClick}>{content}</button>;
+  }
+  return <article className={className}>{content}</article>;
 }

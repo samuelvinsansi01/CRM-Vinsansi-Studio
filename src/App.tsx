@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { DashboardLayout } from './design-system/layouts/DashboardLayout';
 import { AccountPage } from './pages/AccountPage';
 import { BasePage } from './pages/BasePage';
+import { DashboardPage } from './pages/DashboardPage';
+import { LeadsPage } from './pages/LeadsPage';
+import { CommercialPage } from './pages/CommercialPage';
+import { SendsPage } from './pages/SendsPage';
 import { SettingsOverviewPage } from './pages/ConfigurationPages';
 import { CatalogCrudPage } from './pages/CatalogCrudPage';
 import { ChannelsPage } from './pages/ChannelsPage';
@@ -29,25 +33,34 @@ import { syncEvolutionInstances } from './services/evolution-instances/evolution
 const ACTIVE_PAGE_STORAGE_KEY = 'painel:active-page';
 const validPageIds = new Set<PageId>(Object.keys(pageTitles) as PageId[]);
 const legacyPageMap: Record<string, PageId> = {
-  valid: 'home',
-  'pre-send': 'home',
+  dashboard: 'dashboard',
+  home: 'dashboard',
+  valid: 'dashboard',
+  'pre-send': 'dashboard',
+  'import-approved': 'leads',
+  'import-rejected': 'leads',
+  'maps-searches': 'leads',
+  base: 'leads',
+  whatsapp: 'sends',
+  instagram: 'sends',
   chips: 'sender-chips',
   'instagram-settings': 'sender-instagram',
   branches: 'message-branches',
   templates: 'message-templates',
   'import-settings': 'config-import-rules',
-  'config-validation-rules': 'home',
-  'validation-rules': 'home',
-  'validation-settings': 'home',
-  'validation-rules-settings': 'home',
+  'config-validation-rules': 'dashboard',
+  'validation-rules': 'dashboard',
+  'validation-settings': 'dashboard',
+  'validation-rules-settings': 'dashboard',
 };
 
 function initialPage(): PageId {
-  if (typeof window === 'undefined') return 'home';
+  if (typeof window === 'undefined') return 'dashboard';
   const storedPage = window.sessionStorage.getItem(ACTIVE_PAGE_STORAGE_KEY);
-  if (!storedPage) return 'home';
+  if (!storedPage) return 'dashboard';
+  if (legacyPageMap[storedPage]) return legacyPageMap[storedPage];
   if (validPageIds.has(storedPage as PageId)) return storedPage as PageId;
-  return legacyPageMap[storedPage] ?? 'home';
+  return 'dashboard';
 }
 
 export function App() {
@@ -63,7 +76,7 @@ export function App() {
   useEffect(() => {
     if (!isAuthenticated || organizationLoading || !organizationContext) return;
     const permission = pagePermissions[activePage];
-    if (permission && !hasPermission(permission)) setActivePage('home');
+    if (permission && !hasPermission(permission)) setActivePage('dashboard');
   }, [activePage, hasPermission, isAuthenticated, organizationContext, organizationLoading]);
 
   useEffect(() => {
@@ -127,6 +140,10 @@ export function App() {
 
   return (
     <DashboardLayout activePage={activePage} onNavigate={setActivePage}>
+      {activePage === 'dashboard' ? <DashboardPage onNavigate={setActivePage} /> : null}
+      {activePage === 'leads' ? <LeadsPage /> : null}
+      {activePage === 'commercial' ? <CommercialPage /> : null}
+      {activePage === 'sends' ? <SendsPage /> : null}
       {activePage === 'home' ? <HomePage /> : null}
       {activePage === 'import-approved' || activePage === 'import-rejected' ? (
         <ImportPage

@@ -106,6 +106,7 @@ type SelectFieldProps = {
   searchable?: boolean;
   searchPlaceholder?: string;
   renderNoResults?: (query: string, selectValue: (value: string) => void) => ReactNode;
+  disabled?: boolean;
 };
 
 export function SelectField({
@@ -120,6 +121,7 @@ export function SelectField({
   searchable = false,
   searchPlaceholder = 'Buscar...',
   renderNoResults,
+  disabled = false,
 }: SelectFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -195,9 +197,11 @@ export function SelectField({
       <button
         className={`select-field ${density === 'compact' ? 'select-field--compact' : ''} ${isOpen ? 'select-field--open' : ''}`}
         type="button"
+        disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         onClick={() => {
+          if (disabled) return;
           setSearchQuery('');
           setIsOpen((current) => !current);
         }}

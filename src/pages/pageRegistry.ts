@@ -1,4 +1,10 @@
 export type PageId =
+  | 'dashboard'
+  | 'leads'
+  | 'commercial'
+  | 'conversations'
+  | 'sends'
+  // Rotas internas/legadas mantidas para compatibilidade e configurações.
   | 'home'
   | 'import-approved'
   | 'import-rejected'
@@ -6,7 +12,6 @@ export type PageId =
   | 'base'
   | 'whatsapp'
   | 'instagram'
-  | 'conversations'
   | 'sender-chips'
   | 'sender-instagram'
   | 'message-branches'
@@ -28,16 +33,8 @@ export type PageId =
   | 'monitoring'
   | 'homologation';
 
-export type NavItem = {
-  id: PageId;
-  label: string;
-};
-
-export type NavSection = {
-  label: string;
-  items: readonly NavItem[];
-};
-
+export type NavItem = { id: PageId; label: string };
+export type NavSection = { label: string; items: readonly NavItem[] };
 export type NavGroup = {
   id: PageId;
   label: string;
@@ -46,107 +43,36 @@ export type NavGroup = {
   menuClassName?: string;
 };
 
+// Navegação primária orientada às tarefas do CRM.
+// Configuração, organização e catálogos ficam como utilidades no lado direito do header.
 export const navGroups: readonly NavGroup[] = [
-  { id: 'home', label: 'Início' },
-  {
-    id: 'import-approved',
-    label: 'Leads',
-    items: [
-      { id: 'import-approved', label: 'Importação' },
-      { id: 'maps-searches', label: 'Pesquisas Google Maps' },
-      { id: 'base', label: 'Base Permanente' },
-    ],
-  },
-  {
-    id: 'whatsapp',
-    label: 'Filas',
-    items: [
-      { id: 'whatsapp', label: 'Fila WhatsApp' },
-      { id: 'instagram', label: 'Fila Instagram' },
-      { id: 'conversations', label: 'Conversas' },
-    ],
-  },
-  {
-    id: 'sender-chips',
-    label: 'Remetentes',
-    items: [
-      { id: 'sender-chips', label: 'Chips WhatsApp' },
-      { id: 'sender-instagram', label: 'Perfis Instagram' },
-    ],
-  },
-  {
-    id: 'message-branches',
-    label: 'Central de Mensagens',
-    items: [
-      { id: 'message-branches', label: 'Ramos' },
-      { id: 'message-templates', label: 'Templates de mensagens' },
-    ],
-  },
-  {
-    id: 'organization-settings',
-    label: 'Organização',
-    items: [
-      { id: 'organization-settings', label: 'Organização' },
-      { id: 'organization-members', label: 'Membros' },
-      { id: 'organization-roles', label: 'Funções e acessos' },
-      { id: 'platform-organizations', label: 'Plataforma' },
-    ],
-  },
-  {
-    id: 'settings',
-    label: 'Configurações',
-    menuClassName: 'nav-menu--settings',
-    sections: [
-      {
-        label: 'Importação',
-        items: [
-          { id: 'config-contact-sources', label: 'Fontes de contato' },
-          { id: 'config-import-rules', label: 'Critérios de importação' },
-        ],
-      },
-      {
-        label: 'Filas',
-        items: [
-          { id: 'config-channels', label: 'Canais do sistema' },
-          { id: 'config-levels', label: 'Níveis' },
-          { id: 'config-instances', label: 'Instâncias' },
-        ],
-      },
-      {
-        label: 'Sistema',
-        items: [
-          { id: 'tools', label: 'Ferramentas' },
-          { id: 'monitoring', label: 'Monitoramento' },
-          { id: 'homologation', label: 'Homologação final' },
-        ],
-      },
-      {
-        label: 'Templates',
-        items: [
-          { id: 'config-template-channels', label: 'Canais de template' },
-          { id: 'config-template-types', label: 'Tipos de template' },
-        ],
-      },
-    ],
-  },
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'leads', label: 'Leads' },
+  { id: 'commercial', label: 'Comercial' },
+  { id: 'conversations', label: 'Conversas' },
+  { id: 'sends', label: 'Envios' },
 ];
 
 export const pageTitles: Record<PageId, string> = {
-  home: 'Início',
+  dashboard: 'Dashboard',
+  leads: 'Leads',
+  commercial: 'Comercial',
+  conversations: 'Conversas',
+  sends: 'Envios',
+  home: 'Início legado',
   'import-approved': 'Importação',
   'import-rejected': 'Importação',
   'maps-searches': 'Pesquisas Google Maps',
   base: 'Base Permanente',
   whatsapp: 'Fila WhatsApp',
   instagram: 'Fila Instagram',
-  conversations: 'Conversas',
   'sender-chips': 'Chips WhatsApp',
   'sender-instagram': 'Perfis Instagram',
   'message-branches': 'Ramos',
   'message-templates': 'Templates de mensagens',
   settings: 'Configurações',
   'config-contact-sources': 'Fontes de contato',
-  'config-import-rules': 'Critérios de importação',
+  'config-import-rules': 'Critérios de captação',
   'config-channels': 'Canais do sistema',
   'config-levels': 'Níveis',
   'config-instances': 'Instâncias',
@@ -157,12 +83,15 @@ export const pageTitles: Record<PageId, string> = {
   'organization-roles': 'Funções e acessos',
   'platform-organizations': 'Organizações da plataforma',
   account: 'Minha conta',
-  tools: 'Ferramentas',
+  tools: 'Central de Ferramentas',
   monitoring: 'Monitoramento',
   homologation: 'Homologação final',
 };
 
 export const pagePermissions: Partial<Record<PageId, string>> = {
+  leads: 'leads.view',
+  commercial: 'leads.view',
+  sends: 'queues.view',
   'import-approved': 'leads.view',
   'import-rejected': 'leads.view',
   'maps-searches': 'capture.use',
@@ -174,7 +103,6 @@ export const pagePermissions: Partial<Record<PageId, string>> = {
   'sender-instagram': 'instagram.view',
   'message-branches': 'templates.view',
   'message-templates': 'templates.view',
-  settings: 'settings.view',
   'config-contact-sources': 'settings.view',
   'config-import-rules': 'settings.view',
   'config-channels': 'settings.view',
@@ -190,3 +118,23 @@ export const pagePermissions: Partial<Record<PageId, string>> = {
   monitoring: 'monitoring.view',
   homologation: 'monitoring.view',
 };
+
+export const settingsPageIds = new Set<PageId>([
+  'settings',
+  'sender-chips',
+  'sender-instagram',
+  'message-branches',
+  'message-templates',
+  'config-contact-sources',
+  'config-import-rules',
+  'config-channels',
+  'config-levels',
+  'config-instances',
+  'config-template-channels',
+  'config-template-types',
+  'organization-settings',
+  'organization-members',
+  'organization-roles',
+  'platform-organizations',
+  'tools',
+]);

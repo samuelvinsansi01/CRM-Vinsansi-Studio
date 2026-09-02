@@ -2146,3 +2146,174 @@ button.checkbox {
 .notification-center__error {
   color: var(--status-error-text, var(--app-text));
 }
+
+/* R59 BUILD FIX 31 — IA principal, Leads e Comercial */
+.nav-link--active {
+  position: relative;
+  color: var(--app-text);
+}
+
+.nav-link--active::after {
+  position: absolute;
+  right: var(--space-08);
+  bottom: -4px;
+  left: var(--space-08);
+  height: 2px;
+  border-radius: var(--radius-999);
+  background: var(--action-active);
+  content: "";
+}
+
+.app-header__settings-button.is-active {
+  border-color: color-mix(in srgb, var(--action-active) 38%, transparent);
+  background: color-mix(in srgb, var(--action-active) 12%, transparent);
+  color: var(--app-text);
+}
+
+.metric-card--interactive {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.metric-card--interactive:hover,
+.metric-card--interactive:focus-visible {
+  border-color: color-mix(in srgb, var(--action-active) 36%, transparent);
+  outline: none;
+  background: color-mix(in srgb, var(--surface-card) 92%, var(--action-active));
+}
+
+.metric-card--interactive:active {
+  transform: translateY(1px);
+}
+
+.dashboard-page,
+.crm-leads-page,
+.commercial-page,
+.sends-page {
+  display: grid;
+  gap: var(--space-20);
+}
+
+.dashboard-section-card > .metric-grid {
+  padding: 0 var(--space-20) var(--space-20);
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-08);
+}
+
+.crm-leads-page .filters-row {
+  justify-content: flex-end;
+}
+
+.drawer-external-link {
+  width: fit-content;
+  margin-top: calc(var(--space-04) * -1);
+  color: var(--action-active);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.drawer-external-link:hover {
+  text-decoration: underline;
+}
+
+.commercial-stage-select {
+  min-width: 164px;
+}
+
+.commercial-stage-select .select-field {
+  width: 100%;
+  min-width: 164px;
+}
+
+.select-field:disabled {
+  cursor: wait;
+  opacity: .62;
+}
+
+.sends-page__channel-tabs {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.sends-page__channel-tabs .segmented-control {
+  width: auto;
+}
+
+.queue-embedded-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-20);
+  margin-bottom: var(--space-16);
+  padding-top: var(--space-04);
+}
+
+.queue-embedded-header > div:first-child {
+  display: grid;
+  gap: var(--space-04);
+}
+
+.queue-embedded-header strong {
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.queue-embedded-header span {
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.settings-overview-grid--ia {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-overview-card__link-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-02);
+}
+
+.settings-overview-card__link-copy strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-overview-card__link-copy small {
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .settings-overview-grid--ia {
+    grid-template-columns: 1fr;
+  }
+
+  .app-header__nav {
+    gap: var(--space-04);
+  }
+}
+
+@media (max-width: 860px) {
+  .metric-grid--5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .queue-embedded-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
