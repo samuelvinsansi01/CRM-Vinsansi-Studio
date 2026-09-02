@@ -10,6 +10,8 @@ import conversationPresence from './conversation-presence.js';
 import conversationChannel from './conversation-channel.js';
 import manualMessage from './manual-message.js';
 import conversationMedia from './conversation-media.js';
+import conversationSend from './conversation-send.js';
+import conversationCommercial from './conversation-commercial.js';
 import queueOperations from './queue-operations.js';
 
 const handlers = {
@@ -22,6 +24,8 @@ const handlers = {
   'conversation-channel': conversationChannel,
   'manual-message': manualMessage,
   'conversation-media': conversationMedia,
+  'conversation-send': conversationSend,
+  'conversation-commercial': conversationCommercial,
   'queue-operations': queueOperations,
 };
 

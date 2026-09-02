@@ -1,0 +1,33 @@
+VINSANSI MOBILE v0.1.0 — HOMOLOGAÇÃO SOBRE CRM R59 BUILD FIX 33
+
+ESCOPO
+- WhatsApp apenas.
+- Sem disparos no Mobile.
+- Sem CRM mobile.
+- Texto e links como texto.
+- Seleção de chip por organização.
+- Inbox, leitura, resposta, realtime, push e estágio comercial.
+
+VALIDAÇÕES DA MESCLA
+[OK] Base utilizada: CRM Vinsansi Studio v2.4.0-R59 BUILD FIX 33.
+[OK] Rotas Mobile adicionadas sem substituir as rotas do FIX33.
+[OK] Router mesclado de forma aditiva.
+[OK] Webhook mesclado de forma aditiva.
+[OK] Regras comerciais do FIX33 preservadas; set_lead_commercial_stage_r59 continua soberana para transições válidas.
+[OK] Nenhuma credencial/apikey de instância é enviada ao app.
+[OK] Envio Mobile bloqueado em texto-only no backend.
+[OK] Timeout/resultado incerto usa reconciliation_required, sem retry cego.
+[OK] Push inclui conversa + chip e usa lotes de até 100 mensagens por request.
+
+BANCO
+[ ] Confirmar/aplicar CRM R59 BUILD FIX 33 no Supabase real.
+[ ] Confirmar/aplicar APLICAR - MOBILE V0.1.0 - PUSH.sql.
+
+ROTEIRO
+1. Publicar este CRM.
+2. Entrar no Mobile com a mesma conta da organização.
+3. Confirmar chips ativos e troca de inbox.
+4. Receber mensagem inbound e validar realtime/push.
+5. Responder texto e confirmar persistência no CRM/Gerenciador/WhatsApp.
+6. Alterar estágio comercial no Mobile e confirmar o mesmo estado na base/CRM.
+7. Confirmar que transições para trás/ilegais são recusadas pelas regras do FIX33.

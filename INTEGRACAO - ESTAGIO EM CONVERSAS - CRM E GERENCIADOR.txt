@@ -1,0 +1,38 @@
+INTEGRAÇÃO FUTURA — ESTÁGIO COMERCIAL NAS CONVERSAS DO CRM E GERENCIADOR
+
+O backend criado para o Mobile é compartilhável e não é exclusivo do celular.
+
+GET /api/whatsapp/conversation-commercial?conversationId=<ID>
+Retorna:
+- linked
+- leadId
+- leadName
+- alternativeName
+- leadStatusId
+- stage
+- editable
+- updatedAt
+
+POST /api/whatsapp/conversation-commercial
+Body:
+{
+  "conversationId": 123,
+  "stage": "aguardando_design"
+}
+
+Estágios canônicos R59:
+- aguardando_resposta
+- aguardando_design
+- design_enviado
+- fechado
+- recusado
+
+Regra UX definida:
+- Exibir o estágio no cabeçalho da conversa.
+- Clique/toque abre apenas um select/popover/bottom-sheet de estágio.
+- Não abrir tela de lead nem formulário de CRM.
+- A alteração escreve em lead_commercial via set_lead_commercial_stage_r59.
+- A regra do CRM R59 continua soberana: somente leads enviados (lead_status_id = 5) possuem estágio comercial editável.
+
+IMPORTANTE
+Não foi feita alteração visual no CRM nem no Gerenciador neste pacote para evitar conflito com os canais onde esses produtos já estão sendo evoluídos.

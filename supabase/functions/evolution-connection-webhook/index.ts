@@ -281,6 +281,59 @@ async function hmacToken(secret: string, value: string) {
   return Array.from(new Uint8Array(signature)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+
+async function sendMobilePush(admin: any, organizationId: number, conversationId: number, messageId: number, preview: string) {
+  const conversationResult = await admin.from("conversations")
+    .select("conversations_id,chips_id,instances_id,leads_id,remote_jid,contact_phone,contact_name,assigned_to_member_id,conversation_version")
+    .eq("organizations_id", organizationId).eq("conversations_id", conversationId).maybeSingle();
+  if (conversationResult.error || !conversationResult.data) return;
+  const conversation = row(conversationResult.data);
+  const chipResult = await admin.from("chips").select("chips_name,chips_phone").eq("organizations_id", organizationId).eq("chips_id", Number(conversation.chips_id)).maybeSingle();
+  const chip = row(chipResult.data);
+  let devicesQuery = admin.from("mobile_push_devices").select("mobile_push_devices_id,expo_push_token").eq("organizations_id", organizationId).eq("enabled", true);
+  const assignedMemberId = Number(conversation.assigned_to_member_id || 0);
+  if (assignedMemberId > 0) devicesQuery = devicesQuery.eq("organization_members_id", assignedMemberId);
+  const devicesResult = await devicesQuery.limit(200);
+  if (devicesResult.error || !devicesResult.data?.length) return;
+  const contact = text(conversation.contact_name) || text(conversation.contact_phone) || "Nova mensagem";
+  const chipName = text(chip.chips_name) || "WhatsApp";
+  const body = text(preview).slice(0, 180);
+  const messages = devicesResult.data.map((device: Row) => ({
+    to: text(device.expo_push_token),
+    sound: "default",
+    channelId: "mensagens",
+    title: `${contact} · ${chipName}`,
+    body,
+    data: {
+      organizationId, conversationId, messageId,
+      chipId: Number(conversation.chips_id), instanceId: Number(conversation.instances_id), leadId: Number(conversation.leads_id || 0) || null,
+      remoteJid: text(conversation.remote_jid), phone: text(conversation.contact_phone), contactName: contact,
+      conversationVersion: Number(conversation.conversation_version || 1), chipName, chipPhone: text(chip.chips_phone),
+    },
+    priority: "high",
+  })).filter((message: Row) => text(message.to));
+  if (!messages.length) return;
+  const invalidIds: number[] = [];
+  for (let offset = 0; offset < messages.length; offset += 100) {
+    const chunk = messages.slice(offset, offset + 100);
+    let response = await fetch("https://exp.host/--/api/v2/push/send", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(chunk) });
+    if ((response.status === 429 || response.status >= 500) && response.status <= 599) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      response = await fetch("https://exp.host/--/api/v2/push/send", { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(chunk) });
+    }
+    if (!response.ok) continue;
+    const payload = row(await response.json().catch(() => ({})));
+    const tickets = Array.isArray(payload.data) ? payload.data.map(row) : [];
+    const devices = devicesResult.data.slice(offset, offset + 100);
+    devices.forEach((device: Row, index: number) => {
+      const ticket = tickets[index] || {};
+      if (text(row(ticket.details).error) === "DeviceNotRegistered") invalidIds.push(Number(device.mobile_push_devices_id));
+    });
+  }
+  const validInvalidIds = invalidIds.filter(Number.isSafeInteger);
+  if (validInvalidIds.length) await admin.from("mobile_push_devices").update({ enabled: false, updated_at: new Date().toISOString() }).in("mobile_push_devices_id", validInvalidIds);
+}
+
 function timingSafeEqual(left: string, right: string) {
   if (left.length !== right.length) return false;
   let mismatch = 0;
@@ -425,7 +478,12 @@ Deno.serve(async (request: Request) => {
         });
         if (error) throw new Error(error.message);
         const result = row(data);
-        if (result.ignored) ignored += 1; else processed += 1;
+        if (result.ignored) ignored += 1; else {
+          processed += 1;
+          if (!fromMe && result.merged !== true) {
+            await sendMobilePush(admin, Number(instanceRow.organizations_id), Number(result.conversationId), Number(result.messageId), bodyText).catch(() => undefined);
+          }
+        }
       }
     } else if (STATUS_EVENTS.has(event)) {
       for (const item of eventRows(payload)) {

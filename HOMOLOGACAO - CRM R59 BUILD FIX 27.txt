@@ -1,0 +1,17 @@
+CRM VINSANSI STUDIO 2.4.0-R59
+BUILD FIX 27
+
+ESCOPO
+1. Fila Instagram do executor passa a usar a mesma semântica de contagem da Fila final do CRM.
+2. Itens em claimed/following/DM continuam pertencendo à fila exibida, mas não são reclamados novamente pelo Motor.
+3. Data operacional do endpoint Instagram é filtrada pelo agendamento efetivo do item (queue_item ou queue), alinhada à RPC da Fila final.
+4. Tamanho/lotes do Instagram passam a derivar do nível vinculado ao perfil; configuração global deixa de ser autoridade estrutural.
+5. Central de Ferramentas ganha editor Instagram equivalente ao WhatsApp: delays globais editáveis e níveis somente leitura.
+
+BANCO / SQL
+- Nenhuma tabela, coluna, RPC, trigger, policy ou catálogo alterado.
+- Nenhum SQL necessário.
+
+ORDEM DE PUBLICAÇÃO
+1. CRM R59 BUILD FIX 27.
+2. Gerenciador de Disparos v1.5.31.
