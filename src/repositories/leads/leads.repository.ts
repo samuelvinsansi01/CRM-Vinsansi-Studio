@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '../../lib/supabase';
-import type { CommercialStage, CrmLead, CrmLeadFilters, CrmLeadPage, CrmLeadPageRequest, CrmLeadSummary } from '../../services/leads/crmLead.types';
+import type { CommercialStage, CrmDashboardSummary, CrmLead, CrmLeadFilters, CrmLeadPage, CrmLeadPageRequest, CrmLeadSummary } from '../../services/leads/crmLead.types';
 
 type Row = Record<string, unknown>;
 
@@ -61,6 +61,7 @@ function lead(value: unknown): CrmLead {
     commercialStage: stage ? stage : null,
     commercialUpdatedAt: text(row.commercialUpdatedAt),
     commercialUpdatedBy: text(row.commercialUpdatedBy),
+    designDueDate: text(row.designDueDate),
   };
 }
 
@@ -76,6 +77,26 @@ function summary(value: unknown): CrmLeadSummary {
     sent: number(row.sent),
     invalid: number(row.invalid),
     duplicates: number(row.duplicates),
+    commercial: {
+      aguardandoResposta: number(commercial.aguardandoResposta),
+      aguardandoDesign: number(commercial.aguardandoDesign),
+      designEnviado: number(commercial.designEnviado),
+      fechado: number(commercial.fechado),
+      recusado: number(commercial.recusado),
+    },
+  };
+}
+
+function dashboardSummary(value: unknown): CrmDashboardSummary {
+  const row = record(value);
+  const commercial = record(row.commercial);
+  return {
+    newLeads: number(row.newLeads),
+    queued: number(row.queued),
+    sent: number(row.sent),
+    invalid: number(row.invalid),
+    noContact: number(row.noContact),
+    designsDue: number(row.designsDue),
     commercial: {
       aguardandoResposta: number(commercial.aguardandoResposta),
       aguardandoDesign: number(commercial.aguardandoDesign),
@@ -122,5 +143,24 @@ export const leadsRepository = {
     });
     if (response.error) throw new Error(`Não foi possível atualizar o estágio comercial: ${response.error.message}`);
     return record(response.data);
+  },
+
+
+  async setDesignDueDate(leadId: string, designDueDate: string | null) {
+    const response = await getSupabaseClient().rpc('set_lead_design_due_date_r59', {
+      p_leads_id: Number(leadId),
+      p_design_due_date: designDueDate || null,
+    });
+    if (response.error) throw new Error(`Não foi possível atualizar a data do design: ${response.error.message}`);
+    return record(response.data);
+  },
+
+  async dashboardSummary(fromIso: string, toExclusiveIso: string): Promise<CrmDashboardSummary> {
+    const response = await getSupabaseClient().rpc('dashboard_summary_r59', {
+      p_from: fromIso,
+      p_to_exclusive: toExclusiveIso,
+    });
+    if (response.error) throw new Error(`Não foi possível carregar o Dashboard: ${response.error.message}`);
+    return dashboardSummary(response.data);
   },
 };

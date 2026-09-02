@@ -1,5 +1,6 @@
-import type { ChangeEvent, FormEvent, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties, ChangeEvent, FormEvent, InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { LucideIcon } from 'lucide-react';
 import { Check, ChevronDown, Search } from 'lucide-react';
 
@@ -124,8 +125,10 @@ export function SelectField({
   disabled = false,
 }: SelectFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
 
   const normalizedOptions = useMemo<SelectOption[]>(() => {
     if (!options?.length) {
@@ -164,11 +167,42 @@ export function SelectField({
     ? placeholder
     : selectedOptionLabel ?? placeholder ?? children;
 
+  const updateMenuPosition = useCallback(() => {
+    if (!rootRef.current) return;
+    const rect = rootRef.current.getBoundingClientRect();
+    const viewportGap = 12;
+    const estimatedMenuHeight = searchable ? 320 : Math.min(320, Math.max(96, normalizedOptions.length * 40 + 8));
+    const spaceBelow = window.innerHeight - rect.bottom - viewportGap;
+    const shouldFlip = spaceBelow < Math.min(220, estimatedMenuHeight) && rect.top > spaceBelow;
+    setMenuStyle({
+      position: 'fixed',
+      zIndex: 10000,
+      right: Math.max(viewportGap, window.innerWidth - rect.right),
+      minWidth: Math.max(rect.width, 220),
+      ...(shouldFlip
+        ? { bottom: Math.max(viewportGap, window.innerHeight - rect.top + 4), top: 'auto' }
+        : { top: Math.max(viewportGap, rect.bottom + 4), bottom: 'auto' }),
+    });
+  }, [normalizedOptions.length, searchable]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updateMenuPosition();
+    const reposition = () => updateMenuPosition();
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    return () => {
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+    };
+  }, [isOpen, updateMenuPosition]);
+
   useEffect(() => {
     function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const target = event.target as Node;
       if (!rootRef.current) return;
 
-      if (!rootRef.current.contains(event.target as Node)) {
+      if (!rootRef.current.contains(target) && !menuRef.current?.contains(target)) {
         setIsOpen(false);
       }
     }
@@ -210,8 +244,8 @@ export function SelectField({
         <ChevronDown size={16} strokeWidth={1.8} />
       </button>
 
-      {isOpen ? (
-        <div className="select-field__menu" role="listbox" onMouseDown={(event: import('react').MouseEvent<HTMLDivElement>) => event.preventDefault()}>
+      {isOpen && typeof document !== 'undefined' ? createPortal(
+        <div ref={menuRef} className="select-field__menu select-field__menu--portal" role="listbox" style={menuStyle} onMouseDown={(event: import('react').MouseEvent<HTMLDivElement>) => event.preventDefault()}>
           {searchable ? (
             <div className="select-field__search">
               <Search size={15} strokeWidth={1.8} />
@@ -243,7 +277,8 @@ export function SelectField({
               <div className="select-field__empty">Nenhum resultado encontrado.</div>
             )
           )}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

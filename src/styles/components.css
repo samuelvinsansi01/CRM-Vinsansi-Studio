@@ -2317,3 +2317,69 @@ button.checkbox {
     flex-direction: column;
   }
 }
+
+/* R59 BUILD FIX 33 — dropdowns em portal, agenda comercial e filtros de período */
+.select-field__menu--portal {
+  margin: 0;
+}
+
+.commercial-stage-select {
+  width: 100%;
+  min-width: 150px;
+}
+
+.commercial-design-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--action-active);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.commercial-design-date:hover,
+.commercial-design-date:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.commercial-design-date--late,
+.commercial-design-date-text--late {
+  color: var(--status-error-text, #f87171);
+}
+
+.commercial-design-date--today,
+.commercial-design-date-text--today {
+  color: var(--status-warning-text, #fbbf24);
+}
+
+.commercial-design-date-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-help-text {
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-08);
+  background: color-mix(in srgb, var(--surface-card) 82%, transparent);
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dashboard-page > .filters-row {
+  margin-top: calc(var(--space-08) * -1);
+}
+
+.dashboard-page > .filters-row .field {
+  min-width: 150px;
+}

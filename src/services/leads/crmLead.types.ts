@@ -16,6 +16,22 @@ export const COMMERCIAL_STAGE_LABELS: Record<CommercialStage, string> = {
   recusado: 'Recusado',
 };
 
+export const COMMERCIAL_STAGE_TRANSITIONS: Record<CommercialStage, readonly CommercialStage[]> = {
+  aguardando_resposta: ['aguardando_resposta', 'aguardando_design', 'recusado'],
+  aguardando_design: ['aguardando_design', 'design_enviado', 'recusado'],
+  design_enviado: ['design_enviado', 'fechado', 'recusado'],
+  fechado: ['fechado'],
+  recusado: ['recusado'],
+};
+
+export function commercialStageOptions(current: CommercialStage) {
+  return COMMERCIAL_STAGE_TRANSITIONS[current].map((value) => ({ value, label: COMMERCIAL_STAGE_LABELS[value] }));
+}
+
+export function canTransitionCommercialStage(current: CommercialStage, next: CommercialStage) {
+  return COMMERCIAL_STAGE_TRANSITIONS[current].includes(next);
+}
+
 export type CrmLead = {
   id: string;
   company: string;
@@ -40,6 +56,7 @@ export type CrmLead = {
   commercialStage: CommercialStage | null;
   commercialUpdatedAt: string;
   commercialUpdatedBy: string;
+  designDueDate: string;
 };
 
 export type CommercialSummary = {
@@ -48,6 +65,17 @@ export type CommercialSummary = {
   designEnviado: number;
   fechado: number;
   recusado: number;
+};
+
+
+export type CrmDashboardSummary = {
+  newLeads: number;
+  queued: number;
+  sent: number;
+  invalid: number;
+  noContact: number;
+  designsDue: number;
+  commercial: CommercialSummary;
 };
 
 export type CrmLeadSummary = {

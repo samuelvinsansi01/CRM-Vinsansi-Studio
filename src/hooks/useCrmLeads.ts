@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { leadsRepository } from '../repositories/leads';
-import type { CommercialStage, CrmLead, CrmLeadFilters, CrmLeadSummary } from '../services/leads/crmLead.types';
+import { canTransitionCommercialStage, type CommercialStage, type CrmLead, type CrmLeadFilters, type CrmLeadSummary } from '../services/leads/crmLead.types';
 
 const EMPTY_SUMMARY: CrmLeadSummary = {
   total: 0,
@@ -63,6 +63,9 @@ export function useCrmLeads(filters: CrmLeadFilters, page: number, pageSize: num
     if (!before || before.statusId !== 5) throw new Error('Somente leads enviados podem receber estágio comercial.');
     const previousStage = before.commercialStage ?? 'aguardando_resposta';
     if (previousStage === nextStage) return;
+    if (!canTransitionCommercialStage(previousStage, nextStage)) {
+      throw new Error('Esse estágio não pode voltar nem pular etapas. Avance pela sequência comercial ou marque como Recusado.');
+    }
     const now = new Date().toISOString();
 
     setItems((current) => current.map((item) => item.id === leadId ? { ...item, commercialStage: nextStage, commercialUpdatedAt: now } : item));
@@ -93,6 +96,20 @@ export function useCrmLeads(filters: CrmLeadFilters, page: number, pageSize: num
     }
   }, [items]);
 
+  const setDesignDueDate = useCallback(async (leadId: string, designDueDate: string | null) => {
+    const before = items.find((item) => item.id === leadId);
+    const previous = before?.designDueDate ?? '';
+    setItems((current) => current.map((item) => item.id === leadId ? { ...item, designDueDate: designDueDate ?? '' } : item));
+    try {
+      const result = await leadsRepository.setDesignDueDate(leadId, designDueDate);
+      const saved = String(result.designDueDate ?? designDueDate ?? '');
+      setItems((current) => current.map((item) => item.id === leadId ? { ...item, designDueDate: saved } : item));
+    } catch (err) {
+      setItems((current) => current.map((item) => item.id === leadId ? { ...item, designDueDate: previous } : item));
+      throw err;
+    }
+  }, [items]);
+
   return {
     items,
     total,
@@ -102,5 +119,6 @@ export function useCrmLeads(filters: CrmLeadFilters, page: number, pageSize: num
     error,
     refresh: () => load('refresh'),
     setCommercialStage,
+    setDesignDueDate,
   };
 }

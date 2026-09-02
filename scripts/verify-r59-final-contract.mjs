@@ -765,8 +765,44 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const commercial32 = read('src/pages/CommercialPage.tsx');
-  for (const token of ["actions={['view']}", 'setViewingLead(lead)', 'Nome alternativo', 'setCommercialStage']) {
+  for (const token of ["actions={canEdit ? ['view', 'edit'] : ['view']}", 'setViewingLead(lead)', 'Nome alternativo', 'setCommercialStage']) {
     if (!commercial32.includes(token)) fail(`fix32_comercial_acoes_incompletas:${token}`);
+  }
+}
+
+
+// R59 BUILD FIX 33 — dropdown em portal, pipeline comercial progressivo, agenda do design e Dashboard por período.
+{
+  const field33 = read('src/design-system/components/forms/Field.tsx');
+  for (const token of ["createPortal", 'select-field__menu--portal', "window.addEventListener('scroll', reposition, true)"]) {
+    if (!field33.includes(token)) fail(`fix33_select_portal_incompleto:${token}`);
+  }
+
+  const commercialTypes33 = read('src/services/leads/crmLead.types.ts');
+  for (const token of ['COMMERCIAL_STAGE_TRANSITIONS', "aguardando_resposta: ['aguardando_resposta', 'aguardando_design', 'recusado']", "design_enviado: ['design_enviado', 'fechado', 'recusado']", 'designDueDate: string']) {
+    if (!commercialTypes33.includes(token)) fail(`fix33_pipeline_comercial_incompleto:${token}`);
+  }
+
+  const commercial33 = read('src/pages/CommercialPage.tsx');
+  for (const token of ['commercialStageOptions(value)', 'Envio previsto', 'Planejamento do design', 'Enviar design até', 'Definir data']) {
+    if (!commercial33.includes(token)) fail(`fix33_agenda_comercial_incompleta:${token}`);
+  }
+
+  const dashboard33 = read('src/pages/DashboardPage.tsx');
+  for (const token of ["type PeriodPreset = 'Hoje' | 'Semana' | 'Mês' | 'Personalizado'", "useState<PeriodPreset>('Semana')", 'dashboardSummary', 'Operação no período', 'Comercial no período', 'Designs previstos']) {
+    if (!dashboard33.includes(token)) fail(`fix33_dashboard_periodo_incompleto:${token}`);
+  }
+
+  const homolog33 = read('CHECK - CRM R59 - Homologacao final.sql');
+  for (const token of ['design_due_date', 'commercial_stage_transition_invalid', '33_contrato_dashboard_periodo_r59', 'dashboard_period_contract_diff']) {
+    if (!homolog33.includes(token)) fail(`fix33_homologacao_incompleta:${token}`);
+  }
+
+  const fix33Sql = 'APLICAR - CRM R59 BUILD FIX 33 - Comercial progressivo e Dashboard por periodo.sql';
+  if (!exists(fix33Sql)) fail('fix33_sql_ausente');
+  const sql33 = read(fix33Sql);
+  for (const token of ['ADD COLUMN IF NOT EXISTS design_due_date date', 'commercial_stage_transition_invalid', 'commercial_stage_terminal', 'set_lead_design_due_date_r59', 'dashboard_summary_r59', "lc.commercial_stage = 'aguardando_design'"]) {
+    if (!sql33.includes(token)) fail(`fix33_sql_incompleto:${token}`);
   }
 }
 
