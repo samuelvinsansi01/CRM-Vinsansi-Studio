@@ -51,7 +51,7 @@ function initials(value: string) {
 }
 
 function displayContact(conversation: Conversation) {
-  return conversation.contactName || conversation.phone || conversation.remoteJid || 'Contato sem nome';
+  return conversation.displayName || conversation.contactName || conversation.phone || conversation.remoteJid || 'Contato sem nome';
 }
 
 function readNotificationConversationTarget() {
@@ -111,7 +111,7 @@ export function ConversationsPage() {
   const visibleConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
     if (!term) return conversations;
-    return conversations.filter((item) => [item.contactName, item.phone, item.remoteJid, item.lastMessagePreview]
+    return conversations.filter((item) => [item.displayName, item.leadName, item.alternativeName, item.contactName, item.phone, item.remoteJid, item.lastMessagePreview]
       .some((value) => value.toLocaleLowerCase('pt-BR').includes(term)));
   }, [conversations, search]);
 

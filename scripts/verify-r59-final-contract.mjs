@@ -860,4 +860,47 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 }
 
+
+// R59 BUILD FIX 35 — identidade única da conversa + nome canônico do lead.
+{
+  const conversationsRepo35 = read('src/repositories/conversations/conversations.repository.ts');
+  for (const token of [
+    'leadName: string',
+    'alternativeName: string',
+    'displayName: string',
+    'meaningfulContactName',
+    ".from('leads').select('leads_id,leads_name,leads_alternative_name')",
+    'const displayName = alternativeName || leadName || contactName',
+  ]) if (!conversationsRepo35.includes(token)) fail(`fix35_nome_lead_conversas_incompleto:${token}`);
+
+  const conversationsPage35 = read('src/pages/ConversationsPage.tsx');
+  for (const token of [
+    'conversation.displayName || conversation.contactName',
+    '[item.displayName, item.leadName, item.alternativeName, item.contactName',
+  ]) if (!conversationsPage35.includes(token)) fail(`fix35_ui_conversas_nome_incompleta:${token}`);
+
+  const fix35Sql = 'APLICAR - CRM R59 BUILD FIX 35 - Identidade de conversas e nome do lead.sql';
+  if (!exists(fix35Sql)) fail('fix35_sql_ausente');
+  const sql35 = read(fix35Sql);
+  for (const token of [
+    'stage5_conversation_phone_identity',
+    'stage5_sync_conversation_lead_identity',
+    'stage5_resolve_conversation_id',
+    'stage5_register_conversation_aliases',
+    'stage5_repair_conversation_identities_r59',
+    'service_ingest_evolution_message',
+    'service_upsert_evolution_chat',
+    'service_stage5_list_conversations',
+    'leads_alternative_name',
+    'display_name',
+    'effective_whatsapp_phone',
+    'SELECT public.stage5_repair_conversation_identities_r59()',
+  ]) if (!sql35.includes(token)) fail(`fix35_sql_identidade_incompleto:${token}`);
+
+  const homolog35 = read('CHECK - CRM R59 - Homologacao final.sql');
+  for (const token of ['conversation_identity_contract_diff', '35_contrato_identidade_conversas_r59', 'stage5_repair_conversation_identities_r59']) {
+    if (!homolog35.includes(token)) fail(`fix35_homologacao_incompleta:${token}`);
+  }
+}
+
 console.log('CRM R59 final contract + homologacao: OK');

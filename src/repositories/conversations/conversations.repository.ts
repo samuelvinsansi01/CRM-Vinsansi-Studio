@@ -18,6 +18,9 @@ export type Conversation = {
   remoteJid: string;
   phone: string;
   contactName: string;
+  leadName: string;
+  alternativeName: string;
+  displayName: string;
   avatarUrl: string;
   status: 'open' | 'archived';
   unreadCount: number;
@@ -89,8 +92,17 @@ export async function listConversationUnreadCounts(): Promise<Record<string, num
   }, {});
 }
 
+function meaningfulContactName(value: unknown) {
+  const candidate = text(value);
+  if (!candidate) return '';
+  if (/^[+\d\s().-]{7,}$/.test(candidate)) return '';
+  if (/^\d+@(?:s\.whatsapp\.net|c\.us|lid)$/i.test(candidate)) return '';
+  return candidate;
+}
+
 export async function listConversations(chipId: string | null, includeArchived = false): Promise<Conversation[]> {
-  let query = getSupabaseClient().from('conversations')
+  const client = getSupabaseClient();
+  let query = client.from('conversations')
     .select('conversations_id,chips_id,instances_id,leads_id,remote_jid,contact_phone,contact_name,contact_avatar_url,conversation_status,unread_count,last_message_at,last_message_preview,last_message_direction,conversations_updated_at')
     .order('last_message_at', { ascending: false, nullsFirst: false })
     .order('conversations_id', { ascending: false })
@@ -99,22 +111,44 @@ export async function listConversations(chipId: string | null, includeArchived =
   if (!includeArchived) query = query.eq('conversation_status', 'open');
   const result = await query;
   if (result.error) throw new Error(result.error.message);
-  return (result.data ?? []).map((item) => ({
-    id: id(item.conversations_id),
-    chipId: id(item.chips_id),
-    instanceId: id(item.instances_id),
-    leadId: item.leads_id == null ? null : id(item.leads_id),
-    remoteJid: text(item.remote_jid),
-    phone: text(item.contact_phone),
-    contactName: text(item.contact_name),
-    avatarUrl: text(item.contact_avatar_url),
-    status: text(item.conversation_status) === 'archived' ? 'archived' : 'open',
-    unreadCount: number(item.unread_count),
-    lastMessageAt: item.last_message_at ? text(item.last_message_at) : null,
-    lastMessagePreview: text(item.last_message_preview),
-    lastMessageDirection: ['inbound', 'outbound'].includes(text(item.last_message_direction)) ? text(item.last_message_direction) as 'inbound' | 'outbound' : null,
-    updatedAt: text(item.conversations_updated_at),
-  }));
+
+  const conversationRows = (result.data ?? []) as Row[];
+  const leadIds = Array.from(new Set(conversationRows
+    .map((item) => Number(item.leads_id))
+    .filter(Number.isSafeInteger)));
+  const leadsResult = leadIds.length
+    ? await client.from('leads').select('leads_id,leads_name,leads_alternative_name').in('leads_id', leadIds)
+    : { data: [] as Row[], error: null };
+  if (leadsResult.error) throw new Error(leadsResult.error.message);
+  const leads = new Map<string, Row>(((leadsResult.data ?? []) as Row[]).map((lead) => [id(lead.leads_id), lead]));
+
+  return conversationRows.map((item) => {
+    const leadId = item.leads_id == null ? null : id(item.leads_id);
+    const lead = leadId ? leads.get(leadId) : undefined;
+    const leadName = text(lead?.leads_name);
+    const alternativeName = text(lead?.leads_alternative_name);
+    const contactName = meaningfulContactName(item.contact_name);
+    const displayName = alternativeName || leadName || contactName;
+    return {
+      id: id(item.conversations_id),
+      chipId: id(item.chips_id),
+      instanceId: id(item.instances_id),
+      leadId,
+      remoteJid: text(item.remote_jid),
+      phone: text(item.contact_phone),
+      contactName,
+      leadName,
+      alternativeName,
+      displayName,
+      avatarUrl: text(item.contact_avatar_url),
+      status: text(item.conversation_status) === 'archived' ? 'archived' : 'open',
+      unreadCount: number(item.unread_count),
+      lastMessageAt: item.last_message_at ? text(item.last_message_at) : null,
+      lastMessagePreview: text(item.last_message_preview),
+      lastMessageDirection: ['inbound', 'outbound'].includes(text(item.last_message_direction)) ? text(item.last_message_direction) as 'inbound' | 'outbound' : null,
+      updatedAt: text(item.conversations_updated_at),
+    };
+  });
 }
 
 export async function listConversationMessages(conversationId: string, limit = 250): Promise<ConversationMessage[]> {

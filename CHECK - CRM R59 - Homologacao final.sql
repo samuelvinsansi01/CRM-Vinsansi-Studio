@@ -309,6 +309,35 @@ mobile_push_contract_diff AS (
     ) THEN 1 ELSE 0 END
   )::bigint AS total
 ),
+conversation_identity_contract_diff AS (
+  SELECT (
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='stage5_conversation_phone_identity' AND pg_get_function_identity_arguments(p.oid)='p_contact_phone text, p_remote_jid text') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='stage5_sync_conversation_lead_identity' AND pg_get_function_identity_arguments(p.oid)='p_conversations_id bigint') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='stage5_repair_conversation_identities_r59' AND pg_get_function_identity_arguments(p.oid)='') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='service_ingest_evolution_message' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%stage5_resolve_conversation_id%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%stage5_register_conversation_aliases%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%stage5_sync_conversation_lead_identity%'
+      )
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='service_stage5_list_conversations' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%leads_alternative_name%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%display_name%'
+      )
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='stage5_sync_conversation_lead_identity' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%effective_whatsapp_phone%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%leads_normalized_phone%'
+      )
+    ) THEN 1 ELSE 0 END
+  )::bigint AS total
+),
 channel_diff AS (
   WITH esperado(nome) AS (VALUES ('whatsapp'::text),('instagram'::text),('sem_destino'::text)), atual AS (
     SELECT regexp_replace(lower(public.unaccent(trim(channels_name))), '[^a-z0-9]+','_','g') nome FROM public.channels
@@ -412,6 +441,7 @@ checks AS (
   UNION ALL SELECT '32_contrato_comercial_r59',(SELECT total FROM commercial_contract_diff),0,false
   UNION ALL SELECT '33_contrato_dashboard_periodo_r59',(SELECT total FROM dashboard_period_contract_diff),0,false
   UNION ALL SELECT '34_contrato_mobile_push_v1',(SELECT total FROM mobile_push_contract_diff),0,false
+  UNION ALL SELECT '35_contrato_identidade_conversas_r59',(SELECT total FROM conversation_identity_contract_diff),0,false
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado
