@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, Check, CheckCheck, Clock3, Inbox, MessageCircle, RefreshCcw, Search, Send, Smartphone, TriangleAlert } from 'lucide-react';
-import { Button, Panel, Tag } from '../design-system/components';
+import { Archive, ArchiveRestore, CalendarDays, Check, CheckCheck, Clock3, Inbox, MessageCircle, RefreshCcw, Search, Send, Smartphone, TriangleAlert } from 'lucide-react';
+import { Button, Field, Panel, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
 import {
   listChatChips, listConversationMessages, listConversationUnreadCounts, listConversations, markConversationRead, setConversationArchived,
   type ChatChip, type Conversation, type ConversationMessage,
 } from '../repositories/conversations/conversations.repository';
-import { sendConversationMessage } from '../services/conversations/conversations.gateway';
+import {
+  getConversationCommercial,
+  sendConversationMessage,
+  setConversationCommercialStage,
+  setConversationDesignDueDate,
+  type ConversationCommercialContext,
+} from '../services/conversations/conversations.gateway';
+import { COMMERCIAL_STAGE_LABELS, type CommercialStage } from '../services/leads/crmLead.types';
 
 function formatTime(value: string | null) {
   if (!value) return '';
@@ -23,6 +30,21 @@ function formatMessageTime(message: ConversationMessage) {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatDateOnly(value?: string) {
+  if (!value) return '—';
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return '—';
+  return new Intl.DateTimeFormat('pt-BR').format(new Date(year, month - 1, day));
+}
+
+function todayInputValue() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function initials(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
   return (parts.slice(0, 2).map((part) => part[0]).join('') || '?').toUpperCase();
@@ -31,7 +53,6 @@ function initials(value: string) {
 function displayContact(conversation: Conversation) {
   return conversation.contactName || conversation.phone || conversation.remoteJid || 'Contato sem nome';
 }
-
 
 function readNotificationConversationTarget() {
   const raw = window.sessionStorage.getItem('crm:notification:conversation-target');
@@ -56,9 +77,14 @@ function MessageStatus({ status }: { status: ConversationMessage['status'] }) {
   return null;
 }
 
+function commercialStageOptions(context: ConversationCommercialContext) {
+  return context.allowedTransitions.map((value) => ({ value, label: COMMERCIAL_STAGE_LABELS[value] }));
+}
+
 export function ConversationsPage() {
   const { hasPermission } = useOrganizationContext();
   const canReply = hasPermission('whatsapp.reply');
+  const canEditLeads = hasPermission('leads.edit');
   const [chips, setChips] = useState<ChatChip[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
@@ -71,8 +97,15 @@ export function ConversationsPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [commercial, setCommercial] = useState<ConversationCommercialContext | null>(null);
+  const [commercialLoading, setCommercialLoading] = useState(false);
+  const [commercialSaving, setCommercialSaving] = useState(false);
+  const [designDueDateDraft, setDesignDueDateDraft] = useState('');
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
   const notificationTargetRef = useRef(readNotificationConversationTarget());
+  const commercialRequestRef = useRef(0);
+  const designDateDirtyRef = useRef(false);
 
   const selectedConversation = conversations.find((item) => item.id === selectedConversationId) ?? null;
   const visibleConversations = useMemo(() => {
@@ -81,6 +114,12 @@ export function ConversationsPage() {
     return conversations.filter((item) => [item.contactName, item.phone, item.remoteJid, item.lastMessagePreview]
       .some((value) => value.toLocaleLowerCase('pt-BR').includes(term)));
   }, [conversations, search]);
+
+  const toast = useCallback((item: Omit<ToastItem, 'id'>) => {
+    const id = crypto.randomUUID?.() ?? String(Date.now());
+    setToasts((current) => [{ id, ...item }, ...current].slice(0, 4));
+    window.setTimeout(() => setToasts((current) => current.filter((entry) => entry.id !== id)), 3400);
+  }, []);
 
   const loadChips = useCallback(async () => {
     const [next, unread] = await Promise.all([listChatChips(), listConversationUnreadCounts()]);
@@ -126,29 +165,55 @@ export function ConversationsPage() {
     }
   }, []);
 
+  const loadCommercial = useCallback(async (conversationId: string | null, quiet = false) => {
+    const requestId = ++commercialRequestRef.current;
+    if (!conversationId) {
+      setCommercial(null);
+      setDesignDueDateDraft('');
+      designDateDirtyRef.current = false;
+      return;
+    }
+    if (!quiet) setCommercialLoading(true);
+    try {
+      const next = await getConversationCommercial(conversationId);
+      if (commercialRequestRef.current !== requestId) return;
+      setCommercial(next);
+      if (!designDateDirtyRef.current) setDesignDueDateDraft(next.designDueDate || '');
+    } catch (cause) {
+      if (commercialRequestRef.current !== requestId) return;
+      if (!quiet) setError(cause instanceof Error ? cause.message : 'Falha ao carregar o estágio comercial.');
+    } finally {
+      if (!quiet && commercialRequestRef.current === requestId) setCommercialLoading(false);
+    }
+  }, []);
+
   const refresh = useCallback(async (quiet = false) => {
     try {
       if (!chips.length) await loadChips();
       await loadConversations(quiet);
       setUnreadByChip(await listConversationUnreadCounts());
-      await loadMessages(selectedConversationId, quiet);
+      await Promise.all([loadMessages(selectedConversationId, quiet), loadCommercial(selectedConversationId, true)]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao atualizar o chat.');
     }
-  }, [chips.length, loadChips, loadConversations, loadMessages, selectedConversationId]);
+  }, [chips.length, loadChips, loadCommercial, loadConversations, loadMessages, selectedConversationId]);
 
   useEffect(() => { void loadChips().catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao carregar chips.')); }, [loadChips]);
   useEffect(() => { void loadConversations(); }, [loadConversations]);
   useEffect(() => {
-    void loadMessages(selectedConversationId);
+    designDateDirtyRef.current = false;
+    setCommercial(null);
+    setDesignDueDateDraft('');
+    void Promise.all([loadMessages(selectedConversationId), loadCommercial(selectedConversationId)]);
     if (selectedConversationId) {
       void markConversationRead(selectedConversationId).then(() => {
         setConversations((current) => current.map((item) => item.id === selectedConversationId ? { ...item, unreadCount: 0 } : item));
-        const chipId = conversations.find((item) => item.id === selectedConversationId)?.chipId;
-        if (chipId) setUnreadByChip((current) => ({ ...current, [chipId]: Math.max(0, (current[chipId] ?? 0) - (conversations.find((item) => item.id === selectedConversationId)?.unreadCount ?? 0)) }));
+        const selected = conversations.find((item) => item.id === selectedConversationId);
+        const chipId = selected?.chipId;
+        if (chipId) setUnreadByChip((current) => ({ ...current, [chipId]: Math.max(0, (current[chipId] ?? 0) - (selected?.unreadCount ?? 0)) }));
       }).catch(() => undefined);
     }
-  }, [loadMessages, selectedConversationId]);
+  }, [loadCommercial, loadMessages, selectedConversationId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -191,6 +256,42 @@ export function ConversationsPage() {
       await setConversationArchived(selectedConversation.id, selectedConversation.status !== 'archived');
       await loadConversations();
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao alterar a conversa.'); }
+  };
+
+  const changeCommercialStage = async (nextStage: CommercialStage) => {
+    if (!selectedConversation || !commercial?.editable || !canEditLeads || commercialSaving || commercial.stage === nextStage) return;
+    setCommercialSaving(true);
+    try {
+      const next = await setConversationCommercialStage(selectedConversation.id, nextStage);
+      setCommercial(next);
+      setDesignDueDateDraft(next.designDueDate || '');
+      designDateDirtyRef.current = false;
+      toast({ title: 'Estágio atualizado', description: `Lead movido para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
+    } catch (cause) {
+      toast({ title: 'Não foi possível atualizar', description: cause instanceof Error ? cause.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setCommercialSaving(false);
+    }
+  };
+
+  const saveDesignDueDate = async () => {
+    if (!selectedConversation || !commercial?.designDueDateEditable || !canEditLeads || commercialSaving) return;
+    if (designDueDateDraft && designDueDateDraft < todayInputValue()) {
+      toast({ title: 'Data inválida', description: 'A nova data prevista não pode estar no passado.', tone: 'danger' });
+      return;
+    }
+    setCommercialSaving(true);
+    try {
+      const next = await setConversationDesignDueDate(selectedConversation.id, designDueDateDraft || null);
+      setCommercial(next);
+      setDesignDueDateDraft(next.designDueDate || '');
+      designDateDirtyRef.current = false;
+      toast({ title: 'Data do design atualizada', description: next.designDueDate ? `Envio previsto para ${formatDateOnly(next.designDueDate)}.` : 'A data prevista foi removida.', tone: 'success' });
+    } catch (cause) {
+      toast({ title: 'Não foi possível salvar a data', description: cause instanceof Error ? cause.message : 'Tente novamente.', tone: 'danger' });
+    } finally {
+      setCommercialSaving(false);
+    }
   };
 
   return (
@@ -248,6 +349,59 @@ export function ConversationsPage() {
                 <span>{selectedConversation.phone || selectedConversation.remoteJid}</span>
                 {selectedConversation.leadId ? <Tag tone="primary">Lead #{selectedConversation.leadId}</Tag> : <Tag tone="neutral">Sem lead vinculado</Tag>}
               </div>
+
+              <div className="chat-commercial-context">
+                {commercialLoading ? <div className="chat-commercial-context__loading"><Clock3 size={15} /><span>Carregando Comercial...</span></div> : null}
+                {!commercialLoading && commercial && !commercial.linked ? (
+                  <div className="chat-commercial-context__empty"><span>Esta conversa ainda não está vinculada a um lead.</span></div>
+                ) : null}
+                {!commercialLoading && commercial?.linked ? (
+                  <>
+                    <div className="chat-commercial-context__lead">
+                      <span className="chat-commercial-context__eyebrow">Comercial</span>
+                      <strong>{commercial.displayName || commercial.leadName || `Lead #${commercial.leadId}`}</strong>
+                      {commercial.alternativeName && commercial.leadName && commercial.alternativeName !== commercial.leadName ? <small>Original: {commercial.leadName}</small> : null}
+                    </div>
+                    <div className="chat-commercial-context__controls">
+                      {commercial.stage ? (
+                        <SelectField
+                          className="commercial-stage-select chat-commercial-stage-select"
+                          density="compact"
+                          value={commercial.stage}
+                          options={commercialStageOptions(commercial)}
+                          disabled={!commercial.editable || !canEditLeads || commercialSaving || commercial.allowedTransitions.length <= 1}
+                          onChange={(value) => void changeCommercialStage(value as CommercialStage)}
+                        />
+                      ) : <Tag tone="neutral">Comercial disponível após o envio</Tag>}
+
+                      {commercial.stage === 'aguardando_design' ? (
+                        <div className="chat-commercial-design-date">
+                          <Field
+                            aria-label="Enviar design até"
+                            density="compact"
+                            type="date"
+                            min={todayInputValue()}
+                            value={designDueDateDraft}
+                            disabled={!commercial.designDueDateEditable || !canEditLeads || commercialSaving}
+                            onChange={(value) => { designDateDirtyRef.current = true; setDesignDueDateDraft(value); }}
+                          />
+                          {commercial.designDueDateEditable && canEditLeads ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              iconLeft={CalendarDays}
+                              loading={commercialSaving}
+                              disabled={!designDateDirtyRef.current}
+                              onClick={() => void saveDesignDueDate()}
+                            >Salvar data</Button>
+                          ) : null}
+                        </div>
+                      ) : commercial.designDueDate ? <Tag tone="neutral">Design: {formatDateOnly(commercial.designDueDate)}</Tag> : null}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+
               <div className="chat-messages" ref={threadRef}>
                 {!messages.length ? <div className="chat-empty"><Inbox size={24} /><span>Nenhuma mensagem registrada.</span></div> : null}
                 {messages.map((message) => (
@@ -268,6 +422,7 @@ export function ConversationsPage() {
           )}
         </Panel>
       </div>
+      <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>
   );
 }

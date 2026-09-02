@@ -41,3 +41,18 @@
 .chat-thread-empty strong { color: var(--app-text); font-size: 15px; }
 @media (max-width: 1080px) { .chat-layout { grid-template-columns: 180px 260px minmax(340px, 1fr); overflow-x: auto; } }
 @media (max-width: 760px) { .chat-layout { display: flex; flex-direction: column; height: auto; min-height: 0; overflow: visible; } .chat-chips { max-height: 220px; } .chat-conversations { max-height: 390px; } .chat-thread { min-height: 560px; } .chat-message { max-width: 88%; } }
+
+/* R59 BUILD FIX 34 — Comercial dentro da conversa */
+.chat-commercial-context { min-height: 70px; padding: 10px 16px; border-bottom: 1px solid var(--border-muted); background: color-mix(in srgb, var(--action-active) 3%, var(--surface-card)); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.chat-commercial-context__lead { min-width: 0; display: grid; gap: 2px; }
+.chat-commercial-context__lead strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--app-text); }
+.chat-commercial-context__lead small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--app-muted); }
+.chat-commercial-context__eyebrow { color: var(--app-muted); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.chat-commercial-context__controls { min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.chat-commercial-stage-select { min-width: 174px; }
+.chat-commercial-design-date { display: flex; align-items: flex-end; gap: 7px; }
+.chat-commercial-design-date .field { width: 150px; }
+.chat-commercial-design-date .field__control { min-width: 150px; }
+.chat-commercial-context__loading, .chat-commercial-context__empty { width: 100%; display: flex; align-items: center; gap: 7px; color: var(--app-muted); font-size: 11px; }
+@media (max-width: 900px) { .chat-commercial-context { align-items: stretch; flex-direction: column; } .chat-commercial-context__controls { justify-content: flex-start; } }
+@media (max-width: 520px) { .chat-commercial-context__controls, .chat-commercial-design-date { align-items: stretch; flex-direction: column; } .chat-commercial-stage-select, .chat-commercial-design-date .field, .chat-commercial-design-date .field__control { width: 100%; min-width: 0; } }

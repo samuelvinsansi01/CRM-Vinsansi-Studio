@@ -259,7 +259,7 @@ if (pullSql.includes("'contractVersion','R58'")) fail('sql_puxada_filtrada_fix10
 
 const homolog = read(homologSql);
 for (const token of [
-  '62::bigint esperado',
+  '63::bigint esperado',
   'status_antigos_funcoes',
   'revisao_com_canal_invalido',
   'revisao_canal_divergente_batch',
@@ -702,7 +702,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const homolog31 = read('CHECK - CRM R59 - Homologacao final.sql');
-  for (const token of ['62::bigint esperado', 'commercial_contract_diff', '32_contrato_comercial_r59']) {
+  for (const token of ['63::bigint esperado', 'commercial_contract_diff', '32_contrato_comercial_r59']) {
     if (!homolog31.includes(token)) fail(`fix31_homologacao_incompleta:${token}`);
   }
 }
@@ -794,7 +794,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const homolog33 = read('CHECK - CRM R59 - Homologacao final.sql');
-  for (const token of ['design_due_date', 'commercial_stage_transition_invalid', '33_contrato_dashboard_periodo_r59', 'dashboard_period_contract_diff']) {
+  for (const token of ['design_due_date', 'commercial_stage_transition_invalid', '33_contrato_dashboard_periodo_r59', 'dashboard_period_contract_diff', '34_contrato_mobile_push_v1', 'mobile_push_contract_diff']) {
     if (!homolog33.includes(token)) fail(`fix33_homologacao_incompleta:${token}`);
   }
 
@@ -803,6 +803,60 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   const sql33 = read(fix33Sql);
   for (const token of ['ADD COLUMN IF NOT EXISTS design_due_date date', 'commercial_stage_transition_invalid', 'commercial_stage_terminal', 'set_lead_design_due_date_r59', 'dashboard_summary_r59', "lc.commercial_stage = 'aguardando_design'"]) {
     if (!sql33.includes(token)) fail(`fix33_sql_incompleto:${token}`);
+  }
+}
+
+
+// R59 BUILD FIX 34 — Comercial integrado às Conversas + contrato único para CRM/Mobile.
+{
+  const conversations34 = read('src/pages/ConversationsPage.tsx');
+  for (const token of [
+    'getConversationCommercial',
+    'setConversationCommercialStage',
+    'setConversationDesignDueDate',
+    'chat-commercial-context',
+    'commercial.allowedTransitions',
+    "commercial.stage === 'aguardando_design'",
+    'Salvar data',
+  ]) if (!conversations34.includes(token)) fail(`fix34_conversas_comercial_incompleto:${token}`);
+
+  const conversationGateway34 = read('src/services/conversations/conversations.gateway.ts');
+  for (const token of [
+    'ConversationCommercialContext',
+    '/api/whatsapp/conversation-commercial',
+    "action: 'stage'",
+    "action: 'design_due_date'",
+    'allowedTransitions',
+    'designDueDateEditable',
+  ]) if (!conversationGateway34.includes(token)) fail(`fix34_gateway_comercial_incompleto:${token}`);
+
+  const conversationRoute34 = read('server/routes/whatsapp/conversation-commercial.ts');
+  for (const token of [
+    "contractVersion:'conversation-commercial-v0.2'",
+    'allowedTransitions',
+    'designDueDateEditable',
+    "humanScope(req,'whatsapp.view')",
+    "p_permission:'leads.edit'",
+    "action==='design_due_date'",
+    'design_due_date_past_invalid',
+    'set_lead_design_due_date_r59',
+  ]) if (!conversationRoute34.includes(token)) fail(`fix34_rota_comercial_incompleta:${token}`);
+  if (conversationRoute34.includes("humanScope(req,'whatsapp.reply')")) fail('fix34_comercial_ainda_exige_whatsapp_reply');
+
+  const fix34Sql = 'APLICAR - CRM R59 BUILD FIX 34 - Comercial nas Conversas e contrato mobile.sql';
+  if (!exists(fix34Sql)) fail('fix34_sql_ausente');
+  const sql34 = read(fix34Sql);
+  for (const token of [
+    'set_lead_design_due_date_r59',
+    'design_due_date_past_invalid',
+    "America/Sao_Paulo",
+    'design_due_date_requires_awaiting_design',
+    "require_organization_permission('leads.edit')",
+  ]) if (!sql34.includes(token)) fail(`fix34_sql_incompleto:${token}`);
+
+  const homolog34 = read('CHECK - CRM R59 - Homologacao final.sql');
+  for (const token of ['design_due_date_past_invalid', 'america/sao_paulo']) {
+    if (!homolog34.toLowerCase().includes(token.toLowerCase())) fail(`fix34_homologacao_incompleta:${token}`);
   }
 }
 

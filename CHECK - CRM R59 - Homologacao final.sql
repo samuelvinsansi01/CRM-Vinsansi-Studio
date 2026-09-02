@@ -268,8 +268,11 @@ commercial_contract_diff AS (
     ) THEN 1 ELSE 0 END +
     CASE WHEN EXISTS (
       SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-      WHERE n.nspname='public' AND p.proname='set_lead_design_due_date_r59'
-        AND lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%design_due_date_requires_awaiting_design%'
+      WHERE n.nspname='public' AND p.proname='set_lead_design_due_date_r59' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%design_due_date_requires_awaiting_design%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%design_due_date_past_invalid%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%america/sao_paulo%'
+      )
     ) THEN 1 ELSE 0 END +
     CASE WHEN EXISTS (
       SELECT 1 FROM public.lead_commercial lc
@@ -289,6 +292,20 @@ dashboard_period_contract_diff AS (
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_commercial%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%design_due_date%'
       )
+    ) THEN 1 ELSE 0 END
+  )::bigint AS total
+),
+mobile_push_contract_diff AS (
+  SELECT (
+    CASE WHEN (SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename='mobile_push_devices') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='public' AND c.relname='mobile_push_devices' AND c.relrowsecurity
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('register_mobile_push_device_v1','disable_mobile_push_device_v1')) <> 2 THEN 1 ELSE 0 END +
+    CASE WHEN NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='lead_commercial'
     ) THEN 1 ELSE 0 END
   )::bigint AS total
 ),
@@ -356,7 +373,7 @@ trigger_residue AS (
   )
 ),
 checks AS (
-  SELECT '01_total_tabelas' verificacao, (SELECT count(*)::bigint FROM pg_tables WHERE schemaname='public') total, 62::bigint esperado, false informativo
+  SELECT '01_total_tabelas' verificacao, (SELECT count(*)::bigint FROM pg_tables WHERE schemaname='public') total, 63::bigint esperado, false informativo
   UNION ALL SELECT '02_lead_status_divergencias',(SELECT total FROM lead_status_diff),0,false
   UNION ALL SELECT '03_channels_divergencias',(SELECT total FROM channel_diff),0,false
   UNION ALL SELECT '04_constraints_nao_validadas',(SELECT count(*)::bigint FROM pg_constraint con JOIN pg_namespace n ON n.oid=con.connamespace WHERE n.nspname='public' AND con.convalidated IS FALSE),0,false
@@ -394,6 +411,7 @@ checks AS (
   UNION ALL SELECT '31_contrato_notificacoes_r59',(SELECT total FROM notification_contract_diff),0,false
   UNION ALL SELECT '32_contrato_comercial_r59',(SELECT total FROM commercial_contract_diff),0,false
   UNION ALL SELECT '33_contrato_dashboard_periodo_r59',(SELECT total FROM dashboard_period_contract_diff),0,false
+  UNION ALL SELECT '34_contrato_mobile_push_v1',(SELECT total FROM mobile_push_contract_diff),0,false
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado

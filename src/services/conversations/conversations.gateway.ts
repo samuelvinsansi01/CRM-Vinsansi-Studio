@@ -1,16 +1,81 @@
 import { getSupabaseClient } from '../../lib/supabase';
+import { COMMERCIAL_STAGES, type CommercialStage } from '../leads/crmLead.types';
 import { organizationRequestHeaders } from '../organization/organizationSession';
 
 type SendResult = { ok: boolean; message_id?: number | string; external_message_id?: string | null; status?: string; error?: string; message?: string };
+type ApiEnvelope = { ok?: boolean; data?: unknown; error?: string; message?: string };
+type Row = Record<string, unknown>;
 
-export async function sendConversationMessage(conversationId: string, message: string, idempotencyKey = crypto.randomUUID()): Promise<SendResult> {
+export type ConversationCommercialContext = {
+  contractVersion: string;
+  conversationId: string;
+  linked: boolean;
+  leadId: string | null;
+  leadName: string;
+  alternativeName: string;
+  displayName: string;
+  leadStatusId: number | null;
+  stage: CommercialStage | null;
+  editable: boolean;
+  allowedTransitions: CommercialStage[];
+  designDueDate: string;
+  designDueDateEditable: boolean;
+  updatedAt: string | null;
+};
+
+const text = (value: unknown) => String(value ?? '').trim();
+const row = (value: unknown): Row => value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {};
+const stageSet = new Set<string>(COMMERCIAL_STAGES);
+const stage = (value: unknown): CommercialStage | null => {
+  const normalized = text(value).toLowerCase();
+  return stageSet.has(normalized) ? normalized as CommercialStage : null;
+};
+
+async function authorizedHeaders(contentType = false) {
   const session = await getSupabaseClient().auth.getSession();
   if (session.error) throw new Error(session.error.message);
   const token = session.data.session?.access_token;
   if (!token) throw new Error('Sessão expirada. Entre novamente.');
+  return organizationRequestHeaders({
+    ...(contentType ? { 'Content-Type': 'application/json' } : {}),
+    Authorization: `Bearer ${token}`,
+  });
+}
+
+async function parseCommercialResponse(response: Response): Promise<ConversationCommercialContext> {
+  const payload = await response.json().catch(() => null) as ApiEnvelope | null;
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.message || payload?.error || `Falha ao atualizar o Comercial (${response.status}).`);
+  }
+  const data = row(payload.data);
+  const leadIdValue = data.leadId == null ? null : text(data.leadId);
+  const leadStatusValue = data.leadStatusId == null ? null : Number(data.leadStatusId);
+  const currentStage = stage(data.stage);
+  const allowedTransitions = Array.isArray(data.allowedTransitions)
+    ? data.allowedTransitions.map(stage).filter((value): value is CommercialStage => value !== null)
+    : currentStage ? [currentStage] : [];
+  return {
+    contractVersion: text(data.contractVersion) || 'conversation-commercial-v0.2',
+    conversationId: text(data.conversationId),
+    linked: data.linked === true,
+    leadId: leadIdValue,
+    leadName: text(data.leadName),
+    alternativeName: text(data.alternativeName),
+    displayName: text(data.displayName) || text(data.alternativeName) || text(data.leadName),
+    leadStatusId: Number.isSafeInteger(leadStatusValue) ? leadStatusValue : null,
+    stage: currentStage,
+    editable: data.editable === true,
+    allowedTransitions,
+    designDueDate: text(data.designDueDate).slice(0, 10),
+    designDueDateEditable: data.designDueDateEditable === true,
+    updatedAt: data.updatedAt == null ? null : text(data.updatedAt),
+  };
+}
+
+export async function sendConversationMessage(conversationId: string, message: string, idempotencyKey = crypto.randomUUID()): Promise<SendResult> {
   const response = await fetch('/api/chat/send', {
     method: 'POST',
-    headers: organizationRequestHeaders({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
+    headers: await authorizedHeaders(true),
     body: JSON.stringify({ conversation_id: Number(conversationId), message, idempotency_key: idempotencyKey }),
   });
   const payload = await response.json().catch(() => null) as SendResult | null;
@@ -19,4 +84,30 @@ export async function sendConversationMessage(conversationId: string, message: s
     throw new Error(error);
   }
   return payload;
+}
+
+export async function getConversationCommercial(conversationId: string): Promise<ConversationCommercialContext> {
+  const response = await fetch(`/api/whatsapp/conversation-commercial?conversationId=${encodeURIComponent(conversationId)}`, {
+    method: 'GET',
+    headers: await authorizedHeaders(),
+  });
+  return parseCommercialResponse(response);
+}
+
+export async function setConversationCommercialStage(conversationId: string, nextStage: CommercialStage): Promise<ConversationCommercialContext> {
+  const response = await fetch('/api/whatsapp/conversation-commercial', {
+    method: 'POST',
+    headers: await authorizedHeaders(true),
+    body: JSON.stringify({ action: 'stage', conversationId: Number(conversationId), stage: nextStage }),
+  });
+  return parseCommercialResponse(response);
+}
+
+export async function setConversationDesignDueDate(conversationId: string, designDueDate: string | null): Promise<ConversationCommercialContext> {
+  const response = await fetch('/api/whatsapp/conversation-commercial', {
+    method: 'POST',
+    headers: await authorizedHeaders(true),
+    body: JSON.stringify({ action: 'design_due_date', conversationId: Number(conversationId), designDueDate: designDueDate || null }),
+  });
+  return parseCommercialResponse(response);
 }

@@ -29,7 +29,7 @@ const domains = [
   { entrypoint: 'tools', source: '/api/tools/executor/:action', destination: '/api/tools?route=executor/:action', routes: ['executor/config','executor/context','executor/heartbeat','executor/logout','executor/pair-exchange','executor/pair-start','executor/runtime','executor/switch'] },
   { entrypoint: 'maps', source: '/api/maps/:action', destination: '/api/maps?route=:action', routes: ['extension','pair'] },
   { entrypoint: 'instagram', source: '/api/instagram/:action', destination: '/api/instagram?route=:action', routes: ['extension','pair'] },
-  { entrypoint: 'whatsapp', source: '/api/whatsapp/:action', destination: '/api/whatsapp?route=:action', routes: ['batch','dispatch','revalidate','validate','conversations','conversation-messages','conversation-action','conversation-members','conversation-presence','manual-message','conversation-media','queue-operations'] },
+  { entrypoint: 'whatsapp', source: '/api/whatsapp/:action', destination: '/api/whatsapp?route=:action', routes: ['batch','dispatch','validate','conversations','conversation-messages','conversation-action','conversation-members','conversation-presence','conversation-channel','manual-message','conversation-media','conversation-send','conversation-commercial','queue-operations'] },
   { entrypoint: 'organization', source: '/api/organization/:action', destination: '/api/organization?route=:action', routes: ['invitations'] },
   { entrypoint: 'system', source: '/api/desktop/:action', destination: '/api/system?route=desktop/:action', routes: ['desktop/evolution-instances','desktop/worker-provision'] },
   { entrypoint: 'system', source: '/api/chat/:action', destination: '/api/system?route=chat/:action', routes: ['chat/send'] },
@@ -85,7 +85,7 @@ try {
       publicRoutes.push(publicPath);
     }
   }
-  expect(publicRoutes.length === 29, `Matriz pública incompleta: ${publicRoutes.length}/29.`);
+  expect(publicRoutes.length === 31, `Matriz pública incompleta: ${publicRoutes.length}/31.`);
 
   const contextWithoutSession = await invoke('tools', 'executor/context', 'GET');
   expect(contextWithoutSession.status === 401 && contextWithoutSession.body?.error === 'user_session_required', 'Contexto executor não preservou autenticação humana.');
@@ -101,4 +101,4 @@ try {
   fs.rmSync(temporary, { recursive: true, force: true });
 }
 
-console.log(`Vercel Hobby: ${functions.length} Functions e 29 rotas públicas consolidadas; smoke local aprovado.`);
+console.log(`Vercel Hobby: ${functions.length} Functions e 31 rotas públicas consolidadas; smoke local aprovado.`);

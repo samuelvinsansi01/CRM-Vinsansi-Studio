@@ -1,0 +1,33 @@
+VINSANSI MOBILE v0.2.0 — CONTRATO COMERCIAL SOBRE CRM R59 BUILD FIX 34
+
+ESCOPO DESTA ENTREGA
+- CRM Web passa a editar o Comercial dentro da conversa.
+- Mobile passa a ter um contrato completo para ler/alterar estágio e data prevista do design.
+- Nenhuma mensagem altera o estágio automaticamente.
+- Gerenciador Desktop ainda deve consumir este mesmo endpoint em pacote próprio.
+
+VALIDAÇÕES DA MESCLA
+[OK] Base preserva CRM R59 BUILD FIX 33 + Mobile backend v0.1.0.
+[OK] conversation-commercial GET devolve allowedTransitions e designDueDate.
+[OK] conversation-commercial POST separa action=stage de action=design_due_date.
+[OK] Edição do Comercial exige leads.edit e apenas acesso whatsapp.view à conversa.
+[OK] set_lead_commercial_stage_r59 continua soberana para impedir retorno/pulo de estágio.
+[OK] set_lead_design_due_date_r59 continua restrita a aguardando_design.
+[OK] Nova data no passado é recusada segundo America/Sao_Paulo.
+[OK] Datas que se tornam atrasadas não são apagadas nem invalidadas.
+[OK] CRM atualiza estágio/data sem reload da conversa.
+
+BANCO
+[ ] Confirmar/aplicar CRM R59 BUILD FIX 33.
+[ ] Aplicar CRM R59 BUILD FIX 34.
+[ ] Confirmar/aplicar MOBILE v0.1.0 PUSH para notificações do app.
+
+ROTEIRO
+1. Abrir Conversas no CRM e selecionar uma conversa vinculada a lead enviado.
+2. Confirmar o nome do lead e estágio atual no contexto da conversa.
+3. Avançar Aguardando resposta -> Aguardando design.
+4. Confirmar que voltar/pular estágio não aparece como opção e também é recusado pelo banco.
+5. Definir uma data futura para o design e confirmar persistência no Comercial.
+6. Tentar gravar nova data anterior ao dia operacional e confirmar recusa.
+7. Avançar para Design enviado e confirmar que a data permanece como referência, sem edição.
+8. Consumir o mesmo endpoint pelo app e confirmar estado idêntico.
