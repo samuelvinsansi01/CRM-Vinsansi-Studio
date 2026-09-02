@@ -62,3 +62,29 @@
   gap: var(--space-08);
   width: 100%;
 }
+
+/* R59 BUILD FIX 32 — padrão único dos cards métricos (referência visual: Leads). */
+.app-shell .metric-grid .metric-card {
+  height: 82px;
+  min-height: 82px;
+  gap: var(--space-16);
+  padding: var(--space-16) var(--space-20);
+  border-radius: var(--radius-08);
+}
+.app-shell .metric-grid .metric-card__icon {
+  width: var(--space-40);
+  height: var(--space-40);
+  border-radius: var(--radius-08);
+}
+.app-shell .metric-grid .metric-card__text {
+  gap: var(--space-04);
+}
+.app-shell .metric-grid .metric-card__text strong {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+.app-shell .metric-grid .metric-card__text small {
+  font-size: 12px;
+  line-height: 14px;
+}

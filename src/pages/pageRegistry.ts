@@ -50,7 +50,14 @@ export const navGroups: readonly NavGroup[] = [
   { id: 'leads', label: 'Leads' },
   { id: 'commercial', label: 'Comercial' },
   { id: 'conversations', label: 'Conversas' },
-  { id: 'sends', label: 'Envios' },
+  {
+    id: 'sends',
+    label: 'Fila de Disparo',
+    items: [
+      { id: 'whatsapp', label: 'WhatsApp' },
+      { id: 'instagram', label: 'Instagram' },
+    ],
+  },
 ];
 
 export const pageTitles: Record<PageId, string> = {
@@ -58,7 +65,7 @@ export const pageTitles: Record<PageId, string> = {
   leads: 'Leads',
   commercial: 'Comercial',
   conversations: 'Conversas',
-  sends: 'Envios',
+  sends: 'Fila de Disparo',
   home: 'Início legado',
   'import-approved': 'Importação',
   'import-rejected': 'Importação',

@@ -1,0 +1,186 @@
+CRM - Vinsansi Studio v2.4.0-R59
+BUILD FIX 9 — 29/08/2026
+
+ARQUIVOS OBRIGATÓRIOS DE HOMOLOGAÇÃO
+- CHECK - CRM R59 - Homologacao final.sql
+- APLICAR - CRM R59 BUILD FIX 6 - Corrigir invalidacao.sql
+- APLICAR - CRM R59 BUILD FIX 8 - Nome alternativo e snapshot.sql
+- APLICAR - CRM R59 BUILD FIX 10 - Modal e filtros da puxada.sql
+
+CONTRATO ATUAL
+- Banco estrutural congelado em 60 tabelas.
+- lead_status 6 = invalido.
+- status 6 = erro, reservado a falha técnica.
+- status 7 = cancelado, usado quando o operador invalida um item da Fila final.
+- Item cancelado sai da fila ativa e permanece apenas como histórico relacional.
+- Lead invalidado aparece na Base Permanente como Inválido.
+
+BUILD FIX 6 — INVALIDAÇÃO
+- invalidate_final_queue_item encerra o queue_item com status_id=7 (cancelado), não status_id=6 (erro).
+- queue_items_error_message não é usado para invalidação manual.
+- invalidate_queue_review_item mantém lead_status_id=6 e contrato R59.
+- Itens gravados pela versão anterior como erro por "invalidado pelo operador" são reparados para cancelado.
+- Filas canônicas não carregam status operacional cancelado na listagem ativa.
+- Mapeamento interno invalid -> status CANCELADO; cancelado nunca é interpretado como erro técnico.
+- Resumos locais removem o item invalidado do Total e não aumentam Erros/Finalizados.
+
+BUILD FIX 7 — POSIÇÃO OPERACIONAL DA FILA
+- A coluna # da Fila final exibe posição atual compacta 1..N, sem lacunas após invalidação/cancelamento.
+- A ordem histórica persistida continua intacta para o runtime/Worker; apenas a representação operacional é compactada.
+- Ao invalidar um item, os itens seguintes sobem visualmente uma posição imediatamente.
+- A capacidade liberada continua sendo preenchida somente por uma nova ação Puxar; não há refill automático.
+- Drawer e ações recebem a mesma posição operacional mostrada na tabela.
+
+CHECK R59
+- 20_status_operacional_divergencias valida o catálogo operacional 1–8.
+- 21_contrato_invalidacao_r59 valida o contrato das duas RPCs sem busca textual ampla/falso positivo.
+- 22_invalidacao_manual_marcada_como_erro detecta qualquer resíduo de invalidação manual gravado como erro técnico.
+
+INÍCIO
+- Cards oficiais: Importados, Sem destino, WhatsApp, Instagram.
+- Contagens por destino real do lead; cards antigos Com número/Com Instagram/Com site não fazem parte da página.
+
+WHATSAPP
+- Observabilidade técnica preservada desde o Gateway até o toast da fila.
+- Gateway esperado: 1.2.14.
+- Worker esperado: 3.13.7.
+
+VERIFICAÇÕES EXECUTADAS NESTE PACOTE
+- node scripts/verify-syntax.mjs: APROVADO em 233 arquivos TypeScript.
+- node scripts/verify-r59-final-contract.mjs: APROVADO.
+
+BUILD COMPLETO
+- O build completo Vite/TypeScript depende das dependências npm instaladas e não foi executado neste ambiente.
+
+BUILD FIX 8 — NOME ALTERNATIVO E SNAPSHOT
+- Nome original da empresa permanece nas tabelas e listagens; leads_alternative_name não substitui mais a coluna Empresa.
+- Nome alternativo é usado somente como nome efetivo de personalização do envio.
+- Fila WhatsApp e Fila Instagram separam company (original) de company_name (nome usado no envio).
+- update_lead_alternative_name regenera snapshot + hash antes do início e devolve as mensagens regeneradas ao frontend.
+- O frontend atualiza localmente Mensagens 1–4 sem refresh/piscar a tabela.
+- Remover o nome alternativo regenera o snapshot usando novamente o nome original.
+- approve_queue_review_item passa a declarar contrato R59, sem resíduo de versão anterior.
+- CHECK 23 valida o contrato do nome alternativo/snapshot.
+- CHECK 24 valida o contrato R59 da aprovação Revisão -> Fila final.
+
+
+BUILD FIX 9 — FEEDBACK VISUAL SEM DESLOCAR TABELAS
+- Aprovar na Revisão não exibe mais aviso inline de sucesso nem toast de sucesso; a linha some localmente e a Fila final é atualizada normalmente.
+- Invalidar na Revisão não exibe mais aviso de sucesso; erros continuam sendo informados.
+- Invalidar na Fila final (WhatsApp/Instagram) não exibe mais toast de sucesso; a remoção local e compactação da fila continuam imediatas.
+- Editar nome alternativo não exibe mais toast de sucesso; o drawer fecha e as mensagens/linha são atualizadas localmente.
+- Avisos de erro e bloqueio permanecem, pois são necessários para diagnóstico.
+- Nenhuma alteração de banco, RPC, trigger, Gateway, Worker ou Gerenciador.
+
+BUILD FIX 10 — MODAL ÚNICO DE PUXADA + FILTROS
+- Início usa um único botão Puxar leads; os controles antigos Puxar WhatsApp/Puxar Instagram foram removidos da página.
+- Modal transacional permite escolher canal, data, chip/perfil e perfil das empresas antes da reserva.
+- WhatsApp: Site = Qualquer/Sem site/Com site e Instagram = Qualquer/Sem Instagram/Com Instagram.
+- Instagram: Site = Qualquer/Sem site/Com site; presença de Instagram continua requisito estrutural do canal.
+- Modal mostra capacidade, ocupação, vagas, leads compatíveis e quantidade exata que será puxada.
+- Não existe campo manual de quantidade, oversampling, refill ou fallback para lead fora do filtro.
+- preview_queue_review_pull apenas conta; não reserva nem altera lead.
+- pull_queue_review_to_capacity continua a reserva atômica com FOR UPDATE ... SKIP LOCKED e passa a aplicar os filtros dentro da própria transação.
+- pull_queue_review_to_capacity declara contractVersion R59; resíduo R58 removido.
+- Filas WhatsApp/Instagram também usam o mesmo modal ao acionar Puxar leads.
+- Feedback de sucesso volta como toast flutuante no canto para Aprovar, Invalidar e Editar, sem alterar a altura das tabelas.
+- CHECK 25 valida o contrato da puxada filtrada R59.
+- Nenhuma tabela, coluna, trigger, Gateway, Worker ou Gerenciador foi alterado.
+
+VERIFICAÇÕES BUILD FIX 10
+- node scripts/verify-syntax.mjs: APROVADO em 235 arquivos TypeScript.
+- node scripts/verify-r59-final-contract.mjs: APROVADO.
+
+BUILD FIX 12 — DRAWER PADRÃO PARA PUXAR LEADS
+- QueuePullModal removido; o fluxo usa QueuePullDrawer baseado no Drawer oficial do design system.
+- Puxar leads abre painel lateral direito com cabeçalho, corpo rolável e rodapé fixo iguais aos demais cadastros do CRM.
+- Canal permanece em controle segmentado; Site e Instagram usam SelectField padrão.
+- Botões Puxar leads do Início e das Filas usam ícone ListPlus.
+- CTA Puxar N leads no drawer também usa ícone ListPlus.
+- A lógica R59 de prévia, filtros, capacidade e reserva atômica do BUILD FIX 10 permanece inalterada.
+- Nenhuma alteração de banco/RPC/trigger nesta revisão visual.
+
+BUILD FIX 13 — FILTROS DA BASE E DROPDOWNS
+- Filtro Estado da tela Início mantém UF na tabela, mas exibe nomes completos dos estados no dropdown.
+- Menus SelectField ganham largura mínima confortável e opções em uma única linha, com ellipsis quando necessário.
+- Adicionados filtros Site (Todos / Sem site / Com site) e Instagram (Todos / Sem Instagram / Com Instagram) na base de Importados.
+- Os novos filtros são somente de visualização da base; não alteram Motor de Captura nem contrato da puxada filtrada.
+- Nenhuma alteração de banco/RPC/trigger/Gateway/Worker/Gerenciador.
+
+
+BUILD FIX 14 — SELETOR DE ORGANIZAÇÃO
+- Seletor nativo removido do Header; dropdown usa identidade visual escura do projeto.
+- Fechamento por clique externo/Escape e exclusão mútua com menu de perfil.
+
+BUILD FIX 15 — VIRADA À MEIA-NOITE
+- Corte operacional alterado para 00:00; antecipação das 22h removida.
+- Tela aberta agenda refresh logo após a meia-noite; tela fechada processa na próxima leitura.
+
+BUILD FIX 16 — CARD REVISÃO
+- Filas WhatsApp e Instagram exibem card Revisão por data + recurso selecionados.
+- Contagem cai localmente ao aprovar/invalidar e atualiza após nova puxada.
+
+BUILD FIX 17 — APROVAÇÃO + CAPACIDADE + TABELAS
+- Template é selecionado uma única vez no frontend e branches_id é a identidade canônica do ramo.
+- approve_queue_review_item revalida branch/canal/tipo/status no banco e resolve fallback canônico quando o template solicitado divergir.
+- Aprovação converte uma vaga já reservada na Revisão; não exige uma segunda vaga antes da conversão.
+- rollover_queue_items_to_capacity centraliza a virada no banco e usa list_queue_review_resources, portanto Fila final + Revisão compartilham o mesmo limite.
+- Reconciliação automática move apenas itens Em fila/Pausado oriundos de datas anteriores quando o rollover antigo deixou o dia acima da capacidade.
+- Tabs Revisão/Fila final ocupam apenas a largura do conteúdo.
+- Fila WhatsApp passa a exibir Instagram Sim/Não clicável tanto na Revisão quanto na Fila final.
+- CHECK 26 valida o contrato do rollover canônico R59.
+
+BUILD FIX 19 — PAGINAÇÃO, RAMOS, NAVEGAÇÃO E LOTES
+- Paginação operacional aceita 10/20/50/100 de ponta a ponta: seletor, normalização frontend e RPCs server-side.
+- Alterar linhas por página reinicia na página 1 e o banco devolve exatamente o limite escolhido.
+- Menu superior Disparos passa a se chamar Filas.
+- Submenus internos em cascata abrem para a direita e usam chevron semanticamente correspondente.
+- Drawer Puxar leads ganha filtro multi-ramos pesquisável; sem seleção significa Todos os ramos.
+- Ramos são restrição dura da prévia e da reserva atômica; nenhum ramo externo é usado para completar vagas.
+- Cabeçalho visível Ações removido de todas as DataTable; ícones permanecem acessíveis por rótulo de leitor de tela.
+- Coluna de ações usa largura calculada pela quantidade real de ícones e alinhamento à direita.
+- Fila final exibe Lote X/Y por lead e separador visual no início de cada lote previsto.
+- Lotes previstos usam levels_queues e levels_daily_limit do chip/perfil; o último lote absorve eventual resto sem criar lote adicional.
+- pull_queue_review_to_capacity deixa de subtrair Revisão duas vezes: list_queue_review_resources já entrega available líquido de Fila final + Revisão.
+- CHECK 28 valida filtro de ramos e contrato visual/dados dos lotes.
+- Aprovação Revisão -> Fila final permanece com o contrato homologado no FIX 17; nenhuma alteração nesse fluxo.
+- Verificação do pacote: sintaxe TypeScript aprovada em 239 arquivos e contrato R59 aprovado.
+- Build Vite completo continua dependente das dependências npm ausentes neste ambiente; a tentativa falhou por módulos React/Supabase não instalados, não por um erro isolado do FIX 19.
+
+
+BUILD FIX 20 — PROTEÇÃO DE DOWNGRADE DE NÍVEL (CUMULATIVO AO FIX 19)
+- Substitui o FIX 19 para quem ainda não o aplicou; inclui paginação 10/20/50/100, ramos, navegação e lotes do pacote anterior.
+- CRM pré-valida troca de nível de chips WhatsApp e perfis Instagram antes do UPDATE.
+- PostgreSQL bloqueia por trigger qualquer downgrade cujo novo levels_daily_limit fique abaixo da ocupação de hoje ou de uma data futura já preparada.
+- Ocupação canônica soma Revisão aberta + itens da Fila que consomem capacidade (pendente/processando/concluído/pausado).
+- Datas passadas não bloqueiam downgrade; aumento ou manutenção de limite continua permitido.
+- Edição direta de levels_daily_limit também é protegida para todos os chips/perfis vinculados ao nível.
+- Mensagem de bloqueio informa recurso, data crítica, ocupação e novo limite.
+- CHECK 29 valida RPCs, helper de ocupação e triggers da proteção de nível.
+
+
+
+BUILD FIX 21 — COMPACTAÇÃO AUTOMÁTICA DA FILA FINAL
+- Invalidação na Fila final passa a reler silenciosamente a página server-side confirmada pelo banco.
+- O próximo item ocupa a vaga da página automaticamente; não existe buraco visual após invalidar.
+- Posição operacional e Lote X/Y são recalculados pela fila ativa, ignorando cancelados/inválidos.
+- A travessia entre lotes é automática: o primeiro item do lote seguinte sobe quando uma vaga anterior é removida.
+- Se a última página deixar de existir após a invalidação, a tela retorna para a última página válida.
+- Não há puxada/reposição automática de novos leads; a capacidade liberada só é preenchida por Puxar leads.
+- WhatsApp e Instagram usam o mesmo contrato de compactação.
+
+
+BUILD FIX 23 — PALAVRA-CHAVE NO NOME NA PUXADA
+- Drawer Puxar leads ganhou filtro opcional "Palavra-chave no nome".
+- Campo vazio não restringe; quando preenchido exige no mínimo 3 caracteres.
+- Busca exclusivamente leads_name, com comparação literal, sem diferenciar maiúsculas/minúsculas ou acentos.
+- Preview e reserva real usam exatamente o mesmo filtro server-side; nenhum lead fora da palavra-chave completa vagas.
+- Debounce de 300 ms recalcula Leads compatíveis e Serão puxados sem consultar a cada tecla.
+- CHECK 30 valida o contrato canônico p_name_keyword nas RPCs de preview e pull.
+
+R59 BUILD FIX 24 - Fonte canônica dos níveis WhatsApp
+- Central de Ferramentas > Gerenciador de Disparos > Configurações edita somente delays e fuso operacional.
+- Limite diário, quantidade de lotes e distribuição por lote são somente leitura e vêm de Configurações > Filas > Níveis.
+- A fila WhatsApp não sobrescreve mais o nível canônico com chipLevels legados.
+- O runtime legado de plataforma usa os valores já resolvidos do nível do chip.
+- Sem SQL novo e sem alteração em Worker/Gateway/Gerenciador.

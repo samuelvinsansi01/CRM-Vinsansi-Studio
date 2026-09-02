@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Button,
   DataTable,
+  Drawer,
+  Field,
   FiltersBar,
   MetricCard,
   RowsPerPageControl,
@@ -11,6 +13,7 @@ import {
   TableCard,
   Tag,
   ToastViewport,
+  type TableAction,
   type TableColumn,
   type ToastItem,
 } from '../design-system/components';
@@ -18,7 +21,9 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useCrmLeads } from '../hooks/useCrmLeads';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
-import { COMMERCIAL_STAGE_LABELS, type CommercialStage } from '../services/leads/crmLead.types';
+import { COMMERCIAL_STAGE_LABELS, type CommercialStage, type CrmLead } from '../services/leads/crmLead.types';
+import { statusLabel } from '../services/status/status.mapper';
+import { externalHttpHref, instagramHref, mapsHref, whatsappHref } from '../utils/externalLinks';
 
 type Row = Record<string, ReactNode> & { id: string };
 const STAGES = Object.entries(COMMERCIAL_STAGE_LABELS).map(([value, label]) => ({ value, label }));
@@ -54,6 +59,7 @@ export function CommercialPage() {
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [savingLeadId, setSavingLeadId] = useState('');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [viewingLead, setViewingLead] = useState<CrmLead | null>(null);
 
   useEffect(() => { window.sessionStorage.removeItem('crm:commercial:stage'); }, []);
 
@@ -78,6 +84,7 @@ export function CommercialPage() {
     setSavingLeadId(leadId);
     try {
       await setCommercialStage(leadId, nextStage);
+      await refresh();
       toast({ title: 'Estágio atualizado', description: `Lead movido para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
     } catch (err) {
       toast({ title: 'Não foi possível atualizar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
@@ -98,7 +105,7 @@ export function CommercialPage() {
 
   const rows = useMemo<Row[]>(() => items.map((lead) => ({
     id: lead.id,
-    company: lead.company,
+    company: lead.alternativeName ? <span title={`Nome original: ${lead.company}`}><strong>{lead.alternativeName}</strong></span> : lead.company,
     branch: lead.branch || '—',
     location: [lead.city, lead.state].filter(Boolean).join(' · ') || '—',
     channel: <Tag tone={lead.channel === 'WhatsApp' ? 'success' : lead.channel === 'Instagram' ? 'primary' : 'neutral'}>{lead.channel}</Tag>,
@@ -108,6 +115,12 @@ export function CommercialPage() {
   })), [canEdit, items, savingLeadId]);
 
   const selectStage = (value: CommercialStage | '') => { setStage(value); setPage(1); };
+
+  const handleAction = (action: TableAction, row: Row) => {
+    if (action !== 'view') return;
+    const lead = items.find((item) => item.id === row.id);
+    if (lead) setViewingLead(lead);
+  };
 
   return (
     <div className="dashboard-table-page commercial-page">
@@ -142,8 +155,29 @@ export function CommercialPage() {
         {error ? <div className="table-message">{error}</div> : null}
         {!error && loading ? <div className="table-message">Carregando gestão comercial...</div> : null}
         {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead neste estágio.</div> : null}
-        {!error && !loading && rows.length ? <DataTable columns={columns} rows={rows} selectable={false} /> : null}
+        {!error && !loading && rows.length ? <DataTable columns={columns} rows={rows} selectable={false} actions={['view']} onAction={handleAction} /> : null}
       </TableCard>
+
+      <Drawer open={viewingLead !== null} title="Detalhes comerciais" description="O estágio é manual. As mensagens permanecem na Central de Conversas e não alteram esta classificação." onClose={() => setViewingLead(null)} footer={<Button variant="secondary" onClick={() => setViewingLead(null)}>Fechar</Button>}>
+        {viewingLead ? <div className="drawer-form drawer-form--readonly">
+          <Field label="Empresa original" value={viewingLead.company} readOnly />
+          <Field label="Nome alternativo" value={viewingLead.alternativeName || '—'} readOnly />
+          <Field label="Ramo" value={viewingLead.branch || '—'} readOnly />
+          <Field label="Localidade" value={[viewingLead.city, viewingLead.state].filter(Boolean).join(' · ') || '—'} readOnly />
+          <Field label="Canal" value={viewingLead.channel} readOnly />
+          <Field label="WhatsApp" value={viewingLead.phone || '—'} readOnly />
+          {viewingLead.phone ? <a className="drawer-external-link" href={whatsappHref(viewingLead.phone)} target="_blank" rel="noreferrer">Abrir WhatsApp</a> : null}
+          <Field label="Instagram" value={viewingLead.instagram ? `@${viewingLead.instagram.replace(/^@/, '')}` : '—'} readOnly />
+          {viewingLead.instagram ? <a className="drawer-external-link" href={instagramHref(viewingLead.instagram)} target="_blank" rel="noreferrer">Abrir Instagram</a> : null}
+          <Field label="Site" value={viewingLead.website || '—'} readOnly />
+          {viewingLead.website ? <a className="drawer-external-link" href={externalHttpHref(viewingLead.website)} target="_blank" rel="noreferrer">Abrir site</a> : null}
+          <Field label="Google Maps" value={viewingLead.mapsUrl || '—'} readOnly />
+          {viewingLead.mapsUrl ? <a className="drawer-external-link" href={mapsHref(viewingLead.mapsUrl)} target="_blank" rel="noreferrer">Abrir Google Maps</a> : null}
+          <Field label="Status operacional" value={statusLabel(viewingLead.statusId)} readOnly />
+          <Field label="Estágio comercial" value={COMMERCIAL_STAGE_LABELS[viewingLead.commercialStage ?? 'aguardando_resposta']} readOnly />
+          <Field label="Alterado em" value={viewingLead.commercialUpdatedAt ? formatDate(viewingLead.commercialUpdatedAt) : '—'} readOnly />
+        </div> : null}
+      </Drawer>
 
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>

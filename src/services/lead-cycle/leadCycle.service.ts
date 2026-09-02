@@ -228,12 +228,14 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
   const ids = await catalogIds();
   let targetChannelId = before.channels_id == null ? null : Number(before.channels_id);
 
-  if (lead.statusId === LEAD_STATUS.IMPORTED) {
+  let targetStatusId = lead.statusId;
+  if (lead.statusId === LEAD_STATUS.IMPORTED || lead.statusId === LEAD_STATUS.NO_CONTACT) {
     targetChannelId = effectivePhone && instagram
       ? ids.noDestination
       : instagram
         ? ids.instagram
         : ids.whatsapp;
+    if (lead.statusId === LEAD_STATUS.NO_CONTACT) targetStatusId = LEAD_STATUS.IMPORTED;
   } else if (input.channel === 'Instagram') {
     if (!instagram) throw new Error('Para usar Instagram como destino, informe um Instagram válido.');
     targetChannelId = ids.instagram;
@@ -252,6 +254,7 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
     leads_website: input.website.trim() || null,
     leads_maps: input.mapsUrl.trim() || null,
     channels_id: targetChannelId,
+    ...(targetStatusId !== lead.statusId ? { lead_status_id: targetStatusId } : {}),
   }, before.channels_id == null ? undefined : Number(before.channels_id));
   if (!updated) throw new Error('O lead foi alterado por outra operação. Atualize a página e tente novamente.');
 
@@ -259,9 +262,60 @@ async function updateDetails(lead: LeadCycleLead, input: LeadCycleDetailsInput) 
   return mapRow(updated, ids.whatsapp, ids.instagram, ids.noDestination);
 }
 
+
+async function getById(id: string): Promise<LeadCycleLead> {
+  const row = (await supabaseLeadCycleRepository.listByIds([id]))[0];
+  if (!row) throw new Error('Lead não encontrado ou sem permissão de acesso.');
+  const ids = await catalogIds();
+  return mapRow(row, ids.whatsapp, ids.instagram, ids.noDestination);
+}
+
+
+async function invalidateLead(id: string): Promise<LeadCycleLead> {
+  const before = (await supabaseLeadCycleRepository.listByIds([id]))[0];
+  if (!before) throw new Error('Lead não encontrado ou sem permissão de acesso.');
+  if (![LEAD_STATUS.IMPORTED, LEAD_STATUS.NO_CONTACT].includes(before.lead_status_id as 1 | 3)) {
+    throw new Error('Este lead não pode ser invalidado por esta tela no estágio atual.');
+  }
+  const ids = await catalogIds();
+  const updated = await supabaseLeadCycleRepository.compareAndSet(id, before.lead_status_id, {
+    lead_status_id: LEAD_STATUS.INVALID,
+  }, before.channels_id == null ? undefined : Number(before.channels_id));
+  if (!updated) throw new Error('O lead foi alterado por outra operação. Atualize a página e tente novamente.');
+  eventBus.emit('import:changed', { source: 'move' });
+  return mapRow(updated, ids.whatsapp, ids.instagram, ids.noDestination);
+}
+
+async function restoreInvalidToImported(id: string): Promise<LeadCycleLead> {
+  const before = (await supabaseLeadCycleRepository.listByIds([id]))[0];
+  if (!before) throw new Error('Lead não encontrado ou sem permissão de acesso.');
+  if (before.lead_status_id !== LEAD_STATUS.INVALID) throw new Error('Somente leads inválidos podem retornar para Importado por esta ação.');
+
+  const effectivePhone = normalizeEditedPhone(getEffectiveWhatsAppPhone(before));
+  const instagram = normalizeInstagramUsername(before.leads_instagram ?? '');
+  if (!effectivePhone && !instagram) throw new Error('Edite o lead e informe um WhatsApp/telefone ou Instagram antes de retorná-lo para a operação.');
+
+  const ids = await catalogIds();
+  const targetChannelId = effectivePhone && instagram
+    ? ids.noDestination
+    : instagram
+      ? ids.instagram
+      : ids.whatsapp;
+  const updated = await supabaseLeadCycleRepository.compareAndSet(id, LEAD_STATUS.INVALID, {
+    lead_status_id: LEAD_STATUS.IMPORTED,
+    channels_id: targetChannelId,
+  }, before.channels_id == null ? undefined : Number(before.channels_id));
+  if (!updated) throw new Error('O lead foi alterado por outra operação. Atualize a página e tente novamente.');
+  eventBus.emit('import:changed', { source: 'move' });
+  return mapRow(updated, ids.whatsapp, ids.instagram, ids.noDestination);
+}
+
 export const leadCycleService = {
   listImported: () => listByStatuses([LEAD_STATUS.IMPORTED]),
   listImportedPage,
   executeRoutingCommand,
+  getById,
+  invalidateLead,
+  restoreInvalidToImported,
   updateDetails,
 };

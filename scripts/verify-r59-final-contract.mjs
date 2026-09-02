@@ -369,10 +369,10 @@ for (const token of [
   }
   for (const token of ['MultiSelectField', 'branchIds', 'Ramos', 'Todos os ramos']) if (!pullDrawer19.includes(token)) fail(`drawer_ramos_incompleto:${token}`);
   for (const token of ["rpc('list_queue_review_branches_r59'", 'p_branch_ids: filters.branchIds']) if (!queueReviewService19.includes(token)) fail(`servico_ramos_incompleto:${token}`);
-  // FIX31 removeu submenus do header: navegação primária agora é direta e task-based.
-  if (!header19.includes('ChevronRight') && !registry19.includes("{ id: 'sends', label: 'Envios' }")) fail('navegacao_semantica_ausente');
+  // FIX32 mantém a navegação task-based e reintroduz apenas um dropdown semântico para as filas por canal.
+  if (!header19.includes('ChevronRight') && !registry19.includes("label: 'Envios'") && !registry19.includes("label: 'Fila de Disparo'")) fail('navegacao_semantica_ausente');
   if (!componentsCss19.includes('left: calc(100% - var(--space-02));')) fail('submenu_interno_nao_abre_direita');
-  if ((registry19.match(/label: 'Filas'/g) ?? []).length < 2 && !registry19.includes("{ id: 'sends', label: 'Envios' }")) fail('menu_operacional_envios_ausente');
+  if ((registry19.match(/label: 'Filas'/g) ?? []).length < 2 && !registry19.includes("label: 'Envios'") && !registry19.includes("label: 'Fila de Disparo'")) fail('menu_operacional_envios_ausente');
   if (!dataTable19.includes(`<span className="sr-only">{actionsLabel ?? 'Ações'}</span>`)) fail('cabecalho_acoes_sem_rotulo_acessivel');
   if (dataTable19.includes('<th className="data-table__actions">Ações</th>')) fail('cabecalho_acoes_visivel');
   for (const token of ['actionColumnWidth', 'data-table__actions-list', 'getRowClassName']) if (!dataTable19.includes(token)) fail(`tabela_acoes_proporcionais_incompleta:${token}`);
@@ -668,7 +668,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     "{ id: 'leads', label: 'Leads' }",
     "{ id: 'commercial', label: 'Comercial' }",
     "{ id: 'conversations', label: 'Conversas' }",
-    "{ id: 'sends', label: 'Envios' }",
+    "label: 'Fila de Disparo'",
     'settingsPageIds',
   ]) if (!registry31.includes(token)) fail(`fix31_navegacao_incompleta:${token}`);
   const visibleNavBlock = registry31.slice(registry31.indexOf('export const navGroups'), registry31.indexOf('export const pageTitles'));
@@ -704,6 +704,69 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   const homolog31 = read('CHECK - CRM R59 - Homologacao final.sql');
   for (const token of ['62::bigint esperado', 'commercial_contract_diff', '32_contrato_comercial_r59']) {
     if (!homolog31.includes(token)) fail(`fix31_homologacao_incompleta:${token}`);
+  }
+}
+
+
+// R59 BUILD FIX 32: ações canônicas de Leads + criação manual dependente de localidade + menu de fila por canal + cards uniformes.
+{
+  const leads32 = read('src/pages/LeadsPage.tsx');
+  for (const token of [
+    "label=\"Nome alternativo (opcional)\"",
+    'cityCatalogService.listCitiesByStateCode',
+    'getRowActions={getRowActions}',
+    "actions={['view', 'edit', 'invalidate', 'return']}",
+    'leadCycleService.getById',
+    'leadCycleService.invalidateLead',
+    'leadCycleService.restoreInvalidToImported',
+    'summary.invalid',
+    'summary.noContact',
+    'label="Inválidos"',
+    'label="Sem contato"',
+    "alternative_name: manual.alternativeName.trim()",
+  ]) if (!leads32.includes(token)) fail(`fix32_leads_acoes_incompletas:${token}`);
+
+  const leadCycle32 = read('src/services/lead-cycle/leadCycle.service.ts');
+  for (const token of [
+    'lead.statusId === LEAD_STATUS.NO_CONTACT',
+    'targetStatusId = LEAD_STATUS.IMPORTED',
+    'async function invalidateLead',
+    'async function restoreInvalidToImported',
+    'getById',
+  ]) if (!leadCycle32.includes(token)) fail(`fix32_lead_cycle_incompleto:${token}`);
+
+  const city32 = read('src/services/geo/cityCatalog.service.ts');
+  for (const token of [".from('states')", ".from('cities')", ".eq('states_id', stateId)", ".order('cities_name'"]) {
+    if (!city32.includes(token)) fail(`fix32_catalogo_cidades_incompleto:${token}`);
+  }
+
+  const importTypes32 = read('src/services/import/types.ts');
+  const canonicalImport32 = read('src/services/import/canonicalLead.ts');
+  if (!importTypes32.includes('alternative_name?: string')) fail('fix32_import_manual_sem_nome_alternativo_tipo');
+  if (!canonicalImport32.includes('leads_alternative_name')) fail('fix32_import_manual_sem_nome_alternativo_persistencia');
+
+  const registry32 = read('src/pages/pageRegistry.ts');
+  for (const token of ["label: 'Fila de Disparo'", "{ id: 'whatsapp', label: 'WhatsApp' }", "{ id: 'instagram', label: 'Instagram' }"]) {
+    if (!registry32.includes(token)) fail(`fix32_menu_fila_disparo_incompleto:${token}`);
+  }
+  const header32 = read('src/design-system/layouts/Header.tsx');
+  for (const token of ['openNavGroup', 'aria-haspopup="menu"', 'nav-menu--open']) {
+    if (!header32.includes(token)) fail(`fix32_dropdown_header_incompleto:${token}`);
+  }
+
+  const app32 = read('src/App.tsx');
+  for (const token of ["sends: 'whatsapp'", "whatsapp: 'whatsapp'", "instagram: 'instagram'", "activePage === 'whatsapp'", "activePage === 'instagram'"]) {
+    if (!app32.includes(token)) fail(`fix32_rotas_fila_incompletas:${token}`);
+  }
+
+  const pagesCss32 = read('src/styles/pages.css');
+  for (const token of ['R59 BUILD FIX 32', '.app-shell .metric-grid .metric-card', 'height: 82px', 'width: var(--space-40)', 'font-size: 20px']) {
+    if (!pagesCss32.includes(token)) fail(`fix32_cards_metricos_nao_padronizados:${token}`);
+  }
+
+  const commercial32 = read('src/pages/CommercialPage.tsx');
+  for (const token of ["actions={['view']}", 'setViewingLead(lead)', 'Nome alternativo', 'setCommercialStage']) {
+    if (!commercial32.includes(token)) fail(`fix32_comercial_acoes_incompletas:${token}`);
   }
 }
 

@@ -33,9 +33,11 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
   const [organizationOpen, setOrganizationOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread'>('all');
+  const [openNavGroup, setOpenNavGroup] = useState<PageId | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const organizationRef = useRef<HTMLDivElement | null>(null);
   const notificationRef = useRef<HTMLDivElement | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
   const { user, signOut } = useAuthContext();
   const { organizationId, organizations, loading: organizationLoading, hasPermission, switchOrganization } = useOrganizationContext();
   const { items: notifications, unread: hasUnreadNotifications, loading: notificationsLoading, error: notificationsError, markRead, markAllRead } = useNotificationCenter();
@@ -44,7 +46,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
     const permission = pagePermissions[page];
     return !permission || hasPermission(permission);
   };
-  const visibleNavGroups = navGroups.filter((group) => canAccessPage(group.id));
+  const visibleNavGroups = navGroups.filter((group) => group.items?.length ? group.items.some((item) => canAccessPage(item.id)) : canAccessPage(group.id));
   const activeOrganization = organizations.find((organization) => organization.id === organizationId) ?? organizations[0];
   const firstName = user?.name?.split(' ')[0] || 'Usuário';
   const initials = (user?.name || user?.email || 'U')
@@ -59,12 +61,14 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
       if (profileRef.current && !profileRef.current.contains(target)) setProfileOpen(false);
       if (organizationRef.current && !organizationRef.current.contains(target)) setOrganizationOpen(false);
       if (notificationRef.current && !notificationRef.current.contains(target)) setNotificationOpen(false);
+      if (navRef.current && !navRef.current.contains(target)) setOpenNavGroup(null);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setProfileOpen(false);
       setOrganizationOpen(false);
       setNotificationOpen(false);
+      setOpenNavGroup(null);
     };
     document.addEventListener('mousedown', closeOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
@@ -79,6 +83,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
     setProfileOpen(false);
     setOrganizationOpen(false);
     setNotificationOpen(false);
+    setOpenNavGroup(null);
   };
 
   const visibleNotifications = notificationFilter === 'unread' ? notifications.filter((item) => !item.readAt) : notifications;
@@ -96,8 +101,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
     }
     if (target === 'whatsapp' || target === 'instagram') {
       window.sessionStorage.setItem(`crm:notification:queue-target:${target}`, JSON.stringify(item.targetPayload));
-      window.sessionStorage.setItem('crm:envios:channel', target === 'instagram' ? 'Instagram' : 'WhatsApp');
-      navigate('sends');
+      navigate(target);
       return;
     }
     navigate(target);
@@ -108,18 +112,51 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
       <div className="app-header__container">
         <button className="app-header__brand" type="button" onClick={() => navigate('dashboard')}>Vinsansi Studio</button>
 
-        <nav className="app-header__nav" aria-label="Principal">
-          {visibleNavGroups.map((group) => (
-            <button
-              className={`nav-link ${activePage === group.id ? 'nav-link--active' : ''}`}
-              key={group.id}
-              type="button"
-              aria-current={activePage === group.id ? 'page' : undefined}
-              onClick={() => navigate(group.id)}
-            >
-              {group.label}
-            </button>
-          ))}
+        <nav className="app-header__nav" aria-label="Principal" ref={navRef}>
+          {visibleNavGroups.map((group) => {
+            const visibleItems = group.items?.filter((item) => canAccessPage(item.id)) ?? [];
+            const groupActive = activePage === group.id || visibleItems.some((item) => item.id === activePage);
+            if (!visibleItems.length) {
+              return (
+                <button
+                  className={`nav-link ${groupActive ? 'nav-link--active' : ''}`}
+                  key={group.id}
+                  type="button"
+                  aria-current={groupActive ? 'page' : undefined}
+                  onClick={() => navigate(group.id)}
+                >
+                  {group.label}
+                </button>
+              );
+            }
+            const isOpen = openNavGroup === group.id;
+            return (
+              <div className={`nav-item ${isOpen ? 'nav-item--open' : ''}`} key={group.id}>
+                <button
+                  className={`nav-link ${groupActive ? 'nav-link--active' : ''}`}
+                  type="button"
+                  aria-haspopup="menu"
+                  aria-expanded={isOpen}
+                  onClick={() => {
+                    setOpenNavGroup((current) => current === group.id ? null : group.id);
+                    setProfileOpen(false);
+                    setOrganizationOpen(false);
+                    setNotificationOpen(false);
+                  }}
+                >
+                  {group.label}
+                  <ChevronDown size={14} strokeWidth={1.8} aria-hidden="true" />
+                </button>
+                <div className={`nav-menu ${isOpen ? 'nav-menu--open' : ''}`} role="menu">
+                  {visibleItems.map((item) => (
+                    <button type="button" role="menuitem" key={item.id} onClick={() => navigate(item.id)}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </nav>
 
         <div className="app-header__actions">
@@ -132,7 +169,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
                 aria-haspopup="listbox"
                 aria-expanded={organizationOpen}
                 disabled={organizationLoading}
-                onClick={() => { setOrganizationOpen((current) => !current); setProfileOpen(false); setNotificationOpen(false); }}
+                onClick={() => { setOrganizationOpen((current) => !current); setProfileOpen(false); setNotificationOpen(false); setOpenNavGroup(null); }}
               >
                 <Building2 size={14} strokeWidth={1.8} aria-hidden="true" />
                 <strong title={activeOrganization?.name}>{activeOrganization?.name ?? 'Organização'}</strong>
@@ -173,7 +210,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
               className="app-header__notification-button"
               aria-haspopup="dialog"
               aria-expanded={notificationOpen}
-              onClick={() => { setNotificationOpen((current) => !current); setProfileOpen(false); setOrganizationOpen(false); }}
+              onClick={() => { setNotificationOpen((current) => !current); setProfileOpen(false); setOrganizationOpen(false); setOpenNavGroup(null); }}
             />
             {hasUnreadNotifications ? <span className="notification__dot" aria-label="Há notificações não lidas" /> : null}
             {notificationOpen ? (
@@ -219,7 +256,7 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
           />
 
           <div className={`profile-menu ${profileOpen ? 'profile-menu--open' : ''}`} ref={profileRef}>
-            <button className="profile-chip" type="button" aria-expanded={profileOpen} onClick={() => { setProfileOpen((current) => !current); setNotificationOpen(false); setOrganizationOpen(false); }}>
+            <button className="profile-chip" type="button" aria-expanded={profileOpen} onClick={() => { setProfileOpen((current) => !current); setNotificationOpen(false); setOrganizationOpen(false); setOpenNavGroup(null); }}>
               <span className={`profile-chip__avatar ${user?.avatarUrl ? 'profile-chip__avatar--image' : ''}`} style={user?.avatarUrl ? { backgroundImage: `url(${user.avatarUrl})` } : undefined} aria-hidden="true">
                 {!user?.avatarUrl ? initials : null}
               </span>

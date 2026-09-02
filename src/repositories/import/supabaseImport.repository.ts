@@ -125,6 +125,7 @@ function rowToImportLead(row: LeadDatabaseRow): ImportLead {
   return {
     id: mapped.id,
     empresa: mapped.company,
+    alternative_name: String(row.leads_alternative_name ?? '').trim(),
     ramo: mapped.branch,
     branch_id: mapped.branch_id,
     subcategoria: matchedCategory,

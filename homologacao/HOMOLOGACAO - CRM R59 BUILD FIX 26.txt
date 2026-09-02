@@ -1,0 +1,11 @@
+CRM - VINSANSI STUDIO v2.4.0-R59
+BUILD FIX 26
+
+ESCOPO
+- Corrige timeout da API Maps no modo Automático sem aumentar artificialmente o timeout do cliente.
+- `nextCoverage` deixou de consultar cobertura atual + histórico cidade por cidade.
+- A seleção automática carrega cidades, coberturas da execução e histórico do estado em lote e decide a próxima combinação em memória.
+- O gate `batch_sync` deixa de reler candidatos de Revisão pertencentes à própria execução corrente.
+- A criação do candidato retorna o ID no próprio INSERT, eliminando uma consulta adicional.
+- Nenhuma tabela, coluna, RPC ou policy nova.
+- Sem SQL.

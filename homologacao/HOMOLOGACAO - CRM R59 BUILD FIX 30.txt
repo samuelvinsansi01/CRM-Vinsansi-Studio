@@ -1,0 +1,40 @@
+CRM R59 BUILD FIX 30 — CENTRAL DE NOTIFICAÇÕES
+
+Escopo implementado
+- Ativa o sino do header como Central de Notificações persistentes.
+- A bolinha aparece somente quando existe ao menos uma notificação não lida; não há contador numérico.
+- Filtros: Todas / Não lidas.
+- Ação: Marcar todas como lidas.
+- Clique abre o contexto relacionado e marca somente aquela notificação como lida.
+- Nova mensagem WhatsApp gera notificação com empresa/contato + nome/número do chip que recebeu a mensagem.
+- Mensagens consecutivas da mesma conversa são agrupadas enquanto a notificação estiver não lida.
+- Queda real do socket WhatsApp gera notificação identificando chip/número.
+- A conectividade usa public.instance_runtime_states como fonte canônica; instances.status_id não é usado como prova de queda.
+- Estado runtime "unavailable" isolado não é interpretado como chip desconectado, evitando falso alerta por indisponibilidade do Gateway/leitura.
+- Reconexão não gera nova notificação e resolve automaticamente o alerta de desconexão ainda não lido.
+- Falhas de envio são agrupadas por canal + recurso + data operacional.
+- Erro WhatsApp identifica chip; erro Instagram identifica perfil.
+- Clique em mensagem direciona à conversa/chip correspondente.
+- Clique em falha direciona à Fila final do canal/data/recurso quando o recurso ainda existe.
+- Instagram recebido/DM/resposta NÃO é coletado, inferido, mensurado ou notificado.
+
+Arquitetura
+- Nova tabela public.crm_notifications com RLS por organização + membro destinatário.
+- O front-end autenticado recebe somente SELECT; não pode inserir/editar conteúdo de notificação.
+- Marcação de leitura ocorre por RPCs SECURITY DEFINER validadas pelo membro atual.
+- Triggers produzem notificações a partir de eventos canônicos já persistidos no banco.
+- Nenhum histórico paralelo de mensagens foi criado e nenhum corpo de mensagem é duplicado na notificação.
+- Polling do sino: 5s somente com página visível, com trava contra requisições simultâneas.
+- Homologação final atualizada para 61 tabelas e contrato específico do FIX 30.
+
+Banco
+- SQL OBRIGATÓRIO: APLICAR - CRM R59 BUILD FIX 30 - Central de notificacoes.sql
+- Aplicar o SQL antes de publicar/abrir o novo CRM para evitar relation_not_found durante a transição.
+- O SQL é reexecutável: recria funções/triggers do FIX 30 e remove a versão intermediária que observava instances.status_id.
+
+Validações realizadas no pacote-fonte
+- scripts/verify-r59-final-contract.mjs: OK.
+- scripts/verify-syntax.mjs: 242 arquivos TypeScript/TSX aprovados em transpile, 0 erros de sintaxe.
+- Contrato de banco do FIX 30 incluído no CHECK - CRM R59 - Homologacao final.sql.
+- Referências de tabelas/colunas do SQL conferidas contra o snapshot atual do banco.
+- npm run build completo não pôde ser executado neste ambiente porque npm ci depende de artefatos que não estão disponíveis no cache offline; package.json/package-lock.json não foram alterados.

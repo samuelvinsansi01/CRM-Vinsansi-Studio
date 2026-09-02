@@ -24,6 +24,7 @@ export type ImportRejectionCode =
 export type ImportLead = {
   id: string;
   empresa: string;
+  alternative_name?: string;
   ramo: string;
   sourceLeadId?: string;
   branch_id?: string;

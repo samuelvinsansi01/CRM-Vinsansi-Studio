@@ -1,0 +1,22 @@
+CRM VINSANSI STUDIO 2.4.0-R59
+BUILD FIX 28
+
+ESCOPO
+1. Endpoint operacional do Instagram deixa de varrer todo o histórico de queue_items a cada leitura da fila.
+2. A fila moderna é filtrada no banco por organization/users/socials + queue_items_scheduled_at do dia, usando o índice de capacidade já existente; a leitura das queues de fallback também fica restrita à mesma data.
+3. Itens legados com queue_items_scheduled_at nulo continuam suportados pelo fallback da data da queue.
+4. Leituras auxiliares de leads/templates/progresso/branches passam a selecionar somente as colunas usadas pelo executor.
+5. transition deixa de reconstruir toda a fila após cada checkpoint; retorna apenas o instagram_queue_progress atualizado.
+6. claim_item torna-se idempotente para o mesmo consumer + installation: se a primeira resposta se perder após o commit, o retry recupera o claim_token persistido.
+7. claim_next também recupera primeiro um claim ativo pertencente ao mesmo consumer + installation, evitando assumir um segundo lead em retry.
+8. Respostas incluem request_id + server_elapsed_ms; ações lentas (>=5s) e erros são correlacionadas nos logs do backend.
+9. Compatível com Gerenciador v1.5.33, que acrescenta diagnóstico action/endpoint/elapsed/request_id e retry controlado.
+
+BANCO / SQL
+- Nenhuma tabela, coluna, RPC, trigger, policy, índice ou catálogo alterado.
+- Usa índices que já existem no banco atual.
+- Nenhum SQL necessário.
+
+ORDEM DE PUBLICAÇÃO
+1. CRM R59 BUILD FIX 28.
+2. Gerenciador de Disparos v1.5.33.

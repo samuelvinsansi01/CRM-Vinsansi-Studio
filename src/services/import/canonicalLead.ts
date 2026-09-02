@@ -30,6 +30,7 @@ export type ExistingLeadInsert = {
   lead_status_id: LeadStatusId;
   contact_sources_id: number;
   leads_name: string;
+  leads_alternative_name: string | null;
   leads_phone: string | null;
   leads_whatsapp: string | null;
   leads_instagram: string | null;
@@ -129,6 +130,7 @@ function commonPayload(
     lead_status_id: statusId,
     contact_sources_id: lookup.contactSourceId,
     leads_name: lead.empresa.trim(),
+    leads_alternative_name: String(lead.alternative_name ?? '').trim() || null,
     leads_phone: String(lead.whatsapp ?? '').trim() || null,
     leads_whatsapp: String(lead.whatsapp ?? '').trim() || null,
     leads_instagram: instagram || null,
