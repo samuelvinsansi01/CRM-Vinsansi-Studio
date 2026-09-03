@@ -103,7 +103,6 @@
 .project-payment-row > div:first-child { display: grid; gap: var(--space-04); }
 .project-payment-row > div:first-child span { color: var(--app-muted); font-size: 12px; }
 .project-payment-row > div:last-child { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-08); flex-wrap: wrap; }
-.dashboard-management-grid { margin-top: var(--space-16); }
 @media (max-width: 760px) {
   .project-drawer__grid { grid-template-columns: 1fr; }
   .project-payment-row { align-items: flex-start; flex-direction: column; }

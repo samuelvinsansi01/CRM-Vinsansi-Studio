@@ -932,7 +932,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const dashboard36 = read('src/pages/DashboardPage.tsx');
-  for (const token of ['Gestão', 'Projetos fechados', 'Valor fechado', 'Previsto a receber', 'Recebido', 'Projetos ativos', 'Entregas previstas', 'Atrasados agora', 'Saldo total a receber']) {
+  for (const token of ['Projetos', 'Fechados no período', 'Valor vendido no período', 'Ativos agora', 'Entregas no período', 'Atrasados agora', 'Fluxo de caixa', 'Previsto no período', 'Recebido no período', 'Saldo total a receber']) {
     if (!dashboard36.includes(token)) fail(`fix36_dashboard_gestao_incompleto:${token}`);
   }
 
@@ -1022,6 +1022,39 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   const homolog37 = read('CHECK - CRM R59 - Homologacao final.sql');
   for (const token of ['permission_matrix_contract_diff','37_matriz_permissoes_r59','whatsapp.instances.manage','settings.manage']) {
     if (!homolog37.includes(token)) fail(`fix37_homologacao_incompleta:${token}`);
+  }
+}
+
+
+// R59 BUILD FIX 38: navegação sem sublinhado + Dashboard final de caixa + filtro de pagamento em Projetos.
+{
+  const components38 = read('src/styles/components.css');
+  if (components38.includes('.nav-link--active::after')) fail('fix38_sublinhado_menu_ativo_ainda_presente');
+
+  const dashboard38 = read('src/pages/DashboardPage.tsx');
+  for (const token of ['Panel title="Projetos"', 'Fechados no período', 'Valor vendido no período', 'Panel title="Fluxo de caixa"', 'Previsto no período', 'Recebido no período', 'A receber no período', 'Saldo total a receber', 'pendingReceipts']) {
+    if (!dashboard38.includes(token)) fail(`fix38_dashboard_fluxo_caixa_incompleto:${token}`);
+  }
+
+  const projects38 = read('src/pages/ProjectsPage.tsx');
+  for (const token of ['paymentStatus', 'Todos os pagamentos', 'Não configurado', 'Pendente', 'Parcial', 'Pago', 'Atrasado', 'label="Recebido"']) {
+    if (!projects38.includes(token)) fail(`fix38_projetos_pagamento_incompleto:${token}`);
+  }
+  const projectTypes38 = read('src/services/projects/project.types.ts');
+  if (!projectTypes38.includes('paymentStatus?: ProjectPaymentStatus')) fail('fix38_tipo_filtro_pagamento_ausente');
+  const projectRepo38 = read('src/repositories/projects/projects.repository.ts');
+  if (!projectRepo38.includes('p_payment_status: filters.paymentStatus || null')) fail('fix38_repo_filtro_pagamento_ausente');
+
+  const fix38Sql = 'APLICAR - CRM R59 BUILD FIX 38 - Dashboard e gestao simples de projetos.sql';
+  if (!exists(fix38Sql)) fail('fix38_sql_ausente');
+  const sql38 = read(fix38Sql);
+  for (const token of ['p_payment_status text DEFAULT NULL', "'R59-PROJECTS-2'", "'pendingReceipts'", "'R59-FIX38'", 'v_pending_receipts']) {
+    if (!sql38.includes(token)) fail(`fix38_sql_incompleto:${token}`);
+  }
+
+  const homolog38 = read('CHECK - CRM R59 - Homologacao final.sql');
+  for (const token of ['pendingreceipts', 'p_payment_status text', '38_dashboard_fluxo_caixa_e_filtro_pagamento_r59']) {
+    if (!homolog38.includes(token)) fail(`fix38_homologacao_incompleta:${token}`);
   }
 }
 

@@ -295,7 +295,8 @@ dashboard_period_contract_diff AS (
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_commercial%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%preview_due_date%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_projects%' OR
-        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%scheduledreceipts%'
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%scheduledreceipts%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%pendingreceipts%'
       )
     ) THEN 1 ELSE 0 END
   )::bigint AS total
@@ -306,6 +307,7 @@ projects_contract_diff AS (
     CASE WHEN (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname IN ('lead_projects','lead_project_stage_history') AND c.relrowsecurity) <> 2 THEN 1 ELSE 0 END +
     CASE WHEN (SELECT count(*) FROM pg_policies WHERE schemaname='public' AND ((tablename='lead_projects' AND policyname='lead_projects_org_select') OR (tablename='lead_project_stage_history' AND policyname='lead_project_stage_history_org_select'))) <> 2 THEN 1 ELSE 0 END +
     CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('list_projects_r59','update_project_financials_r59','set_project_stage_r59','update_project_stage_dates_r59','set_project_payment_received_r59')) <> 5 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='list_projects_r59' AND pg_get_function_identity_arguments(p.oid)='p_page integer, p_page_size integer, p_search text, p_stage text, p_status text, p_payment_status text') <> 1 THEN 1 ELSE 0 END +
     CASE WHEN NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='lead_project_stage_history_one_active_idx') THEN 1 ELSE 0 END +
     CASE WHEN EXISTS (
       SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -503,6 +505,7 @@ checks AS (
   UNION ALL SELECT '35_contrato_identidade_conversas_r59',(SELECT total FROM conversation_identity_contract_diff),0,false
   UNION ALL SELECT '36_contrato_projetos_r59',(SELECT total FROM projects_contract_diff),0,false
   UNION ALL SELECT '37_matriz_permissoes_r59',(SELECT total FROM permission_matrix_contract_diff),0,false
+  UNION ALL SELECT '38_dashboard_fluxo_caixa_e_filtro_pagamento_r59',((SELECT total FROM dashboard_period_contract_diff)+(SELECT total FROM projects_contract_diff)),0,false
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado

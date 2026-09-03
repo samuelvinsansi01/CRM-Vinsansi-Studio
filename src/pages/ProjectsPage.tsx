@@ -28,6 +28,7 @@ import {
   type CrmProject,
   type PaymentTerms,
   type ProjectFinancialInput,
+  type ProjectPaymentStatus,
   type ProjectStage,
   type ProjectSummary,
 } from '../services/projects/project.types';
@@ -103,6 +104,7 @@ export function ProjectsPage() {
   const debouncedSearch = useDebouncedValue(search, 300);
   const [stage, setStage] = useState<ProjectStage | ''>('');
   const [status, setStatus] = useState<'ativos' | 'entregues' | 'atrasados' | ''>('');
+  const [paymentStatus, setPaymentStatus] = useState<ProjectPaymentStatus | ''>('');
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [items, setItems] = useState<CrmProject[]>([]);
@@ -129,7 +131,7 @@ export function ProjectsPage() {
     if (mode === 'load') setLoading(true); else setRefreshing(true);
     setError(null);
     try {
-      const result = await projectsRepository.page({ search: debouncedSearch, stage, status }, page, rowsPerPage);
+      const result = await projectsRepository.page({ search: debouncedSearch, stage, status, paymentStatus }, page, rowsPerPage);
       if (requestRef.current !== requestId) return;
       setItems(result.items);
       setTotal(result.total);
@@ -143,7 +145,7 @@ export function ProjectsPage() {
         setRefreshing(false);
       }
     }
-  }, [debouncedSearch, page, rowsPerPage, stage, status]);
+  }, [debouncedSearch, page, paymentStatus, rowsPerPage, stage, status]);
 
   useEffect(() => { void load('load'); }, [load]);
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage));
@@ -257,16 +259,25 @@ export function ProjectsPage() {
         action={<Button variant="secondary" iconLeft={RefreshCcw} loading={refreshing} disabled={loading} onClick={() => void load('refresh')}>Atualizar</Button>}
       />
 
-      <section className="metric-grid metric-grid--4">
+      <section className="metric-grid metric-grid--5">
         <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.active)} label="Projetos ativos" active={status === 'ativos'} onClick={() => { setStatus(status === 'ativos' ? '' : 'ativos'); setPage(1); }} />
         <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.dueThisWeek)} label="Entregas em 7 dias" tone="primary" />
         <MetricCard icon={TriangleAlert} value={loading ? '—' : String(summary.overdue)} label="Atrasados" tone="danger" active={status === 'atrasados'} onClick={() => { setStatus(status === 'atrasados' ? '' : 'atrasados'); setPage(1); }} />
+        <MetricCard icon={DollarSign} value={loading ? '—' : money(summary.received)} label="Recebido" tone="success" />
         <MetricCard icon={DollarSign} value={loading ? '—' : money(summary.receivable)} label="A receber" tone="warning" />
       </section>
 
       <FiltersBar>
         <SelectField value={status} placeholder="Situação" options={[{ label: 'Todos', value: '' }, { label: 'Em andamento', value: 'ativos' }, { label: 'Entregues', value: 'entregues' }, { label: 'Atrasados', value: 'atrasados' }]} onChange={(value) => { setStatus(value as typeof status); setPage(1); }} />
         <SelectField value={stage} placeholder="Etapa" options={[{ label: 'Todas as etapas', value: '' }, ...PROJECT_STAGES.map((value) => ({ label: PROJECT_STAGE_LABELS[value], value }))]} onChange={(value) => { setStage(value as ProjectStage | ''); setPage(1); }} />
+        <SelectField value={paymentStatus} placeholder="Pagamento" options={[
+          { label: 'Todos os pagamentos', value: '' },
+          { label: 'Não configurado', value: 'nao_configurado' },
+          { label: 'Pendente', value: 'pendente' },
+          { label: 'Parcial', value: 'parcial' },
+          { label: 'Pago', value: 'pago' },
+          { label: 'Atrasado', value: 'atrasado' },
+        ]} onChange={(value) => { setPaymentStatus(value as ProjectPaymentStatus | ''); setPage(1); }} />
         <SearchInput value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Buscar empresa" />
       </FiltersBar>
 

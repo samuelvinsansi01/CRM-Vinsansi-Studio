@@ -2153,16 +2153,6 @@ button.checkbox {
   color: var(--app-text);
 }
 
-.nav-link--active::after {
-  position: absolute;
-  right: var(--space-08);
-  bottom: -4px;
-  left: var(--space-08);
-  height: 2px;
-  border-radius: var(--radius-999);
-  background: var(--action-active);
-  content: "";
-}
 
 .app-header__settings-button.is-active {
   border-color: color-mix(in srgb, var(--action-active) 38%, transparent);

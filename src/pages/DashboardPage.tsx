@@ -17,7 +17,7 @@ const EMPTY_SUMMARY: CrmDashboardSummary = {
   noContact: 0,
   previewsDue: 0,
   commercial: { aguardandoResposta: 0, aguardandoPrevia: 0, previaEnviada: 0, fechado: 0, recusado: 0 },
-  projects: { closed: 0, active: 0, deliveries: 0, overdue: 0, valueClosed: 0, scheduledReceipts: 0, received: 0, receivableTotal: 0 },
+  projects: { closed: 0, active: 0, deliveries: 0, overdue: 0, valueClosed: 0, scheduledReceipts: 0, pendingReceipts: 0, received: 0, receivableTotal: 0 },
 };
 
 
@@ -153,17 +153,21 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
         </section>
       </Panel>
 
-      <Panel title="Gestão" className="dashboard-section-card">
-        <section className="metric-grid metric-grid--4">
-          <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.closed)} label="Projetos fechados" tone="success" onClick={() => onNavigate('projects')} />
-          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.valueClosed)} label="Valor fechado" tone="success" onClick={() => onNavigate('projects')} />
-          <MetricCard icon={CalendarDays} value={loading ? '—' : formatMoney(summary.projects.scheduledReceipts)} label="Previsto a receber" tone="warning" onClick={() => onNavigate('projects')} />
-          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.received)} label="Recebido" tone="primary" onClick={() => onNavigate('projects')} />
-        </section>
-        <section className="metric-grid metric-grid--4 dashboard-management-grid">
-          <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.active)} label="Projetos ativos" onClick={() => onNavigate('projects')} />
-          <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.projects.deliveries)} label="Entregas previstas" tone="primary" onClick={() => onNavigate('projects')} />
+      <Panel title="Projetos" className="dashboard-section-card">
+        <section className="metric-grid metric-grid--5">
+          <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.closed)} label="Fechados no período" tone="success" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.valueClosed)} label="Valor vendido no período" tone="success" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.active)} label="Ativos agora" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.projects.deliveries)} label="Entregas no período" tone="primary" onClick={() => onNavigate('projects')} />
           <MetricCard icon={TriangleAlert} value={loading ? '—' : String(summary.projects.overdue)} label="Atrasados agora" tone="danger" onClick={() => onNavigate('projects')} />
+        </section>
+      </Panel>
+
+      <Panel title="Fluxo de caixa" className="dashboard-section-card">
+        <section className="metric-grid metric-grid--4">
+          <MetricCard icon={CalendarDays} value={loading ? '—' : formatMoney(summary.projects.scheduledReceipts)} label="Previsto no período" tone="primary" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.received)} label="Recebido no período" tone="success" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.pendingReceipts)} label="A receber no período" tone="warning" onClick={() => onNavigate('projects')} />
           <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.receivableTotal)} label="Saldo total a receber" tone="warning" onClick={() => onNavigate('projects')} />
         </section>
       </Panel>

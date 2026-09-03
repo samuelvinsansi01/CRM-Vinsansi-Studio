@@ -75,6 +75,7 @@ export type CrmDashboardProjectSummary = {
   overdue: number;
   valueClosed: number;
   scheduledReceipts: number;
+  pendingReceipts: number;
   received: number;
   receivableTotal: number;
 };

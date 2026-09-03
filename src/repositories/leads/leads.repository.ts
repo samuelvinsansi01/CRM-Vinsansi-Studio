@@ -112,6 +112,7 @@ function dashboardSummary(value: unknown): CrmDashboardSummary {
       overdue: number(projects.overdue),
       valueClosed: number(projects.valueClosed),
       scheduledReceipts: number(projects.scheduledReceipts),
+      pendingReceipts: number(projects.pendingReceipts),
       received: number(projects.received),
       receivableTotal: number(projects.receivableTotal),
     },

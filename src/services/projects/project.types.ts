@@ -79,6 +79,7 @@ export type ProjectFilters = {
   search?: string;
   stage?: ProjectStage | '';
   status?: 'ativos' | 'entregues' | 'atrasados' | '';
+  paymentStatus?: ProjectPaymentStatus | '';
 };
 
 export type ProjectFinancialInput = {

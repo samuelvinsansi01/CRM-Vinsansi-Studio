@@ -61,6 +61,7 @@ export const projectsRepository = {
       p_search: filters.search?.trim() || null,
       p_stage: filters.stage || null,
       p_status: filters.status || null,
+      p_payment_status: filters.paymentStatus || null,
     });
     if (response.error) throw new Error(`Não foi possível carregar os projetos: ${response.error.message}`);
     const payload = record(response.data);
