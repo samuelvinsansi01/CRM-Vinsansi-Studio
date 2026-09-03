@@ -257,27 +257,30 @@ commercial_contract_diff AS (
       WHERE n.nspname='public' AND c.relname='lead_commercial' AND c.relrowsecurity
     ) THEN 1 ELSE 0 END +
     CASE WHEN (SELECT count(*) FROM pg_policies WHERE schemaname='public' AND tablename='lead_commercial' AND policyname='lead_commercial_org_select') <> 1 THEN 1 ELSE 0 END +
-    CASE WHEN (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='lead_commercial' AND column_name='design_due_date' AND data_type='date') <> 1 THEN 1 ELSE 0 END +
-    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('list_leads_page_r59','set_lead_commercial_stage_r59','set_lead_design_due_date_r59')) <> 3 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='lead_commercial' AND column_name='preview_due_date' AND data_type='date') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='lead_commercial' AND column_name='design_due_date') THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('list_leads_page_r59','set_lead_commercial_stage_r59','set_lead_preview_due_date_r59','set_lead_design_due_date_r59')) <> 4 THEN 1 ELSE 0 END +
     CASE WHEN EXISTS (
       SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
       WHERE n.nspname='public' AND p.proname='set_lead_commercial_stage_r59' AND (
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%commercial_stage_transition_invalid%' OR
-        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%commercial_stage_terminal%'
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%commercial_stage_terminal%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%aguardando_previa%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%previa_enviada%'
       )
     ) THEN 1 ELSE 0 END +
     CASE WHEN EXISTS (
       SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-      WHERE n.nspname='public' AND p.proname='set_lead_design_due_date_r59' AND (
-        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%design_due_date_requires_awaiting_design%' OR
-        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%design_due_date_past_invalid%' OR
+      WHERE n.nspname='public' AND p.proname='set_lead_preview_due_date_r59' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%preview_due_date_requires_awaiting_preview%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%preview_due_date_past_invalid%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%america/sao_paulo%'
       )
     ) THEN 1 ELSE 0 END +
     CASE WHEN EXISTS (
       SELECT 1 FROM public.lead_commercial lc
       JOIN public.leads l ON l.leads_id=lc.leads_id AND l.organizations_id=lc.organizations_id
-      WHERE l.lead_status_id<>5
+      WHERE l.lead_status_id<>5 OR lc.commercial_stage IN ('aguardando_design','design_enviado')
     ) THEN 1 ELSE 0 END
   )::bigint AS total
 ),
@@ -290,7 +293,38 @@ dashboard_period_contract_diff AS (
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%queue_items%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%sents_sent_at%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_commercial%' OR
-        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%design_due_date%'
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%preview_due_date%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_projects%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%scheduledreceipts%'
+      )
+    ) THEN 1 ELSE 0 END
+  )::bigint AS total
+),
+projects_contract_diff AS (
+  SELECT (
+    CASE WHEN (SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename IN ('lead_projects','lead_project_stage_history')) <> 2 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname IN ('lead_projects','lead_project_stage_history') AND c.relrowsecurity) <> 2 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_policies WHERE schemaname='public' AND ((tablename='lead_projects' AND policyname='lead_projects_org_select') OR (tablename='lead_project_stage_history' AND policyname='lead_project_stage_history_org_select'))) <> 2 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('list_projects_r59','update_project_financials_r59','set_project_stage_r59','update_project_stage_dates_r59','set_project_payment_received_r59')) <> 5 THEN 1 ELSE 0 END +
+    CASE WHEN NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='lead_project_stage_history_one_active_idx') THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='set_lead_commercial_stage_r59' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_projects%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%aguardando_inicio%'
+      )
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM public.lead_projects pr
+      JOIN public.leads l ON l.leads_id=pr.leads_id AND l.organizations_id=pr.organizations_id
+      LEFT JOIN public.lead_commercial lc ON lc.leads_id=pr.leads_id AND lc.organizations_id=pr.organizations_id
+      WHERE lc.commercial_stage IS DISTINCT FROM 'fechado'
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM public.lead_projects pr
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.lead_project_stage_history h
+        WHERE h.organizations_id=pr.organizations_id AND h.lead_projects_id=pr.lead_projects_id AND h.completed_on IS NULL
       )
     ) THEN 1 ELSE 0 END
   )::bigint AS total
@@ -402,7 +436,7 @@ trigger_residue AS (
   )
 ),
 checks AS (
-  SELECT '01_total_tabelas' verificacao, (SELECT count(*)::bigint FROM pg_tables WHERE schemaname='public') total, 63::bigint esperado, false informativo
+  SELECT '01_total_tabelas' verificacao, (SELECT count(*)::bigint FROM pg_tables WHERE schemaname='public') total, 65::bigint esperado, false informativo
   UNION ALL SELECT '02_lead_status_divergencias',(SELECT total FROM lead_status_diff),0,false
   UNION ALL SELECT '03_channels_divergencias',(SELECT total FROM channel_diff),0,false
   UNION ALL SELECT '04_constraints_nao_validadas',(SELECT count(*)::bigint FROM pg_constraint con JOIN pg_namespace n ON n.oid=con.connamespace WHERE n.nspname='public' AND con.convalidated IS FALSE),0,false
@@ -442,6 +476,7 @@ checks AS (
   UNION ALL SELECT '33_contrato_dashboard_periodo_r59',(SELECT total FROM dashboard_period_contract_diff),0,false
   UNION ALL SELECT '34_contrato_mobile_push_v1',(SELECT total FROM mobile_push_contract_diff),0,false
   UNION ALL SELECT '35_contrato_identidade_conversas_r59',(SELECT total FROM conversation_identity_contract_diff),0,false
+  UNION ALL SELECT '36_contrato_projetos_r59',(SELECT total FROM projects_contract_diff),0,false
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado

@@ -1,4 +1,4 @@
-import { CalendarDays, Clock3, FileImage, List, Send, Unplug, UserCheck, Users, X } from 'lucide-react';
+import { CalendarDays, Clock3, DollarSign, FileImage, FolderOpen, List, Send, TriangleAlert, Unplug, UserCheck, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Field, FiltersBar, MetricCard, Panel, SegmentedControl } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
@@ -15,9 +15,15 @@ const EMPTY_SUMMARY: CrmDashboardSummary = {
   sent: 0,
   invalid: 0,
   noContact: 0,
-  designsDue: 0,
-  commercial: { aguardandoResposta: 0, aguardandoDesign: 0, designEnviado: 0, fechado: 0, recusado: 0 },
+  previewsDue: 0,
+  commercial: { aguardandoResposta: 0, aguardandoPrevia: 0, previaEnviada: 0, fechado: 0, recusado: 0 },
+  projects: { closed: 0, active: 0, deliveries: 0, overdue: 0, valueClosed: 0, scheduledReceipts: 0, received: 0, receivableTotal: 0 },
 };
+
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 }).format(value || 0);
+}
 
 function localDateInput(date: Date) {
   const year = date.getFullYear();
@@ -99,7 +105,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     return () => { active = false; };
   }, [range.from.getTime(), range.toExclusive.getTime(), rangeValid]);
 
-  const goLeads = (statusId?: number) => {
+  const goCompanies = (statusId?: number) => {
     if (statusId) window.sessionStorage.setItem('crm:leads:status-id', String(statusId));
     else window.sessionStorage.removeItem('crm:leads:status-id');
     onNavigate('leads');
@@ -128,22 +134,37 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       <Panel title="Operação no período" className="dashboard-section-card">
         <section className="metric-grid metric-grid--5">
-          <MetricCard icon={Users} value={loading ? '—' : String(summary.newLeads)} label="Novos leads" onClick={() => goLeads()} />
+          <MetricCard icon={Users} value={loading ? '—' : String(summary.newLeads)} label="Novas empresas" onClick={() => goCompanies()} />
           <MetricCard icon={List} value={loading ? '—' : String(summary.queued)} label="Preparados em fila" tone="primary" onClick={() => onNavigate('whatsapp')} />
-          <MetricCard icon={Send} value={loading ? '—' : String(summary.sent)} label="Enviados" tone="success" onClick={() => goLeads(5)} />
-          <MetricCard icon={X} value={loading ? '—' : String(summary.invalid)} label="Inválidos" tone="danger" onClick={() => goLeads(6)} />
-          <MetricCard icon={Unplug} value={loading ? '—' : String(summary.noContact)} label="Sem contato" tone="warning" onClick={() => goLeads(3)} />
+          <MetricCard icon={Send} value={loading ? '—' : String(summary.sent)} label="Enviados" tone="success" onClick={() => goCompanies(5)} />
+          <MetricCard icon={X} value={loading ? '—' : String(summary.invalid)} label="Inválidos" tone="danger" onClick={() => goCompanies(6)} />
+          <MetricCard icon={Unplug} value={loading ? '—' : String(summary.noContact)} label="Sem contato" tone="warning" onClick={() => goCompanies(3)} />
         </section>
       </Panel>
 
       <Panel title="Comercial no período" className="dashboard-section-card">
         <section className="metric-grid metric-grid--6">
           <MetricCard icon={Clock3} value={loading ? '—' : String(summary.commercial.aguardandoResposta)} label="Aguardando resposta" onClick={() => goCommercial('aguardando_resposta')} />
-          <MetricCard icon={FileImage} value={loading ? '—' : String(summary.commercial.aguardandoDesign)} label="Aguardando design" tone="warning" onClick={() => goCommercial('aguardando_design')} />
-          <MetricCard icon={Send} value={loading ? '—' : String(summary.commercial.designEnviado)} label="Design enviado" tone="primary" onClick={() => goCommercial('design_enviado')} />
+          <MetricCard icon={FileImage} value={loading ? '—' : String(summary.commercial.aguardandoPrevia)} label="Aguardando prévia" tone="warning" onClick={() => goCommercial('aguardando_previa')} />
+          <MetricCard icon={Send} value={loading ? '—' : String(summary.commercial.previaEnviada)} label="Prévia enviada" tone="primary" onClick={() => goCommercial('previa_enviada')} />
           <MetricCard icon={UserCheck} value={loading ? '—' : String(summary.commercial.fechado)} label="Fechados" tone="success" onClick={() => goCommercial('fechado')} />
           <MetricCard icon={X} value={loading ? '—' : String(summary.commercial.recusado)} label="Recusados" tone="danger" onClick={() => goCommercial('recusado')} />
-          <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.designsDue)} label="Designs previstos" tone="warning" onClick={() => goCommercial('aguardando_design')} />
+          <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.previewsDue)} label="Prévias previstas" tone="warning" onClick={() => goCommercial('aguardando_previa')} />
+        </section>
+      </Panel>
+
+      <Panel title="Gestão" className="dashboard-section-card">
+        <section className="metric-grid metric-grid--4">
+          <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.closed)} label="Projetos fechados" tone="success" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.valueClosed)} label="Valor fechado" tone="success" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={CalendarDays} value={loading ? '—' : formatMoney(summary.projects.scheduledReceipts)} label="Previsto a receber" tone="warning" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.received)} label="Recebido" tone="primary" onClick={() => onNavigate('projects')} />
+        </section>
+        <section className="metric-grid metric-grid--4 dashboard-management-grid">
+          <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.active)} label="Projetos ativos" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.projects.deliveries)} label="Entregas previstas" tone="primary" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={TriangleAlert} value={loading ? '—' : String(summary.projects.overdue)} label="Atrasados agora" tone="danger" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.receivableTotal)} label="Saldo total a receber" tone="warning" onClick={() => onNavigate('projects')} />
         </section>
       </Panel>
     </div>

@@ -1,0 +1,63 @@
+CRM R59 BUILD FIX 36 — HOMOLOGAÇÃO
+
+Escopo
+- Leads passa a ser apresentado como Empresas: base permanente e canônica.
+- Comercial permanece a área principal da venda e usa Prévia no lugar de Design na pré-venda.
+- Projetos entra como gestão simples dos trabalhos fechados, 1:1 com o mesmo leads_id.
+- Menu final: Dashboard, Comercial, Conversas, Projetos, Empresas, Fila de Disparo, Canais e Biblioteca.
+- Configurações permanece no ícone de engrenagem.
+- Motor de Captura não é exposto na navegação.
+
+Banco
+1. Aplicar somente:
+   APLICAR - CRM R59 BUILD FIX 36 - Empresas Projetos Previa e Navegacao.sql
+2. Não reaplicar FIX31/FIX33/FIX34/FIX35 se já estiverem no banco.
+3. Depois executar:
+   CHECK - CRM R59 - Homologacao final.sql
+4. Todos os itens não informativos devem retornar OK.
+
+Teste Comercial
+- Aguardando resposta -> Aguardando prévia ou Recusado.
+- Aguardando prévia -> Prévia enviada ou Recusado.
+- Prévia enviada -> Fechado ou Recusado.
+- Fechado/Recusado permanecem terminais.
+- Envio da prévia só pode ser editado em Aguardando prévia.
+- Nova data no passado deve ser recusada.
+
+Teste Projetos
+- Ao fechar uma empresa no Comercial, ela aparece uma única vez em Projetos.
+- O projeto deve apontar para o mesmo registro da empresa; não há cópia de identidade.
+- Editar etapa atual, início da etapa e entrega da etapa.
+- Editar início do projeto e entrega do projeto.
+- Definir valor e condição 100% no início ou 50%/50%.
+- Marcar recebimento da primeira parcela e, quando 50/50, da segunda.
+- Conferir Valor, Recebido e A receber na tabela.
+- Marcar Entregue e conferir data efetiva.
+- Nenhum Kanban, tarefa ou controle de horas deve existir.
+
+Teste Empresas
+- Abre em Todos por padrão.
+- Tabela mostra somente dados próprios da base; não duplica coluna/filtro de estágio Comercial.
+- Registro continua encontrável após entrar em Comercial, virar Projeto ou ser Entregue.
+
+Teste Dashboard
+- Abre em Semana.
+- Hoje/Semana/Mês/Personalizado continuam funcionando.
+- Comercial usa Aguardando prévia / Prévia enviada / Prévias previstas.
+- Gestão exibe projetos fechados, valor fechado, previsto a receber, recebido, ativos, entregas, atrasados e saldo total a receber.
+
+Teste Navegação
+- Dashboard
+- Comercial
+- Conversas
+- Projetos
+- Empresas
+- Fila de Disparo > WhatsApp / Instagram
+- Canais > Chips WhatsApp / Perfis Instagram
+- Biblioteca > Ramos / Templates de mensagem
+- Configurações somente pelo ícone de engrenagem.
+- F5 deve manter a área/subárea atual.
+
+Validações do pacote
+- scripts/verify-r59-final-contract.mjs: OK
+- scripts/verify-syntax.mjs: OK

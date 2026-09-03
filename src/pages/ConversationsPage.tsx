@@ -11,7 +11,7 @@ import {
   getConversationCommercial,
   sendConversationMessage,
   setConversationCommercialStage,
-  setConversationDesignDueDate,
+  setConversationPreviewDueDate,
   type ConversationCommercialContext,
 } from '../services/conversations/conversations.gateway';
 import { COMMERCIAL_STAGE_LABELS, type CommercialStage } from '../services/leads/crmLead.types';
@@ -100,12 +100,12 @@ export function ConversationsPage() {
   const [commercial, setCommercial] = useState<ConversationCommercialContext | null>(null);
   const [commercialLoading, setCommercialLoading] = useState(false);
   const [commercialSaving, setCommercialSaving] = useState(false);
-  const [designDueDateDraft, setDesignDueDateDraft] = useState('');
+  const [previewDueDateDraft, setPreviewDueDateDraft] = useState('');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
   const notificationTargetRef = useRef(readNotificationConversationTarget());
   const commercialRequestRef = useRef(0);
-  const designDateDirtyRef = useRef(false);
+  const previewDateDirtyRef = useRef(false);
 
   const selectedConversation = conversations.find((item) => item.id === selectedConversationId) ?? null;
   const visibleConversations = useMemo(() => {
@@ -169,8 +169,8 @@ export function ConversationsPage() {
     const requestId = ++commercialRequestRef.current;
     if (!conversationId) {
       setCommercial(null);
-      setDesignDueDateDraft('');
-      designDateDirtyRef.current = false;
+      setPreviewDueDateDraft('');
+      previewDateDirtyRef.current = false;
       return;
     }
     if (!quiet) setCommercialLoading(true);
@@ -178,7 +178,7 @@ export function ConversationsPage() {
       const next = await getConversationCommercial(conversationId);
       if (commercialRequestRef.current !== requestId) return;
       setCommercial(next);
-      if (!designDateDirtyRef.current) setDesignDueDateDraft(next.designDueDate || '');
+      if (!previewDateDirtyRef.current) setPreviewDueDateDraft(next.previewDueDate || '');
     } catch (cause) {
       if (commercialRequestRef.current !== requestId) return;
       if (!quiet) setError(cause instanceof Error ? cause.message : 'Falha ao carregar o estágio comercial.');
@@ -201,9 +201,9 @@ export function ConversationsPage() {
   useEffect(() => { void loadChips().catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao carregar chips.')); }, [loadChips]);
   useEffect(() => { void loadConversations(); }, [loadConversations]);
   useEffect(() => {
-    designDateDirtyRef.current = false;
+    previewDateDirtyRef.current = false;
     setCommercial(null);
-    setDesignDueDateDraft('');
+    setPreviewDueDateDraft('');
     void Promise.all([loadMessages(selectedConversationId), loadCommercial(selectedConversationId)]);
     if (selectedConversationId) {
       void markConversationRead(selectedConversationId).then(() => {
@@ -264,9 +264,9 @@ export function ConversationsPage() {
     try {
       const next = await setConversationCommercialStage(selectedConversation.id, nextStage);
       setCommercial(next);
-      setDesignDueDateDraft(next.designDueDate || '');
-      designDateDirtyRef.current = false;
-      toast({ title: 'Estágio atualizado', description: `Lead movido para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
+      setPreviewDueDateDraft(next.previewDueDate || '');
+      previewDateDirtyRef.current = false;
+      toast({ title: 'Estágio atualizado', description: nextStage === 'fechado' ? 'Empresa fechada. O projeto já está disponível em Projetos.' : `Empresa movida para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
     } catch (cause) {
       toast({ title: 'Não foi possível atualizar', description: cause instanceof Error ? cause.message : 'Tente novamente.', tone: 'danger' });
     } finally {
@@ -274,19 +274,19 @@ export function ConversationsPage() {
     }
   };
 
-  const saveDesignDueDate = async () => {
-    if (!selectedConversation || !commercial?.designDueDateEditable || !canEditLeads || commercialSaving) return;
-    if (designDueDateDraft && designDueDateDraft < todayInputValue()) {
+  const savePreviewDueDate = async () => {
+    if (!selectedConversation || !commercial?.previewDueDateEditable || !canEditLeads || commercialSaving) return;
+    if (previewDueDateDraft && previewDueDateDraft < todayInputValue()) {
       toast({ title: 'Data inválida', description: 'A nova data prevista não pode estar no passado.', tone: 'danger' });
       return;
     }
     setCommercialSaving(true);
     try {
-      const next = await setConversationDesignDueDate(selectedConversation.id, designDueDateDraft || null);
+      const next = await setConversationPreviewDueDate(selectedConversation.id, previewDueDateDraft || null);
       setCommercial(next);
-      setDesignDueDateDraft(next.designDueDate || '');
-      designDateDirtyRef.current = false;
-      toast({ title: 'Data do design atualizada', description: next.designDueDate ? `Envio previsto para ${formatDateOnly(next.designDueDate)}.` : 'A data prevista foi removida.', tone: 'success' });
+      setPreviewDueDateDraft(next.previewDueDate || '');
+      previewDateDirtyRef.current = false;
+      toast({ title: 'Data da prévia atualizada', description: next.previewDueDate ? `Envio previsto para ${formatDateOnly(next.previewDueDate)}.` : 'A data prevista foi removida.', tone: 'success' });
     } catch (cause) {
       toast({ title: 'Não foi possível salvar a data', description: cause instanceof Error ? cause.message : 'Tente novamente.', tone: 'danger' });
     } finally {
@@ -347,19 +347,19 @@ export function ConversationsPage() {
             <>
               <div className="chat-thread__identity">
                 <span>{selectedConversation.phone || selectedConversation.remoteJid}</span>
-                {selectedConversation.leadId ? <Tag tone="primary">Lead #{selectedConversation.leadId}</Tag> : <Tag tone="neutral">Sem lead vinculado</Tag>}
+                {selectedConversation.leadId ? <Tag tone="primary">Empresa #{selectedConversation.leadId}</Tag> : <Tag tone="neutral">Sem empresa vinculada</Tag>}
               </div>
 
               <div className="chat-commercial-context">
                 {commercialLoading ? <div className="chat-commercial-context__loading"><Clock3 size={15} /><span>Carregando Comercial...</span></div> : null}
                 {!commercialLoading && commercial && !commercial.linked ? (
-                  <div className="chat-commercial-context__empty"><span>Esta conversa ainda não está vinculada a um lead.</span></div>
+                  <div className="chat-commercial-context__empty"><span>Esta conversa ainda não está vinculada a uma empresa da base.</span></div>
                 ) : null}
                 {!commercialLoading && commercial?.linked ? (
                   <>
                     <div className="chat-commercial-context__lead">
                       <span className="chat-commercial-context__eyebrow">Comercial</span>
-                      <strong>{commercial.displayName || commercial.leadName || `Lead #${commercial.leadId}`}</strong>
+                      <strong>{commercial.displayName || commercial.leadName || `Empresa #${commercial.leadId}`}</strong>
                       {commercial.alternativeName && commercial.leadName && commercial.alternativeName !== commercial.leadName ? <small>Original: {commercial.leadName}</small> : null}
                     </div>
                     <div className="chat-commercial-context__controls">
@@ -374,29 +374,29 @@ export function ConversationsPage() {
                         />
                       ) : <Tag tone="neutral">Comercial disponível após o envio</Tag>}
 
-                      {commercial.stage === 'aguardando_design' ? (
+                      {commercial.stage === 'aguardando_previa' ? (
                         <div className="chat-commercial-design-date">
                           <Field
-                            aria-label="Enviar design até"
+                            aria-label="Enviar prévia até"
                             density="compact"
                             type="date"
                             min={todayInputValue()}
-                            value={designDueDateDraft}
-                            disabled={!commercial.designDueDateEditable || !canEditLeads || commercialSaving}
-                            onChange={(value) => { designDateDirtyRef.current = true; setDesignDueDateDraft(value); }}
+                            value={previewDueDateDraft}
+                            disabled={!commercial.previewDueDateEditable || !canEditLeads || commercialSaving}
+                            onChange={(value) => { previewDateDirtyRef.current = true; setPreviewDueDateDraft(value); }}
                           />
-                          {commercial.designDueDateEditable && canEditLeads ? (
+                          {commercial.previewDueDateEditable && canEditLeads ? (
                             <Button
                               size="sm"
                               variant="secondary"
                               iconLeft={CalendarDays}
                               loading={commercialSaving}
-                              disabled={!designDateDirtyRef.current}
-                              onClick={() => void saveDesignDueDate()}
+                              disabled={!previewDateDirtyRef.current}
+                              onClick={() => void savePreviewDueDate()}
                             >Salvar data</Button>
                           ) : null}
                         </div>
-                      ) : commercial.designDueDate ? <Tag tone="neutral">Design: {formatDateOnly(commercial.designDueDate)}</Tag> : null}
+                      ) : commercial.previewDueDate ? <Tag tone="neutral">Prévia: {formatDateOnly(commercial.previewDueDate)}</Tag> : null}
                     </div>
                   </>
                 ) : null}

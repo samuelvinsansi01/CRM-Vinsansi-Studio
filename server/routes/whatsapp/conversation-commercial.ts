@@ -1,27 +1,28 @@
 import { body,failure,humanScope,integer,query,send,text,type HumanScope,type Stage5Request,type Stage5Response } from '../../whatsapp/stage5.js';
 
-const STAGES=['aguardando_resposta','aguardando_design','design_enviado','fechado','recusado'] as const;
+const STAGES=['aguardando_resposta','aguardando_previa','previa_enviada','fechado','recusado'] as const;
 type CommercialStage=(typeof STAGES)[number];
 const STAGE_SET=new Set<string>(STAGES);
 const TRANSITIONS:Record<CommercialStage,readonly CommercialStage[]>={
-  aguardando_resposta:['aguardando_resposta','aguardando_design','recusado'],
-  aguardando_design:['aguardando_design','design_enviado','recusado'],
-  design_enviado:['design_enviado','fechado','recusado'],
+  aguardando_resposta:['aguardando_resposta','aguardando_previa','recusado'],
+  aguardando_previa:['aguardando_previa','previa_enviada','recusado'],
+  previa_enviada:['previa_enviada','fechado','recusado'],
   fechado:['fechado'],
   recusado:['recusado'],
 };
 
 function stage(value:unknown):CommercialStage|null{
-  const normalized=text(value).toLowerCase();
+  const raw=text(value).toLowerCase();
+  const normalized=raw==='aguardando_design'?'aguardando_previa':raw==='design_enviado'?'previa_enviada':raw;
   return STAGE_SET.has(normalized)?normalized as CommercialStage:null;
 }
 
 function dateOnly(value:unknown){
   const normalized=text(value);
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(normalized))throw new Error('design_due_date_invalid');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(normalized))throw new Error('preview_due_date_invalid');
   const [year,month,day]=normalized.split('-').map(Number);
   const parsed=new Date(Date.UTC(year,month-1,day));
-  if(parsed.getUTCFullYear()!==year||parsed.getUTCMonth()!==month-1||parsed.getUTCDate()!==day)throw new Error('design_due_date_invalid');
+  if(parsed.getUTCFullYear()!==year||parsed.getUTCMonth()!==month-1||parsed.getUTCDate()!==day)throw new Error('preview_due_date_invalid');
   return normalized;
 }
 
@@ -38,8 +39,8 @@ async function read(scope:HumanScope,conversationId:number){
 
   const leadId=Number(conversation.data.leads_id||0);
   if(!leadId)return {
-    contractVersion:'conversation-commercial-v0.2',conversationId,linked:false,leadId:null,leadName:'',alternativeName:'',displayName:'',leadStatusId:null,
-    stage:null,editable:false,allowedTransitions:[],designDueDate:null,designDueDateEditable:false,updatedAt:null,
+    contractVersion:'conversation-commercial-v0.3',conversationId,linked:false,leadId:null,leadName:'',alternativeName:'',displayName:'',leadStatusId:null,
+    stage:null,editable:false,allowedTransitions:[],previewDueDate:null,previewDueDateEditable:false,updatedAt:null,
   };
 
   const lead=await scope.admin.from('leads').select('leads_id,lead_status_id,leads_name,leads_alternative_name').eq('organizations_id',scope.context.organizationId).eq('leads_id',leadId).maybeSingle();
@@ -49,15 +50,15 @@ async function read(scope:HumanScope,conversationId:number){
   const statusId=Number(lead.data.lead_status_id||0);
   let currentStage:CommercialStage|null=null;
   let updatedAt:string|null=null;
-  let designDueDate:string|null=null;
+  let previewDueDate:string|null=null;
   const permission=await scope.admin.rpc('stage5_member_has_permission',{p_organizations_id:scope.context.organizationId,p_organization_members_id:scope.memberId,p_permission:'leads.edit'});
   const canEdit=!permission.error&&permission.data===true;
 
   if(statusId===5){
-    const commercial=await scope.admin.from('lead_commercial').select('commercial_stage,design_due_date,lead_commercial_updated_at').eq('organizations_id',scope.context.organizationId).eq('leads_id',leadId).maybeSingle();
+    const commercial=await scope.admin.from('lead_commercial').select('commercial_stage,preview_due_date,lead_commercial_updated_at').eq('organizations_id',scope.context.organizationId).eq('leads_id',leadId).maybeSingle();
     if(commercial.error)throw new Error(`commercial_stage_read_failed:${commercial.error.message}`);
     currentStage=stage(commercial.data?.commercial_stage)||'aguardando_resposta';
-    designDueDate=text(commercial.data?.design_due_date)||null;
+    previewDueDate=text(commercial.data?.preview_due_date)||null;
     updatedAt=text(commercial.data?.lead_commercial_updated_at)||null;
   }
 
@@ -65,8 +66,8 @@ async function read(scope:HumanScope,conversationId:number){
   const alternativeName=text(lead.data.leads_alternative_name);
   const editable=statusId===5&&canEdit;
   return {
-    contractVersion:'conversation-commercial-v0.2',conversationId,linked:true,leadId,leadName,alternativeName,displayName:alternativeName||leadName,leadStatusId:statusId,
-    stage:currentStage,editable,allowedTransitions:currentStage?TRANSITIONS[currentStage]:[],designDueDate,designDueDateEditable:editable&&currentStage==='aguardando_design',updatedAt,
+    contractVersion:'conversation-commercial-v0.3',conversationId,linked:true,leadId,leadName,alternativeName,displayName:alternativeName||leadName,leadStatusId:statusId,
+    stage:currentStage,editable,allowedTransitions:currentStage?TRANSITIONS[currentStage]:[],previewDueDate,designDueDate:previewDueDate,previewDueDateEditable:editable&&currentStage==='aguardando_previa',updatedAt,
   };
 }
 
@@ -102,12 +103,12 @@ export default async function handler(req:Stage5Request,res:Stage5Response){
       return send(res,200,{ok:true,data:await read(scope,conversationId)});
     }
 
-    if(action==='design_due_date'){
-      if(before.stage!=='aguardando_design')throw new Error('design_due_date_requires_awaiting_design');
-      const rawDate=text(input.designDueDate);
+    if(action==='preview_due_date'||action==='design_due_date'){
+      if(before.stage!=='aguardando_previa')throw new Error('preview_due_date_requires_awaiting_preview');
+      const rawDate=text(input.previewDueDate);
       const dueDate=rawDate?dateOnly(rawDate):null;
-      if(dueDate&&dueDate<saoPauloToday())throw new Error('design_due_date_past_invalid');
-      const changed=await scope.client.rpc('set_lead_design_due_date_r59',{p_leads_id:before.leadId,p_design_due_date:dueDate});
+      if(dueDate&&dueDate<saoPauloToday())throw new Error('preview_due_date_past_invalid');
+      const changed=await scope.client.rpc('set_lead_preview_due_date_r59',{p_leads_id:before.leadId,p_preview_due_date:dueDate});
       if(changed.error)throw new Error(changed.error.message);
       return send(res,200,{ok:true,data:await read(scope,conversationId)});
     }

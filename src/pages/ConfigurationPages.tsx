@@ -1,4 +1,4 @@
-import { ArrowRight, Building2, MessageSquareText, RadioTower, Settings2, Users } from 'lucide-react';
+import { ArrowRight, Building2, Settings2, SlidersHorizontal } from 'lucide-react';
 import { Button, Panel } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
@@ -14,35 +14,21 @@ type SettingsSection = {
 
 const sections: SettingsSection[] = [
   {
-    title: 'Leads e captação',
-    description: 'Estrutura usada para classificar empresas e orientar o Motor de Captura.',
-    icon: Users,
+    title: 'Sistema',
+    description: 'Cadastros técnicos e regras que não fazem parte do trabalho diário.',
+    icon: SlidersHorizontal,
     items: [
-      { label: 'Ramos', page: 'message-branches', description: 'Ramos, categorias e termos usados na operação.' },
-      { label: 'Critérios de captação', page: 'config-import-rules', description: 'Regras globais de nota, avaliações e entrada de leads.' },
-    ],
-  },
-  {
-    title: 'Canais',
-    description: 'Recursos que representam os remetentes e seus limites de operação.',
-    icon: RadioTower,
-    items: [
-      { label: 'Chips WhatsApp', page: 'sender-chips', description: 'Chips, instâncias e vínculo operacional.' },
-      { label: 'Perfis Instagram', page: 'sender-instagram', description: 'Perfis utilizados pelo Motor Instagram.' },
-      { label: 'Níveis', page: 'config-levels', description: 'Limites diários e distribuição por lote.' },
-    ],
-  },
-  {
-    title: 'Mensagens',
-    description: 'Conteúdo utilizado pelos canais durante os envios.',
-    icon: MessageSquareText,
-    items: [
-      { label: 'Templates de mensagens', page: 'message-templates', description: 'Textos e sequências vinculados aos ramos.' },
+      { label: 'Fontes de contato', page: 'config-contact-sources', description: 'Origens e regras técnicas de identificação dos contatos.' },
+      { label: 'Canais do sistema', page: 'config-channels', description: 'Catálogo técnico de canais utilizados pela plataforma.' },
+      { label: 'Níveis', page: 'config-levels', description: 'Limites operacionais utilizados pelos motores de disparo.' },
+      { label: 'Instâncias', page: 'config-instances', description: 'Configuração técnica das instâncias WhatsApp.' },
+      { label: 'Canais de template', page: 'config-template-channels', description: 'Catálogo técnico dos canais disponíveis para templates.' },
+      { label: 'Tipos de template', page: 'config-template-types', description: 'Tipos internos utilizados pelos templates de mensagem.' },
     ],
   },
   {
     title: 'Automação',
-    description: 'Regras globais obedecidas pelos motores do Gerenciador de Disparos.',
+    description: 'Parâmetros globais obedecidos pelas ferramentas auxiliares da operação.',
     icon: Settings2,
     items: [
       { label: 'Central de Ferramentas', page: 'tools', description: 'Delays, janelas, intervalos e configurações dos motores.' },
@@ -75,7 +61,7 @@ export function SettingsOverviewPage({ onNavigate }: SettingsOverviewPageProps) 
     <div className="settings-page settings-overview-page">
       <PageHeader
         title="Configurações"
-        description="Administração da operação. Configurações técnicas que não fazem parte do trabalho diário ficam concentradas aqui."
+        description="Somente administração e estrutura técnica. Chips, perfis, ramos e templates ficam nos menus Canais e Biblioteca."
       />
       <section className="settings-overview-grid settings-overview-grid--ia">
         {visibleSections.map((section) => {

@@ -5,6 +5,7 @@ import { BasePage } from './pages/BasePage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LeadsPage } from './pages/LeadsPage';
 import { CommercialPage } from './pages/CommercialPage';
+import { ProjectsPage } from './pages/ProjectsPage';
 import { SendsPage } from './pages/SendsPage';
 import { SettingsOverviewPage } from './pages/ConfigurationPages';
 import { CatalogCrudPage } from './pages/CatalogCrudPage';
@@ -144,6 +145,7 @@ export function App() {
       {activePage === 'dashboard' ? <DashboardPage onNavigate={setActivePage} /> : null}
       {activePage === 'leads' ? <LeadsPage /> : null}
       {activePage === 'commercial' ? <CommercialPage /> : null}
+      {activePage === 'projects' ? <ProjectsPage /> : null}
       {activePage === 'sends' ? <SendsPage /> : null}
       {activePage === 'home' ? <HomePage /> : null}
       {activePage === 'import-approved' || activePage === 'import-rejected' ? (

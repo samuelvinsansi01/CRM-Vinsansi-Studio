@@ -11,14 +11,14 @@ const EMPTY_SUMMARY: CrmLeadSummary = {
   sent: 0,
   invalid: 0,
   duplicates: 0,
-  commercial: { aguardandoResposta: 0, aguardandoDesign: 0, designEnviado: 0, fechado: 0, recusado: 0 },
+  commercial: { aguardandoResposta: 0, aguardandoPrevia: 0, previaEnviada: 0, fechado: 0, recusado: 0 },
 };
 
 function commercialKey(stage: CommercialStage): keyof CrmLeadSummary['commercial'] {
   return ({
     aguardando_resposta: 'aguardandoResposta',
-    aguardando_design: 'aguardandoDesign',
-    design_enviado: 'designEnviado',
+    aguardando_previa: 'aguardandoPrevia',
+    previa_enviada: 'previaEnviada',
     fechado: 'fechado',
     recusado: 'recusado',
   } as const)[stage];
@@ -47,7 +47,7 @@ export function useCrmLeads(filters: CrmLeadFilters, page: number, pageSize: num
       setSummary(result.summary);
     } catch (err) {
       if (requestRef.current !== requestId) return;
-      setError(err instanceof Error ? err.message : 'Não foi possível carregar os leads.');
+      setError(err instanceof Error ? err.message : 'Não foi possível carregar as empresas.');
     } finally {
       if (requestRef.current === requestId) {
         setLoading(false);
@@ -60,7 +60,7 @@ export function useCrmLeads(filters: CrmLeadFilters, page: number, pageSize: num
 
   const setCommercialStage = useCallback(async (leadId: string, nextStage: CommercialStage) => {
     const before = items.find((item) => item.id === leadId);
-    if (!before || before.statusId !== 5) throw new Error('Somente leads enviados podem receber estágio comercial.');
+    if (!before || before.statusId !== 5) throw new Error('Somente empresas já enviadas podem receber estágio comercial.');
     const previousStage = before.commercialStage ?? 'aguardando_resposta';
     if (previousStage === nextStage) return;
     if (!canTransitionCommercialStage(previousStage, nextStage)) {
@@ -96,16 +96,16 @@ export function useCrmLeads(filters: CrmLeadFilters, page: number, pageSize: num
     }
   }, [items]);
 
-  const setDesignDueDate = useCallback(async (leadId: string, designDueDate: string | null) => {
+  const setPreviewDueDate = useCallback(async (leadId: string, previewDueDate: string | null) => {
     const before = items.find((item) => item.id === leadId);
-    const previous = before?.designDueDate ?? '';
-    setItems((current) => current.map((item) => item.id === leadId ? { ...item, designDueDate: designDueDate ?? '' } : item));
+    const previous = before?.previewDueDate ?? '';
+    setItems((current) => current.map((item) => item.id === leadId ? { ...item, previewDueDate: previewDueDate ?? '' } : item));
     try {
-      const result = await leadsRepository.setDesignDueDate(leadId, designDueDate);
-      const saved = String(result.designDueDate ?? designDueDate ?? '');
-      setItems((current) => current.map((item) => item.id === leadId ? { ...item, designDueDate: saved } : item));
+      const result = await leadsRepository.setPreviewDueDate(leadId, previewDueDate);
+      const saved = String(result.previewDueDate ?? previewDueDate ?? '');
+      setItems((current) => current.map((item) => item.id === leadId ? { ...item, previewDueDate: saved } : item));
     } catch (err) {
-      setItems((current) => current.map((item) => item.id === leadId ? { ...item, designDueDate: previous } : item));
+      setItems((current) => current.map((item) => item.id === leadId ? { ...item, previewDueDate: previous } : item));
       throw err;
     }
   }, [items]);
@@ -119,6 +119,6 @@ export function useCrmLeads(filters: CrmLeadFilters, page: number, pageSize: num
     error,
     refresh: () => load('refresh'),
     setCommercialStage,
-    setDesignDueDate,
+    setPreviewDueDate,
   };
 }

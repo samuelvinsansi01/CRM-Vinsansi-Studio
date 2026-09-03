@@ -77,7 +77,8 @@ function designDateState(value?: string) {
 export function CommercialPage() {
   const { hasPermission } = useOrganizationContext();
   const canEdit = hasPermission('leads.edit');
-  const initialStage = window.sessionStorage.getItem('crm:commercial:stage') ?? '';
+  const storedStage = window.sessionStorage.getItem('crm:commercial:stage') ?? '';
+  const initialStage = storedStage === 'aguardando_design' ? 'aguardando_previa' : storedStage === 'design_enviado' ? 'previa_enviada' : storedStage;
   const [stage, setStage] = useState(initialStage);
   const [channel, setChannel] = useState('Todos');
   const [search, setSearch] = useState('');
@@ -88,7 +89,7 @@ export function CommercialPage() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [viewingLead, setViewingLead] = useState<CrmLead | null>(null);
   const [scheduleLead, setScheduleLead] = useState<CrmLead | null>(null);
-  const [designDueDate, setDesignDueDateDraft] = useState('');
+  const [previewDueDate, setPreviewDueDateDraft] = useState('');
   const [savingDesignDate, setSavingDesignDate] = useState(false);
 
   useEffect(() => { window.sessionStorage.removeItem('crm:commercial:stage'); }, []);
@@ -99,7 +100,7 @@ export function CommercialPage() {
     channel,
     commercialStage: stage as CommercialStage | '',
   }), [channel, debouncedSearch, stage]);
-  const { items, total, summary, loading, refreshing, error, refresh, setCommercialStage, setDesignDueDate } = useCrmLeads(filters, page, rowsPerPage);
+  const { items, total, summary, loading, refreshing, error, refresh, setCommercialStage, setPreviewDueDate } = useCrmLeads(filters, page, rowsPerPage);
   const totalPages = Math.max(1, Math.ceil(total / rowsPerPage));
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
@@ -116,10 +117,10 @@ export function CommercialPage() {
       const original = items.find((item) => item.id === leadId) ?? null;
       await setCommercialStage(leadId, nextStage);
       await refresh();
-      toast({ title: 'Estágio atualizado', description: `Lead movido para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
-      if (nextStage === 'aguardando_design' && original) {
+      toast({ title: 'Estágio atualizado', description: nextStage === 'fechado' ? 'Empresa fechada. O projeto já está disponível em Projetos.' : `Empresa movida para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
+      if (nextStage === 'aguardando_previa' && original) {
         setScheduleLead({ ...original, commercialStage: nextStage });
-        setDesignDueDateDraft(original.designDueDate || '');
+        setPreviewDueDateDraft(original.previewDueDate || '');
       }
     } catch (err) {
       toast({ title: 'Não foi possível atualizar', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
@@ -148,11 +149,11 @@ export function CommercialPage() {
     sentAt: formatDate(lead.lastSentAt),
     stage: <StageControl value={lead.commercialStage ?? 'aguardando_resposta'} disabled={!canEdit || savingLeadId === lead.id} onChange={(next) => void changeStage(lead.id, next)} />,
     designDue: (() => {
-      const state = designDateState(lead.designDueDate);
-      if ((lead.commercialStage ?? 'aguardando_resposta') === 'aguardando_design' && canEdit) {
-        return <button className={`commercial-design-date commercial-design-date--${state}`} type="button" onClick={() => { setScheduleLead(lead); setDesignDueDateDraft(lead.designDueDate || ''); }}><CalendarDays size={14} strokeWidth={1.8} />{lead.designDueDate ? formatDateOnly(lead.designDueDate) : 'Definir data'}</button>;
+      const state = designDateState(lead.previewDueDate);
+      if ((lead.commercialStage ?? 'aguardando_resposta') === 'aguardando_previa' && canEdit) {
+        return <button className={`commercial-design-date commercial-design-date--${state}`} type="button" onClick={() => { setScheduleLead(lead); setPreviewDueDateDraft(lead.previewDueDate || ''); }}><CalendarDays size={14} strokeWidth={1.8} />{lead.previewDueDate ? formatDateOnly(lead.previewDueDate) : 'Definir data'}</button>;
       }
-      return lead.designDueDate ? <span className={`commercial-design-date-text commercial-design-date-text--${state}`}>{formatDateOnly(lead.designDueDate)}</span> : '—';
+      return lead.previewDueDate ? <span className={`commercial-design-date-text commercial-design-date-text--${state}`}>{formatDateOnly(lead.previewDueDate)}</span> : '—';
     })(),
     updatedAt: lead.commercialUpdatedAt ? formatDate(lead.commercialUpdatedAt) : '—',
   })), [canEdit, items, savingLeadId]);
@@ -165,17 +166,17 @@ export function CommercialPage() {
     if (action === 'view') setViewingLead(lead);
     if (action === 'edit' && canEdit) {
       setScheduleLead(lead);
-      setDesignDueDateDraft(lead.designDueDate || '');
+      setPreviewDueDateDraft(lead.previewDueDate || '');
     }
   };
 
   const saveDesignDate = async () => {
-    if (!scheduleLead || (scheduleLead.commercialStage ?? 'aguardando_resposta') !== 'aguardando_design') return;
+    if (!scheduleLead || (scheduleLead.commercialStage ?? 'aguardando_resposta') !== 'aguardando_previa') return;
     setSavingDesignDate(true);
     try {
-      await setDesignDueDate(scheduleLead.id, designDueDate || null);
+      await setPreviewDueDate(scheduleLead.id, previewDueDate || null);
       await refresh();
-      toast({ title: 'Data do design atualizada', description: designDueDate ? `Envio previsto para ${formatDateOnly(designDueDate)}.` : 'A data prevista foi removida.', tone: 'success' });
+      toast({ title: 'Data da prévia atualizada', description: previewDueDate ? `Envio previsto para ${formatDateOnly(previewDueDate)}.` : 'A data prevista foi removida.', tone: 'success' });
       setScheduleLead(null);
     } catch (err) {
       toast({ title: 'Não foi possível salvar a data', description: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' });
@@ -188,14 +189,14 @@ export function CommercialPage() {
     <div className="dashboard-table-page commercial-page">
       <PageHeader
         title="Comercial"
-        description="Classificação manual do resultado comercial dos leads enviados. Nenhuma mensagem ou automação altera estes estágios."
+        description="Acompanhamento manual das empresas que já receberam uma abordagem comercial. Nenhuma mensagem ou automação altera estes estágios."
         action={<Button variant="secondary" iconLeft={RefreshCcw} loading={refreshing} disabled={loading} onClick={() => void refresh()}>Atualizar</Button>}
       />
 
       <section className="metric-grid metric-grid--5">
         <MetricCard icon={Clock3} value={String(summary.commercial.aguardandoResposta)} label="Aguardando resposta" active={stage === 'aguardando_resposta'} onClick={() => selectStage('aguardando_resposta')} />
-        <MetricCard icon={FileImage} value={String(summary.commercial.aguardandoDesign)} label="Aguardando design" tone="warning" active={stage === 'aguardando_design'} onClick={() => selectStage('aguardando_design')} />
-        <MetricCard icon={Send} value={String(summary.commercial.designEnviado)} label="Design enviado" tone="primary" active={stage === 'design_enviado'} onClick={() => selectStage('design_enviado')} />
+        <MetricCard icon={FileImage} value={String(summary.commercial.aguardandoPrevia)} label="Aguardando prévia" tone="warning" active={stage === 'aguardando_previa'} onClick={() => selectStage('aguardando_previa')} />
+        <MetricCard icon={Send} value={String(summary.commercial.previaEnviada)} label="Prévia enviada" tone="primary" active={stage === 'previa_enviada'} onClick={() => selectStage('previa_enviada')} />
         <MetricCard icon={UserCheck} value={String(summary.commercial.fechado)} label="Fechados" tone="success" active={stage === 'fechado'} onClick={() => selectStage('fechado')} />
         <MetricCard icon={X} value={String(summary.commercial.recusado)} label="Recusados" tone="danger" active={stage === 'recusado'} onClick={() => selectStage('recusado')} />
       </section>
@@ -208,7 +209,7 @@ export function CommercialPage() {
 
       <TableCard
         title="Gestão comercial"
-        footerText={loading ? 'Carregando...' : `${refreshing ? 'Atualizando · ' : ''}Mostrando ${rows.length} de ${total} lead(s) enviado(s).`}
+        footerText={loading ? 'Carregando...' : `${refreshing ? 'Atualizando · ' : ''}Mostrando ${rows.length} de ${total} empresa(s) em Comercial.`}
         footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setPage(1); }} />}
         page={page}
         totalPages={totalPages}
@@ -216,7 +217,7 @@ export function CommercialPage() {
       >
         {error ? <div className="table-message">{error}</div> : null}
         {!error && loading ? <div className="table-message">Carregando gestão comercial...</div> : null}
-        {!error && !loading && !rows.length ? <div className="table-message">Nenhum lead neste estágio.</div> : null}
+        {!error && !loading && !rows.length ? <div className="table-message">Nenhuma empresa neste estágio.</div> : null}
         {!error && !loading && rows.length ? <DataTable columns={columns} rows={rows} selectable={false} actions={canEdit ? ['view', 'edit'] : ['view']} onAction={handleAction} /> : null}
       </TableCard>
 
@@ -237,19 +238,19 @@ export function CommercialPage() {
           {viewingLead.mapsUrl ? <a className="drawer-external-link" href={mapsHref(viewingLead.mapsUrl)} target="_blank" rel="noreferrer">Abrir Google Maps</a> : null}
           <Field label="Status operacional" value={statusLabel(viewingLead.statusId)} readOnly />
           <Field label="Estágio comercial" value={COMMERCIAL_STAGE_LABELS[viewingLead.commercialStage ?? 'aguardando_resposta']} readOnly />
-          <Field label="Envio previsto do design" value={viewingLead.designDueDate ? formatDateOnly(viewingLead.designDueDate) : '—'} readOnly />
+          <Field label="Envio da prévia" value={viewingLead.previewDueDate ? formatDateOnly(viewingLead.previewDueDate) : '—'} readOnly />
           <Field label="Alterado em" value={viewingLead.commercialUpdatedAt ? formatDate(viewingLead.commercialUpdatedAt) : '—'} readOnly />
         </div> : null}
       </Drawer>
 
       <Drawer
         open={scheduleLead !== null}
-        title="Planejamento do design"
-        description={scheduleLead && (scheduleLead.commercialStage ?? 'aguardando_resposta') === 'aguardando_design'
+        title="Planejamento da prévia"
+        description={scheduleLead && (scheduleLead.commercialStage ?? 'aguardando_resposta') === 'aguardando_previa'
           ? 'Defina a data em que a prévia deve ser enviada. O estágio comercial continua sendo alterado somente por você.'
           : 'A data planejada permanece como referência do processo comercial.'}
         onClose={() => { if (!savingDesignDate) setScheduleLead(null); }}
-        footer={scheduleLead && (scheduleLead.commercialStage ?? 'aguardando_resposta') === 'aguardando_design' ? <>
+        footer={scheduleLead && (scheduleLead.commercialStage ?? 'aguardando_resposta') === 'aguardando_previa' ? <>
           <Button variant="secondary" disabled={savingDesignDate} onClick={() => setScheduleLead(null)}>Cancelar</Button>
           <Button iconLeft={CalendarDays} loading={savingDesignDate} onClick={() => void saveDesignDate()}>Salvar data</Button>
         </> : <Button variant="secondary" onClick={() => setScheduleLead(null)}>Fechar</Button>}
@@ -257,10 +258,10 @@ export function CommercialPage() {
         {scheduleLead ? <div className="drawer-form">
           <Field label="Empresa" value={scheduleLead.alternativeName || scheduleLead.company} readOnly />
           <Field label="Estágio atual" value={COMMERCIAL_STAGE_LABELS[scheduleLead.commercialStage ?? 'aguardando_resposta']} readOnly />
-          {(scheduleLead.commercialStage ?? 'aguardando_resposta') === 'aguardando_design' ? <>
-            <Field label="Enviar design até" type="date" value={designDueDate} onChange={setDesignDueDateDraft} min={todayInputValue()} />
+          {(scheduleLead.commercialStage ?? 'aguardando_resposta') === 'aguardando_previa' ? <>
+            <Field label="Enviar prévia até" type="date" value={previewDueDate} onChange={setPreviewDueDateDraft} min={todayInputValue()} />
             <div className="drawer-help-text">A data é opcional. Se não quiser agendar agora, deixe em branco e defina depois pela coluna Envio previsto ou pelo ícone de edição.</div>
-          </> : <Field label="Envio previsto do design" value={scheduleLead.designDueDate ? formatDateOnly(scheduleLead.designDueDate) : '—'} readOnly />}
+          </> : <Field label="Envio da prévia" value={scheduleLead.previewDueDate ? formatDateOnly(scheduleLead.previewDueDate) : '—'} readOnly />}
         </div> : null}
       </Drawer>
 

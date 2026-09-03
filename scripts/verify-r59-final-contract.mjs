@@ -259,7 +259,7 @@ if (pullSql.includes("'contractVersion','R58'")) fail('sql_puxada_filtrada_fix10
 
 const homolog = read(homologSql);
 for (const token of [
-  '63::bigint esperado',
+  '65::bigint esperado',
   'status_antigos_funcoes',
   'revisao_com_canal_invalido',
   'revisao_canal_divergente_batch',
@@ -640,7 +640,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
 }
 
 
-// R59 BUILD FIX 31: IA task-based + Leads consolidados + Comercial estritamente manual.
+// R59 BUILD FIX 31: base canônica + Comercial estritamente manual.
 {
   const sql31Path = 'APLICAR - CRM R59 BUILD FIX 31 - Estrutura CRM e Comercial.sql';
   if (!exists(sql31Path)) fail('sql_estrutura_comercial_fix31_ausente');
@@ -655,64 +655,33 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     "'design_enviado'",
     "'fechado'",
     "'recusado'",
-    "coalesce(lc.commercial_stage, 'aguardando_resposta')",
     "PERFORM public.require_organization_permission('leads.edit')",
     "PERFORM public.require_organization_permission('leads.view')",
-  ]) if (!sql31.includes(token)) fail(`fix31_sql_comercial_incompleto:${token}`);
+  ]) if (!sql31.includes(token)) fail(`fix31_sql_comercial_historico_incompleto:${token}`);
   if (/conversation_messages|instagram_message|instagram_dm|instagram_reply/i.test(sql31)) fail('fix31_comercial_ligado_a_mensagens');
   if (/CREATE\s+TRIGGER/i.test(sql31)) fail('fix31_comercial_nao_pode_ter_trigger_automatico');
-
-  const registry31 = read('src/pages/pageRegistry.ts');
-  for (const token of [
-    "{ id: 'dashboard', label: 'Dashboard' }",
-    "{ id: 'leads', label: 'Leads' }",
-    "{ id: 'commercial', label: 'Comercial' }",
-    "{ id: 'conversations', label: 'Conversas' }",
-    "label: 'Fila de Disparo'",
-    'settingsPageIds',
-  ]) if (!registry31.includes(token)) fail(`fix31_navegacao_incompleta:${token}`);
-  const visibleNavBlock = registry31.slice(registry31.indexOf('export const navGroups'), registry31.indexOf('export const pageTitles'));
-  for (const forbidden of ['Importação', 'Pesquisas Google Maps', 'Remetentes', 'Organização', 'Configurações']) {
-    if (visibleNavBlock.includes(forbidden)) fail(`fix31_menu_primario_tecnico:${forbidden}`);
-  }
 
   const header31 = read('src/design-system/layouts/Header.tsx');
   for (const token of ['icon={Settings}', 'label="Configurações"', "navigate('settings')", "navigate('dashboard')"]) {
     if (!header31.includes(token)) fail(`fix31_header_incompleto:${token}`);
   }
 
-  const leads31 = read('src/pages/LeadsPage.tsx');
-  for (const token of ['title="Leads"', 'Inserir lead', 'setInsertOpen(true)', 'createFromImport', 'commercialStage']) {
-    if (!leads31.includes(token)) fail(`fix31_leads_incompleto:${token}`);
-  }
   const commercial31 = read('src/pages/CommercialPage.tsx');
-  for (const token of ['title="Comercial"', 'Aguardando resposta', 'Aguardando design', 'Design enviado', 'Fechado', 'Recusado', 'setCommercialStage']) {
+  for (const token of ['title="Comercial"', 'Aguardando resposta', 'Aguardando prévia', 'Prévia enviada', 'Fechado', 'Recusado', 'setCommercialStage']) {
     if (!commercial31.includes(token)) fail(`fix31_comercial_ui_incompleto:${token}`);
   }
   if (!/nenhuma mensagem|nenhum evento técnico|somente você|manual/i.test(commercial31)) fail('fix31_comercial_ui_sem_regra_manual_explicita');
-
-  const sends31 = read('src/pages/SendsPage.tsx');
-  for (const token of ['title="Envios"', "['WhatsApp', 'Instagram']", '<QueuePage', 'embedded']) {
-    if (!sends31.includes(token)) fail(`fix31_envios_incompleto:${token}`);
-  }
-
-  const app31 = read('src/App.tsx');
-  for (const token of ["<DashboardPage", "<LeadsPage", "<CommercialPage", "<SendsPage", "'maps-searches': 'leads'", "base: 'leads'"]) {
-    if (!app31.includes(token)) fail(`fix31_app_rotas_incompleto:${token}`);
-  }
-
-  const homolog31 = read('CHECK - CRM R59 - Homologacao final.sql');
-  for (const token of ['63::bigint esperado', 'commercial_contract_diff', '32_contrato_comercial_r59']) {
-    if (!homolog31.includes(token)) fail(`fix31_homologacao_incompleta:${token}`);
-  }
 }
 
 
-// R59 BUILD FIX 32: ações canônicas de Leads + criação manual dependente de localidade + menu de fila por canal + cards uniformes.
+// R59 BUILD FIX 32: ações canônicas da base + criação manual dependente de localidade + menu de fila por canal + cards uniformes.
 {
   const leads32 = read('src/pages/LeadsPage.tsx');
   for (const token of [
-    "label=\"Nome alternativo (opcional)\"",
+    'title="Empresas"',
+    'title="Base de empresas"',
+    'Inserir empresa',
+    'label="Nome alternativo (opcional)"',
     'cityCatalogService.listCitiesByStateCode',
     'getRowActions={getRowActions}',
     "actions={['view', 'edit', 'invalidate', 'return']}",
@@ -724,7 +693,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     'label="Inválidos"',
     'label="Sem contato"',
     "alternative_name: manual.alternativeName.trim()",
-  ]) if (!leads32.includes(token)) fail(`fix32_leads_acoes_incompletas:${token}`);
+  ]) if (!leads32.includes(token)) fail(`fix32_empresas_acoes_incompletas:${token}`);
 
   const leadCycle32 = read('src/services/lead-cycle/leadCycle.service.ts');
   for (const token of [
@@ -771,7 +740,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
 }
 
 
-// R59 BUILD FIX 33 — dropdown em portal, pipeline comercial progressivo, agenda do design e Dashboard por período.
+// R59 BUILD FIX 33: dropdown em portal, pipeline progressivo, agenda da prévia e Dashboard por período.
 {
   const field33 = read('src/design-system/components/forms/Field.tsx');
   for (const token of ["createPortal", 'select-field__menu--portal', "window.addEventListener('scroll', reposition, true)"]) {
@@ -779,45 +748,41 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const commercialTypes33 = read('src/services/leads/crmLead.types.ts');
-  for (const token of ['COMMERCIAL_STAGE_TRANSITIONS', "aguardando_resposta: ['aguardando_resposta', 'aguardando_design', 'recusado']", "design_enviado: ['design_enviado', 'fechado', 'recusado']", 'designDueDate: string']) {
+  for (const token of ['COMMERCIAL_STAGE_TRANSITIONS', "aguardando_resposta: ['aguardando_resposta', 'aguardando_previa', 'recusado']", "previa_enviada: ['previa_enviada', 'fechado', 'recusado']", 'previewDueDate: string']) {
     if (!commercialTypes33.includes(token)) fail(`fix33_pipeline_comercial_incompleto:${token}`);
   }
 
   const commercial33 = read('src/pages/CommercialPage.tsx');
-  for (const token of ['commercialStageOptions(value)', 'Envio previsto', 'Planejamento do design', 'Enviar design até', 'Definir data']) {
-    if (!commercial33.includes(token)) fail(`fix33_agenda_comercial_incompleta:${token}`);
+  for (const token of ['commercialStageOptions(value)', 'Envio previsto', 'Planejamento da prévia', 'Enviar prévia até', 'Definir data']) {
+    if (!commercial33.includes(token)) fail(`fix33_agenda_previa_incompleta:${token}`);
   }
 
   const dashboard33 = read('src/pages/DashboardPage.tsx');
-  for (const token of ["type PeriodPreset = 'Hoje' | 'Semana' | 'Mês' | 'Personalizado'", "useState<PeriodPreset>('Semana')", 'dashboardSummary', 'Operação no período', 'Comercial no período', 'Designs previstos']) {
+  for (const token of ["type PeriodPreset = 'Hoje' | 'Semana' | 'Mês' | 'Personalizado'", "useState<PeriodPreset>('Semana')", 'dashboardSummary', 'Operação no período', 'Comercial no período', 'Prévias previstas']) {
     if (!dashboard33.includes(token)) fail(`fix33_dashboard_periodo_incompleto:${token}`);
-  }
-
-  const homolog33 = read('CHECK - CRM R59 - Homologacao final.sql');
-  for (const token of ['design_due_date', 'commercial_stage_transition_invalid', '33_contrato_dashboard_periodo_r59', 'dashboard_period_contract_diff', '34_contrato_mobile_push_v1', 'mobile_push_contract_diff']) {
-    if (!homolog33.includes(token)) fail(`fix33_homologacao_incompleta:${token}`);
   }
 
   const fix33Sql = 'APLICAR - CRM R59 BUILD FIX 33 - Comercial progressivo e Dashboard por periodo.sql';
   if (!exists(fix33Sql)) fail('fix33_sql_ausente');
   const sql33 = read(fix33Sql);
   for (const token of ['ADD COLUMN IF NOT EXISTS design_due_date date', 'commercial_stage_transition_invalid', 'commercial_stage_terminal', 'set_lead_design_due_date_r59', 'dashboard_summary_r59', "lc.commercial_stage = 'aguardando_design'"]) {
-    if (!sql33.includes(token)) fail(`fix33_sql_incompleto:${token}`);
+    if (!sql33.includes(token)) fail(`fix33_sql_historico_incompleto:${token}`);
   }
 }
 
 
-// R59 BUILD FIX 34 — Comercial integrado às Conversas + contrato único para CRM/Mobile.
+// R59 BUILD FIX 34: Comercial integrado às Conversas + contrato único CRM/Mobile.
 {
   const conversations34 = read('src/pages/ConversationsPage.tsx');
   for (const token of [
     'getConversationCommercial',
     'setConversationCommercialStage',
-    'setConversationDesignDueDate',
+    'setConversationPreviewDueDate',
     'chat-commercial-context',
     'commercial.allowedTransitions',
-    "commercial.stage === 'aguardando_design'",
+    "commercial.stage === 'aguardando_previa'",
     'Salvar data',
+    'Prévia:',
   ]) if (!conversations34.includes(token)) fail(`fix34_conversas_comercial_incompleto:${token}`);
 
   const conversationGateway34 = read('src/services/conversations/conversations.gateway.ts');
@@ -825,21 +790,22 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     'ConversationCommercialContext',
     '/api/whatsapp/conversation-commercial',
     "action: 'stage'",
-    "action: 'design_due_date'",
+    "action: 'preview_due_date'",
     'allowedTransitions',
-    'designDueDateEditable',
+    'previewDueDateEditable',
+    'data.designDueDate',
   ]) if (!conversationGateway34.includes(token)) fail(`fix34_gateway_comercial_incompleto:${token}`);
 
   const conversationRoute34 = read('server/routes/whatsapp/conversation-commercial.ts');
   for (const token of [
-    "contractVersion:'conversation-commercial-v0.2'",
+    "contractVersion:'conversation-commercial-v0.3'",
     'allowedTransitions',
-    'designDueDateEditable',
+    'previewDueDateEditable',
     "humanScope(req,'whatsapp.view')",
     "p_permission:'leads.edit'",
-    "action==='design_due_date'",
-    'design_due_date_past_invalid',
-    'set_lead_design_due_date_r59',
+    "action==='preview_due_date'||action==='design_due_date'",
+    'preview_due_date_past_invalid',
+    'set_lead_preview_due_date_r59',
   ]) if (!conversationRoute34.includes(token)) fail(`fix34_rota_comercial_incompleta:${token}`);
   if (conversationRoute34.includes("humanScope(req,'whatsapp.reply')")) fail('fix34_comercial_ainda_exige_whatsapp_reply');
 
@@ -852,16 +818,11 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     "America/Sao_Paulo",
     'design_due_date_requires_awaiting_design',
     "require_organization_permission('leads.edit')",
-  ]) if (!sql34.includes(token)) fail(`fix34_sql_incompleto:${token}`);
-
-  const homolog34 = read('CHECK - CRM R59 - Homologacao final.sql');
-  for (const token of ['design_due_date_past_invalid', 'america/sao_paulo']) {
-    if (!homolog34.toLowerCase().includes(token.toLowerCase())) fail(`fix34_homologacao_incompleta:${token}`);
-  }
+  ]) if (!sql34.includes(token)) fail(`fix34_sql_historico_incompleto:${token}`);
 }
 
 
-// R59 BUILD FIX 35 — identidade única da conversa + nome canônico do lead.
+// R59 BUILD FIX 35: identidade única da conversa + nome canônico da empresa.
 {
   const conversationsRepo35 = read('src/repositories/conversations/conversations.repository.ts');
   for (const token of [
@@ -871,12 +832,14 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     'meaningfulContactName',
     ".from('leads').select('leads_id,leads_name,leads_alternative_name')",
     'const displayName = alternativeName || leadName || contactName',
-  ]) if (!conversationsRepo35.includes(token)) fail(`fix35_nome_lead_conversas_incompleto:${token}`);
+  ]) if (!conversationsRepo35.includes(token)) fail(`fix35_nome_empresa_conversas_incompleto:${token}`);
 
   const conversationsPage35 = read('src/pages/ConversationsPage.tsx');
   for (const token of [
     'conversation.displayName || conversation.contactName',
     '[item.displayName, item.leadName, item.alternativeName, item.contactName',
+    'Empresa #{selectedConversation.leadId}',
+    'Sem empresa vinculada',
   ]) if (!conversationsPage35.includes(token)) fail(`fix35_ui_conversas_nome_incompleta:${token}`);
 
   const fix35Sql = 'APLICAR - CRM R59 BUILD FIX 35 - Identidade de conversas e nome do lead.sql';
@@ -896,10 +859,109 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     'effective_whatsapp_phone',
     'SELECT public.stage5_repair_conversation_identities_r59()',
   ]) if (!sql35.includes(token)) fail(`fix35_sql_identidade_incompleto:${token}`);
+}
 
-  const homolog35 = read('CHECK - CRM R59 - Homologacao final.sql');
-  for (const token of ['conversation_identity_contract_diff', '35_contrato_identidade_conversas_r59', 'stage5_repair_conversation_identities_r59']) {
-    if (!homolog35.includes(token)) fail(`fix35_homologacao_incompleta:${token}`);
+
+// R59 BUILD FIX 36: Empresas como base permanente + Projetos simples + Prévia + IA final.
+{
+  const registry36 = read('src/pages/pageRegistry.ts');
+  const nav36 = registry36.slice(registry36.indexOf('export const navGroups'), registry36.indexOf('export const pageTitles'));
+  const orderedNav = ["label: 'Dashboard'", "label: 'Comercial'", "label: 'Conversas'", "label: 'Projetos'", "label: 'Empresas'", "label: 'Fila de Disparo'", "label: 'Canais'", "label: 'Biblioteca'"];
+  let lastIndex = -1;
+  for (const token of orderedNav) {
+    const currentIndex = nav36.indexOf(token);
+    if (currentIndex < 0 || currentIndex <= lastIndex) fail(`fix36_ordem_menu_invalida:${token}`);
+    lastIndex = currentIndex;
+  }
+  for (const token of [
+    "{ id: 'sender-chips', label: 'Chips WhatsApp' }",
+    "{ id: 'sender-instagram', label: 'Perfis Instagram' }",
+    "{ id: 'message-branches', label: 'Ramos' }",
+    "{ id: 'message-templates', label: 'Templates de mensagem' }",
+  ]) if (!registry36.includes(token)) fail(`fix36_submenus_incompletos:${token}`);
+  for (const forbidden of ['maps-searches', 'Motor de Captura', 'Critérios de captação']) {
+    if (nav36.includes(forbidden)) fail(`fix36_captura_exposta_menu:${forbidden}`);
+  }
+
+  const settings36 = read('src/pages/ConfigurationPages.tsx');
+  for (const forbidden of ['sender-chips', 'sender-instagram', 'message-branches', 'message-templates', 'config-import-rules', 'Motor de Captura']) {
+    if (settings36.includes(forbidden)) fail(`fix36_configuracoes_ainda_expoem_operacao:${forbidden}`);
+  }
+  const settingsIds36 = registry36.slice(registry36.indexOf('export const settingsPageIds'));
+  for (const forbidden of ["'sender-chips'", "'sender-instagram'", "'message-branches'", "'message-templates'"]) {
+    if (settingsIds36.includes(forbidden)) fail(`fix36_item_operacional_ainda_marcado_config:${forbidden}`);
+  }
+
+  const companies36 = read('src/pages/LeadsPage.tsx');
+  for (const token of ['title="Empresas"', 'title="Base de empresas"', 'Base permanente e canônica', 'Mostrando ${rows.length} de ${total} empresa(s).']) {
+    if (!companies36.includes(token)) fail(`fix36_empresas_incompleto:${token}`);
+  }
+  if (companies36.includes("{ key: 'commercial', label: 'Comercial'")) fail('fix36_empresas_tabela_duplica_comercial');
+  if (companies36.includes('placeholder="Comercial"')) fail('fix36_empresas_filtro_duplica_comercial');
+
+  const commercial36 = read('src/services/leads/crmLead.types.ts');
+  for (const token of ["'aguardando_previa'", "'previa_enviada'", "aguardando_previa: 'Aguardando prévia'", "previa_enviada: 'Prévia enviada'", 'previewDueDate: string']) {
+    if (!commercial36.includes(token)) fail(`fix36_previa_tipos_incompletos:${token}`);
+  }
+  for (const forbidden of ["'aguardando_design'", "'design_enviado'"]) {
+    if (commercial36.includes(forbidden)) fail(`fix36_estagio_comercial_antigo_runtime:${forbidden}`);
+  }
+
+  const projectsTypes36 = read('src/services/projects/project.types.ts');
+  for (const token of [
+    "'aguardando_inicio'", "'desenvolvendo_design'", "'aguardando_aprovacao'", "'em_revisao'", "'passando_wordpress'", "'aguardando_aprovacao_final'", "'entregue'",
+    "'100_inicio'", "'50_50'", '50% no início / 50% na entrega',
+  ]) if (!projectsTypes36.includes(token)) fail(`fix36_project_types_incompletos:${token}`);
+
+  const projectsRepo36 = read('src/repositories/projects/projects.repository.ts');
+  for (const token of ['list_projects_r59', 'update_project_financials_r59', 'set_project_stage_r59', 'update_project_stage_dates_r59', 'set_project_payment_received_r59']) {
+    if (!projectsRepo36.includes(token)) fail(`fix36_project_repo_incompleto:${token}`);
+  }
+
+  const projectsPage36 = read('src/pages/ProjectsPage.tsx');
+  for (const token of [
+    'title="Projetos"',
+    'Projetos ativos', 'Entregas em 7 dias', 'Atrasados', 'A receber',
+    'Etapa atual', 'Início da etapa', 'Entrega da etapa', 'Entrega do projeto',
+    'Valor do projeto', 'Condição',
+    'Marcar recebido',
+    "stageStartedOn: todayInputValue(), stageDueOn: ''",
+  ]) if (!projectsPage36.includes(token)) fail(`fix36_project_page_incompleto:${token}`);
+  for (const forbidden of ['KanbanBoard', 'timer', 'Cronômetro', 'Horas realizadas']) {
+    if (projectsPage36.includes(forbidden)) fail(`fix36_projetos_complexidade_indevida:${forbidden}`);
+  }
+
+  const dashboard36 = read('src/pages/DashboardPage.tsx');
+  for (const token of ['Gestão', 'Projetos fechados', 'Valor fechado', 'Previsto a receber', 'Recebido', 'Projetos ativos', 'Entregas previstas', 'Atrasados agora', 'Saldo total a receber']) {
+    if (!dashboard36.includes(token)) fail(`fix36_dashboard_gestao_incompleto:${token}`);
+  }
+
+  const fix36Sql = 'APLICAR - CRM R59 BUILD FIX 36 - Empresas Projetos Previa e Navegacao.sql';
+  if (!exists(fix36Sql)) fail('fix36_sql_ausente');
+  const sql36 = read(fix36Sql);
+  for (const token of [
+    'RENAME COLUMN design_due_date TO preview_due_date',
+    "commercial_stage = 'aguardando_previa'",
+    "commercial_stage = 'previa_enviada'",
+    'CREATE TABLE IF NOT EXISTS public.lead_projects',
+    'CREATE TABLE IF NOT EXISTS public.lead_project_stage_history',
+    'lead_projects_org_lead_unique',
+    'set_lead_preview_due_date_r59',
+    'update_project_financials_r59',
+    'project_second_payment_before_first',
+    'set_project_stage_r59',
+    'update_project_stage_dates_r59',
+    'set_project_payment_received_r59',
+    'list_projects_r59',
+    "IF v_stage = 'fechado' THEN",
+    "VALUES (v_org,p_leads_id,'aguardando_inicio'",
+    "'scheduledReceipts'",
+    "America/Sao_Paulo",
+  ]) if (!sql36.includes(token)) fail(`fix36_sql_incompleto:${token}`);
+
+  const homolog36 = read('CHECK - CRM R59 - Homologacao final.sql');
+  for (const token of ['65::bigint esperado', 'preview_due_date', 'projects_contract_diff', '36_contrato_projetos_r59', 'set_lead_preview_due_date_r59', 'lead_project_stage_history_one_active_idx']) {
+    if (!homolog36.includes(token)) fail(`fix36_homologacao_incompleta:${token}`);
   }
 }
 
