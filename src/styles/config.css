@@ -1,0 +1,221 @@
+.config-table-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.config-table-page .page-header {
+  margin-bottom: var(--space-20);
+}
+
+.config-table-page .page-header .button--md {
+  height: var(--space-56);
+  padding: 0 var(--space-24);
+  border-radius: var(--radius-12);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.config-table-page .metric-grid {
+  gap: var(--space-16);
+  margin-bottom: var(--space-16);
+}
+
+.config-table-page .metric-grid--3 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+}
+
+.config-table-page .metric-grid--4 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+.config-table-page .metric-card {
+  height: 82px;
+  min-height: 82px;
+  gap: var(--space-16);
+  padding: var(--space-16) var(--space-20);
+  border-radius: var(--radius-08);
+}
+
+.config-table-page .metric-card__icon {
+  width: var(--space-40);
+  height: var(--space-40);
+  border-radius: var(--radius-08);
+}
+
+.config-table-page .metric-card__text {
+  gap: var(--space-04);
+}
+
+.config-table-page .metric-card__text strong {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.config-table-page .metric-card__text small {
+  font-size: 12px;
+  line-height: 14px;
+}
+
+.config-table-page .filters-row {
+  flex-wrap: wrap;
+  gap: var(--space-16);
+  margin-bottom: var(--space-16);
+}
+
+.config-table-page .filters-row__controls {
+  flex-wrap: wrap;
+  gap: var(--space-20);
+}
+
+.config-table-page .select-field,
+.config-table-page .field__control {
+  height: var(--space-40);
+  padding: 0 var(--space-20);
+  border-radius: var(--radius-12);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.config-table-page .field--search {
+  width: var(--space-240);
+  flex: 0 1 var(--space-240);
+}
+
+.config-table-page .table-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-16) 0;
+  border-radius: var(--radius-12);
+}
+
+.config-table-page .table-card > .panel__header {
+  min-height: var(--space-64);
+  padding: 0 var(--space-20);
+}
+
+.config-table-page .table-card > .panel__header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+.config-table-page .data-table {
+  padding: 0 var(--space-20);
+}
+
+.config-table-page .data-table table {
+  min-width: 100%;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.config-table-page--chips .data-table table {
+  min-width: 1120px;
+}
+
+.config-table-page .data-table thead th {
+  height: var(--space-48);
+  padding: 0 var(--space-12);
+  border-radius: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.config-table-page .data-table thead th:first-child {
+  border-top-left-radius: var(--radius-12);
+  border-bottom-left-radius: var(--radius-12);
+}
+
+.config-table-page .data-table thead th:last-child {
+  border-top-right-radius: var(--radius-12);
+  border-bottom-right-radius: var(--radius-12);
+}
+
+.config-table-page .data-table tbody td {
+  height: var(--space-56);
+  padding: 0 var(--space-12);
+  white-space: nowrap;
+}
+
+.config-table-page .data-table tbody td {
+  max-width: var(--space-320);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-inline {
+  display: inline-flex;
+  gap: var(--space-08);
+  align-items: center;
+}
+
+.config-table-page .data-table__check {
+  width: var(--space-48);
+  padding-left: var(--space-20);
+}
+
+.config-table-page .checkbox {
+  width: var(--space-20);
+  height: var(--space-20);
+  border-radius: var(--radius-04);
+}
+
+.config-table-page .data-table__actions {
+  width: var(--space-136);
+  padding-right: var(--space-20);
+}
+
+.config-table-page .data-table__actions .icon-button {
+  margin-left: var(--space-08);
+}
+
+.config-table-page .table-card__footer {
+  margin-top: auto;
+  padding: var(--space-20) var(--space-20) 0;
+}
+
+.config-table-page .rows-per-page {
+  width: var(--space-80);
+  height: var(--space-32);
+  gap: var(--space-08);
+  padding: 0 var(--space-12);
+  border-radius: var(--radius-08);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.config-table-page .pagination {
+  gap: var(--space-08);
+}
+
+.config-table-page .pagination__item,
+.config-table-page .pagination .icon-button--sm {
+  width: var(--space-32);
+  height: var(--space-32);
+  border-radius: var(--radius-06);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.config-preview {
+  display: grid;
+  gap: var(--space-08);
+  padding: var(--space-16);
+  border: 1px solid color-mix(in srgb, var(--color-pure-white) 10%, transparent);
+  border-radius: var(--radius-08);
+  background: color-mix(in srgb, var(--color-pure-white) 4%, transparent);
+}
+
+.config-preview strong {
+  color: var(--color-pure-white);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.config-preview span {
+  color: color-mix(in srgb, var(--color-pure-white) 70%, transparent);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-wrap;
+}

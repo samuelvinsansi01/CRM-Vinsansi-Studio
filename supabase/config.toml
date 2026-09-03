@@ -1,0 +1,2 @@
+[functions.evolution-connection-webhook]
+verify_jwt = false

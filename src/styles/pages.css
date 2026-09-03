@@ -1,0 +1,111 @@
+@import './lead-list.css';
+@import './import.css';
+@import './pre-send.css';
+@import './queue.css';
+@import './settings.css';
+@import './config.css';
+@import './audit.css';
+@import './organization.css';
+
+@import './chat.css';
+.maps-pairing-page {
+  width: min(680px, calc(100% - 32px));
+  margin: 64px auto;
+}
+
+.maps-history-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.maps-history-list article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.maps-history-list span { color: var(--text-muted); font-size: 12px; }
+.maps-history-json { max-height: 60vh; overflow: auto; margin-top: 16px; white-space: pre-wrap; font-size: 11px; }
+.import-json-fallback { margin-bottom: 20px; }
+.import-json-fallback > summary { cursor: pointer; color: var(--text-muted); font-size: 12px; }
+.maps-history-city { display: grid; gap: 8px; }
+.maps-history-city h3 { margin: 8px 0 0; font-size: 13px; color: var(--text-primary); }
+.maps-history-coverage-button {
+  width: 100%; border: 1px solid var(--border-subtle); background: var(--surface-primary);
+  border-radius: 10px; padding: 12px; text-align: left; cursor: pointer; display: grid; gap: 5px;
+}
+.maps-history-coverage-button:hover { border-color: var(--border-strong); background: var(--surface-secondary); }
+.maps-history-coverage-button span { color: var(--text-muted); font-size: 12px; }
+.maps-history-back { margin: 0 0 12px; border: 0; background: transparent; color: var(--text-link); cursor: pointer; font-weight: 600; padding: 4px 0; }
+
+.home-leads-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* R59 FIX 19 — largura e respiro das ações independem da página/tabela. */
+.app-shell .data-table .data-table__actions {
+  padding-left: var(--space-08);
+  padding-right: var(--space-12);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.app-shell .data-table .data-table__actions .icon-button {
+  margin-left: 0;
+}
+
+.app-shell .data-table .data-table__actions-list {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-08);
+  width: 100%;
+}
+
+/* R59 BUILD FIX 32 — padrão único dos cards métricos (referência visual: Leads). */
+.app-shell .metric-grid .metric-card {
+  height: 82px;
+  min-height: 82px;
+  gap: var(--space-16);
+  padding: var(--space-16) var(--space-20);
+  border-radius: var(--radius-08);
+}
+.app-shell .metric-grid .metric-card__icon {
+  width: var(--space-40);
+  height: var(--space-40);
+  border-radius: var(--radius-08);
+}
+.app-shell .metric-grid .metric-card__text {
+  gap: var(--space-04);
+}
+.app-shell .metric-grid .metric-card__text strong {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+}
+.app-shell .metric-grid .metric-card__text small {
+  font-size: 12px;
+  line-height: 14px;
+}
+
+/* R59 BUILD FIX 36 — Projetos: gestão simples, sem Kanban ou controle de horas. */
+.projects-page .project-date--overdue { color: var(--action-danger); font-weight: 600; }
+.project-drawer { display: grid; gap: var(--space-24); }
+.project-drawer__section { display: grid; gap: var(--space-16); padding-bottom: var(--space-20); border-bottom: 1px solid var(--border-subtle); }
+.project-drawer__section:last-child { border-bottom: 0; padding-bottom: 0; }
+.project-drawer__section h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--app-text); }
+.project-drawer__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-16); }
+.project-drawer__select-label { display: grid; gap: var(--space-08); min-width: 0; }
+.project-drawer__select-label > span { color: var(--app-muted); font-size: 12px; font-weight: 500; }
+.project-payments { display: grid; gap: var(--space-12); }
+.project-payment-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); padding: var(--space-12) var(--space-16); border: 1px solid var(--border-subtle); border-radius: var(--radius-08); background: var(--surface-card); }
+.project-payment-row > div:first-child { display: grid; gap: var(--space-04); }
+.project-payment-row > div:first-child span { color: var(--app-muted); font-size: 12px; }
+.project-payment-row > div:last-child { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-08); flex-wrap: wrap; }
+.dashboard-management-grid { margin-top: var(--space-16); }
+@media (max-width: 760px) {
+  .project-drawer__grid { grid-template-columns: 1fr; }
+  .project-payment-row { align-items: flex-start; flex-direction: column; }
+  .project-payment-row > div:last-child { justify-content: flex-start; }
+}
