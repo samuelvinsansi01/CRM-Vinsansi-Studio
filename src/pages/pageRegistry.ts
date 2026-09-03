@@ -50,8 +50,8 @@ export type NavGroup = {
 export const navGroups: readonly NavGroup[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'commercial', label: 'Comercial' },
-  { id: 'conversations', label: 'Conversas' },
   { id: 'projects', label: 'Projetos' },
+  { id: 'conversations', label: 'Conversas' },
   { id: 'leads', label: 'Empresas' },
   {
     id: 'sends',

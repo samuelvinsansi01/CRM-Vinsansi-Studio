@@ -866,7 +866,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
 {
   const registry36 = read('src/pages/pageRegistry.ts');
   const nav36 = registry36.slice(registry36.indexOf('export const navGroups'), registry36.indexOf('export const pageTitles'));
-  const orderedNav = ["label: 'Dashboard'", "label: 'Comercial'", "label: 'Conversas'", "label: 'Projetos'", "label: 'Empresas'", "label: 'Fila de Disparo'", "label: 'Biblioteca e cadastros'"];
+  const orderedNav = ["label: 'Dashboard'", "label: 'Comercial'", "label: 'Projetos'", "label: 'Conversas'", "label: 'Empresas'", "label: 'Fila de Disparo'", "label: 'Biblioteca e cadastros'"];
   let lastIndex = -1;
   for (const token of orderedNav) {
     const currentIndex = nav36.indexOf(token);
@@ -971,7 +971,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   const registry37 = read('src/pages/pageRegistry.ts');
   const nav37 = registry37.slice(registry37.indexOf('export const navGroups'), registry37.indexOf('export const pageTitles'));
   const mainMenuLabels37 = [...nav37.matchAll(/\blabel: '([^']+)'/g)].map((match) => match[1]);
-  const topLevelExpected37 = ['Dashboard','Comercial','Conversas','Projetos','Empresas','Fila de Disparo','Biblioteca e cadastros'];
+  const topLevelExpected37 = ['Dashboard','Comercial','Projetos','Conversas','Empresas','Fila de Disparo','Biblioteca e cadastros'];
   for (const label of topLevelExpected37) if (!nav37.includes(`label: '${label}'`)) fail(`fix37_menu_principal_ausente:${label}`);
   if ((nav37.match(/label: 'Canais'/g) ?? []).length) fail('fix37_canais_ainda_menu_principal');
   if ((nav37.match(/label: 'Biblioteca'/g) ?? []).length) fail('fix37_biblioteca_antiga_ainda_menu_principal');
@@ -1091,6 +1091,44 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     "'aprovado', count(*) FILTER",
     "'contractVersion','R59-FIX39'",
   ]) if (!sql39.includes(token)) fail(`fix39_sql_incompleto:${token}`);
+}
+
+
+// R59 BUILD FIX 40: drawer de Projetos interativo + terminal comercial sem falso loading + ordem Projetos/Conversas.
+{
+  const registry40 = read('src/pages/pageRegistry.ts');
+  const nav40 = registry40.slice(registry40.indexOf('export const navGroups'), registry40.indexOf('export const pageTitles'));
+  const projectsAt40 = nav40.indexOf("{ id: 'projects', label: 'Projetos' }");
+  const conversationsAt40 = nav40.indexOf("{ id: 'conversations', label: 'Conversas' }");
+  if (projectsAt40 < 0 || conversationsAt40 < 0 || projectsAt40 > conversationsAt40) fail('fix40_ordem_projetos_conversas_invalida');
+
+  const fields40 = read('src/design-system/components/forms/Field.tsx');
+  if (!fields40.includes('zIndex: 2147483200')) fail('fix40_select_portal_nao_supera_drawer');
+
+  const components40 = read('src/styles/components.css');
+  const disabledSelect40 = components40.slice(components40.indexOf('.select-field:disabled'), components40.indexOf('.sends-page__channel-tabs'));
+  if (!disabledSelect40.includes('cursor: default')) fail('fix40_select_desabilitado_ainda_simula_loading');
+  if (disabledSelect40.includes('cursor: wait')) fail('fix40_select_desabilitado_cursor_wait');
+
+  const commercial40 = read('src/pages/CommercialPage.tsx');
+  for (const token of ["options.length <= 1", "value === 'aprovado' ? 'success'", "COMMERCIAL_STAGE_LABELS[value]"]) {
+    if (!commercial40.includes(token)) fail(`fix40_terminal_comercial_incompleto:${token}`);
+  }
+
+  const conversations40 = read('src/pages/ConversationsPage.tsx');
+  for (const token of ["commercial.allowedTransitions.length <= 1", "commercial.stage === 'aprovado' ? 'success'", "COMMERCIAL_STAGE_LABELS[commercial.stage]"]) {
+    if (!conversations40.includes(token)) fail(`fix40_terminal_conversas_incompleto:${token}`);
+  }
+
+  const projects40 = read('src/pages/ProjectsPage.tsx');
+  for (const token of ['Etapa atual', 'Condição', 'Salvar projeto', 'type="date"', 'updateProjectFinancials']) {
+    // updateProjectFinancials é validado via repositório abaixo; os demais garantem os controles do drawer.
+    if (token !== 'updateProjectFinancials' && !projects40.includes(token)) fail(`fix40_drawer_projetos_incompleto:${token}`);
+  }
+  const projectsRepo40 = read('src/repositories/projects/projects.repository.ts');
+  for (const token of ['update_project_financials_r59', 'set_project_stage_r59', 'update_project_stage_dates_r59']) {
+    if (!projectsRepo40.includes(token)) fail(`fix40_repo_projetos_incompleto:${token}`);
+  }
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

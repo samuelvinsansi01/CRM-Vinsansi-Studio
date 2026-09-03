@@ -176,7 +176,10 @@ export function SelectField({
     const shouldFlip = spaceBelow < Math.min(220, estimatedMenuHeight) && rect.top > spaceBelow;
     setMenuStyle({
       position: 'fixed',
-      zIndex: 10000,
+      // Menus são portais no <body>. O overlay dos drawers usa uma faixa de z-index
+      // muito alta; portanto o menu precisa ficar acima dela para continuar clicável
+      // dentro de drawers/modais.
+      zIndex: 2147483200,
       right: Math.max(viewportGap, window.innerWidth - rect.right),
       minWidth: Math.max(rect.width, 220),
       ...(shouldFlip

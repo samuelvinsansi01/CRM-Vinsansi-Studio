@@ -37,12 +37,15 @@ function formatDate(value?: string) {
 
 function StageControl({ value, disabled, onChange }: { value: CommercialStage; disabled: boolean; onChange: (value: CommercialStage) => void }) {
   const options = commercialStageOptions(value);
+  if (options.length <= 1) {
+    return <Tag tone={value === 'aprovado' ? 'success' : value === 'recusado' ? 'danger' : 'neutral'}>{COMMERCIAL_STAGE_LABELS[value]}</Tag>;
+  }
   return (
     <SelectField
       className="commercial-stage-select"
       value={value}
       options={options}
-      disabled={disabled || options.length <= 1}
+      disabled={disabled}
       onChange={(next) => onChange(next as CommercialStage)}
     />
   );

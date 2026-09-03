@@ -2224,7 +2224,7 @@ button.checkbox {
 }
 
 .select-field:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: .62;
 }
 

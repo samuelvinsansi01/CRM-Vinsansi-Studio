@@ -364,14 +364,18 @@ export function ConversationsPage() {
                     </div>
                     <div className="chat-commercial-context__controls">
                       {commercial.stage ? (
-                        <SelectField
-                          className="commercial-stage-select chat-commercial-stage-select"
-                          density="compact"
-                          value={commercial.stage}
-                          options={commercialStageOptions(commercial)}
-                          disabled={!commercial.editable || !canEditLeads || commercialSaving || commercial.allowedTransitions.length <= 1}
-                          onChange={(value) => void changeCommercialStage(value as CommercialStage)}
-                        />
+                        commercial.allowedTransitions.length <= 1 ? (
+                          <Tag tone={commercial.stage === 'aprovado' ? 'success' : commercial.stage === 'recusado' ? 'danger' : 'neutral'}>{COMMERCIAL_STAGE_LABELS[commercial.stage]}</Tag>
+                        ) : (
+                          <SelectField
+                            className="commercial-stage-select chat-commercial-stage-select"
+                            density="compact"
+                            value={commercial.stage}
+                            options={commercialStageOptions(commercial)}
+                            disabled={!commercial.editable || !canEditLeads || commercialSaving}
+                            onChange={(value) => void changeCommercialStage(value as CommercialStage)}
+                          />
+                        )
                       ) : <Tag tone="neutral">Comercial disponível após o envio</Tag>}
 
                       {commercial.stage === 'aguardando_previa' ? (
