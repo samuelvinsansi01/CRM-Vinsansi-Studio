@@ -704,3 +704,81 @@
   .tool-download-card { align-items: stretch; flex-direction: column; }
   .tool-download-card .button { width: 100%; }
 }
+
+.account-security-card {
+  margin-top: var(--space-20);
+}
+
+.account-security-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(360px, 1.2fr);
+  gap: var(--space-32);
+  align-items: start;
+}
+
+.account-security-copy {
+  display: flex;
+  gap: var(--space-12);
+  align-items: flex-start;
+}
+
+.account-security-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border-radius: var(--radius-10);
+  background: color-mix(in srgb, var(--action-active) 10%, transparent);
+  color: var(--action-active);
+}
+
+.account-security-copy strong {
+  display: block;
+  margin-bottom: var(--space-04);
+  color: var(--app-text);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.account-security-copy p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.account-security-copy b {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.account-security-fields {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.account-security-actions {
+  display: flex;
+  gap: var(--space-16);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.account-security-actions > span {
+  max-width: 520px;
+  color: var(--app-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+@media (max-width: 960px) {
+  .account-security-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-security-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

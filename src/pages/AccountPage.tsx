@@ -1,4 +1,4 @@
-import { Camera, Save, Trash2, Upload } from 'lucide-react';
+import { Camera, KeyRound, Save, Trash2, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { Button, Field, Panel, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
@@ -15,12 +15,15 @@ function pushTemporaryToast(
 }
 
 export function AccountPage() {
-  const { user, refreshProfile } = useAuthContext();
+  const { user, refreshProfile, updatePassword } = useAuthContext();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [name, setName] = useState(user?.name ?? '');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [removeAvatar, setRemoveAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   useEffect(() => {
@@ -82,6 +85,46 @@ export function AccountPage() {
     }
   };
 
+
+  const savePassword = async () => {
+    if (password.length < 8) {
+      pushTemporaryToast(setToasts, {
+        title: 'Senha muito curta',
+        description: 'Use pelo menos 8 caracteres.',
+        tone: 'danger',
+      });
+      return;
+    }
+    if (password !== confirmPassword) {
+      pushTemporaryToast(setToasts, {
+        title: 'Senhas diferentes',
+        description: 'A confirmação precisa ser igual à nova senha.',
+        tone: 'danger',
+      });
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      await updatePassword(password);
+      setPassword('');
+      setConfirmPassword('');
+      pushTemporaryToast(setToasts, {
+        title: 'Senha atualizada',
+        description: 'Você já pode usar este e-mail e senha para entrar no CRM e no app.',
+        tone: 'success',
+      });
+    } catch (error) {
+      pushTemporaryToast(setToasts, {
+        title: 'Não foi possível alterar a senha',
+        description: error instanceof Error ? error.message : 'Tente novamente ou use “Esqueci minha senha” no login.',
+        tone: 'danger',
+      });
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   const clearImage = () => {
     setAvatarFile(null);
     setRemoveAvatar(true);
@@ -92,7 +135,7 @@ export function AccountPage() {
     <div className="settings-page account-page">
       <PageHeader
         title="Minha conta"
-        description="Atualize o nome exibido no painel e a sua imagem de perfil."
+        description="Atualize seu perfil e a senha usada para entrar nos produtos Vinsansi."
         action={<Button iconLeft={Save} loading={saving} onClick={save}>Salvar alterações</Button>}
       />
 
@@ -133,6 +176,26 @@ export function AccountPage() {
               <span>A imagem fica no Supabase Storage e o banco salva somente o caminho do arquivo.</span>
             </div>
           </section>
+        </div>
+      </Panel>
+
+      <Panel title="Segurança" className="settings-card account-card account-security-card">
+        <div className="account-security-grid">
+          <div className="account-security-copy">
+            <div className="account-security-icon"><KeyRound size={20} strokeWidth={1.8} /></div>
+            <div>
+              <strong>Senha de acesso</strong>
+              <p>Defina ou altere uma senha para entrar com <b>{user?.email ?? 'seu e-mail'}</b> no CRM e no app. O login com Google continua disponível como alternativa.</p>
+            </div>
+          </div>
+          <div className="account-security-fields">
+            <Field label="Nova senha" type="password" value={password} onChange={setPassword} autoComplete="new-password" placeholder="Mínimo de 8 caracteres" />
+            <Field label="Confirmar nova senha" type="password" value={confirmPassword} onChange={setConfirmPassword} autoComplete="new-password" placeholder="Repita a nova senha" />
+            <div className="account-security-actions">
+              <span>Sua senha é gerenciada pelo Supabase Auth e não é armazenada nas tabelas do CRM.</span>
+              <Button iconLeft={KeyRound} loading={savingPassword} disabled={savingPassword || !password || !confirmPassword} onClick={savePassword}>Salvar senha</Button>
+            </div>
+          </div>
         </div>
       </Panel>
 

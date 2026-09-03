@@ -36,14 +36,14 @@ type OrganizationContextValue = {
 const Context = createContext<OrganizationContextValue | null>(null);
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, user } = useAuthContext();
+  const { isAuthenticated, user, passwordRecovery } = useAuthContext();
   const [context, setContext] = useState<OrganizationContext | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sequence = useRef(0);
 
   const refreshOrganization = useCallback(async () => {
-    if (!isAuthenticated || !user) {
+    if (!isAuthenticated || !user || passwordRecovery) {
       setContext(null);
       setError(null);
       return;
@@ -65,7 +65,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     } finally {
       if (sequence.current === current) setLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, passwordRecovery, user]);
 
   useEffect(() => {
     void refreshOrganization();

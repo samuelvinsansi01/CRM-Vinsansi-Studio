@@ -16,6 +16,7 @@ import { ConfigTablePage } from './pages/ConfigTablePage';
 import { HomePage } from './pages/HomePage';
 import { ImportPage } from './pages/ImportPage';
 import { LoginPage } from './pages/LoginPage';
+import { PasswordRecoveryPage } from './pages/PasswordRecoveryPage';
 import { QueuePage } from './pages/QueuePage';
 import { ToolsPage } from './pages/ToolsPage';
 import { MonitoringPage } from './pages/MonitoringPage';
@@ -66,7 +67,7 @@ function initialPage(): PageId {
 }
 
 export function App() {
-  const { isAuthenticated, loading } = useAuthContext();
+  const { isAuthenticated, loading, passwordRecovery } = useAuthContext();
   const { context: organizationContext, organizationId, loading: organizationLoading, error: organizationError, hasPermission } = useOrganizationContext();
   const [activePage, setActivePage] = useState<PageId>(initialPage);
   const canSyncEvolution = hasPermission('whatsapp.instances.manage');
@@ -112,6 +113,8 @@ export function App() {
   }, [canSyncEvolution, isAuthenticated, organizationId]);
 
   // Não desmontar o painel autenticado durante renovação de token ou recuperação de foco.
+  if (passwordRecovery) return <PasswordRecoveryPage />;
+
   if (loading && !isAuthenticated) {
     return (
       <div className="login-page">

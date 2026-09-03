@@ -37,6 +37,10 @@ type AuthContextValue = {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  passwordRecovery: boolean;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
+  completePasswordRecovery: (password: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -76,6 +80,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [passwordRecovery, setPasswordRecovery] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('password_recovery') === '1';
+  });
   const userRef = useRef<AuthUser | null>(null);
   const syncSequenceRef = useRef(0);
 
@@ -149,10 +157,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const authUser = session?.user ?? null;
       const currentUser = userRef.current;
 
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
+
       if (event === 'SIGNED_OUT' || !authUser) {
         syncSequenceRef.current += 1;
         setUser(null);
         setError(null);
+        if (event === 'SIGNED_OUT') {
+          setPasswordRecovery(false);
+        } else if (typeof window !== 'undefined') {
+          setPasswordRecovery(new URLSearchParams(window.location.search).get('password_recovery') === '1');
+        }
         setLoading(false);
         return;
       }
@@ -206,6 +221,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     },
+    requestPasswordReset: async (email: string) => {
+      setError(null);
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!normalizedEmail) throw new Error('Informe seu e-mail.');
+      const redirectTo = `${window.location.origin}${window.location.pathname}?password_recovery=1`;
+      const { error: resetError } = await getSupabaseClient().auth.resetPasswordForEmail(normalizedEmail, { redirectTo });
+      if (resetError) {
+        setError(resetError.message);
+        throw new Error(resetError.message);
+      }
+    },
+    updatePassword: async (password: string) => {
+      setError(null);
+      if (password.length < 8) throw new Error('A senha deve ter pelo menos 8 caracteres.');
+      const { error: updateError } = await getSupabaseClient().auth.updateUser({ password });
+      if (updateError) {
+        setError(updateError.message);
+        throw new Error(updateError.message);
+      }
+    },
+    completePasswordRecovery: async (password: string) => {
+      setError(null);
+      if (password.length < 8) throw new Error('A senha deve ter pelo menos 8 caracteres.');
+      const client = getSupabaseClient();
+      const { error: updateError } = await client.auth.updateUser({ password });
+      if (updateError) {
+        setError(updateError.message);
+        throw new Error(updateError.message);
+      }
+      await client.auth.signOut();
+      setPasswordRecovery(false);
+      clearActiveOrganizationSessionId();
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    },
     signInWithGoogle: async () => {
       setError(null);
       const { error: signInError } = await getSupabaseClient().auth.signInWithOAuth({
@@ -229,7 +280,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     },
     refreshProfile,
-  }), [error, loading, refreshProfile, setUser, user]);
+    passwordRecovery,
+  }), [error, loading, passwordRecovery, refreshProfile, setUser, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

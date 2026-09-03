@@ -2400,3 +2400,38 @@ button.checkbox {
     grid-template-columns: 1fr;
   }
 }
+
+.login-panel__hint,
+.login-panel__success {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.login-panel__hint {
+  color: var(--app-muted);
+}
+
+.login-panel__success {
+  padding: var(--space-12);
+  border: 1px solid color-mix(in srgb, var(--action-success) 28%, transparent);
+  border-radius: var(--radius-08);
+  background: color-mix(in srgb, var(--action-success) 7%, transparent);
+  color: var(--app-text);
+}
+
+.login-panel__link {
+  justify-self: end;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--action-active);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.login-panel__link:hover {
+  text-decoration: underline;
+}
