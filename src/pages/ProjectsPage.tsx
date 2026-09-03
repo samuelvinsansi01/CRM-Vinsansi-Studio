@@ -255,7 +255,7 @@ export function ProjectsPage() {
     <div className="dashboard-table-page projects-page">
       <PageHeader
         title="Projetos"
-        description="Gestão simples dos trabalhos já fechados: andamento, datas de entrega e recebimentos. Sem tarefas, Kanban ou controle de horas."
+        description="Gestão simples dos trabalhos já aprovados: andamento, datas de entrega e recebimentos. Sem tarefas, Kanban ou controle de horas."
         action={<Button variant="secondary" iconLeft={RefreshCcw} loading={refreshing} disabled={loading} onClick={() => void load('refresh')}>Atualizar</Button>}
       />
 
@@ -282,7 +282,7 @@ export function ProjectsPage() {
       </FiltersBar>
 
       <TableCard
-        title="Projetos fechados"
+        title="Projetos aprovados"
         footerText={loading ? 'Carregando...' : `${refreshing ? 'Atualizando · ' : ''}Mostrando ${rows.length} de ${total} projeto(s).`}
         footerLeft={<RowsPerPageControl value={rowsPerPage} onChange={(value) => { setRowsPerPage(value); setPage(1); }} />}
         page={page}
@@ -308,7 +308,7 @@ export function ProjectsPage() {
             <h3>Visão geral</h3>
             <div className="project-drawer__grid">
               <Field label="Empresa" value={editingProject.alternativeName || editingProject.company} readOnly />
-              <Field label="Fechado em" value={formatDateTime(editingProject.closedAt)} readOnly />
+              <Field label="Aprovado em" value={formatDateTime(editingProject.closedAt)} readOnly />
               <Field label="Início do projeto" type="date" value={form.projectStartDate} disabled={!canEdit} onChange={(value) => setForm((current) => current ? { ...current, projectStartDate: value } : current)} />
               <Field label="Entrega do projeto" type="date" value={form.projectDueDate} disabled={!canEdit} onChange={(value) => setForm((current) => current ? { ...current, projectDueDate: value, secondPaymentDueDate: current.paymentTerms === '50_50' && !current.secondPaymentDueDate ? value : current.secondPaymentDueDate } : current)} />
             </div>

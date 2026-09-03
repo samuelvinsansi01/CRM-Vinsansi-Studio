@@ -334,6 +334,45 @@ async function sendMobilePush(admin: any, organizationId: number, conversationId
   if (validInvalidIds.length) await admin.from("mobile_push_devices").update({ enabled: false, updated_at: new Date().toISOString() }).in("mobile_push_devices_id", validInvalidIds);
 }
 
+function whatsappPhoneVariants(value: unknown) {
+  let digits = text(value).split("@")[0].replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;
+  const variants = new Set<string>();
+  if (digits) variants.add(digits);
+  if (digits.startsWith("55") && digits.length === 13 && digits[4] === "9") variants.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
+  if (digits.startsWith("55") && digits.length === 12) variants.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
+  return variants;
+}
+
+async function isInternalOwnedChipTraffic(admin: ReturnType<typeof createClient>, instanceRow: Row, event: string, payload: Row) {
+  if (![...MESSAGE_EVENTS, ...STATUS_EVENTS, ...CHAT_EVENTS].includes(event)) return false;
+  const organizationId = Number(instanceRow.organizations_id ?? 0);
+  const instanceId = Number(instanceRow.instances_id ?? 0);
+  if (!organizationId || !instanceId) return false;
+
+  const current = await admin.from("chips")
+    .select("chips_id,chips_phone")
+    .eq("organizations_id", organizationId)
+    .eq("instances_id", instanceId)
+    .maybeSingle();
+  if (current.error) throw new Error(`internal_chip_current_lookup_failed:${current.error.message}`);
+  if (!current.data) return false;
+
+  const peers = await admin.from("chips")
+    .select("chips_id,chips_phone,instances_id")
+    .eq("organizations_id", organizationId)
+    .neq("instances_id", instanceId);
+  if (peers.error) throw new Error(`internal_chip_peer_lookup_failed:${peers.error.message}`);
+  const peerVariants = new Set<string>();
+  for (const peer of peers.data ?? []) for (const variant of whatsappPhoneVariants(peer.chips_phone)) peerVariants.add(variant);
+  if (!peerVariants.size) return false;
+
+  const contactRows = eventRows(payload).map((item) => remoteJid(item)).filter(Boolean);
+  if (!contactRows.length) return false;
+  return contactRows.every((jid) => [...whatsappPhoneVariants(jid)].some((variant) => peerVariants.has(variant)));
+}
+
 function timingSafeEqual(left: string, right: string) {
   if (left.length !== right.length) return false;
   let mismatch = 0;
@@ -387,6 +426,14 @@ Deno.serve(async (request: Request) => {
   const rawEvent = normalized(payload.event ?? payload.type ?? payload.eventType);
   const event = rawEvent === "message" ? "messages_upsert" : rawEvent === "sendmessage" ? "send_message" : rawEvent;
   if (!event) return jsonResponse({ error: "Evento ausente." }, 422);
+
+  // Tráfego entre dois chips pertencentes à própria organização é operacional interno.
+  // Ele é descartado ANTES do recibo de webhook para que texto/raw payload não entre
+  // em evolution_webhook_receipts, conversations ou conversation_messages.
+  if (await isInternalOwnedChipTraffic(admin, row(instanceRow), event, payload)) {
+    return jsonResponse({ ok: true, event, ignored: true, reason: "internal_owned_chip_traffic", persisted: false });
+  }
+
   const payloadHash = await sha256(rawBody);
   let receiptId = 0;
   const receiptInsert = await admin.from("evolution_webhook_receipts").insert({

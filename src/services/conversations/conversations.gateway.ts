@@ -28,7 +28,7 @@ const row = (value: unknown): Row => value && typeof value === 'object' && !Arra
 const stageSet = new Set<string>(COMMERCIAL_STAGES);
 const stage = (value: unknown): CommercialStage | null => {
   const raw = text(value).toLowerCase();
-  const normalized = raw === 'aguardando_design' ? 'aguardando_previa' : raw === 'design_enviado' ? 'previa_enviada' : raw;
+  const normalized = raw === 'aguardando_design' ? 'aguardando_previa' : raw === 'design_enviado' ? 'previa_enviada' : raw === 'fechado' ? 'aprovado' : raw;
   return stageSet.has(normalized) ? normalized as CommercialStage : null;
 };
 

@@ -117,7 +117,7 @@ export function CommercialPage() {
       const original = items.find((item) => item.id === leadId) ?? null;
       await setCommercialStage(leadId, nextStage);
       await refresh();
-      toast({ title: 'Estágio atualizado', description: nextStage === 'fechado' ? 'Empresa fechada. O projeto já está disponível em Projetos.' : `Empresa movida para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
+      toast({ title: 'Estágio atualizado', description: nextStage === 'aprovado' ? 'Projeto aprovado. Ele já está disponível em Projetos.' : `Empresa movida para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
       if (nextStage === 'aguardando_previa' && original) {
         setScheduleLead({ ...original, commercialStage: nextStage });
         setPreviewDueDateDraft(original.previewDueDate || '');
@@ -197,7 +197,7 @@ export function CommercialPage() {
         <MetricCard icon={Clock3} value={String(summary.commercial.aguardandoResposta)} label="Aguardando resposta" active={stage === 'aguardando_resposta'} onClick={() => selectStage('aguardando_resposta')} />
         <MetricCard icon={FileImage} value={String(summary.commercial.aguardandoPrevia)} label="Aguardando prévia" tone="warning" active={stage === 'aguardando_previa'} onClick={() => selectStage('aguardando_previa')} />
         <MetricCard icon={Send} value={String(summary.commercial.previaEnviada)} label="Prévia enviada" tone="primary" active={stage === 'previa_enviada'} onClick={() => selectStage('previa_enviada')} />
-        <MetricCard icon={UserCheck} value={String(summary.commercial.fechado)} label="Fechados" tone="success" active={stage === 'fechado'} onClick={() => selectStage('fechado')} />
+        <MetricCard icon={UserCheck} value={String(summary.commercial.aprovado)} label="Aprovados" tone="success" active={stage === 'aprovado'} onClick={() => selectStage('aprovado')} />
         <MetricCard icon={X} value={String(summary.commercial.recusado)} label="Recusados" tone="danger" active={stage === 'recusado'} onClick={() => selectStage('recusado')} />
       </section>
 

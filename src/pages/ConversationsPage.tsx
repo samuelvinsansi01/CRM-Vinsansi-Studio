@@ -266,7 +266,7 @@ export function ConversationsPage() {
       setCommercial(next);
       setPreviewDueDateDraft(next.previewDueDate || '');
       previewDateDirtyRef.current = false;
-      toast({ title: 'Estágio atualizado', description: nextStage === 'fechado' ? 'Empresa fechada. O projeto já está disponível em Projetos.' : `Empresa movida para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
+      toast({ title: 'Estágio atualizado', description: nextStage === 'aprovado' ? 'Projeto aprovado. Ele já está disponível em Projetos.' : `Empresa movida para ${COMMERCIAL_STAGE_LABELS[nextStage]}.`, tone: 'success' });
     } catch (cause) {
       toast({ title: 'Não foi possível atualizar', description: cause instanceof Error ? cause.message : 'Tente novamente.', tone: 'danger' });
     } finally {

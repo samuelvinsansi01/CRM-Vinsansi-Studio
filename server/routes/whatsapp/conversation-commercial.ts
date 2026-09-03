@@ -1,19 +1,19 @@
 import { body,failure,humanScope,integer,query,send,text,type HumanScope,type Stage5Request,type Stage5Response } from '../../whatsapp/stage5.js';
 
-const STAGES=['aguardando_resposta','aguardando_previa','previa_enviada','fechado','recusado'] as const;
+const STAGES=['aguardando_resposta','aguardando_previa','previa_enviada','aprovado','recusado'] as const;
 type CommercialStage=(typeof STAGES)[number];
 const STAGE_SET=new Set<string>(STAGES);
 const TRANSITIONS:Record<CommercialStage,readonly CommercialStage[]>={
   aguardando_resposta:['aguardando_resposta','aguardando_previa','recusado'],
   aguardando_previa:['aguardando_previa','previa_enviada','recusado'],
-  previa_enviada:['previa_enviada','fechado','recusado'],
-  fechado:['fechado'],
+  previa_enviada:['previa_enviada','aprovado','recusado'],
+  aprovado:['aprovado'],
   recusado:['recusado'],
 };
 
 function stage(value:unknown):CommercialStage|null{
   const raw=text(value).toLowerCase();
-  const normalized=raw==='aguardando_design'?'aguardando_previa':raw==='design_enviado'?'previa_enviada':raw;
+  const normalized=raw==='aguardando_design'?'aguardando_previa':raw==='design_enviado'?'previa_enviada':raw==='fechado'?'aprovado':raw;
   return STAGE_SET.has(normalized)?normalized as CommercialStage:null;
 }
 

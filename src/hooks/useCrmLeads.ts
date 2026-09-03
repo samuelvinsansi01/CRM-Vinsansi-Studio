@@ -11,7 +11,7 @@ const EMPTY_SUMMARY: CrmLeadSummary = {
   sent: 0,
   invalid: 0,
   duplicates: 0,
-  commercial: { aguardandoResposta: 0, aguardandoPrevia: 0, previaEnviada: 0, fechado: 0, recusado: 0 },
+  commercial: { aguardandoResposta: 0, aguardandoPrevia: 0, previaEnviada: 0, aprovado: 0, recusado: 0 },
 };
 
 function commercialKey(stage: CommercialStage): keyof CrmLeadSummary['commercial'] {
@@ -19,7 +19,7 @@ function commercialKey(stage: CommercialStage): keyof CrmLeadSummary['commercial
     aguardando_resposta: 'aguardandoResposta',
     aguardando_previa: 'aguardandoPrevia',
     previa_enviada: 'previaEnviada',
-    fechado: 'fechado',
+    aprovado: 'aprovado',
     recusado: 'recusado',
   } as const)[stage];
 }

@@ -667,7 +667,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const commercial31 = read('src/pages/CommercialPage.tsx');
-  for (const token of ['title="Comercial"', 'Aguardando resposta', 'Aguardando prévia', 'Prévia enviada', 'Fechado', 'Recusado', 'setCommercialStage']) {
+  for (const token of ['title="Comercial"', 'Aguardando resposta', 'Aguardando prévia', 'Prévia enviada', 'Aprovado', 'Recusado', 'setCommercialStage']) {
     if (!commercial31.includes(token)) fail(`fix31_comercial_ui_incompleto:${token}`);
   }
   if (!/nenhuma mensagem|nenhum evento técnico|somente você|manual/i.test(commercial31)) fail('fix31_comercial_ui_sem_regra_manual_explicita');
@@ -748,7 +748,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const commercialTypes33 = read('src/services/leads/crmLead.types.ts');
-  for (const token of ['COMMERCIAL_STAGE_TRANSITIONS', "aguardando_resposta: ['aguardando_resposta', 'aguardando_previa', 'recusado']", "previa_enviada: ['previa_enviada', 'fechado', 'recusado']", 'previewDueDate: string']) {
+  for (const token of ['COMMERCIAL_STAGE_TRANSITIONS', "aguardando_resposta: ['aguardando_resposta', 'aguardando_previa', 'recusado']", "previa_enviada: ['previa_enviada', 'aprovado', 'recusado']", 'previewDueDate: string']) {
     if (!commercialTypes33.includes(token)) fail(`fix33_pipeline_comercial_incompleto:${token}`);
   }
 
@@ -932,7 +932,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const dashboard36 = read('src/pages/DashboardPage.tsx');
-  for (const token of ['Projetos', 'Fechados no período', 'Valor vendido no período', 'Ativos agora', 'Entregas no período', 'Atrasados agora', 'Fluxo de caixa', 'Previsto no período', 'Recebido no período', 'Saldo total a receber']) {
+  for (const token of ['Projetos', 'Aprovados no período', 'Valor vendido no período', 'Ativos agora', 'Entregas no período', 'Atrasados agora', 'Fluxo de caixa', 'Previsto no período', 'Recebido no período', 'Saldo total a receber']) {
     if (!dashboard36.includes(token)) fail(`fix36_dashboard_gestao_incompleto:${token}`);
   }
 
@@ -1032,7 +1032,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   if (components38.includes('.nav-link--active::after')) fail('fix38_sublinhado_menu_ativo_ainda_presente');
 
   const dashboard38 = read('src/pages/DashboardPage.tsx');
-  for (const token of ['Panel title="Projetos"', 'Fechados no período', 'Valor vendido no período', 'Panel title="Fluxo de caixa"', 'Previsto no período', 'Recebido no período', 'A receber no período', 'Saldo total a receber', 'pendingReceipts']) {
+  for (const token of ['Panel title="Projetos"', 'Aprovados no período', 'Valor vendido no período', 'Panel title="Fluxo de caixa"', 'Previsto no período', 'Recebido no período', 'A receber no período', 'Saldo total a receber', 'pendingReceipts']) {
     if (!dashboard38.includes(token)) fail(`fix38_dashboard_fluxo_caixa_incompleto:${token}`);
   }
 
@@ -1056,6 +1056,41 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   for (const token of ['pendingreceipts', 'p_payment_status text', '38_dashboard_fluxo_caixa_e_filtro_pagamento_r59']) {
     if (!homolog38.includes(token)) fail(`fix38_homologacao_incompleta:${token}`);
   }
+}
+
+
+// R59 BUILD FIX 39: Aprovado canônico + descarte pré-persistência do tráfego entre chips próprios.
+{
+  const commercial39 = read('src/services/leads/crmLead.types.ts');
+  for (const token of ["'aprovado'", "aprovado: 'Aprovado'", "previa_enviada: ['previa_enviada', 'aprovado', 'recusado']"]) {
+    if (!commercial39.includes(token)) fail(`fix39_aprovado_runtime_incompleto:${token}`);
+  }
+  if (commercial39.includes("'fechado'")) fail('fix39_fechado_ainda_estagio_runtime');
+
+  const route39 = read('server/routes/whatsapp/conversation-commercial.ts');
+  for (const token of ["previa_enviada:['previa_enviada','aprovado','recusado']", "raw==='fechado'?'aprovado'", "aprovado:['aprovado']"]) {
+    if (!route39.includes(token)) fail(`fix39_contrato_conversa_aprovado_incompleto:${token}`);
+  }
+
+  const webhook39 = read('supabase/functions/evolution-connection-webhook/index.ts');
+  for (const token of ['isInternalOwnedChipTraffic', 'internal_owned_chip_traffic', 'persisted: false', 'whatsappPhoneVariants', '.neq("instances_id", instanceId)']) {
+    if (!webhook39.includes(token)) fail(`fix39_trafego_interno_filtro_incompleto:${token}`);
+  }
+  const discardAt = webhook39.indexOf('if (await isInternalOwnedChipTraffic');
+  const receiptAt = webhook39.indexOf('admin.from("evolution_webhook_receipts").insert');
+  if (discardAt < 0 || receiptAt < 0 || discardAt > receiptAt) fail('fix39_trafego_interno_filtrado_depois_da_persistencia');
+
+  const fix39Sql = 'APLICAR - CRM R59 BUILD FIX 39 - Aprovado e trafego interno entre chips.sql';
+  if (!exists(fix39Sql)) fail('fix39_sql_ausente');
+  const sql39 = read(fix39Sql);
+  for (const token of [
+    "UPDATE public.lead_commercial SET commercial_stage='aprovado' WHERE commercial_stage='fechado'",
+    "'aprovado'::text",
+    "v_stage text := CASE WHEN lower(trim(coalesce(p_commercial_stage, ''))) = 'fechado' THEN 'aprovado'",
+    "IF v_stage = 'aprovado' THEN",
+    "'aprovado', count(*) FILTER",
+    "'contractVersion','R59-FIX39'",
+  ]) if (!sql39.includes(token)) fail(`fix39_sql_incompleto:${token}`);
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

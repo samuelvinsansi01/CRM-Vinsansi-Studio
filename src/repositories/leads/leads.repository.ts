@@ -16,7 +16,7 @@ const EMPTY_SUMMARY: CrmLeadSummary = {
     aguardandoResposta: 0,
     aguardandoPrevia: 0,
     previaEnviada: 0,
-    fechado: 0,
+    aprovado: 0,
     recusado: 0,
   },
 };
@@ -81,7 +81,7 @@ function summary(value: unknown): CrmLeadSummary {
       aguardandoResposta: number(commercial.aguardandoResposta),
       aguardandoPrevia: number(commercial.aguardandoPrevia),
       previaEnviada: number(commercial.previaEnviada),
-      fechado: number(commercial.fechado),
+      aprovado: number(commercial.aprovado ?? commercial.fechado),
       recusado: number(commercial.recusado),
     },
   };
@@ -102,7 +102,7 @@ function dashboardSummary(value: unknown): CrmDashboardSummary {
       aguardandoResposta: number(commercial.aguardandoResposta),
       aguardandoPrevia: number(commercial.aguardandoPrevia),
       previaEnviada: number(commercial.previaEnviada),
-      fechado: number(commercial.fechado),
+      aprovado: number(commercial.aprovado ?? commercial.fechado),
       recusado: number(commercial.recusado),
     },
     projects: {

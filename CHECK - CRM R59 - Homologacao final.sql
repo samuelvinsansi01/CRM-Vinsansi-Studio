@@ -266,7 +266,8 @@ commercial_contract_diff AS (
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%commercial_stage_transition_invalid%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%commercial_stage_terminal%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%aguardando_previa%' OR
-        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%previa_enviada%'
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%previa_enviada%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%aprovado%'
       )
     ) THEN 1 ELSE 0 END +
     CASE WHEN EXISTS (
@@ -280,7 +281,7 @@ commercial_contract_diff AS (
     CASE WHEN EXISTS (
       SELECT 1 FROM public.lead_commercial lc
       JOIN public.leads l ON l.leads_id=lc.leads_id AND l.organizations_id=lc.organizations_id
-      WHERE l.lead_status_id<>5 OR lc.commercial_stage IN ('aguardando_design','design_enviado')
+      WHERE l.lead_status_id<>5 OR lc.commercial_stage IN ('aguardando_design','design_enviado','fechado')
     ) THEN 1 ELSE 0 END
   )::bigint AS total
 ),
@@ -320,7 +321,7 @@ projects_contract_diff AS (
       SELECT 1 FROM public.lead_projects pr
       JOIN public.leads l ON l.leads_id=pr.leads_id AND l.organizations_id=pr.organizations_id
       LEFT JOIN public.lead_commercial lc ON lc.leads_id=pr.leads_id AND lc.organizations_id=pr.organizations_id
-      WHERE lc.commercial_stage IS DISTINCT FROM 'fechado'
+      WHERE lc.commercial_stage IS DISTINCT FROM 'aprovado'
     ) THEN 1 ELSE 0 END +
     CASE WHEN EXISTS (
       SELECT 1 FROM public.lead_projects pr

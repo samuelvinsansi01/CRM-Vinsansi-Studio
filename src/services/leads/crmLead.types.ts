@@ -2,7 +2,7 @@ export const COMMERCIAL_STAGES = [
   'aguardando_resposta',
   'aguardando_previa',
   'previa_enviada',
-  'fechado',
+  'aprovado',
   'recusado',
 ] as const;
 
@@ -12,15 +12,15 @@ export const COMMERCIAL_STAGE_LABELS: Record<CommercialStage, string> = {
   aguardando_resposta: 'Aguardando resposta',
   aguardando_previa: 'Aguardando prévia',
   previa_enviada: 'Prévia enviada',
-  fechado: 'Fechado',
+  aprovado: 'Aprovado',
   recusado: 'Recusado',
 };
 
 export const COMMERCIAL_STAGE_TRANSITIONS: Record<CommercialStage, readonly CommercialStage[]> = {
   aguardando_resposta: ['aguardando_resposta', 'aguardando_previa', 'recusado'],
   aguardando_previa: ['aguardando_previa', 'previa_enviada', 'recusado'],
-  previa_enviada: ['previa_enviada', 'fechado', 'recusado'],
-  fechado: ['fechado'],
+  previa_enviada: ['previa_enviada', 'aprovado', 'recusado'],
+  aprovado: ['aprovado'],
   recusado: ['recusado'],
 };
 
@@ -63,7 +63,7 @@ export type CommercialSummary = {
   aguardandoResposta: number;
   aguardandoPrevia: number;
   previaEnviada: number;
-  fechado: number;
+  aprovado: number;
   recusado: number;
 };
 
