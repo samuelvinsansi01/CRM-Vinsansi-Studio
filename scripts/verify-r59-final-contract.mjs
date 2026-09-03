@@ -758,7 +758,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const dashboard33 = read('src/pages/DashboardPage.tsx');
-  for (const token of ["type PeriodPreset = 'Hoje' | 'Semana' | 'Mês' | 'Personalizado'", "useState<PeriodPreset>('Semana')", 'dashboardSummary', 'Operação no período', 'Comercial no período', 'Prévias previstas']) {
+  for (const token of ["type PeriodPreset = 'Hoje' | 'Semana' | 'Mês' | 'Personalizado'", "useState<PeriodPreset>('Semana')", 'dashboardSummary', 'Aguardando resposta', 'Aguardando prévia', 'Prévias para enviar']) {
     if (!dashboard33.includes(token)) fail(`fix33_dashboard_periodo_incompleto:${token}`);
   }
 
@@ -932,7 +932,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const dashboard36 = read('src/pages/DashboardPage.tsx');
-  for (const token of ['Projetos', 'Aprovados no período', 'Valor vendido no período', 'Ativos agora', 'Entregas no período', 'Atrasados agora', 'Fluxo de caixa', 'Previsto no período', 'Recebido no período', 'Saldo total a receber']) {
+  for (const token of ['Novos projetos', 'Valor vendido', 'Projetos em andamento', 'Entregas no período', 'Projetos atrasados', 'Recebimentos previstos', 'Recebido', 'Saldo a receber']) {
     if (!dashboard36.includes(token)) fail(`fix36_dashboard_gestao_incompleto:${token}`);
   }
 
@@ -1032,7 +1032,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   if (components38.includes('.nav-link--active::after')) fail('fix38_sublinhado_menu_ativo_ainda_presente');
 
   const dashboard38 = read('src/pages/DashboardPage.tsx');
-  for (const token of ['Panel title="Projetos"', 'Aprovados no período', 'Valor vendido no período', 'Panel title="Fluxo de caixa"', 'Previsto no período', 'Recebido no período', 'A receber no período', 'Saldo total a receber', 'pendingReceipts']) {
+  for (const token of ['Novos projetos', 'Valor vendido', 'Projetos em andamento', 'Projetos atrasados', 'Recebimentos previstos', 'Recebido', 'A receber no período', 'Saldo a receber', 'pendingReceipts']) {
     if (!dashboard38.includes(token)) fail(`fix38_dashboard_fluxo_caixa_incompleto:${token}`);
   }
 
@@ -1055,6 +1055,18 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   const homolog38 = read('CHECK - CRM R59 - Homologacao final.sql');
   for (const token of ['pendingreceipts', 'p_payment_status text', '38_dashboard_fluxo_caixa_e_filtro_pagamento_r59']) {
     if (!homolog38.includes(token)) fail(`fix38_homologacao_incompleta:${token}`);
+  }
+}
+
+
+// R59 BUILD FIX 41: Dashboard sem agrupadores, com cards autodescritivos em uma única grade.
+{
+  const dashboard41 = read('src/pages/DashboardPage.tsx');
+  for (const token of ['dashboard-metric-grid', 'Novas empresas', 'Na fila', 'Prévias para enviar', 'Novos projetos', 'Projetos em andamento', 'Recebimentos previstos', 'Saldo a receber']) {
+    if (!dashboard41.includes(token)) fail(`fix41_dashboard_cards_incompleto:${token}`);
+  }
+  for (const removed of ['Operação no período', 'Comercial no período', 'Panel title="Projetos"', 'Panel title="Fluxo de caixa"']) {
+    if (dashboard41.includes(removed)) fail(`fix41_dashboard_agrupador_ainda_presente:${removed}`);
   }
 }
 

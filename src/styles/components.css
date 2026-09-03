@@ -2188,9 +2188,6 @@ button.checkbox {
   gap: var(--space-20);
 }
 
-.dashboard-section-card > .metric-grid {
-  padding: 0 var(--space-20) var(--space-20);
-}
 
 .page-header-actions {
   display: flex;

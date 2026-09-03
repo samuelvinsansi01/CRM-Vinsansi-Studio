@@ -1,0 +1,37 @@
+CRM - Vinsansi Studio v2.4.0-R59 BUILD FIX 41
+
+Escopo
+- Simplificação visual da Dashboard.
+- Removidos os agrupadores visuais e títulos: Operação no período, Comercial no período, Projetos e Fluxo de caixa.
+- Indicadores passam a ocupar uma única grade contínua de cards.
+- Rótulos ajustados para serem autodescritivos sem depender de títulos de seção.
+
+Rótulos principais
+- Novas empresas
+- Na fila
+- Enviados
+- Inválidos
+- Sem contato
+- Aguardando resposta
+- Aguardando prévia
+- Prévia enviada
+- Aprovados
+- Recusados
+- Prévias para enviar
+- Novos projetos
+- Valor vendido
+- Projetos em andamento
+- Entregas no período
+- Projetos atrasados
+- Recebimentos previstos
+- Recebido
+- A receber no período
+- Saldo a receber
+
+Banco
+- Nenhuma alteração de banco.
+- Não há SQL para aplicar neste FIX.
+
+Validação
+- npm run verify:release
+- Contrato/homologação R59 atualizado para refletir a nova composição visual da Dashboard.
