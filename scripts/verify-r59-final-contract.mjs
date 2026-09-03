@@ -1205,3 +1205,13 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
 }
 
 console.log('CRM R59 final contract + homologacao: OK');
+
+// R59 BUILD FIX 48: reconciliação pós-QR e saneamento de identidade.
+{
+  const webhook = read('supabase/functions/evolution-connection-webhook/index.ts');
+  const sql = read('APLICAR - CRM R59 BUILD FIX 48 - Reconciliacao pos QR e identidade de conversas.sql');
+  if (!webhook.includes('stage5_reconcile_instance_after_reconnect_r59')) fail('fix48_webhook_sem_reconciliacao_pos_qr');
+  if (!sql.includes('stage5_reconcile_instance_after_reconnect_r59')) fail('fix48_rpc_reconciliacao_pos_qr_ausente');
+  if (!sql.includes('stage5_contact_name_is_own_sender_r59')) fail('fix48_protecao_nome_proprio_ausente');
+  if (!sql.includes('conversations_contact_name_guard_r59')) fail('fix48_guard_contact_name_ausente');
+}

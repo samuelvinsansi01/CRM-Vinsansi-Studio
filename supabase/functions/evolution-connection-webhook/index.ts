@@ -423,7 +423,7 @@ Deno.serve(async (request: Request) => {
 
     if (["connection_update", "connection"].includes(event)) {
       const currentResult = await admin.from("instance_runtime_states")
-        .select("session_saved,jid")
+        .select("session_saved,jid,socket_connected,connected,logged_in")
         .eq("instances_id", instanceId)
         .eq("organizations_id", instanceRow.organizations_id)
         .maybeSingle();
@@ -448,6 +448,10 @@ Deno.serve(async (request: Request) => {
         instance_runtime_states_updated_at: checkedAt,
       }, { onConflict: "instances_id" });
       if (error) throw new Error(error.message);
+      if (runtime.socketConnected) {
+        const reconciliation = await admin.rpc("stage5_reconcile_instance_after_reconnect_r59", { p_instances_id: instanceId });
+        if (reconciliation.error) throw new Error(`post_qr_reconciliation_failed:${reconciliation.error.message}`);
+      }
       processed = 1;
     } else if (MESSAGE_EVENTS.has(event)) {
       for (const item of eventRows(payload)) {
