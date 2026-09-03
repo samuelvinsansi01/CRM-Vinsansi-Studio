@@ -1,0 +1,11 @@
+CRM - Vinsansi Studio v2.4.0-R59 BUILD FIX 42
+
+Homologação funcional da Dashboard
+1. Semana deve abrir como padrão e mostrar apenas o intervalo no cabeçalho.
+2. A Dashboard deve conter exatamente 17 cards.
+3. Não devem existir títulos visuais de grupo.
+4. Não devem existir os cards Novos projetos, Recebimentos previstos ou Saldo a receber duplicado.
+5. Alterar Hoje/Semana/Mês deve mudar eventos do período (ex.: Novas empresas, Enviados, Aprovados, Valor vendido, Recebido).
+6. Na fila, estágios comerciais abertos, Projetos em andamento, Projetos atrasados e A receber total devem permanecer como estado atual independentemente do período.
+7. Prévias para enviar e Entregas previstas devem respeitar as datas do período selecionado.
+8. Os 3 cards financeiros devem aparecer em linha própria em desktop.

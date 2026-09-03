@@ -198,7 +198,8 @@ level_capacity_contract_diff AS (
       SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
       WHERE n.nspname='public' AND p.proname='_resource_capacity_conflict_r59' AND (
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%queue_review_items%' OR
-        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%queue_items%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_status_id=4%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%r59-fix42%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%concluido%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%p_from_date%'
       )
@@ -291,7 +292,8 @@ dashboard_period_contract_diff AS (
     CASE WHEN EXISTS (
       SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
       WHERE n.nspname='public' AND p.proname='dashboard_summary_r59' AND (
-        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%queue_items%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_status_id=4%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%r59-fix42%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%sents_sent_at%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%lead_commercial%' OR
         lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%preview_due_date%' OR

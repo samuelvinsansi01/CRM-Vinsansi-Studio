@@ -20,7 +20,6 @@ const EMPTY_SUMMARY: CrmDashboardSummary = {
   projects: { closed: 0, active: 0, deliveries: 0, overdue: 0, valueClosed: 0, scheduledReceipts: 0, pendingReceipts: 0, received: 0, receivableTotal: 0 },
 };
 
-
 function formatMoney(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 2 }).format(value || 0);
 }
@@ -120,7 +119,7 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
     <div className="dashboard-page">
       <PageHeader
         title="Dashboard"
-        description={rangeValid ? `Visão do período selecionado · ${formatRange(range.from, range.toExclusive)}. A semana atual é o padrão; períodos maiores só aparecem quando você filtra.` : 'Selecione um período válido para atualizar os indicadores.'}
+        description={rangeValid ? formatRange(range.from, range.toExclusive) : 'Selecione um período válido para atualizar os indicadores.'}
       />
 
       <FiltersBar left={<SegmentedControl compact items={['Hoje', 'Semana', 'Mês', 'Personalizado']} active={preset} onChange={(value) => setPreset(value as PeriodPreset)} />}>
@@ -132,31 +131,36 @@ export function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       {error ? <div className="table-message">{error}</div> : null}
 
-      <section className="metric-grid metric-grid--5 dashboard-metric-grid" aria-label="Indicadores do Dashboard">
-        <MetricCard icon={Users} value={loading ? '—' : String(summary.newLeads)} label="Novas empresas" onClick={() => goCompanies()} />
-        <MetricCard icon={List} value={loading ? '—' : String(summary.queued)} label="Na fila" tone="primary" onClick={() => onNavigate('whatsapp')} />
-        <MetricCard icon={Send} value={loading ? '—' : String(summary.sent)} label="Enviados" tone="success" onClick={() => goCompanies(5)} />
-        <MetricCard icon={X} value={loading ? '—' : String(summary.invalid)} label="Inválidos" tone="danger" onClick={() => goCompanies(6)} />
-        <MetricCard icon={Unplug} value={loading ? '—' : String(summary.noContact)} label="Sem contato" tone="warning" onClick={() => goCompanies(3)} />
+      <div className="dashboard-metric-stack" aria-label="Indicadores do Dashboard">
+        <section className="metric-grid metric-grid--5 dashboard-metric-row" aria-label="Aquisição e disparos">
+          <MetricCard icon={Users} value={loading ? '—' : String(summary.newLeads)} label="Novas empresas" onClick={() => goCompanies()} />
+          <MetricCard icon={List} value={loading ? '—' : String(summary.queued)} label="Na fila agora" tone="primary" onClick={() => onNavigate('whatsapp')} />
+          <MetricCard icon={Send} value={loading ? '—' : String(summary.sent)} label="Enviados" tone="success" onClick={() => goCompanies(5)} />
+          <MetricCard icon={X} value={loading ? '—' : String(summary.invalid)} label="Inválidos na base" tone="danger" onClick={() => goCompanies(6)} />
+          <MetricCard icon={Unplug} value={loading ? '—' : String(summary.noContact)} label="Sem contato na base" tone="warning" onClick={() => goCompanies(3)} />
+        </section>
 
-        <MetricCard icon={Clock3} value={loading ? '—' : String(summary.commercial.aguardandoResposta)} label="Aguardando resposta" onClick={() => goCommercial('aguardando_resposta')} />
-        <MetricCard icon={FileImage} value={loading ? '—' : String(summary.commercial.aguardandoPrevia)} label="Aguardando prévia" tone="warning" onClick={() => goCommercial('aguardando_previa')} />
-        <MetricCard icon={Send} value={loading ? '—' : String(summary.commercial.previaEnviada)} label="Prévia enviada" tone="primary" onClick={() => goCommercial('previa_enviada')} />
-        <MetricCard icon={UserCheck} value={loading ? '—' : String(summary.commercial.aprovado)} label="Aprovados" tone="success" onClick={() => goCommercial('aprovado')} />
-        <MetricCard icon={X} value={loading ? '—' : String(summary.commercial.recusado)} label="Recusados" tone="danger" onClick={() => goCommercial('recusado')} />
+        <section className="metric-grid metric-grid--5 dashboard-metric-row" aria-label="Comercial">
+          <MetricCard icon={Clock3} value={loading ? '—' : String(summary.commercial.aguardandoResposta)} label="Aguardando resposta" onClick={() => goCommercial('aguardando_resposta')} />
+          <MetricCard icon={FileImage} value={loading ? '—' : String(summary.commercial.aguardandoPrevia)} label="Aguardando prévia" tone="warning" onClick={() => goCommercial('aguardando_previa')} />
+          <MetricCard icon={Send} value={loading ? '—' : String(summary.commercial.previaEnviada)} label="Prévia enviada" tone="primary" onClick={() => goCommercial('previa_enviada')} />
+          <MetricCard icon={UserCheck} value={loading ? '—' : String(summary.commercial.aprovado)} label="Aprovados" tone="success" onClick={() => goCommercial('aprovado')} />
+          <MetricCard icon={X} value={loading ? '—' : String(summary.commercial.recusado)} label="Recusados" tone="danger" onClick={() => goCommercial('recusado')} />
+        </section>
 
-        <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.previewsDue)} label="Prévias para enviar" tone="warning" onClick={() => goCommercial('aguardando_previa')} />
-        <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.closed)} label="Novos projetos" tone="success" onClick={() => onNavigate('projects')} />
-        <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.valueClosed)} label="Valor vendido" tone="success" onClick={() => onNavigate('projects')} />
-        <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.active)} label="Projetos em andamento" onClick={() => onNavigate('projects')} />
-        <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.projects.deliveries)} label="Entregas no período" tone="primary" onClick={() => onNavigate('projects')} />
+        <section className="metric-grid metric-grid--4 dashboard-metric-row dashboard-metric-row--separated" aria-label="Atenção e entregas">
+          <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.previewsDue)} label="Prévias para enviar" tone="warning" onClick={() => goCommercial('aguardando_previa')} />
+          <MetricCard icon={FolderOpen} value={loading ? '—' : String(summary.projects.active)} label="Projetos em andamento" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={CalendarDays} value={loading ? '—' : String(summary.projects.deliveries)} label="Entregas previstas" tone="primary" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={TriangleAlert} value={loading ? '—' : String(summary.projects.overdue)} label="Projetos atrasados" tone="danger" onClick={() => onNavigate('projects')} />
+        </section>
 
-        <MetricCard icon={TriangleAlert} value={loading ? '—' : String(summary.projects.overdue)} label="Projetos atrasados" tone="danger" onClick={() => onNavigate('projects')} />
-        <MetricCard icon={CalendarDays} value={loading ? '—' : formatMoney(summary.projects.scheduledReceipts)} label="Recebimentos previstos" tone="primary" onClick={() => onNavigate('projects')} />
-        <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.received)} label="Recebido" tone="success" onClick={() => onNavigate('projects')} />
-        <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.pendingReceipts)} label="A receber no período" tone="warning" onClick={() => onNavigate('projects')} />
-        <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.receivableTotal)} label="Saldo a receber" tone="warning" onClick={() => onNavigate('projects')} />
-      </section>
+        <section className="metric-grid metric-grid--3 dashboard-metric-row dashboard-metric-row--separated dashboard-metric-row--finance" aria-label="Financeiro">
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.valueClosed)} label="Valor vendido" tone="success" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.received)} label="Recebido" tone="success" onClick={() => onNavigate('projects')} />
+          <MetricCard icon={DollarSign} value={loading ? '—' : formatMoney(summary.projects.receivableTotal)} label="A receber total" tone="warning" onClick={() => onNavigate('projects')} />
+        </section>
+      </div>
     </div>
   );
 }

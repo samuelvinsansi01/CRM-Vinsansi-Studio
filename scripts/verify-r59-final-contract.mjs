@@ -932,7 +932,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 
   const dashboard36 = read('src/pages/DashboardPage.tsx');
-  for (const token of ['Novos projetos', 'Valor vendido', 'Projetos em andamento', 'Entregas no período', 'Projetos atrasados', 'Recebimentos previstos', 'Recebido', 'Saldo a receber']) {
+  for (const token of ['Valor vendido', 'Projetos em andamento', 'Entregas previstas', 'Projetos atrasados', 'Recebido', 'A receber total']) {
     if (!dashboard36.includes(token)) fail(`fix36_dashboard_gestao_incompleto:${token}`);
   }
 
@@ -1032,7 +1032,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   if (components38.includes('.nav-link--active::after')) fail('fix38_sublinhado_menu_ativo_ainda_presente');
 
   const dashboard38 = read('src/pages/DashboardPage.tsx');
-  for (const token of ['Novos projetos', 'Valor vendido', 'Projetos em andamento', 'Projetos atrasados', 'Recebimentos previstos', 'Recebido', 'A receber no período', 'Saldo a receber', 'pendingReceipts']) {
+  for (const token of ['Valor vendido', 'Projetos em andamento', 'Projetos atrasados', 'Recebido', 'A receber total']) {
     if (!dashboard38.includes(token)) fail(`fix38_dashboard_fluxo_caixa_incompleto:${token}`);
   }
 
@@ -1059,14 +1059,47 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
 }
 
 
-// R59 BUILD FIX 41: Dashboard sem agrupadores, com cards autodescritivos em uma única grade.
+// R59 BUILD FIX 42: Dashboard orientada a decisão, 17 cards e semântica estado atual x período.
 {
-  const dashboard41 = read('src/pages/DashboardPage.tsx');
-  for (const token of ['dashboard-metric-grid', 'Novas empresas', 'Na fila', 'Prévias para enviar', 'Novos projetos', 'Projetos em andamento', 'Recebimentos previstos', 'Saldo a receber']) {
-    if (!dashboard41.includes(token)) fail(`fix41_dashboard_cards_incompleto:${token}`);
+  const dashboard42 = read('src/pages/DashboardPage.tsx');
+  for (const token of [
+    'dashboard-metric-stack',
+    'Na fila agora',
+    'Inválidos na base',
+    'Sem contato na base',
+    'Prévias para enviar',
+    'Projetos em andamento',
+    'Entregas previstas',
+    'Projetos atrasados',
+    'Valor vendido',
+    'Recebido',
+    'A receber total',
+  ]) {
+    if (!dashboard42.includes(token)) fail(`fix42_dashboard_cards_incompleto:${token}`);
   }
-  for (const removed of ['Operação no período', 'Comercial no período', 'Panel title="Projetos"', 'Panel title="Fluxo de caixa"']) {
-    if (dashboard41.includes(removed)) fail(`fix41_dashboard_agrupador_ainda_presente:${removed}`);
+  for (const removed of ['Novos projetos', 'Recebimentos previstos', 'A receber no período', 'Saldo a receber', 'Operação no período', 'Comercial no período']) {
+    if (dashboard42.includes(removed)) fail(`fix42_dashboard_redundancia_ainda_presente:${removed}`);
+  }
+  const metricCount42 = (dashboard42.match(/<MetricCard /g) || []).length;
+  if (metricCount42 !== 17) fail(`fix42_dashboard_qtd_cards_invalida:${metricCount42}`);
+
+  const css42 = read('src/styles/components.css');
+  for (const token of ['.dashboard-metric-stack', '.dashboard-metric-row--separated', '.dashboard-metric-row--finance']) {
+    if (!css42.includes(token)) fail(`fix42_dashboard_hierarquia_visual_incompleta:${token}`);
+  }
+
+  const fix42Sql = 'APLICAR - CRM R59 BUILD FIX 42 - Dashboard orientada a decisao.sql';
+  if (!exists(fix42Sql)) fail('fix42_sql_ausente');
+  const sql42 = read(fix42Sql);
+  for (const token of [
+    "'contractVersion','R59-FIX42'",
+    'l.lead_status_id=4',
+    "commercial_stage='aguardando_previa'",
+    "commercial_stage IN ('aprovado','fechado')",
+    "p.project_stage<>'entregue' AND p.project_due_date>=v_from_date",
+    "'receivableTotal',v_receivable_total",
+  ]) {
+    if (!sql42.includes(token)) fail(`fix42_sql_semantica_incompleta:${token}`);
   }
 }
 
