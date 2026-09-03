@@ -1,0 +1,6 @@
+CRM R59 BUILD FIX 47
+
+[OK] Classificador/marcador de aquecimento removido da Edge Function.
+[OK] Mensagens inbound/outbound seguem novamente o pipeline canônico.
+[OK] pushName de mensagem fromMe não atualiza contact_name.
+[OK] Sem alteração de schema/banco.

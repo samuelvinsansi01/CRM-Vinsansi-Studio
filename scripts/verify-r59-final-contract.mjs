@@ -1117,15 +1117,11 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
     if (!route39.includes(token)) fail(`fix39_contrato_conversa_aprovado_incompleto:${token}`);
   }
 
+  // FIX47 removeu integralmente o filtro de aquecimento do webhook.
   const webhook39 = read('supabase/functions/evolution-connection-webhook/index.ts');
-  for (const token of ['isInternalOwnedChipTraffic', 'internal_owned_chip_traffic', 'persisted: false', 'whatsappPhoneVariants', '.neq("instances_id", instanceId)']) {
-    if (!webhook39.includes(token)) fail(`fix39_trafego_interno_filtro_incompleto:${token}`);
+  for (const forbidden of ['isInternalOwnedChipTraffic', 'internal_owned_chip_traffic', 'INTERNAL_CHIP_WARMUP_MARKER']) {
+    if (webhook39.includes(forbidden)) fail(`fix47_residuo_aquecimento_no_webhook:${forbidden}`);
   }
-  const discardAt = webhook39.indexOf('isInternalOwnedChipTraffic(admin');
-  const receiptAt = webhook39.indexOf('admin.from("evolution_webhook_receipts").insert');
-  if (discardAt < 0 || receiptAt < 0 || discardAt > receiptAt) fail('fix39_trafego_interno_filtrado_depois_da_persistencia');
-  if (!webhook39.includes('internal_owned_chip_traffic_classifier_failed')) fail('fix46_classificador_sem_fail_open');
-  if (!webhook39.includes('MESSAGE_EVENTS.has(event)')) fail('fix46_message_events_sem_set_has');
 
   const fix39Sql = 'APLICAR - CRM R59 BUILD FIX 39 - Aprovado e trafego interno entre chips.sql';
   if (!exists(fix39Sql)) fail('fix39_sql_ausente');
@@ -1199,13 +1195,13 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   if (!repo43.includes(".from('channels')")) fail('fix43_catalogo_canais_nao_preservado');
 }
 
-// R59 BUILD FIX 45: tráfego normal entre chips próprios nunca pode ser confundido com aquecimento.
+// R59 BUILD FIX 47: aquecimento removido; todo MESSAGE segue o pipeline canônico.
 {
-  const webhook45 = read('supabase/functions/evolution-connection-webhook/index.ts');
-  for (const token of ['INTERNAL_CHIP_WARMUP_MARKER', 'messageBody(item).includes(INTERNAL_CHIP_WARMUP_MARKER)', 'if (!MESSAGE_EVENTS.has(event)) return false', 'internal_owned_chip_traffic']) {
-    if (!webhook45.includes(token)) fail(`fix45_webhook_sem_protecao_seletiva:${token}`);
+  const webhook47 = read('supabase/functions/evolution-connection-webhook/index.ts');
+  for (const forbidden of ['INTERNAL_CHIP_WARMUP_MARKER', 'isInternalOwnedChipTraffic', 'internal_owned_chip_traffic']) {
+    if (webhook47.includes(forbidden)) fail(`fix47_residuo_aquecimento:${forbidden}`);
   }
-  if (webhook45.includes('if (![...MESSAGE_EVENTS, ...STATUS_EVENTS, ...CHAT_EVENTS].includes(event)) return false')) fail('fix45_filtro_amplo_ainda_presente');
+  if (!webhook47.includes('p_contact_name: fromMe ? null : (contactName(item) || null)')) fail('fix47_nome_contato_outbound_nao_protegido');
 }
 
 console.log('CRM R59 final contract + homologacao: OK');

@@ -334,57 +334,6 @@ async function sendMobilePush(admin: any, organizationId: number, conversationId
   if (validInvalidIds.length) await admin.from("mobile_push_devices").update({ enabled: false, updated_at: new Date().toISOString() }).in("mobile_push_devices_id", validInvalidIds);
 }
 
-function whatsappPhoneVariants(value: unknown) {
-  let digits = text(value).split("@")[0].replace(/\D/g, "");
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.length === 10 || digits.length === 11) digits = `55${digits}`;
-  const variants = new Set<string>();
-  if (digits) variants.add(digits);
-  if (digits.startsWith("55") && digits.length === 13 && digits[4] === "9") variants.add(`${digits.slice(0, 4)}${digits.slice(5)}`);
-  if (digits.startsWith("55") && digits.length === 12) variants.add(`${digits.slice(0, 4)}9${digits.slice(4)}`);
-  return variants;
-}
-
-// Marcador invisível exclusivo do Worker de aquecimento. Ele não é persistido:
-// o webhook testa a mensagem antes de criar recibo/conversa/mensagem.
-const INTERNAL_CHIP_WARMUP_MARKER = "\u2063\u200B\u200C\u2063";
-
-async function isInternalOwnedChipTraffic(admin: ReturnType<typeof createClient>, instanceRow: Row, event: string, payload: Row) {
-  // FIX45: dois chips pertencerem à mesma organização NÃO basta para descartar a
-  // mensagem. Tráfego normal entre chips próprios precisa continuar aparecendo em
-  // Conversas. Só descartamos mensagens produzidas pelo Worker de aquecimento.
-  if (!MESSAGE_EVENTS.has(event)) return false;
-  const organizationId = Number(instanceRow.organizations_id ?? 0);
-  const instanceId = Number(instanceRow.instances_id ?? 0);
-  if (!organizationId || !instanceId) return false;
-
-  const rows = eventRows(payload);
-  if (!rows.some((item) => messageBody(item).includes(INTERNAL_CHIP_WARMUP_MARKER))) return false;
-
-  const current = await admin.from("chips")
-    .select("chips_id,chips_phone")
-    .eq("organizations_id", organizationId)
-    .eq("instances_id", instanceId)
-    .maybeSingle();
-  if (current.error) throw new Error(`internal_chip_current_lookup_failed:${current.error.message}`);
-  if (!current.data) return false;
-
-  const peers = await admin.from("chips")
-    .select("chips_id,chips_phone,instances_id")
-    .eq("organizations_id", organizationId)
-    .neq("instances_id", instanceId);
-  if (peers.error) throw new Error(`internal_chip_peer_lookup_failed:${peers.error.message}`);
-  const peerVariants = new Set<string>();
-  for (const peer of peers.data ?? []) for (const variant of whatsappPhoneVariants(peer.chips_phone)) peerVariants.add(variant);
-  if (!peerVariants.size) return false;
-
-  const markedRows = rows.filter((item) => messageBody(item).includes(INTERNAL_CHIP_WARMUP_MARKER));
-  if (!markedRows.length) return false;
-  const contactRows = markedRows.map((item) => remoteJid(item)).filter(Boolean);
-  if (!contactRows.length) return false;
-  return contactRows.every((jid) => [...whatsappPhoneVariants(jid)].some((variant) => peerVariants.has(variant)));
-}
-
 function timingSafeEqual(left: string, right: string) {
   if (left.length !== right.length) return false;
   let mismatch = 0;
@@ -439,20 +388,6 @@ Deno.serve(async (request: Request) => {
   const event = rawEvent === "message" ? "messages_upsert" : rawEvent === "sendmessage" ? "send_message" : rawEvent;
   if (!event) return jsonResponse({ error: "Evento ausente." }, 422);
 
-  // Somente mensagens marcadas pelo Worker de aquecimento e trocadas entre chips
-  // próprios são descartadas. Mensagens normais entre chips da organização seguem
-  // o pipeline canônico e aparecem em Conversas.
-  // O classificador de aquecimento nunca pode interromper o recebimento normal.
-  // Em caso de qualquer falha técnica, seguimos pelo pipeline canônico (fail-open).
-  let internalOwnedChipTraffic = false;
-  try {
-    internalOwnedChipTraffic = await isInternalOwnedChipTraffic(admin, row(instanceRow), event, payload);
-  } catch (error) {
-    console.error("internal_owned_chip_traffic_classifier_failed", error);
-  }
-  if (internalOwnedChipTraffic) {
-    return jsonResponse({ ok: true, event, ignored: true, reason: "internal_owned_chip_traffic", persisted: false });
-  }
 
   const payloadHash = await sha256(rawBody);
   let receiptId = 0;
@@ -535,7 +470,7 @@ Deno.serve(async (request: Request) => {
           p_message_type: "text",
           p_message_body: bodyText,
           p_message_status: statusFromItem(item, event, fromMe),
-          p_contact_name: contactName(item) || null,
+          p_contact_name: fromMe ? null : (contactName(item) || null),
           p_provider_timestamp: providerTimestamp(item),
           p_raw_payload: rawPayload,
           p_media_url: null,
