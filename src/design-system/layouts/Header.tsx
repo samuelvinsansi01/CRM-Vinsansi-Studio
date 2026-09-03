@@ -248,12 +248,14 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
             ) : null}
           </div>
 
-          <IconButton
-            icon={Settings}
-            label="Configurações"
-            className={`app-header__settings-button ${settingsPageIds.has(activePage) ? 'is-active' : ''}`}
-            onClick={() => navigate('settings')}
-          />
+          {canAccessPage('settings') ? (
+            <IconButton
+              icon={Settings}
+              label="Configurações"
+              className={`app-header__settings-button ${settingsPageIds.has(activePage) ? 'is-active' : ''}`}
+              onClick={() => navigate('settings')}
+            />
+          ) : null}
 
           <div className={`profile-menu ${profileOpen ? 'profile-menu--open' : ''}`} ref={profileRef}>
             <button className="profile-chip" type="button" aria-expanded={profileOpen} onClick={() => { setProfileOpen((current) => !current); setNotificationOpen(false); setOrganizationOpen(false); setOpenNavGroup(null); }}>

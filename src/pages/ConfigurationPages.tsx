@@ -1,4 +1,4 @@
-import { ArrowRight, Building2, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ArrowRight, Building2, PlugZap, Settings2, SlidersHorizontal } from 'lucide-react';
 import { Button, Panel } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
@@ -14,35 +14,35 @@ type SettingsSection = {
 
 const sections: SettingsSection[] = [
   {
-    title: 'Sistema',
-    description: 'Cadastros técnicos e regras que não fazem parte do trabalho diário.',
-    icon: SlidersHorizontal,
-    items: [
-      { label: 'Fontes de contato', page: 'config-contact-sources', description: 'Origens e regras técnicas de identificação dos contatos.' },
-      { label: 'Canais do sistema', page: 'config-channels', description: 'Catálogo técnico de canais utilizados pela plataforma.' },
-      { label: 'Níveis', page: 'config-levels', description: 'Limites operacionais utilizados pelos motores de disparo.' },
-      { label: 'Instâncias', page: 'config-instances', description: 'Configuração técnica das instâncias WhatsApp.' },
-      { label: 'Canais de template', page: 'config-template-channels', description: 'Catálogo técnico dos canais disponíveis para templates.' },
-      { label: 'Tipos de template', page: 'config-template-types', description: 'Tipos internos utilizados pelos templates de mensagem.' },
-    ],
-  },
-  {
-    title: 'Automação',
-    description: 'Parâmetros globais obedecidos pelas ferramentas auxiliares da operação.',
-    icon: Settings2,
-    items: [
-      { label: 'Central de Ferramentas', page: 'tools', description: 'Delays, janelas, intervalos e configurações dos motores.' },
-    ],
-  },
-  {
     title: 'Organização',
-    description: 'Estrutura da conta, membros e controle de acesso.',
+    description: 'Conta, equipe e controle de acesso da organização ativa.',
     icon: Building2,
     items: [
-      { label: 'Dados da organização', page: 'organization-settings', description: 'Informações e preferências da organização ativa.' },
-      { label: 'Membros', page: 'organization-members', description: 'Pessoas que acessam esta organização.' },
-      { label: 'Funções e acessos', page: 'organization-roles', description: 'Papéis e permissões delegáveis.' },
+      { label: 'Dados da organização', page: 'organization-settings', description: 'Identificação da organização e dados administrativos.' },
+      { label: 'Membros', page: 'organization-members', description: 'Pessoas que acessam esta organização e seus níveis.' },
+      { label: 'Funções e acessos', page: 'organization-roles', description: 'Permissões delegáveis. Somente o Dono altera funções.' },
       { label: 'Organizações da plataforma', page: 'platform-organizations', description: 'Administração exclusiva do Platform Owner.' },
+    ],
+  },
+  {
+    title: 'Preferências gerais',
+    description: 'Cadastros técnicos de apoio que não fazem parte do trabalho diário.',
+    icon: SlidersHorizontal,
+    items: [
+      { label: 'Fontes de contato', page: 'config-contact-sources', description: 'Origens técnicas usadas para classificar contatos.' },
+      { label: 'Canais do sistema', page: 'config-channels', description: 'Catálogo interno dos canais suportados pela plataforma.' },
+      { label: 'Níveis', page: 'config-levels', description: 'Limites e capacidades operacionais dos canais.' },
+      { label: 'Canais de template', page: 'config-template-channels', description: 'Catálogo técnico usado pelos templates de mensagem.' },
+      { label: 'Tipos de template', page: 'config-template-types', description: 'Tipos internos utilizados pelos templates.' },
+    ],
+  },
+  {
+    title: 'Integrações e automação',
+    description: 'Infraestrutura técnica usada pelas ferramentas conectadas ao CRM.',
+    icon: PlugZap,
+    items: [
+      { label: 'Instâncias WhatsApp', page: 'config-instances', description: 'Instâncias técnicas vinculadas aos chips cadastrados.' },
+      { label: 'Central de Ferramentas', page: 'tools', description: 'Parâmetros e conexões das ferramentas auxiliares.' },
     ],
   },
 ];
@@ -61,7 +61,7 @@ export function SettingsOverviewPage({ onNavigate }: SettingsOverviewPageProps) 
     <div className="settings-page settings-overview-page">
       <PageHeader
         title="Configurações"
-        description="Somente administração e estrutura técnica. Chips, perfis, ramos e templates ficam nos menus Canais e Biblioteca."
+        description="Administração da organização e preferências técnicas. Chips, perfis, ramos e templates ficam em Biblioteca e cadastros."
       />
       <section className="settings-overview-grid settings-overview-grid--ia">
         {visibleSections.map((section) => {

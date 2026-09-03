@@ -44,8 +44,9 @@ export type NavGroup = {
   menuClassName?: string;
 };
 
-// Navegação primária orientada às tarefas do CRM.
-// Configurações administrativas ficam no ícone de engrenagem; Canais e Biblioteca permanecem na navegação principal.
+// Navegação primária final do CRM.
+// Configurações administrativas ficam exclusivamente no ícone de engrenagem.
+// Canais e cadastros reutilizáveis compartilham um único ponto para manter sete menus principais.
 export const navGroups: readonly NavGroup[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'commercial', label: 'Comercial' },
@@ -62,16 +63,10 @@ export const navGroups: readonly NavGroup[] = [
   },
   {
     id: 'sender-chips',
-    label: 'Canais',
+    label: 'Biblioteca e cadastros',
     items: [
       { id: 'sender-chips', label: 'Chips WhatsApp' },
       { id: 'sender-instagram', label: 'Perfis Instagram' },
-    ],
-  },
-  {
-    id: 'message-branches',
-    label: 'Biblioteca',
-    items: [
       { id: 'message-branches', label: 'Ramos' },
       { id: 'message-templates', label: 'Templates de mensagem' },
     ],
@@ -115,6 +110,7 @@ export const pageTitles: Record<PageId, string> = {
 };
 
 export const pagePermissions: Partial<Record<PageId, string>> = {
+  settings: 'settings.view',
   leads: 'leads.view',
   projects: 'leads.view',
   commercial: 'leads.view',
@@ -137,11 +133,11 @@ export const pagePermissions: Partial<Record<PageId, string>> = {
   'config-instances': 'whatsapp.instances.manage',
   'config-template-channels': 'templates.view',
   'config-template-types': 'templates.view',
-  'organization-settings': 'organization.view',
+  'organization-settings': 'settings.view',
   'organization-members': 'members.view',
   'organization-roles': 'roles.view',
   'platform-organizations': 'platform.organizations.manage',
-  tools: 'tools.view',
+  tools: 'settings.view',
   monitoring: 'monitoring.view',
   homologation: 'monitoring.view',
 };

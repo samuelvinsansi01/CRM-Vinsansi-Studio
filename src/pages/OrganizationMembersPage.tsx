@@ -260,7 +260,7 @@ export function OrganizationMembersPage() {
           />
           <label className="organization-field-label">Função</label>
           <SelectField value={inviteRoleId} onChange={setInviteRoleId} options={roleOptions} searchable />
-          <p className="settings-note">Gestores sempre mantêm os poderes mínimos de gestão de membros, mesmo que a função atribuída seja alterada.</p>
+          <p className="settings-note">Gestores sempre mantêm o conjunto mínimo operacional e administrativo do CRM, mesmo que a função atribuída seja alterada.</p>
         </div>
       </Drawer>
 

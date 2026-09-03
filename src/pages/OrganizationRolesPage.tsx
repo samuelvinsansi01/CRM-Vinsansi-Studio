@@ -136,7 +136,7 @@ export function OrganizationRolesPage() {
 
       <Panel title="Modelo de acesso" className="organization-panel organization-access-summary">
         <div><Tag tone="success">Dono</Tag><p>Acesso total à organização. Propriedade só muda pelo fluxo de transferência.</p></div>
-        <div><Tag tone="warning">Gestor</Tag><p>Mantém poderes mínimos de gestão de membros e pode receber uma função com permissões operacionais adicionais.</p></div>
+        <div><Tag tone="warning">Gestor</Tag><p>Mantém o conjunto operacional e administrativo do CRM. A função atribuída pode acrescentar permissões, mas não remove esse mínimo.</p></div>
         <div><Tag tone="neutral">Membro</Tag><p>Recebe uma função, como SDR, e herda exatamente as permissões delegáveis daquela função.</p></div>
       </Panel>
 

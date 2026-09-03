@@ -866,7 +866,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
 {
   const registry36 = read('src/pages/pageRegistry.ts');
   const nav36 = registry36.slice(registry36.indexOf('export const navGroups'), registry36.indexOf('export const pageTitles'));
-  const orderedNav = ["label: 'Dashboard'", "label: 'Comercial'", "label: 'Conversas'", "label: 'Projetos'", "label: 'Empresas'", "label: 'Fila de Disparo'", "label: 'Canais'", "label: 'Biblioteca'"];
+  const orderedNav = ["label: 'Dashboard'", "label: 'Comercial'", "label: 'Conversas'", "label: 'Projetos'", "label: 'Empresas'", "label: 'Fila de Disparo'", "label: 'Biblioteca e cadastros'"];
   let lastIndex = -1;
   for (const token of orderedNav) {
     const currentIndex = nav36.indexOf(token);
@@ -962,6 +962,66 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   const homolog36 = read('CHECK - CRM R59 - Homologacao final.sql');
   for (const token of ['65::bigint esperado', 'preview_due_date', 'projects_contract_diff', '36_contrato_projetos_r59', 'set_lead_preview_due_date_r59', 'lead_project_stage_history_one_active_idx']) {
     if (!homolog36.includes(token)) fail(`fix36_homologacao_incompleta:${token}`);
+  }
+}
+
+
+// R59 BUILD FIX 37: sete menus + Biblioteca e cadastros + matriz administrativa final.
+{
+  const registry37 = read('src/pages/pageRegistry.ts');
+  const nav37 = registry37.slice(registry37.indexOf('export const navGroups'), registry37.indexOf('export const pageTitles'));
+  const mainMenuLabels37 = [...nav37.matchAll(/\blabel: '([^']+)'/g)].map((match) => match[1]);
+  const topLevelExpected37 = ['Dashboard','Comercial','Conversas','Projetos','Empresas','Fila de Disparo','Biblioteca e cadastros'];
+  for (const label of topLevelExpected37) if (!nav37.includes(`label: '${label}'`)) fail(`fix37_menu_principal_ausente:${label}`);
+  if ((nav37.match(/label: 'Canais'/g) ?? []).length) fail('fix37_canais_ainda_menu_principal');
+  if ((nav37.match(/label: 'Biblioteca'/g) ?? []).length) fail('fix37_biblioteca_antiga_ainda_menu_principal');
+  for (const token of [
+    "{ id: 'sender-chips', label: 'Chips WhatsApp' }",
+    "{ id: 'sender-instagram', label: 'Perfis Instagram' }",
+    "{ id: 'message-branches', label: 'Ramos' }",
+    "{ id: 'message-templates', label: 'Templates de mensagem' }",
+  ]) if (!nav37.includes(token)) fail(`fix37_biblioteca_cadastros_incompleta:${token}`);
+  // Há 7 grupos de primeiro nível; os rótulos internos dos submenus não contam como menus principais.
+  const groupStarts37 = (nav37.match(/^  \{(?:\n| )/gm) ?? []).length;
+  if (groupStarts37 !== 7) fail(`fix37_quantidade_menu_principal:${groupStarts37}`);
+
+  for (const token of [
+    "settings: 'settings.view'",
+    "'organization-settings': 'settings.view'",
+    "tools: 'settings.view'",
+  ]) if (!registry37.includes(token)) fail(`fix37_config_permission_incompleta:${token}`);
+
+  const header37 = read('src/design-system/layouts/Header.tsx');
+  if (!header37.includes("canAccessPage('settings') ?")) fail('fix37_icone_config_nao_protegido');
+
+  const settings37 = read('src/pages/ConfigurationPages.tsx');
+  for (const token of ['Biblioteca e cadastros','Organização','Preferências gerais','Integrações e automação']) {
+    if (!settings37.includes(token)) fail(`fix37_configuracoes_ia_incompleta:${token}`);
+  }
+  for (const forbidden of ['sender-chips','sender-instagram','message-branches','message-templates','Motor de Captura']) {
+    if (settings37.includes(forbidden)) fail(`fix37_config_expoe_operacao:${forbidden}`);
+  }
+
+  const roles37 = read('src/pages/OrganizationRolesPage.tsx');
+  if (!roles37.includes('Mantém o conjunto operacional e administrativo do CRM')) fail('fix37_descricao_gestor_desatualizada');
+
+  const fix37Sql = 'APLICAR - CRM R59 BUILD FIX 37 - Navegacao final e permissoes administrativas.sql';
+  if (!exists(fix37Sql)) fail('fix37_sql_ausente');
+  const sql37 = read(fix37Sql);
+  for (const token of [
+    'CREATE OR REPLACE FUNCTION public.has_organization_permission',
+    'CREATE OR REPLACE FUNCTION public.stage5_member_has_permission',
+    "v_member.access_level='manager'",
+    'whatsapp.instances.manage',
+    'instagram.settings',
+    'templates.manage',
+    'settings.manage',
+    'p.permissions_sensitivity<>' + "'platform_only'",
+  ]) if (!sql37.includes(token)) fail(`fix37_sql_permissoes_incompleto:${token}`);
+
+  const homolog37 = read('CHECK - CRM R59 - Homologacao final.sql');
+  for (const token of ['permission_matrix_contract_diff','37_matriz_permissoes_r59','whatsapp.instances.manage','settings.manage']) {
+    if (!homolog37.includes(token)) fail(`fix37_homologacao_incompleta:${token}`);
   }
 }
 

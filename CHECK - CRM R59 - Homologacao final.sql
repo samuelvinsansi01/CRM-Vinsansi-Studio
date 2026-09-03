@@ -372,6 +372,31 @@ conversation_identity_contract_diff AS (
     ) THEN 1 ELSE 0 END
   )::bigint AS total
 ),
+permission_matrix_contract_diff AS (
+  SELECT (
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='has_organization_permission' AND pg_get_function_identity_arguments(p.oid)='p_permission_key text') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='stage5_member_has_permission' AND pg_get_function_identity_arguments(p.oid)='p_organizations_id bigint, p_organization_members_id bigint, p_permission text') <> 1 THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='has_organization_permission' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%access_level=''manager''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%whatsapp.instances.manage%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%instagram.settings%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%templates.manage%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%settings.manage%'
+      )
+    ) THEN 1 ELSE 0 END +
+    CASE WHEN EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname='public' AND p.proname='stage5_member_has_permission' AND (
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%access_level=''manager''%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%whatsapp.assign%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%queues.control%' OR
+        lower(regexp_replace(p.prosrc, '\s+', '', 'g')) NOT LIKE '%leads.edit%'
+      )
+    ) THEN 1 ELSE 0 END
+  )::bigint AS total
+),
 channel_diff AS (
   WITH esperado(nome) AS (VALUES ('whatsapp'::text),('instagram'::text),('sem_destino'::text)), atual AS (
     SELECT regexp_replace(lower(public.unaccent(trim(channels_name))), '[^a-z0-9]+','_','g') nome FROM public.channels
@@ -477,6 +502,7 @@ checks AS (
   UNION ALL SELECT '34_contrato_mobile_push_v1',(SELECT total FROM mobile_push_contract_diff),0,false
   UNION ALL SELECT '35_contrato_identidade_conversas_r59',(SELECT total FROM conversation_identity_contract_diff),0,false
   UNION ALL SELECT '36_contrato_projetos_r59',(SELECT total FROM projects_contract_diff),0,false
+  UNION ALL SELECT '37_matriz_permissoes_r59',(SELECT total FROM permission_matrix_contract_diff),0,false
 )
 SELECT verificacao,total,esperado,
   CASE WHEN informativo THEN 'INFORMATIVO' WHEN total=esperado THEN 'OK' ELSE 'REVISAR' END AS resultado
