@@ -1121,9 +1121,11 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   for (const token of ['isInternalOwnedChipTraffic', 'internal_owned_chip_traffic', 'persisted: false', 'whatsappPhoneVariants', '.neq("instances_id", instanceId)']) {
     if (!webhook39.includes(token)) fail(`fix39_trafego_interno_filtro_incompleto:${token}`);
   }
-  const discardAt = webhook39.indexOf('if (await isInternalOwnedChipTraffic');
+  const discardAt = webhook39.indexOf('isInternalOwnedChipTraffic(admin');
   const receiptAt = webhook39.indexOf('admin.from("evolution_webhook_receipts").insert');
   if (discardAt < 0 || receiptAt < 0 || discardAt > receiptAt) fail('fix39_trafego_interno_filtrado_depois_da_persistencia');
+  if (!webhook39.includes('internal_owned_chip_traffic_classifier_failed')) fail('fix46_classificador_sem_fail_open');
+  if (!webhook39.includes('MESSAGE_EVENTS.has(event)')) fail('fix46_message_events_sem_set_has');
 
   const fix39Sql = 'APLICAR - CRM R59 BUILD FIX 39 - Aprovado e trafego interno entre chips.sql';
   if (!exists(fix39Sql)) fail('fix39_sql_ausente');
@@ -1200,7 +1202,7 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
 // R59 BUILD FIX 45: tráfego normal entre chips próprios nunca pode ser confundido com aquecimento.
 {
   const webhook45 = read('supabase/functions/evolution-connection-webhook/index.ts');
-  for (const token of ['INTERNAL_CHIP_WARMUP_MARKER', 'messageBody(item).includes(INTERNAL_CHIP_WARMUP_MARKER)', 'if (!MESSAGE_EVENTS.includes(event)) return false', 'internal_owned_chip_traffic']) {
+  for (const token of ['INTERNAL_CHIP_WARMUP_MARKER', 'messageBody(item).includes(INTERNAL_CHIP_WARMUP_MARKER)', 'if (!MESSAGE_EVENTS.has(event)) return false', 'internal_owned_chip_traffic']) {
     if (!webhook45.includes(token)) fail(`fix45_webhook_sem_protecao_seletiva:${token}`);
   }
   if (webhook45.includes('if (![...MESSAGE_EVENTS, ...STATUS_EVENTS, ...CHAT_EVENTS].includes(event)) return false')) fail('fix45_filtro_amplo_ainda_presente');

@@ -353,7 +353,7 @@ async function isInternalOwnedChipTraffic(admin: ReturnType<typeof createClient>
   // FIX45: dois chips pertencerem à mesma organização NÃO basta para descartar a
   // mensagem. Tráfego normal entre chips próprios precisa continuar aparecendo em
   // Conversas. Só descartamos mensagens produzidas pelo Worker de aquecimento.
-  if (!MESSAGE_EVENTS.includes(event)) return false;
+  if (!MESSAGE_EVENTS.has(event)) return false;
   const organizationId = Number(instanceRow.organizations_id ?? 0);
   const instanceId = Number(instanceRow.instances_id ?? 0);
   if (!organizationId || !instanceId) return false;
@@ -442,7 +442,15 @@ Deno.serve(async (request: Request) => {
   // Somente mensagens marcadas pelo Worker de aquecimento e trocadas entre chips
   // próprios são descartadas. Mensagens normais entre chips da organização seguem
   // o pipeline canônico e aparecem em Conversas.
-  if (await isInternalOwnedChipTraffic(admin, row(instanceRow), event, payload)) {
+  // O classificador de aquecimento nunca pode interromper o recebimento normal.
+  // Em caso de qualquer falha técnica, seguimos pelo pipeline canônico (fail-open).
+  let internalOwnedChipTraffic = false;
+  try {
+    internalOwnedChipTraffic = await isInternalOwnedChipTraffic(admin, row(instanceRow), event, payload);
+  } catch (error) {
+    console.error("internal_owned_chip_traffic_classifier_failed", error);
+  }
+  if (internalOwnedChipTraffic) {
     return jsonResponse({ ok: true, event, ignored: true, reason: "internal_owned_chip_traffic", persisted: false });
   }
 
