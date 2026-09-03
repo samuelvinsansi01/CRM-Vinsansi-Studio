@@ -1197,4 +1197,13 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   if (!repo43.includes(".from('channels')")) fail('fix43_catalogo_canais_nao_preservado');
 }
 
+// R59 BUILD FIX 45: tráfego normal entre chips próprios nunca pode ser confundido com aquecimento.
+{
+  const webhook45 = read('supabase/functions/evolution-connection-webhook/index.ts');
+  for (const token of ['INTERNAL_CHIP_WARMUP_MARKER', 'messageBody(item).includes(INTERNAL_CHIP_WARMUP_MARKER)', 'if (!MESSAGE_EVENTS.includes(event)) return false', 'internal_owned_chip_traffic']) {
+    if (!webhook45.includes(token)) fail(`fix45_webhook_sem_protecao_seletiva:${token}`);
+  }
+  if (webhook45.includes('if (![...MESSAGE_EVENTS, ...STATUS_EVENTS, ...CHAT_EVENTS].includes(event)) return false')) fail('fix45_filtro_amplo_ainda_presente');
+}
+
 console.log('CRM R59 final contract + homologacao: OK');

@@ -345,11 +345,21 @@ function whatsappPhoneVariants(value: unknown) {
   return variants;
 }
 
+// Marcador invisível exclusivo do Worker de aquecimento. Ele não é persistido:
+// o webhook testa a mensagem antes de criar recibo/conversa/mensagem.
+const INTERNAL_CHIP_WARMUP_MARKER = "\u2063\u200B\u200C\u2063";
+
 async function isInternalOwnedChipTraffic(admin: ReturnType<typeof createClient>, instanceRow: Row, event: string, payload: Row) {
-  if (![...MESSAGE_EVENTS, ...STATUS_EVENTS, ...CHAT_EVENTS].includes(event)) return false;
+  // FIX45: dois chips pertencerem à mesma organização NÃO basta para descartar a
+  // mensagem. Tráfego normal entre chips próprios precisa continuar aparecendo em
+  // Conversas. Só descartamos mensagens produzidas pelo Worker de aquecimento.
+  if (!MESSAGE_EVENTS.includes(event)) return false;
   const organizationId = Number(instanceRow.organizations_id ?? 0);
   const instanceId = Number(instanceRow.instances_id ?? 0);
   if (!organizationId || !instanceId) return false;
+
+  const rows = eventRows(payload);
+  if (!rows.some((item) => messageBody(item).includes(INTERNAL_CHIP_WARMUP_MARKER))) return false;
 
   const current = await admin.from("chips")
     .select("chips_id,chips_phone")
@@ -368,7 +378,9 @@ async function isInternalOwnedChipTraffic(admin: ReturnType<typeof createClient>
   for (const peer of peers.data ?? []) for (const variant of whatsappPhoneVariants(peer.chips_phone)) peerVariants.add(variant);
   if (!peerVariants.size) return false;
 
-  const contactRows = eventRows(payload).map((item) => remoteJid(item)).filter(Boolean);
+  const markedRows = rows.filter((item) => messageBody(item).includes(INTERNAL_CHIP_WARMUP_MARKER));
+  if (!markedRows.length) return false;
+  const contactRows = markedRows.map((item) => remoteJid(item)).filter(Boolean);
   if (!contactRows.length) return false;
   return contactRows.every((jid) => [...whatsappPhoneVariants(jid)].some((variant) => peerVariants.has(variant)));
 }
@@ -427,9 +439,9 @@ Deno.serve(async (request: Request) => {
   const event = rawEvent === "message" ? "messages_upsert" : rawEvent === "sendmessage" ? "send_message" : rawEvent;
   if (!event) return jsonResponse({ error: "Evento ausente." }, 422);
 
-  // Tráfego entre dois chips pertencentes à própria organização é operacional interno.
-  // Ele é descartado ANTES do recibo de webhook para que texto/raw payload não entre
-  // em evolution_webhook_receipts, conversations ou conversation_messages.
+  // Somente mensagens marcadas pelo Worker de aquecimento e trocadas entre chips
+  // próprios são descartadas. Mensagens normais entre chips da organização seguem
+  // o pipeline canônico e aparecem em Conversas.
   if (await isInternalOwnedChipTraffic(admin, row(instanceRow), event, payload)) {
     return jsonResponse({ ok: true, event, ignored: true, reason: "internal_owned_chip_traffic", persisted: false });
   }
