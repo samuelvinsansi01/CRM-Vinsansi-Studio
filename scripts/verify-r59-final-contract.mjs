@@ -1176,4 +1176,25 @@ if (!executorRuntimeFix21.includes("'chips','levels','instances'")) fail('runtim
   }
 }
 
+
+// R59 BUILD FIX 43: "sem_destino" permanece técnico e nunca aparece como canal de envio selecionável.
+{
+  const catalog43 = read('src/pages/CatalogCrudPage.tsx');
+  for (const token of ['isDeliveryChannelOption', 'channels={deliveryChannels}', 'const deliveryChannels = useMemo']) {
+    if (!catalog43.includes(token)) fail(`fix43_canais_selecionaveis_incompleto:${token}`);
+  }
+
+  const repo43 = read('src/repositories/configuration/configuration.repository.ts');
+  for (const token of [
+    "const DELIVERY_CHANNEL_NAMES = new Set(['whatsapp', 'instagram'])",
+    'export function isDeliveryChannelOption',
+    'await assertDeliveryChannelId(channelId)',
+    'if (defaultChannelId != null) await assertDeliveryChannelId(defaultChannelId)',
+    '"Sem destino" é apenas um valor técnico interno.',
+  ]) {
+    if (!repo43.includes(token)) fail(`fix43_protecao_canal_envio_incompleta:${token}`);
+  }
+  if (!repo43.includes(".from('channels')")) fail('fix43_catalogo_canais_nao_preservado');
+}
+
 console.log('CRM R59 final contract + homologacao: OK');

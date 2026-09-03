@@ -4,6 +4,29 @@ import { getCurrentUserId, nowIso } from '../supabase.helpers';
 export type StatusOption = { id: string; name: string };
 export type ChannelOption = { id: string; name: string };
 
+const DELIVERY_CHANNEL_NAMES = new Set(['whatsapp', 'instagram']);
+
+function normalizeChannelChoice(value: unknown) {
+  return text(value).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+}
+
+export function isDeliveryChannelOption(option: ChannelOption) {
+  return DELIVERY_CHANNEL_NAMES.has(normalizeChannelChoice(option.name));
+}
+
+async function assertDeliveryChannelId(channelId: number) {
+  if (!Number.isSafeInteger(channelId) || channelId <= 0) throw new Error('Canal de envio inválido.');
+  const { data, error } = await getSupabaseClient()
+    .from('channels')
+    .select('channels_name')
+    .eq('channels_id', channelId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data || !DELIVERY_CHANNEL_NAMES.has(normalizeChannelChoice((data as Row).channels_name))) {
+    throw new Error('Selecione um canal de envio válido: WhatsApp ou Instagram. "Sem destino" é apenas um valor técnico interno.');
+  }
+}
+
 type LevelLimitValidation = {
   allowed?: boolean;
   message?: string;
@@ -259,10 +282,12 @@ export async function createCatalogRecord(kind: CatalogKind, input: Record<strin
     const name = text(input.name).trim();
     const key = normalizedKey(input.key || name);
     if (!name || !key) throw new Error('Nome e chave da fonte são obrigatórios.');
+    const defaultChannelId = text(input.defaultChannelId) ? Number(input.defaultChannelId) : null;
+    if (defaultChannelId != null) await assertDeliveryChannelId(defaultChannelId);
     const { error } = await client.from('contact_sources').insert({
       users_id: usersId, status_id: statusId, contact_sources_name: name, contact_sources_key: key,
       contact_sources_requires_review: bool(input.requiresReview, true),
-      contact_sources_default_channel_id: text(input.defaultChannelId) ? Number(input.defaultChannelId) : null,
+      contact_sources_default_channel_id: defaultChannelId,
     });
     if (error) throw new Error(error.message);
     return;
@@ -273,6 +298,7 @@ export async function createCatalogRecord(kind: CatalogKind, input: Record<strin
     const channelId = Number(input.channelId);
     const dailyLimit = Math.max(1, number(input.dailyLimit, 1));
     if (!name || !Number.isSafeInteger(channelId)) throw new Error('Nome e canal do nível são obrigatórios.');
+    await assertDeliveryChannelId(channelId);
     const { error } = await client.from('levels').insert({
       users_id: usersId, channels_id: channelId, status_id: statusId, levels_name: name,
       levels_daily_limit: dailyLimit, levels_queues: text(input.queues) ? Math.max(1, number(input.queues, 1)) : null,
@@ -330,10 +356,12 @@ export async function updateCatalogRecord(kind: CatalogKind, id: string, input: 
   if (kind === 'contact_sources') {
     const name = text(input.name).trim();
     const key = normalizedKey(input.key || name);
+    const defaultChannelId = text(input.defaultChannelId) ? Number(input.defaultChannelId) : null;
+    if (defaultChannelId != null) await assertDeliveryChannelId(defaultChannelId);
     const { error } = await client.from('contact_sources').update({
       status_id: statusId, contact_sources_name: name, contact_sources_key: key,
       contact_sources_requires_review: bool(input.requiresReview, true),
-      contact_sources_default_channel_id: text(input.defaultChannelId) ? Number(input.defaultChannelId) : null,
+      contact_sources_default_channel_id: defaultChannelId,
       contact_sources_updated_at: nowIso(),
     }).eq('contact_sources_id', numericId).eq('users_id', usersId);
     if (error) throw new Error(error.message);
@@ -342,9 +370,11 @@ export async function updateCatalogRecord(kind: CatalogKind, id: string, input: 
 
   if (kind === 'levels') {
     const newDailyLimit = Math.max(1, number(input.dailyLimit, 1));
+    const channelId = Number(input.channelId);
+    await assertDeliveryChannelId(channelId);
     await assertLevelDailyLimitChangeAllowed(numericId, newDailyLimit);
     const { error } = await client.from('levels').update({
-      status_id: statusId, levels_name: text(input.name).trim(), channels_id: Number(input.channelId),
+      status_id: statusId, levels_name: text(input.name).trim(), channels_id: channelId,
       levels_daily_limit: newDailyLimit,
       levels_queues: text(input.queues) ? Math.max(1, number(input.queues, 1)) : null,
       levels_updated_at: nowIso(),

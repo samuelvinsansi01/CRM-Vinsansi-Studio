@@ -26,6 +26,7 @@ import { useClientPagination } from '../hooks/useClientPagination';
 import { syncEvolutionInstances } from '../services/evolution-instances/evolutionInstances.service';
 import {
   listChannelOptions,
+  isDeliveryChannelOption,
   type CatalogKind,
   type CatalogRecord,
   type ChannelOption,
@@ -288,6 +289,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
     void listChannelOptions().then(setChannels).catch(() => setChannels([]));
   }, []);
 
+  const deliveryChannels = useMemo(() => channels.filter(isDeliveryChannelOption), [channels]);
   const rows = useMemo(() => filteredRecords.map((record) => rowFor(record, channels)), [channels, filteredRecords]);
   const { page, setPage, rowsPerPage, setRowsPerPage, totalPages, pageItems, resetPage } = useClientPagination(rows, 20);
   const activeCount = records.filter((record) => record.active).length;
@@ -452,7 +454,7 @@ export function CatalogCrudPage({ kind }: CatalogCrudPageProps) {
           </>
         )}
       >
-        <CatalogForm kind={kind} form={form} channels={channels} onChange={(key, value) => setForm((current) => ({ ...current, [key]: value }))} />
+        <CatalogForm kind={kind} form={form} channels={deliveryChannels} onChange={(key, value) => setForm((current) => ({ ...current, [key]: value }))} />
       </Drawer>
 
       <ConfirmDialog
