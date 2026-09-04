@@ -11,7 +11,9 @@ export default async function handler(req:Stage5Request,res:Stage5Response){
     const messageType=text(input.messageType)||'text';
     if(messageType!=='text'||text(input.mediaStoragePath)||text(input.mediaMimeType)||text(input.mediaFileName)||input.mediaSizeBytes!==undefined&&input.mediaSizeBytes!==null)throw new Error('media_disabled_text_only');
     const prepared=record(await rpc(scope,'service_stage5_prepare_manual_message',{p_conversations_id:integer(input.conversationId,'conversation_id_required'),p_expected_version:integer(input.expectedVersion,'conversation_version_required'),p_client_idempotency_key:text(input.idempotencyKey),p_message_body:text(input.body)||null,p_message_type:'text',p_media_storage_path:null,p_media_mime_type:null,p_media_file_name:null,p_media_size_bytes:null}));
-    if(prepared.idempotent===true&&['sent','delivered','read','reconciliation_required'].includes(text(prepared.status)))return send(res,200,{ok:true,prepared,command:null});
+    // A mesma idempotency key nunca volta ao provider. Se a primeira tentativa já
+    // criou a mensagem (qualquer status), devolvemos o estado canônico e command=null.
+    if(prepared.idempotent===true)return send(res,['pending','sending','reconciliation_required'].includes(text(prepared.status))?202:200,{ok:true,prepared,command:null});
     const conversationId=integer(input.conversationId,'conversation_id_required') as number;
     const command=await evolutionCommand(scope,integer(prepared.instancesId,'conversation_instance_required') as number);
     const recipient=await providerRecipientForConversation(scope,conversationId,text(prepared.recipient));

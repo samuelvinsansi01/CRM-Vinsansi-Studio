@@ -32,15 +32,30 @@ const stage = (value: unknown): CommercialStage | null => {
   return stageSet.has(normalized) ? normalized as CommercialStage : null;
 };
 
-async function authorizedHeaders(contentType = false) {
-  const session = await getSupabaseClient().auth.getSession();
+async function accessToken(forceRefresh = false) {
+  const client = getSupabaseClient();
+  const session = forceRefresh ? await client.auth.refreshSession() : await client.auth.getSession();
   if (session.error) throw new Error(session.error.message);
   const token = session.data.session?.access_token;
   if (!token) throw new Error('Sessão expirada. Entre novamente.');
-  return organizationRequestHeaders({
-    ...(contentType ? { 'Content-Type': 'application/json' } : {}),
-    Authorization: `Bearer ${token}`,
-  });
+  return token;
+}
+
+async function authorizedFetch(input: RequestInfo | URL, init: RequestInit = {}) {
+  const call = async (token: string) => {
+    const headers = new Headers(init.headers ?? {});
+    headers.set('Authorization', `Bearer ${token}`);
+    if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+    const organizationHeaders = organizationRequestHeaders(Object.fromEntries(headers.entries()));
+    return fetch(input, { ...init, headers: organizationHeaders });
+  };
+
+  const first = await call(await accessToken(false));
+  if (first.status !== 401) return first;
+
+  // Uma única renovação + repetição da MESMA requisição. O body/idempotencyKey
+  // já foi materializado pelo chamador, então o retry não cria outro envio.
+  return call(await accessToken(true));
 }
 
 async function parseCommercialResponse(response: Response): Promise<ConversationCommercialContext> {
@@ -74,9 +89,8 @@ async function parseCommercialResponse(response: Response): Promise<Conversation
 }
 
 export async function sendConversationMessage(conversationId: string, message: string, idempotencyKey = crypto.randomUUID()): Promise<SendResult> {
-  const response = await fetch('/api/whatsapp/conversation-send', {
+  const response = await authorizedFetch('/api/whatsapp/conversation-send', {
     method: 'POST',
-    headers: await authorizedHeaders(true),
     body: JSON.stringify({ conversationId: Number(conversationId), body: message, idempotencyKey }),
   });
   const payload = await response.json().catch(() => null) as SendResult | null;
@@ -88,26 +102,21 @@ export async function sendConversationMessage(conversationId: string, message: s
 }
 
 export async function getConversationCommercial(conversationId: string): Promise<ConversationCommercialContext> {
-  const response = await fetch(`/api/whatsapp/conversation-commercial?conversationId=${encodeURIComponent(conversationId)}`, {
-    method: 'GET',
-    headers: await authorizedHeaders(),
-  });
+  const response = await authorizedFetch(`/api/whatsapp/conversation-commercial?conversationId=${encodeURIComponent(conversationId)}`, { method: 'GET' });
   return parseCommercialResponse(response);
 }
 
 export async function setConversationCommercialStage(conversationId: string, nextStage: CommercialStage): Promise<ConversationCommercialContext> {
-  const response = await fetch('/api/whatsapp/conversation-commercial', {
+  const response = await authorizedFetch('/api/whatsapp/conversation-commercial', {
     method: 'POST',
-    headers: await authorizedHeaders(true),
     body: JSON.stringify({ action: 'stage', conversationId: Number(conversationId), stage: nextStage }),
   });
   return parseCommercialResponse(response);
 }
 
 export async function setConversationPreviewDueDate(conversationId: string, previewDueDate: string | null): Promise<ConversationCommercialContext> {
-  const response = await fetch('/api/whatsapp/conversation-commercial', {
+  const response = await authorizedFetch('/api/whatsapp/conversation-commercial', {
     method: 'POST',
-    headers: await authorizedHeaders(true),
     body: JSON.stringify({ action: 'preview_due_date', conversationId: Number(conversationId), previewDueDate: previewDueDate || null }),
   });
   return parseCommercialResponse(response);

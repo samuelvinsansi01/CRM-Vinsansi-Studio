@@ -47,7 +47,7 @@ export async function rpc(scope:HumanScope,name:string,args:Row){const result=aw
 export function status(error:unknown){const message=error instanceof Error?error.message:String(error);
   if(/auth_required|auth_invalid/.test(message))return 401;
   if(/permission_denied|membership_required|assigned_to_other|transfer_target/.test(message))return 403;
-  if(/version_conflict|assignment_conflict|idempotency_conflict|requires_reconciliation|already_sent/.test(message))return 409;
+  if(/version_conflict|assignment_conflict|idempotency_conflict|requires_reconciliation|already_sent|in_progress/.test(message))return 409;
   if(/not_found/.test(message))return 404;
   if(/required|invalid|not_safely|archived|media_disabled/.test(message))return 400;
   if(/not_configured/.test(message))return 503;

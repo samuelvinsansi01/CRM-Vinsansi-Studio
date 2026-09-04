@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, CalendarDays, Check, CheckCheck, Clock3, Inbox
 import { Button, Field, Panel, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
+import { getSupabaseClient } from '../lib/supabase';
 import {
   listChatChips, listConversationMessages, listConversationUnreadCounts, listConversations, markConversationRead, setConversationArchived,
   type ChatChip, type Conversation, type ConversationMessage,
@@ -82,7 +83,7 @@ function commercialStageOptions(context: ConversationCommercialContext) {
 }
 
 export function ConversationsPage() {
-  const { hasPermission } = useOrganizationContext();
+  const { hasPermission, organizationId } = useOrganizationContext();
   const canReply = hasPermission('whatsapp.reply');
   const canEditLeads = hasPermission('leads.edit');
   const [chips, setChips] = useState<ChatChip[]>([]);
@@ -218,9 +219,43 @@ export function ConversationsPage() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refresh(true);
-    }, 5_000);
+    }, 30_000);
     return () => window.clearInterval(timer);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!organizationId) return;
+    const client = getSupabaseClient();
+    let cancelled = false;
+    let channel: ReturnType<typeof client.channel> | null = null;
+    let timer: number | null = null;
+    const scheduleRefresh = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (!cancelled && document.visibilityState === 'visible') void refresh(true);
+      }, 120);
+    };
+
+    void (async () => {
+      // Realtime não transporta o header HTTP do tenant; sincronizamos o mesmo
+      // contexto persistente usado pelo Gerenciador antes de assinar.
+      const active = await client.rpc('set_active_organization', { p_organizations_id: Number(organizationId) });
+      if (cancelled || active.error) return;
+      const filter = `organizations_id=eq.${organizationId}`;
+      channel = client.channel(`crm-conversations-${organizationId}-${Date.now()}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations', filter }, scheduleRefresh)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations', filter }, scheduleRefresh)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_messages', filter }, scheduleRefresh)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_messages', filter }, scheduleRefresh);
+      channel.subscribe();
+    })();
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+      if (channel) void client.removeChannel(channel);
+    };
+  }, [organizationId, refresh]);
 
   useEffect(() => {
     if (!threadRef.current) return;
