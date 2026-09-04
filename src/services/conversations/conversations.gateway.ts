@@ -74,10 +74,10 @@ async function parseCommercialResponse(response: Response): Promise<Conversation
 }
 
 export async function sendConversationMessage(conversationId: string, message: string, idempotencyKey = crypto.randomUUID()): Promise<SendResult> {
-  const response = await fetch('/api/chat/send', {
+  const response = await fetch('/api/whatsapp/conversation-send', {
     method: 'POST',
     headers: await authorizedHeaders(true),
-    body: JSON.stringify({ conversation_id: Number(conversationId), message, idempotency_key: idempotencyKey }),
+    body: JSON.stringify({ conversationId: Number(conversationId), body: message, idempotencyKey }),
   });
   const payload = await response.json().catch(() => null) as SendResult | null;
   if (!response.ok || !payload?.ok) {

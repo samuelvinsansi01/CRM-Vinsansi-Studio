@@ -1,209 +1,141 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { organizationScopedAuthHeaders, resolveOrganizationContext, type OrganizationAuthContext } from '../../../organization/context.js';
+import {
+  body,
+  evolutionCommand,
+  failure,
+  humanScope,
+  integer,
+  providerRecipientForConversation,
+  record,
+  rpc,
+  send,
+  text,
+  type Stage5Request,
+  type Stage5Response,
+} from '../../../whatsapp/stage5.js';
 
-type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
-type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void };
-type Row = Record<string, unknown>;
-declare const process: { env: Record<string, string | undefined> };
+type ProviderError = Error & { explicit?: boolean };
 
 export const maxDuration = 45;
 
-function envAny(...names: string[]) {
-  for (const name of names) {
-    const value = process.env[name];
-    if (String(value ?? '').trim()) return String(value).trim();
-  }
-  return '';
+function externalMessageId(payload: Record<string, unknown>) {
+  return text(payload.messageId || payload.id || payload.externalMessageId || payload.external_id);
 }
 
-function bodyRecord(body: unknown): Row {
-  if (typeof body === 'string') {
-    try { return JSON.parse(body) as Row; } catch { return {}; }
-  }
-  return body && typeof body === 'object' && !Array.isArray(body) ? body as Row : {};
-}
-
-function header(req: ApiRequest, name: string) {
-  const key = Object.keys(req.headers ?? {}).find((item) => item.toLowerCase() === name.toLowerCase());
-  const value = key ? req.headers?.[key] : undefined;
-  return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '');
-}
-
-function bearer(req: ApiRequest) {
-  return header(req, 'authorization').match(/^Bearer\s+(.+)$/i)?.[1]?.trim() ?? '';
-}
-
-function send(res: ApiResponse, status: number, payload: unknown) {
-  res.setHeader('Cache-Control', 'no-store');
-  return res.status(status).json(payload);
-}
-
-function text(value: unknown) { return String(value ?? '').trim(); }
-function row(value: unknown): Row { return value && typeof value === 'object' && !Array.isArray(value) ? value as Row : {}; }
-
-async function auth(req: ApiRequest): Promise<OrganizationAuthContext> {
-  const token = bearer(req);
-  const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const key = envAny('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY', 'VITE_SUPABASE_PUBLISHABLE_KEY');
-  if (!token) throw new Error('auth_required');
-  if (!url || !key) throw new Error('supabase_auth_backend_not_configured');
-  const client = createClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: { headers: organizationScopedAuthHeaders(token, req.headers) },
-  });
-  const authResult = await client.auth.getUser(token);
-  if (authResult.error || !authResult.data.user) throw new Error('auth_invalid');
-  const context = await resolveOrganizationContext(client);
-  const allowed = await client.rpc('has_organization_permission', { p_permission_key: 'whatsapp.reply' });
-  if (allowed.error || allowed.data !== true) throw new Error('whatsapp_reply_permission_denied');
-  return context;
-}
-
-function serviceClient(): SupabaseClient {
-  const url = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
-  const key = envAny('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !key) throw new Error('chat_backend_not_configured');
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
-
-function externalMessageId(payload: unknown) {
-  const root = row(payload);
-  const data = row(root.data);
-  const key = row(root.key);
-  const dataKey = row(data.key);
-  const message = row(root.message);
-  const messageKey = row(message.key);
-  return text(key.id ?? dataKey.id ?? messageKey.id ?? root.messageId ?? data.messageId ?? root.id ?? data.id);
-}
-
-async function evolutionSend(url: string, instanceName: string, apiKey: string, recipient: string, message: string) {
+async function gatewaySend(instanceUrl: string, instanceName: string, apiKey: string, recipient: string, message: string) {
+  if (!instanceUrl || !instanceName || !apiKey || !recipient) throw new Error('chat_gateway_command_invalid');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
-    const response = await fetch(`${url.replace(/\/$/, '')}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/messages/text`, {
+    const endpoint = `${instanceUrl.replace(/\/$/, '')}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/messages/text`;
+    const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', apikey: apiKey },
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', apikey: apiKey },
       body: JSON.stringify({ number: recipient, text: message, delay: 0 }),
       signal: controller.signal,
     });
     const raw = await response.text();
-    let payload: unknown = null;
-    try { payload = raw ? JSON.parse(raw) : null; } catch { payload = { raw }; }
+    let payload: Record<string, unknown> = {};
+    try { payload = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch { payload = { raw }; }
     if (!response.ok) {
-      const detail = text(row(payload).message ?? row(payload).error ?? raw ?? `evolution_http_${response.status}`);
-      const error = new Error(detail || `evolution_http_${response.status}`) as Error & { explicit?: boolean; payload?: unknown };
+      const error = new Error(String(payload.error || payload.message || `gateway_http_${response.status}`)) as ProviderError;
       error.explicit = true;
-      error.payload = payload;
       throw error;
     }
-    return { payload, externalId: externalMessageId(payload) };
+    const id = externalMessageId(payload);
+    if (!id) throw new Error('chat_gateway_provider_id_missing');
+    return { externalMessageId: id, payload };
+  } catch (error) {
+    if ((error as { name?: string })?.name === 'AbortError') throw new Error('chat_gateway_timeout_uncertain');
+    throw error;
   } finally {
     clearTimeout(timer);
   }
 }
 
-export default async function handler(req: ApiRequest, res: ApiResponse) {
+export default async function handler(req: Stage5Request, res: Stage5Response) {
   if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method_not_allowed' });
-  let context: OrganizationAuthContext | null = null;
-  let messageId = 0;
-  let admin: SupabaseClient | null = null;
   try {
-    const body = bodyRecord(req.body);
-    const conversationId = Number(body.conversation_id ?? body.conversations_id ?? 0);
-    const message = text(body.message ?? body.body ?? body.text);
-    const idempotencyKey = text(body.idempotency_key ?? body.client_idempotency_key);
-    if (!Number.isSafeInteger(conversationId) || conversationId <= 0) return send(res, 400, { ok: false, error: 'conversation_id_required' });
-    if (!message || message.length > 4096) return send(res, 400, { ok: false, error: 'message_body_invalid' });
+    const input = body(req);
+    const scope = await humanScope(req, 'whatsapp.reply');
+    const conversationId = integer(input.conversation_id ?? input.conversations_id ?? input.conversationId, 'conversation_id_required') as number;
+    const message = text(input.message ?? input.body ?? input.text);
+    const idempotencyKey = text(input.idempotency_key ?? input.client_idempotency_key ?? input.idempotencyKey);
+    if (!message || message.length > 4096) throw new Error('message_body_invalid');
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idempotencyKey)) {
-      return send(res, 400, { ok: false, error: 'idempotency_key_uuid_required' });
+      throw new Error('idempotency_key_uuid_required');
     }
 
-    context = await auth(req);
-    admin = serviceClient();
-    const prepared = await admin.rpc('service_prepare_outgoing_chat_message', {
-      p_users_id: context.scopeUsersId,
+    const currentConversation = await scope.admin
+      .from('conversations')
+      .select('conversation_version')
+      .eq('organizations_id', scope.context.organizationId)
+      .eq('conversations_id', conversationId)
+      .maybeSingle();
+    if (currentConversation.error) throw new Error(currentConversation.error.message);
+    if (!currentConversation.data) throw new Error('conversation_not_found');
+
+    const expectedVersion = integer(currentConversation.data.conversation_version, 'conversation_version_required') as number;
+    const prepared = record(await rpc(scope, 'service_stage5_prepare_manual_message', {
       p_conversations_id: conversationId,
-      p_message_body: message,
+      p_expected_version: expectedVersion,
       p_client_idempotency_key: idempotencyKey,
-    });
-    if (prepared.error) throw new Error(prepared.error.message);
-    const candidate = Array.isArray(prepared.data) ? row(prepared.data[0]) : row(prepared.data);
-    messageId = Number(candidate.conversation_messages_id ?? 0);
-    if (!messageId) throw new Error('chat_outgoing_prepare_empty');
+      p_message_body: message,
+      p_message_type: 'text',
+      p_media_storage_path: null,
+      p_media_mime_type: null,
+      p_media_file_name: null,
+      p_media_size_bytes: null,
+    }));
 
-    if (context.memberId) {
-      const attribution = await admin.from('conversation_messages').update({
-        organizations_id: context.organizationId,
-        sent_by_member_id: context.memberId,
-        executed_by: 'member',
-      }).eq('conversation_messages_id', messageId).eq('users_id', context.scopeUsersId);
-      if (attribution.error) throw new Error(`chat_attribution_failed:${attribution.error.message}`);
-      await admin.from('conversations').update({
-        last_replied_by_member_id: context.memberId,
-      }).eq('conversations_id', conversationId).eq('users_id', context.scopeUsersId);
+    const messageId = integer(prepared.messageId, 'message_id_required') as number;
+    const currentStatus = text(prepared.status);
+    if (prepared.idempotent === true && ['sent', 'delivered', 'read'].includes(currentStatus)) {
+      return send(res, 200, { ok: true, idempotent: true, message_id: messageId, status: currentStatus });
     }
-
-    const currentStatus = text(candidate.message_status);
-    if (['sent', 'delivered', 'read'].includes(currentStatus)) {
-      return send(res, 200, { ok: true, idempotent: true, message_id: messageId, external_message_id: candidate.external_message_id, status: currentStatus });
-    }
-    if (currentStatus === 'reconciliation_required') {
+    if (prepared.idempotent === true && ['sending', 'reconciliation_required'].includes(currentStatus)) {
       return send(res, 409, { ok: false, error: 'chat_message_requires_reconciliation', message_id: messageId });
     }
 
-    const instanceUrl = text(candidate.instance_url);
-    const instanceName = text(candidate.instance_name);
-    const apiKey = text(candidate.api_key);
-    const recipient = text(candidate.recipient).replace(/\D/g, '');
-    if (!instanceUrl || !instanceName || !apiKey || !recipient) throw new Error('chat_evolution_credentials_or_recipient_missing');
-
-    const sending = await admin.from('conversation_messages').update({
-      message_status: 'sending', conversation_messages_updated_at: new Date().toISOString(), error_message: null,
-    }).eq('conversation_messages_id', messageId).eq('users_id', context.scopeUsersId);
-    if (sending.error) throw new Error(sending.error.message);
+    await rpc(scope, 'service_stage5_report_manual_message', {
+      p_conversation_messages_id: messageId,
+      p_status: 'sending',
+      p_external_message_id: null,
+      p_error_message: null,
+      p_provider_payload: {},
+    });
 
     try {
-      const evolution = await evolutionSend(instanceUrl, instanceName, apiKey, recipient, message);
-      const completed = await admin.rpc('service_complete_outgoing_chat_message', {
-        p_users_id: context.scopeUsersId,
+      const command = await evolutionCommand(scope, integer(prepared.instancesId, 'conversation_instance_required') as number);
+      const recipient = await providerRecipientForConversation(scope, conversationId, text(prepared.recipient));
+      if (!recipient) throw new Error('conversation_recipient_not_found');
+      const sent = await gatewaySend(text(command.instanceUrl), text(command.instanceName), text(command.apiKey), recipient, message);
+      const completed = record(await rpc(scope, 'service_stage5_report_manual_message', {
         p_conversation_messages_id: messageId,
         p_status: 'sent',
-        p_external_message_id: evolution.externalId || null,
-        p_raw_payload: evolution.payload ?? {},
+        p_external_message_id: sent.externalMessageId,
         p_error_message: null,
+        p_provider_payload: sent.payload,
+      }));
+      return send(res, 200, {
+        ok: true,
+        message_id: Number(completed.messageId ?? messageId),
+        external_message_id: text(completed.externalMessageId || sent.externalMessageId) || null,
+        status: text(completed.status) || 'sent',
       });
-      if (completed.error) throw new Error(completed.error.message);
-      return send(res, 200, { ok: true, message_id: Number(completed.data ?? messageId), external_message_id: evolution.externalId || null, status: 'sent' });
     } catch (error) {
-      const explicit = Boolean((error as Error & { explicit?: boolean }).explicit);
-      const status = explicit ? 'failed' : 'reconciliation_required';
-      const errorMessage = error instanceof DOMException && error.name === 'AbortError'
-        ? 'Tempo limite ao enviar pela Evolution; confirme a entrega antes de tentar novamente.'
-        : error instanceof Error ? error.message : 'Falha ao enviar pela Evolution.';
-      const rawPayload = (error as Error & { payload?: unknown }).payload ?? {};
-      const completed = await admin.rpc('service_complete_outgoing_chat_message', {
-        p_users_id: context.scopeUsersId,
+      const explicit = Boolean((error as ProviderError).explicit);
+      const nextStatus = explicit ? 'failed' : 'reconciliation_required';
+      const errorMessage = error instanceof Error ? error.message : 'Falha ao enviar pela Evolution.';
+      await rpc(scope, 'service_stage5_report_manual_message', {
         p_conversation_messages_id: messageId,
-        p_status: status,
+        p_status: nextStatus,
         p_external_message_id: null,
-        p_raw_payload: rawPayload,
         p_error_message: errorMessage,
-      });
-      if (completed.error) throw new Error(`${errorMessage}; persistence:${completed.error.message}`);
-      return send(res, explicit ? 502 : 409, { ok: false, error: status, message: errorMessage, message_id: messageId });
+        p_provider_payload: {},
+      }).catch(() => undefined);
+      return send(res, explicit ? 502 : 409, { ok: false, error: nextStatus, message: errorMessage, message_id: messageId });
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'chat_send_error';
-    const status = message.includes('auth_') ? 401
-      : message.includes('permission_denied') || message.includes('_permission_denied') || message.includes('not_found') || message.includes('archived') ? 403
-      : message.includes('required') || message.includes('invalid') ? 400
-      : 502;
-    if (admin && context && messageId) {
-      await admin.from('conversation_messages').update({
-        message_status: 'reconciliation_required', error_message: message,
-        conversation_messages_updated_at: new Date().toISOString(),
-      }).eq('conversation_messages_id', messageId).eq('users_id', context.scopeUsersId).eq('message_status', 'sending');
-    }
-    return send(res, status, { ok: false, error: message, message_id: messageId || null });
+    return failure(res, error);
   }
 }

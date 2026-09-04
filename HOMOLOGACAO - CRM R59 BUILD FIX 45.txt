@@ -1,7 +1,0 @@
-CRM R59 BUILD FIX 45 - HOMOLOGAÇÃO
-
-[OK] Filtro de tráfego interno exige marcador de aquecimento.
-[OK] Tráfego normal entre chips próprios não é descartado.
-[OK] Somente MESSAGE_EVENTS são elegíveis ao descarte de aquecimento.
-[OK] O descarte continua antes de evolution_webhook_receipts/conversations/conversation_messages.
-[OK] Sem SQL.

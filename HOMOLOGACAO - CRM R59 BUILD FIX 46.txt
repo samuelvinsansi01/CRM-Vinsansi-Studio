@@ -1,6 +1,0 @@
-CRM R59 BUILD FIX 46 - HOMOLOGAÇÃO
-
-[OK] MESSAGE_EVENTS usa Set.has no classificador de tráfego interno.
-[OK] Falha do classificador é fail-open e não bloqueia ingestão normal.
-[OK] Tráfego de aquecimento marcado continua podendo ser descartado antes da persistência.
-[OK] Nenhuma migration SQL necessária.

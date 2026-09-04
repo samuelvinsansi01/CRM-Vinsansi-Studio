@@ -1,9 +1,0 @@
-MOBILE v0.3.0 — HOMOLOGAÇÃO DO CONTRATO NO CRM
-
-- GET conversation-commercial retorna contractVersion conversation-commercial-v0.3.
-- Retorna previewDueDate e previewDueDateEditable.
-- Estágios: aguardando_resposta, aguardando_previa, previa_enviada, fechado, recusado.
-- POST action=stage usa a mesma RPC comercial do CRM.
-- POST action=preview_due_date usa set_lead_preview_due_date_r59.
-- action=design_due_date continua aceita apenas por compatibilidade com bundles anteriores.
-- Nenhuma chave do Gateway/Evolution é exposta ao cliente mobile.
