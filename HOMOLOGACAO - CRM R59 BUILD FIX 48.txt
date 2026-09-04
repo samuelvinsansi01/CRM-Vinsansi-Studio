@@ -1,8 +1,0 @@
-CRM R59 BUILD FIX 48
-
-Critérios
-- novo ciclo conectado executa stage5_reconcile_instance_after_reconnect_r59;
-- aliases de mensagens inbound são reaproveitados para fundir JID/LID/telefone;
-- nome encontrado apenas como pushName outbound do próprio chip não permanece como contato externo;
-- threads vinculadas a lead continuam priorizando nome alternativo/empresa;
-- última falha chip_disconnected é limpa apenas quando runtime confirma socket conectado.

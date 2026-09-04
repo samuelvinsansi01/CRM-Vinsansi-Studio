@@ -1,0 +1,7 @@
+CRM R59 BUILD FIX 49
+
+Critérios
+- service_prepare_outgoing_chat_message usa alias c.conversations_id;
+- envio não retorna mais ambiguidade de conversations_id;
+- idempotência continua preservada;
+- mensagens outbound continuam convergindo pelo mesmo conversation_messages_id;
