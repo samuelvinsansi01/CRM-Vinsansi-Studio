@@ -1,3 +1,5 @@
+import { getRuntimeConfig } from '../runtimeConfig';
+
 export type SupabaseRuntimeConfig = {
   url: string;
   supabaseKey: string;
@@ -18,8 +20,9 @@ export type SupabaseRuntimeConfig = {
 };
 
 export function getSupabaseConfig(): SupabaseRuntimeConfig {
-  const url = import.meta.env.VITE_SUPABASE_URL ?? '';
-  const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
+  const runtime = getRuntimeConfig();
+  const url = runtime?.supabaseUrl ?? '';
+  const supabaseKey = runtime?.supabasePublishableKey ?? '';
   const isConfigured = Boolean(url && supabaseKey);
 
   return {

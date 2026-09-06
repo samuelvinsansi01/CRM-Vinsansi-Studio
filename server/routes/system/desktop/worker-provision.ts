@@ -62,10 +62,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     const token = bearer(req);
-    const supabaseUrl = envAny('SUPABASE_URL', 'VITE_SUPABASE_URL');
     const cloudflareTunnelToken = envAny('DESKTOP_CLOUDFLARE_TUNNEL_TOKEN');
     if (!token) return send(res, 401, { ok: false, error: 'auth_required' });
-    if (!supabaseUrl || !envAny('SUPABASE_SERVICE_ROLE_KEY') || !cloudflareTunnelToken) {
+    if (!envAny('SUPABASE_URL') || !envAny('SUPABASE_SERVICE_ROLE_KEY') || !cloudflareTunnelToken) {
       return send(res, 503, { ok: false, error: 'worker_provisioning_backend_not_configured' });
     }
 
@@ -101,7 +100,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return send(res, 200, {
       ok: true,
       version: 5,
-      supabaseUrl,
       cloudflareTunnelId: envAny('DESKTOP_CLOUDFLARE_TUNNEL_ID') || DEFAULT_TUNNEL_ID,
       cloudflareTunnelName: envAny('DESKTOP_CLOUDFLARE_TUNNEL_NAME') || DEFAULT_TUNNEL_NAME,
       evolutionPublicUrl: envAny('DESKTOP_EVOLUTION_PUBLIC_URL') || DEFAULT_EVOLUTION_PUBLIC_URL,

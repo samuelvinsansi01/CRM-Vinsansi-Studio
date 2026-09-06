@@ -11,7 +11,7 @@ export function getSupabaseClient(): AppSupabaseClient {
   const config = getSupabaseConfig();
 
   if (!config.isConfigured) {
-    throw new Error('Supabase nao configurado. Defina VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY no arquivo .env.');
+    throw new Error('Supabase nao configurado pelo Control Plane do CRM.');
   }
 
   client = createClient(config.url, config.supabaseKey, {

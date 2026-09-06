@@ -13,6 +13,7 @@ import conversationMedia from './conversation-media.js';
 import conversationSend from './conversation-send.js';
 import conversationCommercial from './conversation-commercial.js';
 import queueOperations from './queue-operations.js';
+import evolutionWebhook from './evolution-webhook.js';
 
 const handlers = {
   batch, dispatch, validate,
@@ -27,6 +28,7 @@ const handlers = {
   'conversation-send': conversationSend,
   'conversation-commercial': conversationCommercial,
   'queue-operations': queueOperations,
+  'evolution-webhook': evolutionWebhook,
 };
 
 export default function whatsappRouter(req: RoutedRequest, res: RoutedResponse) {
