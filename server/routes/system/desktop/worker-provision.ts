@@ -1,3 +1,4 @@
+import { loadPlatformRelease } from '../../../platform/release.js';
 import { exchangePairing, startPairing } from '../../../tools/executor.js';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
@@ -88,7 +89,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const pairing = await startPairing(req, {
       toolId: 'vinsansi_whatsapp_manager', organizationId, externalInstallationId,
       version: String(body.app_version ?? '1.1.0'),
-      capabilities: ['organization.context','member.context','settings.read','presence.heartbeat','activity.report','whatsapp.instances.manage','whatsapp.queue.execute'],
+      capabilities: ['organization.context','member.context','settings.read','presence.heartbeat','activity.report','whatsapp.instances.manage','whatsapp.queue.execute','monitoring.runtime.report'],
     });
     const exchanged = await exchangePairing({ pairingCode: pairing.pairingCode });
     const [encryptedInstallationCredential, encryptedUserSession, encryptedCloudflareTunnelToken] = await Promise.all([
@@ -96,6 +97,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       encryptValue(key, exchanged.userSession),
       encryptValue(key, cloudflareTunnelToken),
     ]);
+
+    const release=await loadPlatformRelease().catch(()=>null);
 
     return send(res, 200, {
       ok: true,
@@ -106,7 +109,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       evolutionTunnelServiceUrl: envAny('DESKTOP_EVOLUTION_SERVICE_URL') || DEFAULT_EVOLUTION_SERVICE_URL,
       workerPublicUrl: envAny('DESKTOP_WORKER_PUBLIC_URL') || DEFAULT_WORKER_PUBLIC_URL,
       workerTunnelServiceUrl: envAny('DESKTOP_WORKER_SERVICE_URL') || DEFAULT_WORKER_SERVICE_URL,
-      cloudflareTunnelImage: envAny('DESKTOP_CLOUDFLARE_IMAGE') || DEFAULT_CLOUDFLARE_IMAGE,
+      cloudflareTunnelImage: release?.components.cloudflared.image || envAny('DESKTOP_CLOUDFLARE_IMAGE') || DEFAULT_CLOUDFLARE_IMAGE,
       cloudflareTunnelContainerName: envAny('DESKTOP_CLOUDFLARE_CONTAINER_NAME') || DEFAULT_CLOUDFLARE_CONTAINER,
       dockerNetworkName: envAny('DESKTOP_DOCKER_NETWORK_NAME') || DEFAULT_DOCKER_NETWORK,
       organizationId,

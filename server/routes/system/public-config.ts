@@ -1,4 +1,5 @@
 import type { RoutedRequest, RoutedResponse } from '../dispatch.js';
+import { loadPlatformRelease } from '../../platform/release.js';
 
 function env(...keys: string[]) {
   for (const key of keys) {
@@ -29,13 +30,18 @@ export default async function handler(req: RoutedRequest, res: RoutedResponse) {
     return res.status(503).json({ ok: false, error: 'control_plane_public_config_incomplete' });
   }
 
+  let platformRelease = null;
+  try { platformRelease = await loadPlatformRelease(); }
+  catch (error) { console.warn('[public-config] platform release unavailable', error instanceof Error ? error.message : String(error)); }
+
   return res.status(200).json({
     ok: true,
-    version: 1,
+    version: 2,
     public: {
       crmWebUrl: crmWebUrl.replace(/\/$/, ''),
       supabaseUrl: supabaseUrl.replace(/\/$/, ''),
       supabasePublishableKey,
     },
+    platformRelease,
   });
 }
