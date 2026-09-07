@@ -4,7 +4,7 @@ import { executorStatus,installationScope } from '../../../tools/executor.js';
 
 const TABLES=new Set([
   'status','lead_status','channels','chips','levels','instances','instance_runtime_states',
-  'queue_items','leads','templates','branches','sents','worker_batches','service_worker_heartbeats',
+  'queue_items','leads','templates','branches','sents','worker_batches',
 ]);
 const GLOBAL_TABLES=new Set(['status','lead_status','channels']);
 const RPCS=new Set([
@@ -112,12 +112,9 @@ export default async function handler(req:ApiRequest,res:ApiResponse){
         args.p_organizations_id=scope.organizationId;
       }
 
-      const result=await scope.client.rpc(name,args);
-      if(result.error)throw new Error(result.error.message);
-
-      // service_worker_heartbeat preserva a tabela histórica worker_heartbeats.
-      // Nesta fase, a identidade de runtime do Worker passa a ser a mesma
-      // instalação raiz do Gerenciador que autenticou a chamada.
+      // Fase 4: platform_runtime_heartbeats é a única fonte canônica de saúde.
+      // O nome service_worker_heartbeat é mantido no contrato do Worker por
+      // compatibilidade, mas a rota não grava mais worker_heartbeats.
       if(name==='service_worker_heartbeat'){
         const runtime=await scope.client.rpc('service_runtime_heartbeat',{
           p_organizations_id:scope.organizationId,
@@ -131,8 +128,11 @@ export default async function handler(req:ApiRequest,res:ApiResponse){
           p_meaningful_activity:false,
         });
         if(runtime.error)throw new Error(runtime.error.message);
+        return send(req,res,200,{ok:true,data:null});
       }
 
+      const result=await scope.client.rpc(name,args);
+      if(result.error)throw new Error(result.error.message);
       return send(req,res,200,{ok:true,data:result.data});
     }
 

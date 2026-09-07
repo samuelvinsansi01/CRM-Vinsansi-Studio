@@ -1,11 +1,12 @@
 import { getSupabaseClient } from '../../lib/supabase';
 
-export type RuntimeComponent = { type:string; key:string; version?:string|null; status:string; lastSeenAt?:string; lastActivityAt?:string|null; metrics?:Record<string,unknown>; metadata?:Record<string,unknown> };
+export type RuntimeComponent = { type:string; key:string; version?:string|null; status:string; storedStatus?:string; lastSeenAt?:string; lastActivityAt?:string|null; ageSeconds?:number; metrics?:Record<string,unknown>; metadata?:Record<string,unknown> };
 
 export type OperationalHealth = {
   checkedAt: string;
   organizationId?: number;
   components: RuntimeComponent[];
+  runtimePolicy: { ttlSeconds:number };
   workers: { online: number; stale: number };
   queues: { pending: number; processing: number; staleProcessing: number; errors: number };
   reconciliation: { whatsapp: number; instagram: number };
@@ -16,7 +17,7 @@ export type OperationalHealth = {
 };
 
 const empty: OperationalHealth = {
-  checkedAt: '', components: [], workers: { online: 0, stale: 0 }, queues: { pending: 0, processing: 0, staleProcessing: 0, errors: 0 },
+  checkedAt: '', components: [], runtimePolicy: { ttlSeconds: 180 }, workers: { online: 0, stale: 0 }, queues: { pending: 0, processing: 0, staleProcessing: 0, errors: 0 },
   reconciliation: { whatsapp: 0, instagram: 0 }, batches: { active: 0, stale: 0 }, tools: { registered: 0, stale: 0 }, alerts: { open: 0, critical: 0 }, latestRecovery: null,
 };
 
@@ -25,7 +26,7 @@ export async function getOperationalHealth(): Promise<OperationalHealth> {
   if (response.error) throw new Error(`Não foi possível consultar a saúde operacional: ${response.error.message}`);
   const value = (response.data ?? {}) as Partial<OperationalHealth>;
   return {
-    ...empty, ...value,
+    ...empty, ...value, runtimePolicy: { ...empty.runtimePolicy, ...(value.runtimePolicy ?? {}) },
     workers: { ...empty.workers, ...(value.workers ?? {}) }, queues: { ...empty.queues, ...(value.queues ?? {}) },
     reconciliation: { ...empty.reconciliation, ...(value.reconciliation ?? {}) }, batches: { ...empty.batches, ...(value.batches ?? {}) },
     tools: { ...empty.tools, ...(value.tools ?? {}) }, alerts: { ...empty.alerts, ...(value.alerts ?? {}) }, components: Array.isArray(value.components) ? value.components : [],

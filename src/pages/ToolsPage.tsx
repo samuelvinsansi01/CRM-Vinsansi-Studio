@@ -401,7 +401,7 @@ export function ToolsPage() {
               <article><PackageCheck size={20} /><div><strong>Versões suportadas</strong><span>Mínima {details.minimumSupportedVersion ?? '—'} · Atual {details.latestVersion ?? '—'}</span></div></article>
               <article><Boxes size={20} /><div><strong>Instalações</strong><span>{details.installations.length} registro(s) canônico(s)</span></div></article>
               <article><Activity size={20} /><div><strong>Entitlements</strong><code>{JSON.stringify(details.entitlements)}</code></div></article>
-              <p className="tool-stage-boundary">Presença usa heartbeat de 60s e TTL de 180s somente quando a capability <code>presence.heartbeat</code> é suportada. A adoção completa pelos executores pertence à Etapa 4.</p>
+              <p className="tool-stage-boundary">A presença exibida no resumo usa o runtime canônico da plataforma e TTL central de 180s. Instalações antigas permanecem apenas no histórico/detalhe.</p>
             </div>
           ) : null}
 

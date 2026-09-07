@@ -11,6 +11,7 @@ type ToolRelease = {
 };
 
 type ComponentRelease = { version: string; image?: string };
+type HealthPolicy = { runtimeTtlSeconds:number; managerHeartbeatSeconds:number; workerHeartbeatSeconds:number };
 
 export type PlatformReleaseManifest = {
   schemaVersion: number;
@@ -18,6 +19,7 @@ export type PlatformReleaseManifest = {
   manager: ToolRelease;
   capture: ToolRelease;
   instagram: ToolRelease;
+  healthPolicy: HealthPolicy;
   components: {
     worker: ComponentRelease;
     gateway: ComponentRelease;
@@ -42,6 +44,15 @@ function tool(row: Row | undefined, toolId: string): ToolRelease {
   const minimumSupportedVersion=text(row?.minimum_supported_version);
   if (!latestVersion || !minimumSupportedVersion) throw new Error(`platform_release_tool_incomplete:${toolId}`);
   return { toolId, latestVersion, minimumSupportedVersion };
+}
+
+function healthPolicy(root: Row): HealthPolicy {
+  const item=object(root.healthPolicy);
+  const runtimeTtlSeconds=Number(item.runtimeTtlSeconds);
+  const managerHeartbeatSeconds=Number(item.managerHeartbeatSeconds);
+  const workerHeartbeatSeconds=Number(item.workerHeartbeatSeconds);
+  if (!Number.isFinite(runtimeTtlSeconds) || runtimeTtlSeconds < 30 || !Number.isFinite(managerHeartbeatSeconds) || managerHeartbeatSeconds < 15 || !Number.isFinite(workerHeartbeatSeconds) || workerHeartbeatSeconds < 15) throw new Error('platform_release_health_policy_incomplete');
+  return { runtimeTtlSeconds, managerHeartbeatSeconds, workerHeartbeatSeconds };
 }
 
 function component(root: Row, key: string, requireImage = false): ComponentRelease {
@@ -70,6 +81,7 @@ export async function loadPlatformRelease(): Promise<PlatformReleaseManifest> {
     manager:tool(managerRow,'vinsansi_whatsapp_manager'),
     capture:tool(rows.get('vinsansi_capture'),'vinsansi_capture'),
     instagram:tool(rows.get('vinsansi_instagram'),'vinsansi_instagram'),
+    healthPolicy:healthPolicy(release),
     components:{
       worker:component(components,'worker',true),
       gateway:component(components,'gateway',true),

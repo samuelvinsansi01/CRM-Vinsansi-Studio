@@ -6,6 +6,8 @@ import { useNotificationContext } from '../providers/NotificationProvider';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { getOperationalHealth, listOperationalAlerts, requestOperationalRecovery, type OperationalHealth } from '../repositories/monitoring/operationalHealth.repository';
 
+function statusLabel(value:string){ return ({online:'Online',degraded:'Degradado',stopping:'Parando',offline:'Offline',error:'Erro',incompatible:'Incompatível'} as Record<string,string>)[value] ?? value; }
+
 function dateTime(value: unknown) {
   const date = new Date(String(value ?? ''));
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString('pt-BR');
@@ -61,12 +63,13 @@ export function MonitoringPage() {
           <div><strong>Filas</strong><span>Pendentes: {health?.queues.pending ?? 0} · Erros: {health?.queues.errors ?? 0}</span></div>
           <div><strong>Lotes</strong><span>Ativos: {health?.batches.active ?? 0} · Travados: {health?.batches.stale ?? 0}</span></div>
           <div><strong>Worker</strong><span>Online: {health?.workers.online ?? 0} · Sem heartbeat: {health?.workers.stale ?? 0}</span></div>
+          <div><strong>Política de runtime</strong><span>Offline após {health?.runtimePolicy.ttlSeconds ?? 180}s sem heartbeat</span></div>
           <div><strong>Última leitura</strong><span>{dateTime(health?.checkedAt)}</span></div>
         </div>
       </Panel>
       <Panel title="Componentes em tempo real">
         {!health?.components.length ? <div className="audit-state"><Server size={22}/><strong>Nenhum heartbeat recebido ainda.</strong><span>Os componentes aparecerão aqui após a primeira comunicação.</span></div> : (
-          <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>Componente</th><th>Estado</th><th>Versão</th><th>Último heartbeat</th></tr></thead><tbody>{health.components.map((component) => <tr key={`${component.type}:${component.key}`}><td><strong>{componentLabel[component.type] ?? component.type}</strong><span>{component.key}</span></td><td><Tag tone={component.status==='online'?'success':component.status==='degraded'?'warning':'danger'}>{component.status}</Tag></td><td>{component.version || '—'}</td><td>{dateTime(component.lastSeenAt)}</td></tr>)}</tbody></table></div>
+          <div className="audit-table-wrap"><table className="audit-table"><thead><tr><th>Componente</th><th>Estado</th><th>Versão</th><th>Último heartbeat</th></tr></thead><tbody>{health.components.map((component) => <tr key={`${component.type}:${component.key}`}><td><strong>{componentLabel[component.type] ?? component.type}</strong><span>{component.key}</span></td><td><Tag tone={component.status==='online'?'success':component.status==='degraded'?'warning':'danger'}>{statusLabel(component.status)}</Tag></td><td>{component.version || '—'}</td><td>{dateTime(component.lastSeenAt)}</td></tr>)}</tbody></table></div>
         )}
       </Panel>
       <Panel title="Alertas abertos">
