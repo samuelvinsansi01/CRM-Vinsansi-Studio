@@ -1,4 +1,4 @@
-import { ArrowRight, Building2, PlugZap, Settings2, SlidersHorizontal } from 'lucide-react';
+import { ArrowRight, Building2, PlugZap, ShieldCheck, Settings2, SlidersHorizontal } from 'lucide-react';
 import { Button, Panel } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
@@ -43,6 +43,15 @@ const sections: SettingsSection[] = [
     items: [
       { label: 'Instâncias WhatsApp', page: 'config-instances', description: 'Instâncias técnicas vinculadas aos chips cadastrados.' },
       { label: 'Central de Ferramentas', page: 'tools', description: 'Parâmetros e conexões das ferramentas auxiliares.' },
+    ],
+  },
+  {
+    title: 'Monitoramento e homologação',
+    description: 'Saúde operacional e validação final do ambiente antes de considerar a plataforma pronta para produção.',
+    icon: ShieldCheck,
+    items: [
+      { label: 'Monitoramento', page: 'monitoring', description: 'Acompanhe o estado operacional atual dos componentes da plataforma.' },
+      { label: 'Homologação final', page: 'homologation', description: 'Execute a validação final de Control Plane, instalação corrente, isolamento e runtime.' },
     ],
   },
 ];

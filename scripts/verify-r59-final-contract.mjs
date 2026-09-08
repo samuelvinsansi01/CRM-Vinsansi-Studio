@@ -94,6 +94,15 @@ requireTokens('navegacao_final_incompleta', pageRegistry, [
   "homologation: 'Homologação final'",
   "monitoring: 'Monitoramento'",
   "homologation: 'monitoring.view'",
+  "'monitoring',",
+  "'homologation',",
+]);
+const configurationPages = requireFile('src/pages/ConfigurationPages.tsx');
+requireTokens('configuracoes_sem_homologacao_final', configurationPages, [
+  "title: 'Monitoramento e homologação'",
+  "page: 'monitoring'",
+  "page: 'homologation'",
+  "label: 'Homologação final'",
 ]);
 
 const forbiddenRootArtifacts = fs.readdirSync(root).filter((name) => /^(APLICAR|CHECK).*\.sql$/i.test(name) || /^README/i.test(name));

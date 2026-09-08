@@ -156,4 +156,6 @@ export const settingsPageIds = new Set<PageId>([
   'organization-roles',
   'platform-organizations',
   'tools',
+  'monitoring',
+  'homologation',
 ]);
