@@ -1,16 +1,13 @@
 import { loadPlatformRelease } from '../../../platform/release.js';
-import { exchangePairing, startPairing } from '../../../tools/executor.js';
+import { exchangePairing, installationScope, startPairing } from '../../../tools/executor.js';
+import { confirmInstallationCloudflare, provisionInstallationCloudflare } from '../../../platform/cloudflare-installation.js';
 
 type ApiRequest = { method?: string; body?: unknown; headers?: Record<string, string | string[] | undefined> };
 type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): void; setHeader(name: string, value: string): void };
 type RecordValue = Record<string, unknown>;
 declare const process: { env: Record<string, string | undefined> };
 
-const DEFAULT_TUNNEL_ID = '42e52d34-34e7-4f2d-a626-4f550500b610';
-const DEFAULT_TUNNEL_NAME = 'vinsansi-docker';
-const DEFAULT_EVOLUTION_PUBLIC_URL = 'https://evolution.samuelvinsansi.com.br';
 const DEFAULT_EVOLUTION_SERVICE_URL = 'http://host.docker.internal:8080';
-const DEFAULT_WORKER_PUBLIC_URL = 'https://worker.samuelvinsansi.com.br';
 const DEFAULT_WORKER_SERVICE_URL = 'http://lead-certo-whatsapp-worker:8787';
 const DEFAULT_CLOUDFLARE_IMAGE = 'cloudflare/cloudflared:2026.7.3';
 const DEFAULT_CLOUDFLARE_CONTAINER = 'vinsansi-cloudflared';
@@ -54,6 +51,21 @@ async function encryptValue(key: CryptoKey, value: string) {
   const encrypted = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, key, new TextEncoder().encode(value));
   return arrayBufferToBase64(encrypted);
 }
+async function commonProvisioningPayload(installationTunnel: Awaited<ReturnType<typeof provisionInstallationCloudflare>>) {
+  const release = await loadPlatformRelease().catch(() => null);
+  return {
+    version: 6,
+    cloudflareTunnelId: installationTunnel.tunnelId,
+    cloudflareTunnelName: installationTunnel.tunnelName,
+    evolutionPublicUrl: installationTunnel.evolutionPublicUrl,
+    evolutionTunnelServiceUrl: envAny('DESKTOP_EVOLUTION_SERVICE_URL') || DEFAULT_EVOLUTION_SERVICE_URL,
+    workerPublicUrl: installationTunnel.workerPublicUrl,
+    workerTunnelServiceUrl: envAny('DESKTOP_WORKER_SERVICE_URL') || DEFAULT_WORKER_SERVICE_URL,
+    cloudflareTunnelImage: release?.components.cloudflared.image || envAny('DESKTOP_CLOUDFLARE_IMAGE') || DEFAULT_CLOUDFLARE_IMAGE,
+    cloudflareTunnelContainerName: envAny('DESKTOP_CLOUDFLARE_CONTAINER_NAME') || DEFAULT_CLOUDFLARE_CONTAINER,
+    dockerNetworkName: envAny('DESKTOP_DOCKER_NETWORK_NAME') || DEFAULT_DOCKER_NETWORK,
+  };
+}
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return send(res, 405, { ok: false, error: 'method_not_allowed' });
@@ -61,26 +73,63 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (envAny('DESKTOP_WORKER_PROVISIONING_ENABLED').toLowerCase() !== 'true') {
       return send(res, 503, { ok: false, error: 'worker_provisioning_disabled' });
     }
-
-    const token = bearer(req);
-    const cloudflareTunnelToken = envAny('DESKTOP_CLOUDFLARE_TUNNEL_TOKEN');
-    if (!token) return send(res, 401, { ok: false, error: 'auth_required' });
-    if (!envAny('SUPABASE_URL') || !envAny('SUPABASE_SERVICE_ROLE_KEY') || !cloudflareTunnelToken) {
+    if (!envAny('SUPABASE_URL') || !envAny('SUPABASE_SERVICE_ROLE_KEY')) {
       return send(res, 503, { ok: false, error: 'worker_provisioning_backend_not_configured' });
     }
 
     const body = bodyRecord(req.body);
     const action = String(body.action ?? 'provision').trim().toLowerCase();
-    if (action !== 'provision') return send(res, 400, { ok: false, error: 'worker_provisioning_action_invalid' });
+    if (!['provision', 'refresh-cloudflare', 'confirm-cloudflare'].includes(action)) return send(res, 400, { ok: false, error: 'worker_provisioning_action_invalid' });
+
+    if (action === 'refresh-cloudflare' || action === 'confirm-cloudflare') {
+      const scope = await installationScope(req);
+      if (scope.toolId !== 'vinsansi_whatsapp_manager') return send(res, 403, { ok: false, error: 'worker_provisioning_not_authorized' });
+      const requestedOrganizationId = Number(body.organization_id || 0);
+      const requestedExternalId = String(body.external_installation_id ?? '').trim();
+      if ((requestedOrganizationId && requestedOrganizationId !== scope.organizationId) || (requestedExternalId && requestedExternalId !== scope.externalInstallationId)) {
+        return send(res, 409, { ok: false, error: 'worker_provisioning_context_mismatch' });
+      }
+      if (action === 'confirm-cloudflare') {
+        const confirmed = await confirmInstallationCloudflare({
+          organizationId: scope.organizationId,
+          organizationToolInstallationId: scope.installationId,
+          externalInstallationId: scope.externalInstallationId,
+        });
+        return send(res, 200, { ok: true, version: 6, organizationId: scope.organizationId, ...confirmed });
+      }
+
+      const pem = String(body.public_key_pem ?? '').trim();
+      if (!pem.startsWith('-----BEGIN PUBLIC KEY-----') || pem.length > 8192) {
+        return send(res, 400, { ok: false, error: 'worker_provisioning_public_key_invalid' });
+      }
+      let key: CryptoKey;
+      try { key = await importRsaPublicKey(pem); }
+      catch { return send(res, 400, { ok: false, error: 'worker_provisioning_public_key_invalid' }); }
+
+      const installationTunnel = await provisionInstallationCloudflare({
+        organizationId: scope.organizationId,
+        organizationToolInstallationId: scope.installationId,
+        externalInstallationId: scope.externalInstallationId,
+      });
+      const encryptedCloudflareTunnelToken = await encryptValue(key, installationTunnel.token);
+      return send(res, 200, {
+        ok: true,
+        ...(await commonProvisioningPayload(installationTunnel)),
+        organizationId: scope.organizationId,
+        encryptedCloudflareTunnelToken,
+      });
+    }
+
     const pem = String(body.public_key_pem ?? '').trim();
     if (!pem.startsWith('-----BEGIN PUBLIC KEY-----') || pem.length > 8192) {
       return send(res, 400, { ok: false, error: 'worker_provisioning_public_key_invalid' });
     }
-
     let key: CryptoKey;
     try { key = await importRsaPublicKey(pem); }
     catch { return send(res, 400, { ok: false, error: 'worker_provisioning_public_key_invalid' }); }
 
+    const token = bearer(req);
+    if (!token) return send(res, 401, { ok: false, error: 'auth_required' });
     const organizationId = Number(body.organization_id);
     const externalInstallationId = String(body.external_installation_id ?? '').trim();
     if (!Number.isSafeInteger(organizationId) || organizationId <= 0 || !externalInstallationId) {
@@ -92,32 +141,31 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       capabilities: ['organization.context','member.context','settings.read','presence.heartbeat','activity.report','whatsapp.instances.manage','whatsapp.queue.execute','monitoring.runtime.report'],
     });
     const exchanged = await exchangePairing({ pairingCode: pairing.pairingCode });
+    const installationTunnel = await provisionInstallationCloudflare({
+      organizationId,
+      organizationToolInstallationId: exchanged.organizationToolInstallationId,
+      externalInstallationId,
+    });
     const [encryptedInstallationCredential, encryptedUserSession, encryptedCloudflareTunnelToken] = await Promise.all([
       encryptValue(key, exchanged.installationCredential),
       encryptValue(key, exchanged.userSession),
-      encryptValue(key, cloudflareTunnelToken),
+      encryptValue(key, installationTunnel.token),
     ]);
-
-    const release=await loadPlatformRelease().catch(()=>null);
 
     return send(res, 200, {
       ok: true,
-      version: 5,
-      cloudflareTunnelId: envAny('DESKTOP_CLOUDFLARE_TUNNEL_ID') || DEFAULT_TUNNEL_ID,
-      cloudflareTunnelName: envAny('DESKTOP_CLOUDFLARE_TUNNEL_NAME') || DEFAULT_TUNNEL_NAME,
-      evolutionPublicUrl: envAny('DESKTOP_EVOLUTION_PUBLIC_URL') || DEFAULT_EVOLUTION_PUBLIC_URL,
-      evolutionTunnelServiceUrl: envAny('DESKTOP_EVOLUTION_SERVICE_URL') || DEFAULT_EVOLUTION_SERVICE_URL,
-      workerPublicUrl: envAny('DESKTOP_WORKER_PUBLIC_URL') || DEFAULT_WORKER_PUBLIC_URL,
-      workerTunnelServiceUrl: envAny('DESKTOP_WORKER_SERVICE_URL') || DEFAULT_WORKER_SERVICE_URL,
-      cloudflareTunnelImage: release?.components.cloudflared.image || envAny('DESKTOP_CLOUDFLARE_IMAGE') || DEFAULT_CLOUDFLARE_IMAGE,
-      cloudflareTunnelContainerName: envAny('DESKTOP_CLOUDFLARE_CONTAINER_NAME') || DEFAULT_CLOUDFLARE_CONTAINER,
-      dockerNetworkName: envAny('DESKTOP_DOCKER_NETWORK_NAME') || DEFAULT_DOCKER_NETWORK,
+      ...(await commonProvisioningPayload(installationTunnel)),
       organizationId,
       encryptedInstallationCredential,
       encryptedUserSession,
       encryptedCloudflareTunnelToken,
     });
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/installation_credential_required|installation_credential_invalid/.test(message)) return send(res, 401, { ok: false, error: 'installation_credential_invalid' });
+    if (/installation_superseded|installation_revoked/.test(message)) return send(res, 409, { ok: false, error: 'installation_superseded' });
+    if (/cloudflare_installation_provisioning_not_configured/.test(message)) return send(res, 503, { ok: false, error: 'cloudflare_installation_provisioning_not_configured' });
+    if (/cloudflare_api_failed|cloudflare_tunnel_|cloudflare_installation_/.test(message)) return send(res, 502, { ok: false, error: 'cloudflare_installation_provisioning_failed' });
     return send(res, 500, { ok: false, error: 'worker_provisioning_failed' });
   }
 }
