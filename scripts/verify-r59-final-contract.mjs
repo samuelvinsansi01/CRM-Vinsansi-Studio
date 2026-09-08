@@ -72,6 +72,22 @@ forbidTokens('cloudflare_nao_pode_persistir_segredos', cloudflare, [
   'metadata: { ...metadata, cloudflare: { ...cloudflareMetadata, token',
 ]);
 
+const mobilePush = requireFile('server/mobile/push.ts');
+requireTokens('mobile_push_backend_incompleto', mobilePush, [
+  "from('mobile_push_devices')",
+  "stage5_member_has_permission",
+  "https://exp.host/--/api/v2/push/send",
+  "DeviceNotRegistered",
+  "channelId: 'mensagens'",
+]);
+const evolutionWebhook = requireFile('server/routes/whatsapp/evolution-webhook.ts');
+requireTokens('mobile_push_webhook_incompleto', evolutionWebhook, [
+  "notifyInboundWhatsappMessage",
+  "event === 'messages.upsert'",
+  "!fromMe",
+  "externalMessageId",
+]);
+
 const heartbeat = requireFile('server/routes/tools/executor/heartbeat.ts');
 requireTokens('runtime_manager_root_incompleto', heartbeat, [
   "vinsansi_whatsapp_manager:'manager'",

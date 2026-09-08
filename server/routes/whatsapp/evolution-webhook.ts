@@ -1,4 +1,5 @@
 import type { RoutedRequest, RoutedResponse } from '../dispatch.js';
+import { notifyInboundWhatsappMessage } from '../../mobile/push.js';
 
 function header(req: RoutedRequest, name: string) {
   const value = req.headers?.[name] ?? req.headers?.[name.toLowerCase()];
@@ -34,6 +35,21 @@ export default async function handler(req: RoutedRequest, res: RoutedResponse) {
   const raw = await response.text();
   res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json; charset=utf-8');
   if (!response.ok) return res.status(response.status).json({ ok: false, error: 'evolution_webhook_upstream_failed', upstreamStatus: response.status, upstream: raw.slice(0, 1000) });
+
+  const payload = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body as Record<string, unknown> : {};
+  const data = payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data) ? payload.data as Record<string, unknown> : {};
+  const key = data.key && typeof data.key === 'object' && !Array.isArray(data.key) ? data.key as Record<string, unknown> : {};
+  const event = String(payload.event ?? '').trim().toLowerCase();
+  const externalMessageId = String(key.id ?? '').trim();
+  const fromMe = key.fromMe === true;
+  if (event === 'messages.upsert' && !fromMe && externalMessageId) {
+    try {
+      await notifyInboundWhatsappMessage({ instanceId: Number(instanceId), externalMessageId });
+    } catch (error) {
+      console.warn('[mobile-push]', error instanceof Error ? error.message : String(error));
+    }
+  }
+
   try { return res.status(response.status).json(raw ? JSON.parse(raw) : { ok: true }); }
   catch { return res.status(response.status).json({ ok: true, upstream: raw.slice(0, 1000) }); }
 }
