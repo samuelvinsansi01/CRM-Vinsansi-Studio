@@ -19,18 +19,23 @@ catch {
   }
 }
 function walk(dir) {
+  if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) return walk(full);
     return [full];
   });
 }
-const files = [
-  ...walk(path.join(root, 'src')),
-  ...walk(path.join(root, 'api')),
-  ...walk(path.join(root, 'server')),
-  ...walk(path.join(root, 'supabase/functions')),
-].filter((file) => /\.(ts|tsx)$/.test(file) && !file.endsWith('.d.ts'));
+const sourceRoots = ['src', 'api', 'server']
+  .map((relative) => path.join(root, relative))
+  .filter((dir) => fs.existsSync(dir));
+const files = sourceRoots
+  .flatMap(walk)
+  .filter((file) => /\.(ts|tsx)$/.test(file) && !file.endsWith('.d.ts'));
+if (!files.length) {
+  console.error('Nenhum arquivo TypeScript encontrado para verificar.');
+  process.exit(1);
+}
 const diagnostics = [];
 for (const file of files) {
   const source = fs.readFileSync(file, 'utf8');

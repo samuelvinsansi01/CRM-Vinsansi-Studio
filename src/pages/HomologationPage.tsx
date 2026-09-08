@@ -41,7 +41,7 @@ export function HomologationPage() {
   return <div className="dashboard-table-page">
     <PageHeader
       title="Homologação final"
-      description="Verificação automática e somente leitura do contrato final. Não depende de tabelas de homologação nem de promoção de release no banco."
+      description="Verificação automática e somente leitura do contrato final, Control Plane, instalação corrente, isolamento e runtime. Não cria tabelas de homologação nem promove release."
       action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading} onClick={() => void refresh()}>Atualizar</Button>}
     />
     <section className="metric-grid metric-grid--4">
