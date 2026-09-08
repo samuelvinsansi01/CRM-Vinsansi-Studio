@@ -34,6 +34,12 @@ requireTokens('homologacao_final_incompleta', homologRepo, [
   "organization_tool_installations",
   "platform_runtime_heartbeats",
   "release_manifest",
+  "queue_operational_today_r59",
+  "list_queue_review_resources",
+]);
+forbidTokens('homologacao_nao_pode_ler_reserva_diretamente', homologRepo, [
+  "from('queue_review_items')",
+  "from(\"queue_review_items\")",
 ]);
 requireTokens('pagina_homologacao_incompleta', homologPage, [
   "from '../repositories/release/homologation.repository'",

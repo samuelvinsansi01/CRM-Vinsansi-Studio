@@ -237,12 +237,27 @@ export async function getHomologationSnapshot(): Promise<HomologationSnapshot> {
     CORE_RUNTIME_TYPES.map((type) => `${type}:${text(onlineByType.get(type)?.component_version) || 'offline'}`).join(' · '),
   ));
 
-  const reviewStatus = await client.from('leads').select('leads_id', { count: 'exact', head: true }).eq('lead_status_id', 2);
-  const openReview = await client.from('queue_review_items').select('queue_review_items_id', { count: 'exact', head: true }).eq('review_status', 'open');
-  const reviewReadable = !reviewStatus.error && !openReview.error;
+  const operationalDateResult = await client.rpc('queue_operational_today_r59');
+  const operationalDate = text(operationalDateResult.data);
+  const reviewWhatsapp = operationalDate ? await client.rpc('list_queue_review_resources', {
+    p_channel: 'whatsapp',
+    p_scheduled_date: operationalDate,
+  }) : { data: [], error: null };
+  const reviewInstagram = operationalDate ? await client.rpc('list_queue_review_resources', {
+    p_channel: 'instagram',
+    p_scheduled_date: operationalDate,
+  }) : { data: [], error: null };
+  const reviewReadable = !operationalDateResult.error && Boolean(operationalDate) && !reviewWhatsapp.error && !reviewInstagram.error;
+  const whatsappResources = list(reviewWhatsapp.data).map(object);
+  const instagramResources = list(reviewInstagram.data).map(object);
+  const whatsappOpen = whatsappResources.reduce((total, row) => total + number(row.review_open ?? row.reviewOpen), 0);
+  const instagramOpen = instagramResources.reduce((total, row) => total + number(row.review_open ?? row.reviewOpen), 0);
+  const reviewError = operationalDateResult.error || reviewWhatsapp.error || reviewInstagram.error;
   checks.push(check(
     'review_contract', 'Fluxo', 'Revisão e reservas operacionais legíveis', reviewReadable,
-    reviewReadable ? `Leads em revisão: ${reviewStatus.count ?? 0}; itens abertos: ${openReview.count ?? 0}` : String(reviewStatus.error?.message || openReview.error?.message || 'erro'),
+    reviewReadable
+      ? `Data operacional ${operationalDate}; WhatsApp: ${whatsappResources.length} recurso(s), ${whatsappOpen} reserva(s) aberta(s); Instagram: ${instagramResources.length} recurso(s), ${instagramOpen} reserva(s) aberta(s).`
+      : `Falha no contrato canônico de revisão: ${text(object(reviewError).message) || text(object(reviewError).details) || text(object(reviewError).code) || 'erro não detalhado'}`,
   ));
 
   const queued = await client.from('leads').select('leads_id', { count: 'exact', head: true }).eq('lead_status_id', 4);
