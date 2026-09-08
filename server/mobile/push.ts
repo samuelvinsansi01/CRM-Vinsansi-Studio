@@ -38,7 +38,7 @@ function validExpoPushToken(value: string) {
 async function findInboundMessage(admin: SupabaseClient, instanceId: number, externalMessageId: string) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const result = await admin.from('conversation_messages')
-      .select('conversation_messages_id,organizations_id,conversations_id,chips_id,instances_id,leads_id,remote_jid,message_type,message_body,external_message_id,direction')
+      .select('conversation_messages_id,organizations_id,conversations_id,chips_id,instances_id,leads_id,remote_jid,message_type,message_body,external_message_id,direction,mobile_push_sent_at')
       .eq('instances_id', instanceId)
       .eq('external_message_id', externalMessageId)
       .eq('direction', 'inbound')
@@ -97,6 +97,28 @@ async function disableInvalidTokens(admin: SupabaseClient, tokens: string[]) {
       updated_at: new Date().toISOString(),
     }).in('expo_push_token', unique);
   } catch { /* best effort */ }
+}
+
+async function claimMessagePush(admin: SupabaseClient, messageId: number) {
+  const claimedAt = new Date().toISOString();
+  const result = await admin.from('conversation_messages')
+    .update({ mobile_push_sent_at: claimedAt })
+    .eq('conversation_messages_id', messageId)
+    .is('mobile_push_sent_at', null)
+    .select('conversation_messages_id')
+    .maybeSingle();
+  if (result.error) throw new Error(`mobile_push_claim_failed:${result.error.message}`);
+  return result.data ? claimedAt : '';
+}
+
+async function releaseMessagePushClaim(admin: SupabaseClient, messageId: number, claimedAt: string) {
+  if (!claimedAt) return;
+  try {
+    await admin.from('conversation_messages')
+      .update({ mobile_push_sent_at: null })
+      .eq('conversation_messages_id', messageId)
+      .eq('mobile_push_sent_at', claimedAt);
+  } catch { /* best effort: permite retry futuro se Expo falhar */ }
 }
 
 async function expoSend(admin: SupabaseClient, devices: PushDevice[], payload: Row) {
@@ -170,12 +192,19 @@ export async function notifyInboundWhatsappMessage(input: InboundPushInput) {
   const devices = await allowedDevices(admin, organizationId);
   if (!devices.length) return { skipped: true, reason: 'no_registered_devices' };
 
+  const messageId = integer(message.conversation_messages_id);
+  if (!messageId) return { skipped: true, reason: 'message_id_missing' };
+  const claimedAt = await claimMessagePush(admin, messageId);
+  if (!claimedAt) return { skipped: true, reason: 'already_notified' };
+
   const contactName = text(conversation.contact_name) || text(conversation.contact_phone) || 'Nova mensagem';
   const messageBody = text(message.message_body);
   const messageType = text(message.message_type) || 'text';
   const body = messageBody ? messageBody.slice(0, 180) : messageType === 'text' ? 'Nova mensagem recebida.' : `Nova mensagem (${messageType}).`;
 
-  const result = await expoSend(admin, devices, {
+  let result: { sent: number; disabled: number };
+  try {
+    result = await expoSend(admin, devices, {
     title: contactName,
     body,
     sound: 'default',
@@ -193,7 +222,11 @@ export async function notifyInboundWhatsappMessage(input: InboundPushInput) {
       chipName: text(chip.chips_name) || 'WhatsApp',
       chipPhone: text(chip.chips_phone),
     },
-  });
+    });
+  } catch (error) {
+    await releaseMessagePushClaim(admin, messageId, claimedAt);
+    throw error;
+  }
 
   return { skipped: false, ...result };
 }
