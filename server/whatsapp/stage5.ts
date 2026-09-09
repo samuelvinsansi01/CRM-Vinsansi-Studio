@@ -75,12 +75,19 @@ function providerJidCandidate(value: unknown) {
 export function stage5ProviderJidsFromPayload(value:unknown){
   const payload=record(value);
   const nested=(path:string[])=>{let current:unknown=payload;for(const key of path){if(!current||typeof current!=='object'||Array.isArray(current))return '';current=(current as Row)[key];}return providerJidCandidate(current);};
-  const preferLid=(values:string[])=>[...values.filter((jid)=>jid.endsWith('@lid')),...values.filter((jid)=>!jid.endsWith('@lid'))];
-  // Chat/remoteJid representam a thread. Sender só é fallback: em mensagens fromMe ele pode ser o próprio chip.
-  const chats=preferLid([nested(['Info','Chat']),nested(['info','Chat']),nested(['info','chat']),nested(['data','Info','Chat']),nested(['data','info','chat'])].filter(Boolean));
-  const remotes=preferLid([nested(['key','remoteJid']),nested(['remoteJid'])].filter(Boolean));
-  const senders=preferLid([nested(['Info','Sender']),nested(['info','Sender']),nested(['info','sender']),nested(['data','Info','Sender']),nested(['data','info','sender'])].filter(Boolean));
-  return [...new Set([...chats,...remotes,...senders])];
+  const candidates=[
+    nested(['Info','ChatAlt']),nested(['Info','SenderAlt']),
+    nested(['info','ChatAlt']),nested(['info','chatAlt']),nested(['info','SenderAlt']),nested(['info','senderAlt']),
+    nested(['data','Info','ChatAlt']),nested(['data','Info','SenderAlt']),
+    nested(['key','remoteJidAlt']),nested(['key','remote_jid_alt']),nested(['remoteJidAlt']),nested(['remote_jid_alt']),
+    // Chat/remoteJid representam a thread. Sender é apenas fallback.
+    nested(['Info','Chat']),nested(['info','Chat']),nested(['info','chat']),nested(['data','Info','Chat']),nested(['data','info','chat']),
+    nested(['key','remoteJid']),nested(['remoteJid']),
+    nested(['Info','Sender']),nested(['info','Sender']),nested(['info','sender']),nested(['data','Info','Sender']),nested(['data','info','sender']),
+  ].filter(Boolean);
+  // Identidade canônica da conversa é o JID telefônico quando o provider o expõe.
+  // @lid continua registrado como alias e só é usado como fallback de transporte.
+  return [...new Set([...candidates.filter((jid)=>jid.endsWith('@s.whatsapp.net')),...candidates.filter((jid)=>jid.endsWith('@lid'))])];
 }
 
 export async function providerRecipientForConversation(scope:HumanScope,conversationId:number,fallback:string){
