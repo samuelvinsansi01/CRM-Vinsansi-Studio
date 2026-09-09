@@ -45,17 +45,68 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const AUTH_USER_CACHE_KEY = 'crm:auth-user-cache:v1';
+
+function readCachedAuthUser(authUser: User | null): AuthUser | null {
+  if (!authUser || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(AUTH_USER_CACHE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw) as Partial<AuthUser>;
+    if (value.id !== authUser.id || !value.usersId) return null;
+    return {
+      id: authUser.id,
+      usersId: String(value.usersId),
+      name: String(value.name ?? authUser.user_metadata?.name ?? authUser.email?.split('@')[0] ?? 'Operador'),
+      email: authUser.email ?? String(value.email ?? ''),
+      role: String(value.role ?? authUser.user_metadata?.role ?? 'operador'),
+      statusId: String(value.statusId ?? '1'),
+      avatarPath: value.avatarPath ? String(value.avatarPath) : null,
+      avatarUrl: value.avatarUrl ? String(value.avatarUrl) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistCachedAuthUser(user: AuthUser | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (user) window.localStorage.setItem(AUTH_USER_CACHE_KEY, JSON.stringify(user));
+    else window.localStorage.removeItem(AUTH_USER_CACHE_KEY);
+  } catch {
+    // Cache é somente uma otimização; nunca bloqueia autenticação.
+  }
+}
+
+async function withDeadline<T>(promise: Promise<T>, ms: number, code: string): Promise<T> {
+  let timer: number | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = window.setTimeout(() => reject(new Error(code)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) window.clearTimeout(timer);
+  }
+}
+
+
 async function loadAuthUser(authUser: User | null): Promise<AuthUser | null> {
   if (!authUser) return null;
 
-  const data = await ensurePublicUser(authUser);
+  const data = await withDeadline(ensurePublicUser(authUser), 8_000, 'Tempo excedido ao carregar o perfil.');
   const metadata = authUser.user_metadata ?? {};
   const fallbackName = String(
     metadata.name ?? metadata.full_name ?? authUser.email?.split('@')[0] ?? 'Operador',
   );
   const name = String(data.users_name ?? '').trim() || fallbackName;
   const avatarPath = data.users_avatar_path ? String(data.users_avatar_path) : null;
-  const avatarUrl = await createProfileAvatarUrl(avatarPath);
+  const avatarUrl = avatarPath
+    ? await withDeadline(createProfileAvatarUrl(avatarPath), 2_000, 'avatar_timeout').catch(() => null)
+    : null;
 
   return {
     id: authUser.id,
@@ -90,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setUser = useCallback((nextUser: AuthUser | null) => {
     userRef.current = nextUser;
     setUserState(nextUser);
+    persistCachedAuthUser(nextUser);
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -143,6 +195,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    const bootstrapUser = (authUser: User | null) => {
+      if (!authUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      const cached = readCachedAuthUser(authUser);
+      if (cached) {
+        // Sessão do Supabase fica em storage local; não bloqueamos a UI esperando
+        // uma nova ida ao banco em todo refresh do navegador.
+        setUser(cached);
+        setLoading(false);
+        void syncUser(authUser, { background: true, preserveCurrentUserOnError: true });
+        return;
+      }
+      void syncUser(authUser);
+    };
+
     void client.auth.getSession().then(({ data, error: sessionError }) => {
       if (!active) return;
       if (sessionError) {
@@ -150,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return;
       }
-      void syncUser(data.session?.user ?? null);
+      bootstrapUser(data.session?.user ?? null);
     });
 
     const { data } = client.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
@@ -178,6 +248,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentUser?.id === authUser.id
         && (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'INITIAL_SESSION')
       ) {
+        return;
+      }
+
+      const cached = readCachedAuthUser(authUser);
+      if (!currentUser && cached && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        setUser(cached);
+        setLoading(false);
+        void syncUser(authUser, { background: true, preserveCurrentUserOnError: true });
         return;
       }
 

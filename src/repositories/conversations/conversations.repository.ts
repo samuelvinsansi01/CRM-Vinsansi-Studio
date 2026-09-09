@@ -53,15 +53,16 @@ const text = (value: unknown) => String(value ?? '').trim();
 const id = (value: unknown) => text(value);
 const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
 
-export async function listChatChips(): Promise<ChatChip[]> {
+export async function listChatChips(organizationId: string): Promise<ChatChip[]> {
   const client = getSupabaseClient();
   const chipsResult = await client.from('chips')
     .select('chips_id,instances_id,status_id,chips_name,chips_phone')
+    .eq('organizations_id', Number(organizationId))
     .order('chips_name');
   if (chipsResult.error) throw new Error(chipsResult.error.message);
   const instanceIds = Array.from(new Set((chipsResult.data ?? []).map((item) => Number(item.instances_id)).filter(Number.isSafeInteger)));
   const instanceResult = instanceIds.length
-    ? await client.from('instances').select('instances_id,status_id,instances_name').in('instances_id', instanceIds)
+    ? await client.from('instances').select('instances_id,status_id,instances_name').eq('organizations_id', Number(organizationId)).in('instances_id', instanceIds)
     : { data: [], error: null };
   if (instanceResult.error) throw new Error(instanceResult.error.message);
   const instances = new Map((instanceResult.data ?? []).map((item) => [id(item.instances_id), item as Row]));
@@ -79,9 +80,10 @@ export async function listChatChips(): Promise<ChatChip[]> {
   }).sort((left, right) => Number(right.active && right.connected) - Number(left.active && left.connected) || left.name.localeCompare(right.name));
 }
 
-export async function listConversationUnreadCounts(): Promise<Record<string, number>> {
+export async function listConversationUnreadCounts(organizationId: string): Promise<Record<string, number>> {
   const result = await getSupabaseClient().from('conversations')
     .select('chips_id,unread_count')
+    .eq('organizations_id', Number(organizationId))
     .eq('conversation_status', 'open')
     .gt('unread_count', 0);
   if (result.error) throw new Error(result.error.message);
@@ -100,10 +102,11 @@ function meaningfulContactName(value: unknown) {
   return candidate;
 }
 
-export async function listConversations(chipId: string | null, includeArchived = false): Promise<Conversation[]> {
+export async function listConversations(organizationId: string, chipId: string | null, includeArchived = false): Promise<Conversation[]> {
   const client = getSupabaseClient();
   let query = client.from('conversations')
     .select('conversations_id,chips_id,instances_id,leads_id,remote_jid,contact_phone,contact_name,contact_avatar_url,conversation_status,unread_count,last_message_at,last_message_preview,last_message_direction,conversations_updated_at')
+    .eq('organizations_id', Number(organizationId))
     .order('last_message_at', { ascending: false, nullsFirst: false })
     .order('conversations_id', { ascending: false })
     .limit(500);
@@ -117,7 +120,7 @@ export async function listConversations(chipId: string | null, includeArchived =
     .map((item) => Number(item.leads_id))
     .filter(Number.isSafeInteger)));
   const leadsResult = leadIds.length
-    ? await client.from('leads').select('leads_id,leads_name,leads_alternative_name').in('leads_id', leadIds)
+    ? await client.from('leads').select('leads_id,leads_name,leads_alternative_name').eq('organizations_id', Number(organizationId)).in('leads_id', leadIds)
     : { data: [] as Row[], error: null };
   if (leadsResult.error) throw new Error(leadsResult.error.message);
   const leads = new Map<string, Row>(((leadsResult.data ?? []) as Row[]).map((lead) => [id(lead.leads_id), lead]));
@@ -151,15 +154,18 @@ export async function listConversations(chipId: string | null, includeArchived =
   });
 }
 
-export async function listConversationMessages(conversationId: string, limit = 250): Promise<ConversationMessage[]> {
+export async function listConversationMessages(organizationId: string, conversationId: string, limit = 250): Promise<ConversationMessage[]> {
+  // Buscar primeiro os IDs mais recentes usa conversation_messages_thread_cursor_idx
+  // e evita o bug antigo de limitar as 250 mensagens MAIS ANTIGAS da conversa.
   const result = await getSupabaseClient().from('conversation_messages')
     .select('conversation_messages_id,conversations_id,external_message_id,direction,from_me,message_type,message_body,media_url,media_mime_type,media_file_name,quoted_external_message_id,message_status,provider_timestamp,conversation_messages_created_at,error_message')
+    .eq('organizations_id', Number(organizationId))
     .eq('conversations_id', Number(conversationId))
-    .order('provider_timestamp', { ascending: true, nullsFirst: false })
-    .order('conversation_messages_id', { ascending: true })
+    .order('conversation_messages_id', { ascending: false })
     .limit(limit);
   if (result.error) throw new Error(result.error.message);
-  return (result.data ?? []).map((item) => ({
+  const rows = [...(result.data ?? [])];
+  const mapped = rows.map((item) => ({
     id: id(item.conversation_messages_id),
     conversationId: id(item.conversations_id),
     externalId: item.external_message_id == null ? null : text(item.external_message_id),
@@ -176,6 +182,15 @@ export async function listConversationMessages(conversationId: string, limit = 2
     createdAt: text(item.conversation_messages_created_at),
     errorMessage: text(item.error_message),
   }));
+  // A janela é escolhida pelo cursor de inserção (rápido), mas a apresentação
+  // continua cronológica pelo timestamp real do WhatsApp. Replays antigos da
+  // Evolution não são empurrados visualmente para o fim da conversa.
+  return mapped.sort((left, right) => {
+    const leftAt = new Date(left.providerTimestamp || left.createdAt).getTime();
+    const rightAt = new Date(right.providerTimestamp || right.createdAt).getTime();
+    const timeDelta = (Number.isFinite(leftAt) ? leftAt : 0) - (Number.isFinite(rightAt) ? rightAt : 0);
+    return timeDelta || Number(left.id) - Number(right.id);
+  });
 }
 
 export async function markConversationRead(conversationId: string) {

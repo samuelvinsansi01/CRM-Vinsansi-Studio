@@ -107,6 +107,14 @@ export function ConversationsPage() {
   const notificationTargetRef = useRef(readNotificationConversationTarget());
   const commercialRequestRef = useRef(0);
   const previewDateDirtyRef = useRef(false);
+  const conversationsRequestRef = useRef(0);
+  const messagesRequestRef = useRef(0);
+  const conversationSyncRunningRef = useRef(false);
+  const conversationSyncPendingRef = useRef(false);
+  const messageSyncRunningRef = useRef(false);
+  const messageSyncPendingRef = useRef(false);
+  const selectedConversationIdRef = useRef<string | null>(null);
+  const realtimeReadyRef = useRef(false);
 
   const selectedConversation = conversations.find((item) => item.id === selectedConversationId) ?? null;
   const visibleConversations = useMemo(() => {
@@ -116,6 +124,10 @@ export function ConversationsPage() {
       .some((value) => value.toLocaleLowerCase('pt-BR').includes(term)));
   }, [conversations, search]);
 
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
   const toast = useCallback((item: Omit<ToastItem, 'id'>) => {
     const id = crypto.randomUUID?.() ?? String(Date.now());
     setToasts((current) => [{ id, ...item }, ...current].slice(0, 4));
@@ -123,7 +135,11 @@ export function ConversationsPage() {
   }, []);
 
   const loadChips = useCallback(async () => {
-    const [next, unread] = await Promise.all([listChatChips(), listConversationUnreadCounts()]);
+    if (!organizationId) return;
+    const [next, unread] = await Promise.all([
+      listChatChips(organizationId),
+      listConversationUnreadCounts(organizationId),
+    ]);
     setChips(next);
     setUnreadByChip(unread);
     setSelectedChipId((current) => {
@@ -131,12 +147,20 @@ export function ConversationsPage() {
       if (targetChipId && next.some((chip) => chip.id === targetChipId)) return targetChipId;
       return current && next.some((chip) => chip.id === current) ? current : next[0]?.id ?? null;
     });
-  }, []);
+  }, [organizationId]);
 
   const loadConversations = useCallback(async (quiet = false) => {
+    const requestId = ++conversationsRequestRef.current;
+    if (!organizationId || !selectedChipId) {
+      setConversations([]);
+      setSelectedConversationId(null);
+      if (!quiet) setLoading(false);
+      return;
+    }
     if (!quiet) setLoading(true);
     try {
-      const next = await listConversations(selectedChipId, includeArchived);
+      const next = await listConversations(organizationId, selectedChipId, includeArchived);
+      if (requestId !== conversationsRequestRef.current) return;
       setConversations(next);
       setSelectedConversationId((current) => {
         const targetConversationId = notificationTargetRef.current?.conversationId;
@@ -149,22 +173,29 @@ export function ConversationsPage() {
       });
       setError('');
     } catch (cause) {
+      if (requestId !== conversationsRequestRef.current) return;
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar as conversas.');
     } finally {
-      if (!quiet) setLoading(false);
+      if (!quiet && requestId === conversationsRequestRef.current) setLoading(false);
     }
-  }, [selectedChipId, includeArchived]);
+  }, [organizationId, selectedChipId, includeArchived]);
 
   const loadMessages = useCallback(async (conversationId: string | null, quiet = false) => {
-    if (!conversationId) { setMessages([]); return; }
+    const requestId = ++messagesRequestRef.current;
+    if (!organizationId || !conversationId) {
+      setMessages([]);
+      return;
+    }
     try {
-      const next = await listConversationMessages(conversationId);
+      const next = await listConversationMessages(organizationId, conversationId);
+      if (requestId !== messagesRequestRef.current || selectedConversationIdRef.current !== conversationId) return;
       setMessages(next);
       if (!quiet) window.requestAnimationFrame(() => threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight }));
     } catch (cause) {
+      if (requestId !== messagesRequestRef.current) return;
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar as mensagens.');
     }
-  }, []);
+  }, [organizationId]);
 
   const loadCommercial = useCallback(async (conversationId: string | null, quiet = false) => {
     const requestId = ++commercialRequestRef.current;
@@ -188,19 +219,73 @@ export function ConversationsPage() {
     }
   }, []);
 
-  const refresh = useCallback(async (quiet = false) => {
+  const syncConversationList = useCallback(async () => {
+    if (!organizationId || !selectedChipId) return;
+    if (conversationSyncRunningRef.current) {
+      conversationSyncPendingRef.current = true;
+      return;
+    }
+    conversationSyncRunningRef.current = true;
     try {
-      if (!chips.length) await loadChips();
-      await loadConversations(quiet);
-      setUnreadByChip(await listConversationUnreadCounts());
-      await Promise.all([loadMessages(selectedConversationId, quiet), loadCommercial(selectedConversationId, true)]);
+      do {
+        conversationSyncPendingRef.current = false;
+        const [, unread] = await Promise.all([
+          loadConversations(true),
+          listConversationUnreadCounts(organizationId),
+        ]);
+        setUnreadByChip(unread);
+      } while (conversationSyncPendingRef.current);
+    } finally {
+      conversationSyncRunningRef.current = false;
+    }
+  }, [loadConversations, organizationId, selectedChipId]);
+
+  const syncSelectedMessages = useCallback(async () => {
+    if (!organizationId) return;
+    if (messageSyncRunningRef.current) {
+      messageSyncPendingRef.current = true;
+      return;
+    }
+    messageSyncRunningRef.current = true;
+    try {
+      do {
+        messageSyncPendingRef.current = false;
+        await loadMessages(selectedConversationIdRef.current, true);
+      } while (messageSyncPendingRef.current);
+    } finally {
+      messageSyncRunningRef.current = false;
+    }
+  }, [loadMessages, organizationId]);
+
+  const refresh = useCallback(async (quiet = false) => {
+    if (!organizationId) return;
+    if (!quiet) setLoading(true);
+    try {
+      await Promise.all([
+        loadChips(),
+        selectedChipId ? loadConversations(true) : Promise.resolve(),
+        selectedConversationId ? loadMessages(selectedConversationId, true) : Promise.resolve(),
+      ]);
+      // Comercial não bloqueia o refresh da conversa. É secundário ao chat.
+      if (selectedConversationId) void loadCommercial(selectedConversationId, true);
+      setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao atualizar o chat.');
+    } finally {
+      if (!quiet) setLoading(false);
     }
-  }, [chips.length, loadChips, loadCommercial, loadConversations, loadMessages, selectedConversationId]);
+  }, [loadChips, loadCommercial, loadConversations, loadMessages, organizationId, selectedChipId, selectedConversationId]);
 
-  useEffect(() => { void loadChips().catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao carregar chips.')); }, [loadChips]);
-  useEffect(() => { void loadConversations(); }, [loadConversations]);
+  // Carrega chips primeiro; a conversa só é consultada quando existe chip selecionado.
+  useEffect(() => {
+    void loadChips().catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao carregar chips.'));
+  }, [loadChips]);
+
+  useEffect(() => {
+    if (!selectedChipId) return;
+    void loadConversations();
+  }, [loadConversations, selectedChipId]);
+
   useEffect(() => {
     previewDateDirtyRef.current = false;
     setCommercial(null);
@@ -217,45 +302,84 @@ export function ConversationsPage() {
   }, [loadCommercial, loadMessages, selectedConversationId]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh(true);
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
-
-  useEffect(() => {
     if (!organizationId) return;
     const client = getSupabaseClient();
     let cancelled = false;
     let channel: ReturnType<typeof client.channel> | null = null;
-    let timer: number | null = null;
-    const scheduleRefresh = () => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        if (!cancelled && document.visibilityState === 'visible') void refresh(true);
-      }, 120);
+    let conversationTimer: number | null = null;
+    let messageTimer: number | null = null;
+
+    const scheduleConversationRefresh = () => {
+      if (conversationTimer !== null) window.clearTimeout(conversationTimer);
+      conversationTimer = window.setTimeout(() => {
+        if (!cancelled && document.visibilityState === 'visible') void syncConversationList();
+      }, 80);
+    };
+
+    const scheduleMessageRefresh = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old ?? {};
+      const conversationId = String(row.conversations_id ?? '').trim();
+      if (messageTimer !== null) window.clearTimeout(messageTimer);
+      messageTimer = window.setTimeout(() => {
+        if (cancelled || document.visibilityState !== 'visible') return;
+        if (conversationId && conversationId === selectedConversationIdRef.current) void syncSelectedMessages();
+        // O INSERT/UPDATE da mensagem normalmente vem acompanhado do UPDATE da
+        // conversa. Usamos o mesmo debounce para não disparar duas leituras completas.
+        scheduleConversationRefresh();
+      }, 60);
     };
 
     void (async () => {
-      // Realtime não transporta o header HTTP do tenant; sincronizamos o mesmo
-      // contexto persistente usado pelo Gerenciador antes de assinar.
       const active = await client.rpc('set_active_organization', { p_organizations_id: Number(organizationId) });
       if (cancelled || active.error) return;
       const filter = `organizations_id=eq.${organizationId}`;
-      channel = client.channel(`crm-conversations-${organizationId}-${Date.now()}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations', filter }, scheduleRefresh)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations', filter }, scheduleRefresh)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_messages', filter }, scheduleRefresh)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_messages', filter }, scheduleRefresh);
-      channel.subscribe();
+      channel = client.channel(`crm-conversations-${organizationId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations', filter }, scheduleConversationRefresh)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations', filter }, scheduleConversationRefresh)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_messages', filter }, scheduleMessageRefresh)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_messages', filter }, scheduleMessageRefresh);
+      channel.subscribe((status) => {
+        realtimeReadyRef.current = status === 'SUBSCRIBED';
+      });
     })();
+
+    const fallbackTimer = window.setInterval(() => {
+      if (cancelled || document.visibilityState !== 'visible') return;
+      // Realtime saudável recebe eventos instantaneamente. O polling vira apenas uma rede de segurança.
+      if (!realtimeReadyRef.current) {
+        void syncSelectedMessages();
+        void syncConversationList();
+      }
+    }, 5_000);
+
+    const selfHealTimer = window.setInterval(() => {
+      if (cancelled || document.visibilityState !== 'visible') return;
+      // Mesmo com Realtime conectado, uma leitura leve periódica evita estado preso após suspensão de aba/rede.
+      void syncSelectedMessages();
+      void syncConversationList();
+    }, 30_000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void syncSelectedMessages();
+        void syncConversationList();
+      }
+    };
+    window.addEventListener('focus', onVisibilityChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
+      realtimeReadyRef.current = false;
+      if (conversationTimer !== null) window.clearTimeout(conversationTimer);
+      if (messageTimer !== null) window.clearTimeout(messageTimer);
+      window.clearInterval(fallbackTimer);
+      window.clearInterval(selfHealTimer);
+      window.removeEventListener('focus', onVisibilityChange);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       if (channel) void client.removeChannel(channel);
     };
-  }, [organizationId, refresh]);
+  }, [organizationId, syncConversationList, syncSelectedMessages]);
 
   useEffect(() => {
     if (!threadRef.current) return;
