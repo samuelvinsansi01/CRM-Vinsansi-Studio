@@ -165,7 +165,7 @@ export async function listConversationMessages(organizationId: string, conversat
     .limit(limit);
   if (result.error) throw new Error(result.error.message);
   const rows = [...(result.data ?? [])];
-  const mapped = rows.map((item) => ({
+  const mapped: ConversationMessage[] = rows.map((item): ConversationMessage => ({
     id: id(item.conversation_messages_id),
     conversationId: id(item.conversations_id),
     externalId: item.external_message_id == null ? null : text(item.external_message_id),
