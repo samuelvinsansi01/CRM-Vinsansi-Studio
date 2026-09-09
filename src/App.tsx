@@ -30,7 +30,6 @@ import { PlatformOrganizationsPage } from './pages/PlatformOrganizationsPage';
 import { pagePermissions, pageTitles, type PageId } from './pages/pageRegistry';
 import { useAuthContext } from './providers/AuthProvider';
 import { useOrganizationContext } from './providers/OrganizationProvider';
-import { syncEvolutionInstances } from './services/evolution-instances/evolutionInstances.service';
 
 const ACTIVE_PAGE_STORAGE_KEY = 'painel:active-page';
 const validPageIds = new Set<PageId>(Object.keys(pageTitles) as PageId[]);
@@ -70,8 +69,6 @@ export function App() {
   const { isAuthenticated, loading, passwordRecovery } = useAuthContext();
   const { context: organizationContext, organizationId, loading: organizationLoading, error: organizationError, hasPermission } = useOrganizationContext();
   const [activePage, setActivePage] = useState<PageId>(initialPage);
-  const canSyncEvolution = hasPermission('whatsapp.instances.manage');
-
   useEffect(() => {
     window.sessionStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, activePage);
   }, [activePage]);
@@ -82,35 +79,9 @@ export function App() {
     if (permission && !hasPermission(permission)) setActivePage('dashboard');
   }, [activePage, hasPermission, isAuthenticated, organizationContext, organizationLoading]);
 
-  useEffect(() => {
-    if (!isAuthenticated || !organizationId || !canSyncEvolution) return undefined;
-    let disposed = false;
-
-    const reconcile = async (configureWebhook: boolean) => {
-      if (disposed) return;
-      try {
-        await syncEvolutionInstances({ configureWebhook });
-      } catch (error) {
-        console.warn('Não foi possível sincronizar as instâncias Evolution.', error);
-      }
-    };
-
-    const initialTimer = window.setTimeout(() => void reconcile(true), 500);
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void reconcile(false);
-    }, 60_000);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') void reconcile(false);
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      disposed = true;
-      window.clearTimeout(initialTimer);
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [canSyncEvolution, isAuthenticated, organizationId]);
+  // A Evolution é mantida pelo runtime local (Gateway/Control Plane).
+  // O CRM não reconcilia todas as instâncias a cada abertura, foco ou minuto;
+  // isso evita requisições de infraestrutura em páginas operacionais.
 
   // Não desmontar o painel autenticado durante renovação de token ou recuperação de foco.
   if (passwordRecovery) return <PasswordRecoveryPage />;

@@ -5,7 +5,7 @@ import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { getSupabaseClient } from '../lib/supabase';
 import {
-  listChatChips, listConversationMessages, listConversationUnreadCounts, listConversations, markConversationRead, setConversationArchived,
+  listChatChips, listConversationMessages, listConversationUnreadCounts, listConversations, mapConversationMessageRow, markConversationRead, setConversationArchived, sortConversationMessages,
   type ChatChip, type Conversation, type ConversationMessage,
 } from '../repositories/conversations/conversations.repository';
 import {
@@ -82,6 +82,8 @@ function commercialStageOptions(context: ConversationCommercialContext) {
   return context.allowedTransitions.map((value) => ({ value, label: COMMERCIAL_STAGE_LABELS[value] }));
 }
 
+const MESSAGE_PAGE_SIZE = 80;
+
 export function ConversationsPage() {
   const { hasPermission, organizationId } = useOrganizationContext();
   const canReply = hasPermission('whatsapp.reply');
@@ -89,6 +91,8 @@ export function ConversationsPage() {
   const [chips, setChips] = useState<ChatChip[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [unreadByChip, setUnreadByChip] = useState<Record<string, number>>({});
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -114,7 +118,9 @@ export function ConversationsPage() {
   const messageSyncRunningRef = useRef(false);
   const messageSyncPendingRef = useRef(false);
   const selectedConversationIdRef = useRef<string | null>(null);
-  const realtimeReadyRef = useRef(false);
+  const conversationRealtimeReadyRef = useRef(false);
+  const messageRealtimeReadyRef = useRef(false);
+  const unreadRefreshTimerRef = useRef<number | null>(null);
 
   const selectedConversation = conversations.find((item) => item.id === selectedConversationId) ?? null;
   const visibleConversations = useMemo(() => {
@@ -184,18 +190,46 @@ export function ConversationsPage() {
     const requestId = ++messagesRequestRef.current;
     if (!organizationId || !conversationId) {
       setMessages([]);
+      setHasOlderMessages(false);
       return;
     }
     try {
-      const next = await listConversationMessages(organizationId, conversationId);
+      const next = await listConversationMessages(organizationId, conversationId, MESSAGE_PAGE_SIZE);
       if (requestId !== messagesRequestRef.current || selectedConversationIdRef.current !== conversationId) return;
-      setMessages(next);
+      setMessages((current) => {
+        if (!quiet || current.length <= MESSAGE_PAGE_SIZE) return next;
+        const byId = new Map(current.map((item) => [item.id, item]));
+        next.forEach((item) => byId.set(item.id, item));
+        return sortConversationMessages([...byId.values()]);
+      });
+      if (!quiet) setHasOlderMessages(next.length >= MESSAGE_PAGE_SIZE);
       if (!quiet) window.requestAnimationFrame(() => threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight }));
     } catch (cause) {
       if (requestId !== messagesRequestRef.current) return;
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar as mensagens.');
     }
   }, [organizationId]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!organizationId || !selectedConversationId || loadingOlderMessages || !messages.length) return;
+    const numericIds = messages.map((item) => Number(item.id)).filter(Number.isSafeInteger);
+    const beforeId = numericIds.length ? String(Math.min(...numericIds)) : null;
+    if (!beforeId) { setHasOlderMessages(false); return; }
+    setLoadingOlderMessages(true);
+    try {
+      const older = await listConversationMessages(organizationId, selectedConversationId, MESSAGE_PAGE_SIZE, beforeId);
+      setMessages((current) => {
+        const byId = new Map(current.map((item) => [item.id, item]));
+        older.forEach((item) => byId.set(item.id, item));
+        return sortConversationMessages([...byId.values()]);
+      });
+      setHasOlderMessages(older.length >= MESSAGE_PAGE_SIZE);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao carregar o histórico anterior.');
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [loadingOlderMessages, messages, organizationId, selectedConversationId]);
 
   const loadCommercial = useCallback(async (conversationId: string | null, quiet = false) => {
     const requestId = ++commercialRequestRef.current;
@@ -219,6 +253,12 @@ export function ConversationsPage() {
     }
   }, []);
 
+  const loadUnreadCounts = useCallback(async () => {
+    if (!organizationId) return;
+    const unread = await listConversationUnreadCounts(organizationId);
+    setUnreadByChip(unread);
+  }, [organizationId]);
+
   const syncConversationList = useCallback(async () => {
     if (!organizationId || !selectedChipId) return;
     if (conversationSyncRunningRef.current) {
@@ -229,11 +269,7 @@ export function ConversationsPage() {
     try {
       do {
         conversationSyncPendingRef.current = false;
-        const [, unread] = await Promise.all([
-          loadConversations(true),
-          listConversationUnreadCounts(organizationId),
-        ]);
-        setUnreadByChip(unread);
+        await loadConversations(true);
       } while (conversationSyncPendingRef.current);
     } finally {
       conversationSyncRunningRef.current = false;
@@ -261,12 +297,11 @@ export function ConversationsPage() {
     if (!organizationId) return;
     if (!quiet) setLoading(true);
     try {
-      await Promise.all([
-        loadChips(),
-        selectedChipId ? loadConversations(true) : Promise.resolve(),
-        selectedConversationId ? loadMessages(selectedConversationId, true) : Promise.resolve(),
-      ]);
-      // Comercial não bloqueia o refresh da conversa. É secundário ao chat.
+      // Atualiza primeiro o que o operador está vendo. Chips/contadores são
+      // secundários e não entram mais no mesmo burst de requisições.
+      if (selectedChipId) await loadConversations(true);
+      if (selectedConversationId) await loadMessages(selectedConversationId, true);
+      void loadChips().catch(() => undefined);
       if (selectedConversationId) void loadCommercial(selectedConversationId, true);
       setError('');
     } catch (cause) {
@@ -305,64 +340,123 @@ export function ConversationsPage() {
     if (!organizationId) return;
     const client = getSupabaseClient();
     let cancelled = false;
-    let channel: ReturnType<typeof client.channel> | null = null;
-    let conversationTimer: number | null = null;
-    let messageTimer: number | null = null;
+    let conversationChannel: ReturnType<typeof client.channel> | null = null;
+    let messageChannel: ReturnType<typeof client.channel> | null = null;
+    let newConversationTimer: number | null = null;
 
-    const scheduleConversationRefresh = () => {
-      if (conversationTimer !== null) window.clearTimeout(conversationTimer);
-      conversationTimer = window.setTimeout(() => {
-        if (!cancelled && document.visibilityState === 'visible') void syncConversationList();
-      }, 80);
+    const scheduleUnreadRefresh = () => {
+      if (unreadRefreshTimerRef.current !== null) window.clearTimeout(unreadRefreshTimerRef.current);
+      unreadRefreshTimerRef.current = window.setTimeout(() => {
+        unreadRefreshTimerRef.current = null;
+        if (!cancelled && document.visibilityState === 'visible') void loadUnreadCounts().catch(() => undefined);
+      }, 1_200);
     };
 
-    const scheduleMessageRefresh = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+    const scheduleNewConversationRefresh = () => {
+      if (newConversationTimer !== null) window.clearTimeout(newConversationTimer);
+      newConversationTimer = window.setTimeout(() => {
+        if (!cancelled && document.visibilityState === 'visible') void syncConversationList();
+      }, 250);
+    };
+
+    const handleConversationChange = (payload: { eventType?: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
       const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old ?? {};
       const conversationId = String(row.conversations_id ?? '').trim();
-      if (messageTimer !== null) window.clearTimeout(messageTimer);
-      messageTimer = window.setTimeout(() => {
-        if (cancelled || document.visibilityState !== 'visible') return;
-        if (conversationId && conversationId === selectedConversationIdRef.current) void syncSelectedMessages();
-        // O INSERT/UPDATE da mensagem normalmente vem acompanhado do UPDATE da
-        // conversa. Usamos o mesmo debounce para não disparar duas leituras completas.
-        scheduleConversationRefresh();
-      }, 60);
+      const chipId = String(row.chips_id ?? '').trim();
+      if (!conversationId) return;
+      scheduleUnreadRefresh();
+      if (chipId && chipId !== selectedChipId) return;
+
+      setConversations((current) => {
+        const index = current.findIndex((item) => item.id === conversationId);
+        if (index < 0) return current;
+        const previous = current[index];
+        const rawContactName = String(row.contact_name ?? '').trim();
+        const contactName = rawContactName && !/^\d+@(?:s\.whatsapp\.net|c\.us|lid)$/i.test(rawContactName) ? rawContactName : previous.contactName;
+        const next: Conversation = {
+          ...previous,
+          remoteJid: String(row.remote_jid ?? previous.remoteJid),
+          phone: String(row.contact_phone ?? previous.phone),
+          contactName,
+          displayName: previous.alternativeName || previous.leadName || contactName,
+          status: String(row.conversation_status ?? previous.status) === 'archived' ? 'archived' : 'open',
+          unreadCount: Number.isFinite(Number(row.unread_count)) ? Number(row.unread_count) : previous.unreadCount,
+          lastMessageAt: row.last_message_at ? String(row.last_message_at) : previous.lastMessageAt,
+          lastMessagePreview: row.last_message_preview == null ? previous.lastMessagePreview : String(row.last_message_preview),
+          lastMessageDirection: ['inbound', 'outbound'].includes(String(row.last_message_direction)) ? String(row.last_message_direction) as 'inbound' | 'outbound' : previous.lastMessageDirection,
+          updatedAt: row.conversations_updated_at ? String(row.conversations_updated_at) : previous.updatedAt,
+        };
+        const replaced = [...current];
+        replaced[index] = next;
+        return replaced
+          .filter((item) => includeArchived || item.status !== 'archived')
+          .sort((left, right) => {
+            const leftAt = left.lastMessageAt ? new Date(left.lastMessageAt).getTime() : 0;
+            const rightAt = right.lastMessageAt ? new Date(right.lastMessageAt).getTime() : 0;
+            return rightAt - leftAt || Number(right.id) - Number(left.id);
+          });
+      });
+      if (payload.eventType === 'INSERT') scheduleNewConversationRefresh();
     };
 
-    void (async () => {
-      const active = await client.rpc('set_active_organization', { p_organizations_id: Number(organizationId) });
-      if (cancelled || active.error) return;
-      const filter = `organizations_id=eq.${organizationId}`;
-      channel = client.channel(`crm-conversations-${organizationId}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations', filter }, scheduleConversationRefresh)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations', filter }, scheduleConversationRefresh)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_messages', filter }, scheduleMessageRefresh)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_messages', filter }, scheduleMessageRefresh);
-      channel.subscribe((status) => {
-        realtimeReadyRef.current = status === 'SUBSCRIBED';
+    const handleMessageChange = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+      const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old ?? {};
+      const conversationId = String(row.conversations_id ?? '').trim();
+      if (!conversationId || conversationId !== selectedConversationIdRef.current) return;
+      const message = mapConversationMessageRow(row);
+      if (!message.id) return;
+      const thread = threadRef.current;
+      const stickToBottom = !thread || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
+      setMessages((current) => {
+        const byId = new Map(current.map((item) => [item.id, item]));
+        byId.set(message.id, message);
+        return sortConversationMessages([...byId.values()]);
       });
-    })();
+      if (stickToBottom) window.requestAnimationFrame(() => threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight }));
+    };
+
+    const conversationFilter = `organizations_id=eq.${organizationId}`;
+    conversationChannel = client.channel(`crm-conversations-list-${organizationId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations', filter: conversationFilter }, handleConversationChange)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversations', filter: conversationFilter }, handleConversationChange);
+    conversationChannel.subscribe((status) => {
+      conversationRealtimeReadyRef.current = status === 'SUBSCRIBED';
+    });
+
+    if (selectedConversationId) {
+      const messageFilter = `conversations_id=eq.${selectedConversationId}`;
+      messageChannel = client.channel(`crm-conversation-messages-${organizationId}-${selectedConversationId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversation_messages', filter: messageFilter }, handleMessageChange)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_messages', filter: messageFilter }, handleMessageChange);
+      messageChannel.subscribe((status) => {
+        messageRealtimeReadyRef.current = status === 'SUBSCRIBED';
+      });
+    } else {
+      messageRealtimeReadyRef.current = true;
+    }
 
     const fallbackTimer = window.setInterval(() => {
       if (cancelled || document.visibilityState !== 'visible') return;
-      // Realtime saudável recebe eventos instantaneamente. O polling vira apenas uma rede de segurança.
-      if (!realtimeReadyRef.current) {
-        void syncSelectedMessages();
+      if (!conversationRealtimeReadyRef.current) {
         void syncConversationList();
+        void loadUnreadCounts().catch(() => undefined);
       }
-    }, 5_000);
+      if (!messageRealtimeReadyRef.current) void syncSelectedMessages();
+    }, 15_000);
 
     const selfHealTimer = window.setInterval(() => {
       if (cancelled || document.visibilityState !== 'visible') return;
-      // Mesmo com Realtime conectado, uma leitura leve periódica evita estado preso após suspensão de aba/rede.
-      void syncSelectedMessages();
+      // Uma única reconciliação por minuto é suficiente para corrigir perda de evento.
       void syncConversationList();
-    }, 30_000);
+      void syncSelectedMessages();
+      void loadUnreadCounts().catch(() => undefined);
+    }, 60_000);
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        void syncSelectedMessages();
         void syncConversationList();
+        void syncSelectedMessages();
+        void loadUnreadCounts().catch(() => undefined);
       }
     };
     window.addEventListener('focus', onVisibilityChange);
@@ -370,21 +464,26 @@ export function ConversationsPage() {
 
     return () => {
       cancelled = true;
-      realtimeReadyRef.current = false;
-      if (conversationTimer !== null) window.clearTimeout(conversationTimer);
-      if (messageTimer !== null) window.clearTimeout(messageTimer);
+      conversationRealtimeReadyRef.current = false;
+      messageRealtimeReadyRef.current = false;
+      if (newConversationTimer !== null) window.clearTimeout(newConversationTimer);
+      if (unreadRefreshTimerRef.current !== null) {
+        window.clearTimeout(unreadRefreshTimerRef.current);
+        unreadRefreshTimerRef.current = null;
+      }
       window.clearInterval(fallbackTimer);
       window.clearInterval(selfHealTimer);
       window.removeEventListener('focus', onVisibilityChange);
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      if (channel) void client.removeChannel(channel);
+      if (conversationChannel) void client.removeChannel(conversationChannel);
+      if (messageChannel) void client.removeChannel(messageChannel);
     };
-  }, [organizationId, syncConversationList, syncSelectedMessages]);
+  }, [includeArchived, loadUnreadCounts, organizationId, selectedChipId, selectedConversationId, syncConversationList, syncSelectedMessages]);
 
   useEffect(() => {
     if (!threadRef.current) return;
     threadRef.current.scrollTop = threadRef.current.scrollHeight;
-  }, [messages.length, selectedConversationId]);
+  }, [selectedConversationId]);
 
   const handleSend = async () => {
     if (!canReply) return;
@@ -399,7 +498,9 @@ export function ConversationsPage() {
     setDraft(''); setSending(true); setMessages((current) => [...current, optimistic]);
     try {
       await sendConversationMessage(selectedConversation.id, body);
-      await Promise.all([loadMessages(selectedConversation.id, true), loadConversations(true)]);
+      // A lista é atualizada pelo UPDATE Realtime da conversa; só reconciliamos
+      // a pequena janela da thread para substituir o item otimista pelo canônico.
+      await loadMessages(selectedConversation.id, true);
       setError('');
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Falha ao enviar a mensagem.';
@@ -566,6 +667,7 @@ export function ConversationsPage() {
               </div>
 
               <div className="chat-messages" ref={threadRef}>
+                {hasOlderMessages ? <div className="chat-load-older"><Button size="sm" variant="secondary" loading={loadingOlderMessages} onClick={() => void loadOlderMessages()}>Carregar mensagens anteriores</Button></div> : null}
                 {!messages.length ? <div className="chat-empty"><Inbox size={24} /><span>Nenhuma mensagem registrada.</span></div> : null}
                 {messages.map((message) => (
                   <article key={message.id} className={`chat-message chat-message--${message.direction} ${message.status === 'failed' || message.status === 'reconciliation_required' ? 'has-error' : ''}`}>

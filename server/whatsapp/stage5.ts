@@ -91,19 +91,29 @@ export function stage5ProviderJidsFromPayload(value:unknown){
 }
 
 export async function providerRecipientForConversation(scope:HumanScope,conversationId:number,fallback:string){
-  const recent=await scope.admin.from('conversation_messages')
-    .select('conversation_messages_id,raw_payload')
-    .eq('organizations_id',scope.context.organizationId)
-    .eq('conversations_id',conversationId)
-    .order('conversation_messages_id',{ascending:false})
-    .limit(30);
-  if(!recent.error){
-    for(const row of (recent.data??[]) as Row[]){
-      const candidates=stage5ProviderJidsFromPayload(row.raw_payload);
-      if(candidates.length)return candidates[0];
-    }
-  }
-  return text(fallback);
+  // A identidade de transporte já é materializada em conversation_contact_aliases.
+  // Não varremos mais 30 raw_payloads grandes a cada envio manual.
+  const [conversationResult, aliasesResult]=await Promise.all([
+    scope.admin.from('conversations')
+      .select('remote_jid')
+      .eq('organizations_id',scope.context.organizationId)
+      .eq('conversations_id',conversationId)
+      .maybeSingle(),
+    scope.admin.from('conversation_contact_aliases')
+      .select('alias_jid')
+      .eq('organizations_id',scope.context.organizationId)
+      .eq('conversations_id',conversationId)
+      .order('conversation_contact_aliases_id',{ascending:false})
+      .limit(20),
+  ]);
+
+  const candidates=[
+    providerJidCandidate(conversationResult.data?.remote_jid),
+    ...((aliasesResult.data??[]) as Row[]).map((row)=>providerJidCandidate(row.alias_jid)),
+    providerJidCandidate(fallback),
+  ].filter(Boolean);
+  const unique=[...new Set(candidates)];
+  return unique.find((jid)=>jid.endsWith('@s.whatsapp.net'))??unique.find((jid)=>jid.endsWith('@lid'))??text(fallback);
 }
 
 export function safeFileName(value:unknown){const base=text(value).normalize('NFKD').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,120);return base||'arquivo';}

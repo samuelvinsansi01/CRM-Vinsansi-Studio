@@ -102,14 +102,14 @@ function meaningfulContactName(value: unknown) {
   return candidate;
 }
 
-export async function listConversations(organizationId: string, chipId: string | null, includeArchived = false): Promise<Conversation[]> {
+export async function listConversations(organizationId: string, chipId: string | null, includeArchived = false, limit = 120): Promise<Conversation[]> {
   const client = getSupabaseClient();
   let query = client.from('conversations')
     .select('conversations_id,chips_id,instances_id,leads_id,remote_jid,contact_phone,contact_name,contact_avatar_url,conversation_status,unread_count,last_message_at,last_message_preview,last_message_direction,conversations_updated_at')
     .eq('organizations_id', Number(organizationId))
     .order('last_message_at', { ascending: false, nullsFirst: false })
     .order('conversations_id', { ascending: false })
-    .limit(500);
+    .limit(limit);
   if (chipId) query = query.eq('chips_id', Number(chipId));
   if (!includeArchived) query = query.eq('conversation_status', 'open');
   const result = await query;
@@ -154,18 +154,8 @@ export async function listConversations(organizationId: string, chipId: string |
   });
 }
 
-export async function listConversationMessages(organizationId: string, conversationId: string, limit = 250): Promise<ConversationMessage[]> {
-  // Buscar primeiro os IDs mais recentes usa conversation_messages_thread_cursor_idx
-  // e evita o bug antigo de limitar as 250 mensagens MAIS ANTIGAS da conversa.
-  const result = await getSupabaseClient().from('conversation_messages')
-    .select('conversation_messages_id,conversations_id,external_message_id,direction,from_me,message_type,message_body,media_url,media_mime_type,media_file_name,quoted_external_message_id,message_status,provider_timestamp,conversation_messages_created_at,error_message')
-    .eq('organizations_id', Number(organizationId))
-    .eq('conversations_id', Number(conversationId))
-    .order('conversation_messages_id', { ascending: false })
-    .limit(limit);
-  if (result.error) throw new Error(result.error.message);
-  const rows = [...(result.data ?? [])];
-  const mapped: ConversationMessage[] = rows.map((item): ConversationMessage => ({
+export function mapConversationMessageRow(item: Row): ConversationMessage {
+  return {
     id: id(item.conversation_messages_id),
     conversationId: id(item.conversations_id),
     externalId: item.external_message_id == null ? null : text(item.external_message_id),
@@ -181,16 +171,36 @@ export async function listConversationMessages(organizationId: string, conversat
     providerTimestamp: item.provider_timestamp ? text(item.provider_timestamp) : null,
     createdAt: text(item.conversation_messages_created_at),
     errorMessage: text(item.error_message),
-  }));
-  // A janela é escolhida pelo cursor de inserção (rápido), mas a apresentação
-  // continua cronológica pelo timestamp real do WhatsApp. Replays antigos da
-  // Evolution não são empurrados visualmente para o fim da conversa.
-  return mapped.sort((left, right) => {
+  };
+}
+
+export function sortConversationMessages(messages: ConversationMessage[]) {
+  return [...messages].sort((left, right) => {
     const leftAt = new Date(left.providerTimestamp || left.createdAt).getTime();
     const rightAt = new Date(right.providerTimestamp || right.createdAt).getTime();
     const timeDelta = (Number.isFinite(leftAt) ? leftAt : 0) - (Number.isFinite(rightAt) ? rightAt : 0);
     return timeDelta || Number(left.id) - Number(right.id);
   });
+}
+
+export async function listConversationMessages(
+  organizationId: string,
+  conversationId: string,
+  limit = 80,
+  beforeId: string | null = null,
+): Promise<ConversationMessage[]> {
+  // O chat abre apenas a janela recente. Histórico anterior é paginado sob demanda;
+  // nunca carregamos centenas de mensagens em toda atualização Realtime.
+  let query = getSupabaseClient().from('conversation_messages')
+    .select('conversation_messages_id,conversations_id,external_message_id,direction,from_me,message_type,message_body,media_url,media_mime_type,media_file_name,quoted_external_message_id,message_status,provider_timestamp,conversation_messages_created_at,error_message')
+    .eq('organizations_id', Number(organizationId))
+    .eq('conversations_id', Number(conversationId))
+    .order('conversation_messages_id', { ascending: false })
+    .limit(limit);
+  if (beforeId && Number.isSafeInteger(Number(beforeId))) query = query.lt('conversation_messages_id', Number(beforeId));
+  const result = await query;
+  if (result.error) throw new Error(result.error.message);
+  return sortConversationMessages(((result.data ?? []) as Row[]).map(mapConversationMessageRow));
 }
 
 export async function markConversationRead(conversationId: string) {
