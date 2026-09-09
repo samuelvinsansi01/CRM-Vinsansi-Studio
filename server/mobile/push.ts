@@ -3,6 +3,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 type Row = Record<string, unknown>;
 type PushDevice = { id: number; memberId: number; token: string };
 
+const DEFAULT_PUSH_MAX_EVENT_AGE_MS = 15 * 60 * 1000;
+
 type InboundPushInput = {
   instanceId: number;
   externalMessageId: string;
@@ -35,10 +37,23 @@ function validExpoPushToken(value: string) {
   return /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/.test(value);
 }
 
+function pushMaxEventAgeMs() {
+  const raw = Number(env('MOBILE_PUSH_MAX_EVENT_AGE_MS'));
+  return Number.isFinite(raw) && raw >= 60_000 ? raw : DEFAULT_PUSH_MAX_EVENT_AGE_MS;
+}
+
+function eventAgeMs(message: Row) {
+  const raw = text(message.provider_timestamp) || text(message.conversation_messages_created_at);
+  if (!raw) return 0;
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Date.now() - parsed);
+}
+
 async function findInboundMessage(admin: SupabaseClient, instanceId: number, externalMessageId: string) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const result = await admin.from('conversation_messages')
-      .select('conversation_messages_id,organizations_id,conversations_id,chips_id,instances_id,leads_id,remote_jid,message_type,message_body,external_message_id,direction,mobile_push_sent_at')
+      .select('conversation_messages_id,organizations_id,conversations_id,chips_id,instances_id,leads_id,remote_jid,message_type,message_body,external_message_id,direction,provider_timestamp,conversation_messages_created_at,mobile_push_sent_at')
       .eq('instances_id', instanceId)
       .eq('external_message_id', externalMessageId)
       .eq('direction', 'inbound')
@@ -171,6 +186,14 @@ export async function notifyInboundWhatsappMessage(input: InboundPushInput) {
   const conversationId = integer(message.conversations_id);
   const chipId = integer(message.chips_id);
   if (!organizationId || !conversationId || !chipId) return { skipped: true, reason: 'message_scope_incomplete' };
+
+  // Evolution Go pode reentregar backlog antigo depois de reconexão. A mensagem
+  // continua sendo persistida/sincronizada pelo fluxo canônico, mas push deve ser
+  // reservado a eventos recentes para não acordar o usuário com notificações
+  // históricas horas depois.
+  const ageMs = eventAgeMs(message);
+  const maxAgeMs = pushMaxEventAgeMs();
+  if (ageMs > maxAgeMs) return { skipped: true, reason: 'stale_replay', ageMs, maxAgeMs };
 
   const [conversationResult, chipResult] = await Promise.all([
     admin.from('conversations')

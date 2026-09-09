@@ -79,6 +79,9 @@ requireTokens('mobile_push_backend_incompleto', mobilePush, [
   "https://exp.host/--/api/v2/push/send",
   "DeviceNotRegistered",
   "channelId: 'mensagens'",
+  "provider_timestamp",
+  "stale_replay",
+  "MOBILE_PUSH_MAX_EVENT_AGE_MS",
 ]);
 const evolutionWebhook = requireFile('server/routes/whatsapp/evolution-webhook.ts');
 requireTokens('mobile_push_webhook_incompleto', evolutionWebhook, [
