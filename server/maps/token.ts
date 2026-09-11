@@ -31,13 +31,6 @@ function secret() {
   const value = String(configuredValue ?? '').trim();
   const state = !exists ? 'absent' : !value ? 'empty' : value.length < 32 ? 'too_short' : 'valid';
 
-  console.info('[maps-token-config]', {
-    signingSecretExists: exists,
-    signingSecretNonEmpty: Boolean(value),
-    signingSecretLength: value.length,
-    signingSecretState: state,
-  });
-
   if (state === 'absent' || state === 'empty') throw new Error('gmaps_extension_signing_secret_not_configured');
   if (state === 'too_short') throw new Error('gmaps_extension_signing_secret_invalid');
   return value;

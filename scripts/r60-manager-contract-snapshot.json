@@ -1,0 +1,43 @@
+{
+  "source": "CRM - Gerenciador de Disparos v1.5.71 - CANDIDATE.zip",
+  "managerVersion": "1.5.71",
+  "workerVersion": "3.14.6",
+  "gatewayVersion": "1.2.30",
+  "captureVersion": "1.0.53",
+  "instagramVersion": "2.0.8",
+  "releaseSequence": 60,
+  "schemaTarget": "r60",
+  "securityBaseline": "r60-security-baseline-v1",
+  "productionReady": false,
+  "resumeAllowed": false,
+  "workerRpcCalls": {
+    "worker_claim_dispatch_job": ["p_organizations_id","p_queue_items_id","p_worker_id","p_lease_seconds"],
+    "worker_move_dispatch_to_dlq": ["p_organizations_id","p_queue_items_id","p_worker_id","p_reason","p_attempts","p_max_attempts"],
+    "worker_claim_dispatch_part": ["p_organizations_id","p_queue_items_id","p_part_key","p_content_hash","p_body","p_reserved_external_id","p_worker_id","p_lease_seconds"],
+    "worker_complete_dispatch_part": ["p_organizations_id","p_queue_items_id","p_part_key","p_claim_token","p_outcome","p_external_id","p_operation_id","p_error_message"],
+    "service_stage5_converge_automatic_message": ["p_organizations_id","p_queue_items_id","p_external_message_id","p_remote_jid","p_message_body","p_message_type"],
+    "worker_finalize_whatsapp_queue_item": ["p_organizations_id","p_queue_items_id"],
+    "worker_fail_whatsapp_queue_item": ["p_organizations_id","p_queue_items_id","p_error_message"],
+    "worker_start_whatsapp_batch": ["p_organizations_id","p_chip_instance","p_queue_item_ids","p_worker_id"],
+    "worker_set_whatsapp_batch_state": ["p_organizations_id","p_chip_instance","p_action","p_worker_id"],
+    "worker_recover_stale_whatsapp_v2": ["p_organizations_id","p_stale_before"],
+    "worker_claim_next_batch_item": ["p_worker_batches_id","p_worker_id"],
+    "worker_complete_batch_item": ["p_worker_batch_items_id","p_result","p_error_message","p_next_run_at"],
+    "service_worker_heartbeat": ["p_worker_id","p_worker_version","p_status","p_metrics","p_metadata"],
+    "refresh_operational_alerts": ["p_organizations_id"],
+    "service_claim_recovery_request": ["p_worker_id"],
+    "service_complete_recovery_request": ["p_request_id","p_result","p_error"],
+    "instagram_recover_stale_items_v2": ["p_organizations_id","p_stale_before"]
+  },
+  "gateway": {
+    "crmPath": "/api/whatsapp/evolution-webhook",
+    "instanceQuery": "instance_id",
+    "hmacHeader": "x-evolution-signature",
+    "instanceHeader": "x-evolution-instance-id",
+    "hmacMessage": "${instances_id}:${instances_name}",
+    "remoteJid": true,
+    "remoteJidAlt": true,
+    "messageStatus": true,
+    "dropNonDirectBeforeCrm": true
+  }
+}

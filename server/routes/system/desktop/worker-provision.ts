@@ -7,8 +7,7 @@ type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): voi
 type RecordValue = Record<string, unknown>;
 declare const process: { env: Record<string, string | undefined> };
 
-const DEFAULT_EVOLUTION_SERVICE_URL = 'http://host.docker.internal:8080';
-const DEFAULT_WORKER_SERVICE_URL = 'http://lead-certo-whatsapp-worker:8787';
+const DEFAULT_GATEWAY_TUNNEL_SERVICE_URL = 'http://host.docker.internal:8090';
 const DEFAULT_CLOUDFLARE_IMAGE = 'cloudflare/cloudflared:2026.7.3';
 const DEFAULT_CLOUDFLARE_CONTAINER = 'vinsansi-cloudflared';
 const DEFAULT_DOCKER_NETWORK = 'vinsansi-network';
@@ -58,9 +57,8 @@ async function commonProvisioningPayload(installationTunnel: Awaited<ReturnType<
     cloudflareTunnelId: installationTunnel.tunnelId,
     cloudflareTunnelName: installationTunnel.tunnelName,
     evolutionPublicUrl: installationTunnel.evolutionPublicUrl,
-    evolutionTunnelServiceUrl: envAny('DESKTOP_EVOLUTION_SERVICE_URL') || DEFAULT_EVOLUTION_SERVICE_URL,
-    workerPublicUrl: installationTunnel.workerPublicUrl,
-    workerTunnelServiceUrl: envAny('DESKTOP_WORKER_SERVICE_URL') || DEFAULT_WORKER_SERVICE_URL,
+    // Field name retained for Manager 1.5.71 compatibility; R60 routes it to the Gateway public listener.
+    evolutionTunnelServiceUrl: envAny('DESKTOP_GATEWAY_SERVICE_URL') || DEFAULT_GATEWAY_TUNNEL_SERVICE_URL,
     cloudflareTunnelImage: release?.components.cloudflared.image || envAny('DESKTOP_CLOUDFLARE_IMAGE') || DEFAULT_CLOUDFLARE_IMAGE,
     cloudflareTunnelContainerName: envAny('DESKTOP_CLOUDFLARE_CONTAINER_NAME') || DEFAULT_CLOUDFLARE_CONTAINER,
     dockerNetworkName: envAny('DESKTOP_DOCKER_NETWORK_NAME') || DEFAULT_DOCKER_NETWORK,

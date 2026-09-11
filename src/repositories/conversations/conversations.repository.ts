@@ -1,218 +1,58 @@
 import { getSupabaseClient } from '../../lib/supabase';
+import { organizationRequestHeaders } from '../../services/organization/organizationSession';
 
-export type ChatChip = {
-  id: string;
-  instanceId: string;
-  name: string;
-  phone: string;
-  active: boolean;
-  connected: boolean;
-  instanceName: string;
-};
-
+export type ChatChip = { id:string; instanceId:string; name:string; phone:string; active:boolean; connected:boolean; instanceName:string };
+export type ContactState='lead'|'unknown'|'ignored';
 export type Conversation = {
-  id: string;
-  chipId: string;
-  instanceId: string;
-  leadId: string | null;
-  remoteJid: string;
-  phone: string;
-  contactName: string;
-  leadName: string;
-  alternativeName: string;
-  displayName: string;
-  avatarUrl: string;
-  status: 'open' | 'archived';
-  unreadCount: number;
-  lastMessageAt: string | null;
-  lastMessagePreview: string;
-  lastMessageDirection: 'inbound' | 'outbound' | null;
-  updatedAt: string;
+  id:string; chipId:string; instanceId:string; contactId:string; contactState:ContactState; leadId:string|null; remoteJid:string; phone:string;
+  contactName:string; leadName:string; alternativeName:string; displayName:string; avatarUrl:string; status:'open'|'archived'; unreadCount:number;
+  lastMessageAt:string|null; lastMessagePreview:string; lastMessageDirection:'inbound'|'outbound'|null; updatedAt:string; version:number;
 };
+export type ConversationMessage={id:string;conversationId:string;externalId:string|null;direction:'inbound'|'outbound';fromMe:boolean;type:string;body:string;mediaUrl:string;mediaMimeType:string;mediaFileName:string;quotedExternalId:string|null;status:'pending'|'sending'|'sent'|'delivered'|'read'|'failed'|'deleted'|'reconciliation_required';providerTimestamp:string|null;createdAt:string;errorMessage:string};
+type Row=Record<string,unknown>;
+const text=(value:unknown)=>String(value??'').trim();const id=(value:unknown)=>text(value);const number=(value:unknown)=>Number.isFinite(Number(value))?Number(value):0;
+const record=(value:unknown):Row=>value&&typeof value==='object'&&!Array.isArray(value)?value as Row:{};
 
-export type ConversationMessage = {
-  id: string;
-  conversationId: string;
-  externalId: string | null;
-  direction: 'inbound' | 'outbound';
-  fromMe: boolean;
-  type: string;
-  body: string;
-  mediaUrl: string;
-  mediaMimeType: string;
-  mediaFileName: string;
-  quotedExternalId: string | null;
-  status: 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'deleted' | 'reconciliation_required';
-  providerTimestamp: string | null;
-  createdAt: string;
-  errorMessage: string;
-};
-
-type Row = Record<string, unknown>;
-const text = (value: unknown) => String(value ?? '').trim();
-const id = (value: unknown) => text(value);
-const number = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
-
-export async function listChatChips(organizationId: string): Promise<ChatChip[]> {
-  const client = getSupabaseClient();
-  const chipsResult = await client.from('chips')
-    .select('chips_id,instances_id,status_id,chips_name,chips_phone')
-    .eq('organizations_id', Number(organizationId))
-    .order('chips_name');
-  if (chipsResult.error) throw new Error(chipsResult.error.message);
-  const instanceIds = Array.from(new Set((chipsResult.data ?? []).map((item) => Number(item.instances_id)).filter(Number.isSafeInteger)));
-  const instanceResult = instanceIds.length
-    ? await client.from('instances').select('instances_id,status_id,instances_name').eq('organizations_id', Number(organizationId)).in('instances_id', instanceIds)
-    : { data: [], error: null };
-  if (instanceResult.error) throw new Error(instanceResult.error.message);
-  const instances = new Map((instanceResult.data ?? []).map((item) => [id(item.instances_id), item as Row]));
-  return (chipsResult.data ?? []).map((item) => {
-    const instance = instances.get(id(item.instances_id));
-    return {
-      id: id(item.chips_id),
-      instanceId: id(item.instances_id),
-      name: text(item.chips_name),
-      phone: text(item.chips_phone),
-      active: number(item.status_id) === 1,
-      connected: number(instance?.status_id) === 1,
-      instanceName: text(instance?.instances_name),
-    };
-  }).sort((left, right) => Number(right.active && right.connected) - Number(left.active && left.connected) || left.name.localeCompare(right.name));
+async function accessToken(force=false){const client=getSupabaseClient();const session=force?await client.auth.refreshSession():await client.auth.getSession();if(session.error)throw new Error(session.error.message);const token=session.data.session?.access_token;if(!token)throw new Error('Sessão expirada. Entre novamente.');return token;}
+async function apiJson<T>(path:string,organizationId:string,init:RequestInit={}){
+  const call=async(token:string)=>{const headers=new Headers(init.headers??{});headers.set('Authorization',`Bearer ${token}`);headers.set('X-Vinsansi-Organization-Id',organizationId);if(init.body&&!headers.has('Content-Type'))headers.set('Content-Type','application/json');const scoped=organizationRequestHeaders(Object.fromEntries(headers.entries()));return fetch(path,{...init,headers:scoped});};
+  let response=await call(await accessToken(false));if(response.status===401)response=await call(await accessToken(true));const payload=await response.json().catch(()=>({})) as T&{ok?:boolean;error?:string};if(!response.ok||payload.ok===false)throw new Error(payload.error||`conversation_api_http_${response.status}`);return payload;
 }
 
-export async function listConversationUnreadCounts(organizationId: string): Promise<Record<string, number>> {
-  const result = await getSupabaseClient().from('conversations')
-    .select('chips_id,unread_count')
-    .eq('organizations_id', Number(organizationId))
-    .eq('conversation_status', 'open')
-    .gt('unread_count', 0);
-  if (result.error) throw new Error(result.error.message);
-  return (result.data ?? []).reduce<Record<string, number>>((acc, item) => {
-    const chipId = id(item.chips_id);
-    acc[chipId] = (acc[chipId] ?? 0) + number(item.unread_count);
-    return acc;
-  }, {});
+export async function listChatChips(organizationId:string):Promise<ChatChip[]>{
+ const client=getSupabaseClient();const chipsResult=await client.from('chips').select('chips_id,instances_id,status_id,chips_name,chips_phone').eq('organizations_id',Number(organizationId)).order('chips_name');if(chipsResult.error)throw new Error(chipsResult.error.message);
+ const instanceIds=Array.from(new Set((chipsResult.data??[]).map((item)=>Number(item.instances_id)).filter(Number.isSafeInteger)));const instanceResult=instanceIds.length?await client.from('instances').select('instances_id,status_id,instances_name').eq('organizations_id',Number(organizationId)).in('instances_id',instanceIds):{data:[],error:null};if(instanceResult.error)throw new Error(instanceResult.error.message);const instances=new Map((instanceResult.data??[]).map((item)=>[id(item.instances_id),item as Row]));
+ return(chipsResult.data??[]).map((item)=>{const instance=instances.get(id(item.instances_id));return{id:id(item.chips_id),instanceId:id(item.instances_id),name:text(item.chips_name),phone:text(item.chips_phone),active:number(item.status_id)===1,connected:number(instance?.status_id)===1,instanceName:text(instance?.instances_name)}}).sort((a,b)=>Number(b.active&&b.connected)-Number(a.active&&a.connected)||a.name.localeCompare(b.name));
 }
 
-function meaningfulContactName(value: unknown) {
-  const candidate = text(value);
-  if (!candidate) return '';
-  if (/^[+\d\s().-]{7,}$/.test(candidate)) return '';
-  if (/^\d+@(?:s\.whatsapp\.net|c\.us|lid)$/i.test(candidate)) return '';
-  return candidate;
+export async function listConversationUnreadCounts(organizationId:string):Promise<Record<string,number>>{const result=await getSupabaseClient().from('conversations').select('chips_id,unread_count').eq('organizations_id',Number(organizationId)).eq('conversation_status','open').gt('unread_count',0);if(result.error)throw new Error(result.error.message);return(result.data??[]).reduce<Record<string,number>>((acc,item)=>{const chip=id(item.chips_id);acc[chip]=(acc[chip]??0)+number(item.unread_count);return acc},{});}
+function contactState(value:unknown):ContactState{return text(value)==='lead'?'lead':text(value)==='ignored'?'ignored':'unknown';}
+function mapConversationRow(item:Row):Conversation{return{id:id(item.conversations_id),chipId:id(item.chips_id),instanceId:id(item.instances_id),contactId:id(item.whatsapp_contacts_id),contactState:contactState(item.contact_state),leadId:item.leads_id==null?null:id(item.leads_id),remoteJid:text(item.remote_jid),phone:text(item.contact_phone),contactName:text(item.contact_name),leadName:text(item.leads_name),alternativeName:text(item.leads_alternative_name),displayName:text(item.display_name)||text(item.leads_alternative_name)||text(item.leads_name)||text(item.contact_name)||(contactState(item.contact_state)==='unknown'?'Não cadastrado':text(item.contact_phone)),avatarUrl:text(item.contact_avatar_url),status:text(item.conversation_status)==='archived'?'archived':'open',unreadCount:number(item.unread_count),lastMessageAt:item.last_message_at?text(item.last_message_at):null,lastMessagePreview:text(item.last_message_preview),lastMessageDirection:['inbound','outbound'].includes(text(item.last_message_direction))?text(item.last_message_direction) as 'inbound'|'outbound':null,updatedAt:text(item.conversations_updated_at),version:Math.max(1,number(item.conversation_version)||1)};}
+
+export type ConversationCursor={at:string;id:string};
+export async function listConversationsPage(organizationId:string,chipId:string|null,includeArchived=false,limit=50,contactFilter:'active'|ContactState='active',cursor:ConversationCursor|null=null):Promise<{items:Conversation[];nextCursor:ConversationCursor|null}>{
+ const params=new URLSearchParams({limit:String(Math.min(100,Math.max(1,limit))),archived:String(includeArchived)});if(chipId)params.set('chipId',chipId);if(contactFilter!=='active')params.set('contactState',contactFilter);if(cursor?.at)params.set('cursorAt',cursor.at);if(cursor?.id)params.set('cursorId',cursor.id);const payload=await apiJson<{ok:boolean;items?:Row[];nextCursor?:{at?:unknown;id?:unknown}|null}>(`/api/whatsapp/conversations?${params}`,organizationId);const next=payload.nextCursor&&text(payload.nextCursor.at)&&text(payload.nextCursor.id)?{at:text(payload.nextCursor.at),id:text(payload.nextCursor.id)}:null;return{items:(payload.items??[]).map(mapConversationRow),nextCursor:next};
+}
+export async function listConversations(organizationId:string,chipId:string|null,includeArchived=false,limit=50,contactFilter:'active'|ContactState='active'):Promise<Conversation[]>{return(await listConversationsPage(organizationId,chipId,includeArchived,limit,contactFilter,null)).items;}
+
+export async function getConversationDelta(organizationId:string,conversationId:string):Promise<Conversation|null>{
+ const client=getSupabaseClient();const c=await client.from('conversations').select('conversations_id,chips_id,instances_id,whatsapp_contacts_id,remote_jid,contact_avatar_url,conversation_status,unread_count,last_message_at,last_message_preview,last_message_direction,conversation_version,conversations_updated_at').eq('organizations_id',Number(organizationId)).eq('conversations_id',Number(conversationId)).maybeSingle();if(c.error)throw new Error(c.error.message);if(!c.data)return null;
+ const contactId=id(c.data.whatsapp_contacts_id);if(!contactId)return null;const wc=await client.from('whatsapp_contacts').select('whatsapp_contacts_id,normalized_phone,display_name,leads_id,contact_state').eq('organizations_id',Number(organizationId)).eq('whatsapp_contacts_id',Number(contactId)).maybeSingle();if(wc.error||!wc.data)return null;let lead:Row={};if(wc.data.leads_id){const l=await client.from('leads').select('leads_id,leads_name,leads_alternative_name').eq('organizations_id',Number(organizationId)).eq('leads_id',Number(wc.data.leads_id)).maybeSingle();if(l.error)throw new Error(l.error.message);lead=record(l.data);}
+ return mapConversationRow({...c.data,...wc.data,contact_phone:wc.data.normalized_phone,contact_name:wc.data.display_name,...lead});
 }
 
-export async function listConversations(organizationId: string, chipId: string | null, includeArchived = false, limit = 120): Promise<Conversation[]> {
-  const client = getSupabaseClient();
-  let query = client.from('conversations')
-    .select('conversations_id,chips_id,instances_id,leads_id,remote_jid,contact_phone,contact_name,contact_avatar_url,conversation_status,unread_count,last_message_at,last_message_preview,last_message_direction,conversations_updated_at')
-    .eq('organizations_id', Number(organizationId))
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .order('conversations_id', { ascending: false })
-    .limit(limit);
-  if (chipId) query = query.eq('chips_id', Number(chipId));
-  if (!includeArchived) query = query.eq('conversation_status', 'open');
-  const result = await query;
-  if (result.error) throw new Error(result.error.message);
+export function mapConversationMessageRow(item:Row):ConversationMessage{return{id:id(item.conversation_messages_id),conversationId:id(item.conversations_id),externalId:item.external_message_id==null?null:text(item.external_message_id),direction:text(item.direction)==='outbound'?'outbound':'inbound',fromMe:Boolean(item.from_me),type:text(item.message_type)||'text',body:text(item.message_body),mediaUrl:'',mediaMimeType:'',mediaFileName:'',quotedExternalId:item.quoted_external_message_id==null?null:text(item.quoted_external_message_id),status:text(item.message_status) as ConversationMessage['status'],providerTimestamp:item.provider_timestamp?text(item.provider_timestamp):null,createdAt:text(item.conversation_messages_created_at),errorMessage:text(item.error_message)};}
+export function sortConversationMessages(messages:ConversationMessage[]){return[...messages].sort((a,b)=>{const aa=new Date(a.providerTimestamp||a.createdAt).getTime(),bb=new Date(b.providerTimestamp||b.createdAt).getTime();return(Number.isFinite(aa)?aa:0)-(Number.isFinite(bb)?bb:0)||Number(a.id)-Number(b.id)});}
+export async function listConversationMessages(organizationId:string,conversationId:string,limit=80,beforeId:string|null=null):Promise<ConversationMessage[]>{const params=new URLSearchParams({conversationId,limit:String(Math.min(100,Math.max(1,limit)))});if(beforeId)params.set('beforeId',beforeId);const payload=await apiJson<{ok:boolean;items?:Row[]}>(`/api/whatsapp/conversation-messages?${params}`,organizationId);return sortConversationMessages((payload.items??[]).map(mapConversationMessageRow));}
+export async function markConversationRead(organizationId:string,conversationId:string){return apiJson('/api/whatsapp/conversation-action',organizationId,{method:'POST',body:JSON.stringify({action:'read',conversationId:Number(conversationId)})});}
+export async function setConversationArchived(organizationId:string,conversationId:string,archived:boolean,expectedVersion:number){return apiJson('/api/whatsapp/conversation-action',organizationId,{method:'POST',body:JSON.stringify({action:archived?'archive':'unarchive',conversationId:Number(conversationId),expectedVersion})});}
+export async function ignoreConversationContact(organizationId:string,conversationId:string){return apiJson('/api/whatsapp/conversation-action',organizationId,{method:'POST',body:JSON.stringify({action:'ignore',conversationId:Number(conversationId)})});}
+export async function restoreConversationContact(organizationId:string,conversationId:string,contactId:string){return apiJson('/api/whatsapp/conversation-action',organizationId,{method:'POST',body:JSON.stringify({action:'restore',conversationId:Number(conversationId),contactId:Number(contactId)})});}
+export async function promoteConversationContact(organizationId:string,conversationId:string,input:{name:string;alternativeName?:string;branchId:number;countryId:number;stateId?:number|null;cityId?:number|null;contactSourceId:number;channelId?:number}){return apiJson('/api/whatsapp/conversation-action',organizationId,{method:'POST',body:JSON.stringify({action:'promote',conversationId:Number(conversationId),...input})});}
 
-  const conversationRows = (result.data ?? []) as Row[];
-  const leadIds = Array.from(new Set(conversationRows
-    .map((item) => Number(item.leads_id))
-    .filter(Number.isSafeInteger)));
-  const leadsResult = leadIds.length
-    ? await client.from('leads').select('leads_id,leads_name,leads_alternative_name').eq('organizations_id', Number(organizationId)).in('leads_id', leadIds)
-    : { data: [] as Row[], error: null };
-  if (leadsResult.error) throw new Error(leadsResult.error.message);
-  const leads = new Map<string, Row>(((leadsResult.data ?? []) as Row[]).map((lead) => [id(lead.leads_id), lead]));
-
-  return conversationRows.map((item) => {
-    const leadId = item.leads_id == null ? null : id(item.leads_id);
-    const lead = leadId ? leads.get(leadId) : undefined;
-    const leadName = text(lead?.leads_name);
-    const alternativeName = text(lead?.leads_alternative_name);
-    const contactName = meaningfulContactName(item.contact_name);
-    const displayName = alternativeName || leadName || contactName;
-    return {
-      id: id(item.conversations_id),
-      chipId: id(item.chips_id),
-      instanceId: id(item.instances_id),
-      leadId,
-      remoteJid: text(item.remote_jid),
-      phone: text(item.contact_phone),
-      contactName,
-      leadName,
-      alternativeName,
-      displayName,
-      avatarUrl: text(item.contact_avatar_url),
-      status: text(item.conversation_status) === 'archived' ? 'archived' : 'open',
-      unreadCount: number(item.unread_count),
-      lastMessageAt: item.last_message_at ? text(item.last_message_at) : null,
-      lastMessagePreview: text(item.last_message_preview),
-      lastMessageDirection: ['inbound', 'outbound'].includes(text(item.last_message_direction)) ? text(item.last_message_direction) as 'inbound' | 'outbound' : null,
-      updatedAt: text(item.conversations_updated_at),
-    };
-  });
-}
-
-export function mapConversationMessageRow(item: Row): ConversationMessage {
-  return {
-    id: id(item.conversation_messages_id),
-    conversationId: id(item.conversations_id),
-    externalId: item.external_message_id == null ? null : text(item.external_message_id),
-    direction: text(item.direction) === 'outbound' ? 'outbound' : 'inbound',
-    fromMe: Boolean(item.from_me),
-    type: text(item.message_type) || 'text',
-    body: text(item.message_body),
-    mediaUrl: text(item.media_url),
-    mediaMimeType: text(item.media_mime_type),
-    mediaFileName: text(item.media_file_name),
-    quotedExternalId: item.quoted_external_message_id == null ? null : text(item.quoted_external_message_id),
-    status: text(item.message_status) as ConversationMessage['status'],
-    providerTimestamp: item.provider_timestamp ? text(item.provider_timestamp) : null,
-    createdAt: text(item.conversation_messages_created_at),
-    errorMessage: text(item.error_message),
-  };
-}
-
-export function sortConversationMessages(messages: ConversationMessage[]) {
-  return [...messages].sort((left, right) => {
-    const leftAt = new Date(left.providerTimestamp || left.createdAt).getTime();
-    const rightAt = new Date(right.providerTimestamp || right.createdAt).getTime();
-    const timeDelta = (Number.isFinite(leftAt) ? leftAt : 0) - (Number.isFinite(rightAt) ? rightAt : 0);
-    return timeDelta || Number(left.id) - Number(right.id);
-  });
-}
-
-export async function listConversationMessages(
-  organizationId: string,
-  conversationId: string,
-  limit = 80,
-  beforeId: string | null = null,
-): Promise<ConversationMessage[]> {
-  // O chat abre apenas a janela recente. Histórico anterior é paginado sob demanda;
-  // nunca carregamos centenas de mensagens em toda atualização Realtime.
-  let query = getSupabaseClient().from('conversation_messages')
-    .select('conversation_messages_id,conversations_id,external_message_id,direction,from_me,message_type,message_body,media_url,media_mime_type,media_file_name,quoted_external_message_id,message_status,provider_timestamp,conversation_messages_created_at,error_message')
-    .eq('organizations_id', Number(organizationId))
-    .eq('conversations_id', Number(conversationId))
-    .order('conversation_messages_id', { ascending: false })
-    .limit(limit);
-  if (beforeId && Number.isSafeInteger(Number(beforeId))) query = query.lt('conversation_messages_id', Number(beforeId));
-  const result = await query;
-  if (result.error) throw new Error(result.error.message);
-  return sortConversationMessages(((result.data ?? []) as Row[]).map(mapConversationMessageRow));
-}
-
-export async function markConversationRead(conversationId: string) {
-  const result = await getSupabaseClient().rpc('mark_conversation_read', { p_conversations_id: Number(conversationId) });
-  if (result.error) throw new Error(result.error.message);
-  return Boolean(result.data);
-}
-
-export async function setConversationArchived(conversationId: string, archived: boolean) {
-  const result = await getSupabaseClient().rpc('set_conversation_archived', {
-    p_conversations_id: Number(conversationId), p_archived: archived,
-  });
-  if (result.error) throw new Error(result.error.message);
-  return Boolean(result.data);
-}
+export type PromotionOption={id:string;name:string;key?:string};
+export async function listPromotionBranches(organizationId:string):Promise<PromotionOption[]>{const r=await getSupabaseClient().from('branches').select('branches_id,branches_name,status_id').eq('organizations_id',Number(organizationId)).eq('status_id',1).order('branches_name');if(r.error)throw new Error(r.error.message);return(r.data??[]).map(x=>({id:id(x.branches_id),name:text(x.branches_name)}));}
+export async function listPromotionCountries():Promise<PromotionOption[]>{const r=await getSupabaseClient().from('countries').select('countries_id,countries_name').order('countries_name');if(r.error)throw new Error(r.error.message);return(r.data??[]).map(x=>({id:id(x.countries_id),name:text(x.countries_name)}));}
+export async function listPromotionStates(countryId:string):Promise<PromotionOption[]>{if(!countryId)return[];const r=await getSupabaseClient().from('states').select('states_id,states_name').eq('countries_id',Number(countryId)).order('states_name');if(r.error)throw new Error(r.error.message);return(r.data??[]).map(x=>({id:id(x.states_id),name:text(x.states_name)}));}
+export async function listPromotionCities(stateId:string):Promise<PromotionOption[]>{if(!stateId)return[];const r=await getSupabaseClient().from('cities').select('cities_id,cities_name').eq('states_id',Number(stateId)).order('cities_name');if(r.error)throw new Error(r.error.message);return(r.data??[]).map(x=>({id:id(x.cities_id),name:text(x.cities_name)}));}
+export async function listPromotionContactSources(organizationId:string):Promise<PromotionOption[]>{const r=await getSupabaseClient().from('contact_sources').select('contact_sources_id,contact_sources_name,contact_sources_key,status_id').eq('organizations_id',Number(organizationId)).eq('status_id',1).order('contact_sources_name');if(r.error)throw new Error(r.error.message);return(r.data??[]).map(x=>({id:id(x.contact_sources_id),name:text(x.contact_sources_name),key:text(x.contact_sources_key)}));}

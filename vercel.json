@@ -1,37 +1,26 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; upgrade-insecure-requests" }
+      ]
+    },
+    { "source": "/api/(.*)", "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }] }
+  ],
   "rewrites": [
-    {
-      "source": "/api/tools/browser-pair",
-      "destination": "/api/tools?route=browser-pair"
-    },
-    {
-      "source": "/api/tools/executor/:action",
-      "destination": "/api/tools?route=executor/:action"
-    },
-    {
-      "source": "/api/maps/:action",
-      "destination": "/api/maps?route=:action"
-    },
-    {
-      "source": "/api/instagram/:action",
-      "destination": "/api/instagram?route=:action"
-    },
-    {
-      "source": "/api/whatsapp/:action",
-      "destination": "/api/whatsapp?route=:action"
-    },
-    {
-      "source": "/api/organization/:action",
-      "destination": "/api/organization?route=:action"
-    },
-    {
-      "source": "/api/desktop/:action",
-      "destination": "/api/system?route=desktop/:action"
-    },
-    {
-      "source": "/api/chat/:action",
-      "destination": "/api/system?route=chat/:action"
-    }
+    { "source": "/api/tools/browser-pair", "destination": "/api/tools?route=browser-pair" },
+    { "source": "/api/tools/executor/:action", "destination": "/api/tools?route=executor/:action" },
+    { "source": "/api/maps/:action", "destination": "/api/maps?route=:action" },
+    { "source": "/api/instagram/:action", "destination": "/api/instagram?route=:action" },
+    { "source": "/api/whatsapp/:action", "destination": "/api/whatsapp?route=:action" },
+    { "source": "/api/organization/:action", "destination": "/api/organization?route=:action" },
+    { "source": "/api/desktop/:action", "destination": "/api/system?route=desktop/:action" },
+    { "source": "/api/chat/:action", "destination": "/api/system?route=chat/:action" }
   ]
 }

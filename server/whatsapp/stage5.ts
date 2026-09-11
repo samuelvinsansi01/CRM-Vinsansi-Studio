@@ -25,7 +25,7 @@ export function send(res:Stage5Response,status:number,payload:unknown){res.setHe
 function serviceClient(){const url=env('SUPABASE_URL','VITE_SUPABASE_URL');const key=env('SUPABASE_SERVICE_ROLE_KEY');if(!url||!key)throw new Error('whatsapp_stage5_backend_not_configured');return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});}
 
 export type HumanScope={client:SupabaseClient;admin:SupabaseClient;context:OrganizationAuthContext;memberId:number;authUserId:string};
-export async function humanScope(req:Stage5Request,permission:'whatsapp.view'|'whatsapp.reply'|'whatsapp.assign'|'queues.view'|'queues.control'):Promise<HumanScope>{
+export async function humanScope(req:Stage5Request,permission:'whatsapp.view'|'whatsapp.reply'|'whatsapp.assign'|'queues.view'|'queues.control'|'leads.create'):Promise<HumanScope>{
   const token=bearer(req);if(!token)throw new Error('auth_required');
   const url=env('SUPABASE_URL','VITE_SUPABASE_URL');const key=env('SUPABASE_ANON_KEY','SUPABASE_PUBLISHABLE_KEY','VITE_SUPABASE_PUBLISHABLE_KEY');
   if(!url||!key)throw new Error('supabase_auth_backend_not_configured');
@@ -42,7 +42,20 @@ export async function humanScope(req:Stage5Request,permission:'whatsapp.view'|'w
   return {client,admin,context,memberId:context.memberId,authUserId:auth.data.user.id};
 }
 
-export async function rpc(scope:HumanScope,name:string,args:Row){const result=await scope.admin.rpc(name,{p_organizations_id:scope.context.organizationId,p_organization_members_id:scope.memberId,...args});if(result.error)throw new Error(result.error.message);return result.data;}
+const ACTOR_DERIVED_R60_RPCS=new Set([
+  'service_stage5_list_conversations','service_stage5_list_messages','service_stage5_mark_read',
+  'service_stage5_set_archived','service_stage5_assign_conversation','service_stage5_presence',
+  'service_stage5_ignore_contact','service_stage5_restore_contact','service_stage5_promote_unknown_contact',
+]);
+
+export async function rpc(scope:HumanScope,name:string,args:Row){
+  const r60=ACTOR_DERIVED_R60_RPCS.has(name);
+  const target=r60?scope.client:scope.admin;
+  const parameters=r60
+    ? {p_organizations_id:scope.context.organizationId,...args}
+    : {p_organizations_id:scope.context.organizationId,p_organization_members_id:scope.memberId,...args};
+  const result=await target.rpc(name,parameters);if(result.error)throw new Error(result.error.message);return result.data;
+}
 
 export function status(error:unknown){const message=error instanceof Error?error.message:String(error);
   if(/auth_required|auth_invalid/.test(message))return 401;
@@ -91,25 +104,28 @@ export function stage5ProviderJidsFromPayload(value:unknown){
 }
 
 export async function providerRecipientForConversation(scope:HumanScope,conversationId:number,fallback:string){
-  // A identidade de transporte já é materializada em conversation_contact_aliases.
+  // A identidade de transporte R60 é materializada em whatsapp_contact_aliases.
   // Não varremos mais 30 raw_payloads grandes a cada envio manual.
-  const [conversationResult, aliasesResult]=await Promise.all([
-    scope.admin.from('conversations')
-      .select('remote_jid')
+  const conversationResult=await scope.admin.from('conversations')
+    .select('remote_jid,whatsapp_contacts_id')
+    .eq('organizations_id',scope.context.organizationId)
+    .eq('conversations_id',conversationId)
+    .maybeSingle();
+  if(conversationResult.error)throw new Error(conversationResult.error.message);
+  const contactId=Number(conversationResult.data?.whatsapp_contacts_id??0);
+  const aliasesResult=contactId>0
+    ? await scope.admin.from('whatsapp_contact_aliases')
+      .select('alias_value')
       .eq('organizations_id',scope.context.organizationId)
-      .eq('conversations_id',conversationId)
-      .maybeSingle(),
-    scope.admin.from('conversation_contact_aliases')
-      .select('alias_jid')
-      .eq('organizations_id',scope.context.organizationId)
-      .eq('conversations_id',conversationId)
-      .order('conversation_contact_aliases_id',{ascending:false})
-      .limit(20),
-  ]);
+      .eq('whatsapp_contacts_id',contactId)
+      .order('whatsapp_contact_aliases_id',{ascending:false})
+      .limit(20)
+    : {data:[] as Row[],error:null};
+  if(aliasesResult.error)throw new Error(aliasesResult.error.message);
 
   const candidates=[
     providerJidCandidate(conversationResult.data?.remote_jid),
-    ...((aliasesResult.data??[]) as Row[]).map((row)=>providerJidCandidate(row.alias_jid)),
+    ...((aliasesResult.data??[]) as Row[]).map((row)=>providerJidCandidate(row.alias_value)),
     providerJidCandidate(fallback),
   ].filter(Boolean);
   const unique=[...new Set(candidates)];

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "release": "2.4.0-R60",
+  "releaseSequence": 60,
+  "generatedAt": "2026-09-11T19:12:42Z",
+  "productionReady": false,
+  "resumeAllowed": false,
+  "schemaTarget": "r60",
+  "securityBaseline": "r60-security-baseline-v1",
+  "managerAuthority": {
+    "version": "1.5.71",
+    "zipSha256": "008430f0a248847a9f1f8ca5f4cb78ff03f6d19af0e95b6a5c00ca43c895f7d1",
+    "components": {
+      "worker": "3.14.6",
+      "gateway": "1.2.30",
+      "capture": "1.0.53",
+      "instagram": "2.0.8"
+    },
+    "componentHashes": {
+      "manager": "ce9233d1b11f3137ed815b6bbc5dc35b661ef157d2a76268abfb910520b8c8ce",
+      "worker": "85481dd54cb7e51f64a960677bed2b0e5b1459c89051ba799320262d02c49b4f",
+      "gateway": "06871d8f8aa41ac1f9b2cb6536456a0e19434ccea2bce25b34a0ceed2d8a1a09",
+      "capture": "162d0d53307df64f993b00854098b069cff6d59432e8a392ee6fefea0333faf3",
+      "instagram": "fbe34cff58a7dec0c0dd506d3b7eae81a2d6afd29d08e3a3c19dfc48b1ab09f9"
+    }
+  },
+  "hashes": {
+    "crmCanonicalSource": "46e69b7288183ff8e4bfad1cb7dde4c616cad856605ec4d4fca5a3894471bb13",
+    "supplyChain": "997a92d8f5f993b341fe7935b11dda6e96bf7bdfe147ee15fc9935b2b62ede0d",
+    "verifyR60": "43c4ec4f36c8b14995bd4d4a2b3903452c8b14efa0be367fa0259a75174c6b6a",
+    "sqlOrderedSet": "708f38629563784f16b5499e6b09fe483de3a0fdd65e159c7ac571fa41ffb2b0"
+  },
+  "canonicalization": {
+    "crmSource": "SHA-256 over sorted relative-path + NUL + file-SHA256 + LF; excludes R60_CANDIDATE_MANIFEST.json and R60_CANDIDATE_HASHES.txt",
+    "supplyChain": "same tree rule over the six explicitly listed supply-chain files",
+    "sqlOrderedSet": "SHA-256 over ordered ledger lines: file-SHA256 + two spaces + sql/r60/path + LF"
+  },
+  "supplyChainFiles": [
+    "server/platform/release.ts",
+    "server/routes/system/public-config.ts",
+    "scripts/r60-supply-chain-test.mjs",
+    "sql/r60/01_SUPPLY_CHAIN_BOOTSTRAP.sql",
+    "sql/r60/10B_SUPPLY_CHAIN_HARDENING_R60.sql",
+    "sql/r60/10C_PRODUCTION_RESUME_GATE_R60.sql"
+  ],
+  "supplyChainFixtureKeyId": "LOCAL_TEST_ONLY",
+  "dockerDigestsResolved": false,
+  "externalGates": [
+    "postgresql_r60_migrations_and_smoke",
+    "full_dependency_build_typecheck",
+    "docker_network_runtime",
+    "production_release_signature_and_image_digests"
+  ]
+}

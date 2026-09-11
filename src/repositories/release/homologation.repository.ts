@@ -24,7 +24,7 @@ export type HomologationCheck = {
 
 export type HomologationSnapshot = { run: HomologationRun; checks: HomologationCheck[] };
 
-const RELEASE = '2.4.0-R59';
+const RELEASE = '2.4.0-R60';
 const MANAGER_TOOL_ID = 'vinsansi_whatsapp_manager';
 const CORE_RUNTIME_TYPES = ['manager', 'worker', 'gateway', 'evolution'] as const;
 
@@ -175,21 +175,16 @@ export async function getHomologationSnapshot(): Promise<HomologationSnapshot> {
 
   const cloudflare = cloudflareMetadata(current?.metadata);
   const evolutionPublicUrl = text(cloudflare.evolutionPublicUrl);
-  const workerPublicUrl = text(cloudflare.workerPublicUrl);
   const evolutionHost = publicHostname(evolutionPublicUrl);
-  const workerHost = publicHostname(workerPublicUrl);
   const cloudflareReady = Number(cloudflare.provisioningVersion || 0) >= 1
     && Boolean(text(cloudflare.tunnelId))
     && Boolean(text(cloudflare.tunnelName))
     && Boolean(text(cloudflare.confirmedAt))
     && evolutionPublicUrl.startsWith('https://')
-    && workerPublicUrl.startsWith('https://')
-    && evolutionHost.startsWith('evolution-')
-    && workerHost.startsWith('worker-')
-    && evolutionHost !== workerHost;
+    && evolutionHost.startsWith('evolution-');
   checks.push(check(
     'cloudflare_installation_isolated', 'Instalação', 'Cloudflare Tunnel exclusivo preparado e confirmado', cloudflareReady,
-    cloudflareReady ? `${text(cloudflare.tunnelName)} · ${evolutionHost} · ${workerHost}` : 'Metadata Cloudflare exclusiva ainda incompleta ou não confirmada.',
+    cloudflareReady ? `${text(cloudflare.tunnelName)} · ${evolutionHost} · Worker interno sem ingress público` : 'Metadata Cloudflare exclusiva ainda incompleta ou não confirmada.',
   ));
 
   checks.push(check(
@@ -272,9 +267,9 @@ export async function getHomologationSnapshot(): Promise<HomologationSnapshot> {
   const nowIso = new Date().toISOString();
   return {
     run: {
-      id: 'runtime-r59-phase6', releaseVersion: RELEASE, status: passed ? 'passed' : 'failed',
+      id: 'runtime-r60-candidate', releaseVersion: RELEASE, status: passed ? 'passed' : 'failed',
       startedAt: nowIso, completedAt: nowIso,
-      notes: 'Homologação automática e somente leitura do contrato final, Control Plane, instalação corrente, isolamento e runtime canônico. Não usa tabelas/RPCs persistentes de homologação.',
+      notes: 'Homologação automática e somente leitura do Candidate R60, Control Plane, instalação corrente, isolamento e runtime canônico. Não executa o Smoke SQL nem arma resume.',
     },
     checks,
   };

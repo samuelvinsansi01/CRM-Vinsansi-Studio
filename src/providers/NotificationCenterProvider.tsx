@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { listCrmNotifications, markAllCrmNotificationsRead, markCrmNotificationRead, type CrmNotification } from '../repositories/notifications';
+import { listCrmNotifications, mapCrmNotificationRow, markAllCrmNotificationsRead, markCrmNotificationRead, type CrmNotification } from '../repositories/notifications';
 import { useAuthContext } from './AuthProvider';
 import { useOrganizationContext } from './OrganizationProvider';
+import { getSupabaseClient } from '../lib/supabase';
 
 type NotificationCenterContextValue = {
   items: CrmNotification[];
@@ -60,15 +61,45 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
   useEffect(() => {
     void refresh();
     if (!isAuthenticated || !organizationId || !memberId) return undefined;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh();
-    }, 5_000);
-    const onVisibility = () => { if (document.visibilityState === 'visible') void refresh(); };
+    const client = getSupabaseClient();
+    let subscribed = false;
+    let fallbackTimer: number | null = null;
+    let hiddenAt: number | null = null;
+
+    const upsert = (row: Record<string, unknown>) => {
+      const item = mapCrmNotificationRow(row);
+      if (!item.id) return;
+      setItems((current) => [item, ...current.filter((existing) => existing.id !== item.id)]
+        .sort((a, b) => b.lastEventAt.localeCompare(a.lastEventAt)).slice(0, 60));
+    };
+    const channel = client.channel(`crm-notifications-r60-${organizationId}-${memberId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'crm_notifications' }, (payload) => upsert(payload.new as Record<string, unknown>))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crm_notifications' }, (payload) => upsert(payload.new as Record<string, unknown>))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'crm_notifications' }, (payload) => {
+        const oldRow = payload.old as Record<string, unknown>;
+        const id = String(oldRow.crm_notifications_id ?? '');
+        if (id) setItems((current) => current.filter((item) => item.id !== id));
+      })
+      .subscribe((status) => {
+        subscribed = status === 'SUBSCRIBED';
+        if (subscribed && fallbackTimer !== null) { window.clearInterval(fallbackTimer); fallbackTimer = null; }
+        if (!subscribed && fallbackTimer === null) {
+          fallbackTimer = window.setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 30_000);
+        }
+      });
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+      const hiddenFor = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = null;
+      if (hiddenFor >= 120_000 || !subscribed) void refresh();
+    };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       request.current += 1;
-      window.clearInterval(timer);
+      if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
       document.removeEventListener('visibilitychange', onVisibility);
+      void client.removeChannel(channel);
     };
   }, [isAuthenticated, memberId, organizationId, refresh]);
 

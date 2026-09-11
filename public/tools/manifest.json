@@ -1,14 +1,4 @@
 {
-  "updatedAt": "2026-08-25T17:00:00-03:00",
-  "tools": [
-    {
-      "id": "instagram-extension",
-      "name": "Extensão Instagram",
-      "description": "Extensão do navegador com fila persistente, claim seguro, mídia condicional, reconciliação pós-disparo e prevenção de reenvio cego.",
-      "version": "2.0.5",
-      "path": "/tools/instagram-extension-latest.zip",
-      "fileName": "Vinsansi Instagram v2.0.5.zip",
-      "size": 48348
-    }
-  ]
+  "updatedAt": "2026-09-11T15:20:00-03:00",
+  "tools": []
 }

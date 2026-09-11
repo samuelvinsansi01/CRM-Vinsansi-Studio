@@ -24,15 +24,8 @@ type Row = Record<string, unknown>;
 const text = (value: unknown) => String(value ?? '').trim();
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
-export async function listCrmNotifications(limit = 60): Promise<CrmNotification[]> {
-  const result = await getSupabaseClient().from('crm_notifications')
-    .select('crm_notifications_id,notification_type,channel,title,message,entity_type,entity_id,target_page,target_payload,metadata,event_count,first_event_at,last_event_at,read_at')
-    .order('last_event_at', { ascending: false })
-    .limit(limit);
-  if (result.error) throw new Error(result.error.message);
-  const data: unknown = result.data;
-  const rows = Array.isArray(data) ? data.filter((row): row is Row => Boolean(row) && typeof row === 'object' && !Array.isArray(row)) : [];
-  return rows.map((row) => ({
+export function mapCrmNotificationRow(row: Row): CrmNotification {
+  return {
     id: text(row.crm_notifications_id),
     type: text(row.notification_type) as CrmNotificationType,
     channel: (text(row.channel) || null) as CrmNotificationChannel,
@@ -47,7 +40,18 @@ export async function listCrmNotifications(limit = 60): Promise<CrmNotification[
     firstEventAt: text(row.first_event_at),
     lastEventAt: text(row.last_event_at),
     readAt: row.read_at ? text(row.read_at) : null,
-  }));
+  };
+}
+
+export async function listCrmNotifications(limit = 60): Promise<CrmNotification[]> {
+  const result = await getSupabaseClient().from('crm_notifications')
+    .select('crm_notifications_id,notification_type,channel,title,message,entity_type,entity_id,target_page,target_payload,metadata,event_count,first_event_at,last_event_at,read_at')
+    .order('last_event_at', { ascending: false })
+    .limit(limit);
+  if (result.error) throw new Error(result.error.message);
+  const data: unknown = result.data;
+  const rows = Array.isArray(data) ? data.filter((row): row is Row => Boolean(row) && typeof row === 'object' && !Array.isArray(row)) : [];
+  return rows.map(mapCrmNotificationRow);
 }
 
 export async function markCrmNotificationRead(notificationId: string) {

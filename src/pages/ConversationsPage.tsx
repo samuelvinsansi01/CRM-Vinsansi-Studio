@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArchiveRestore, CalendarDays, Check, CheckCheck, Clock3, Inbox, MessageCircle, RefreshCcw, Search, Send, Smartphone, TriangleAlert } from 'lucide-react';
-import { Button, Field, Panel, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
+import { Button, Drawer, Field, Panel, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
 import { useOrganizationContext } from '../providers/OrganizationProvider';
 import { getSupabaseClient } from '../lib/supabase';
 import {
-  listChatChips, listConversationMessages, listConversationUnreadCounts, listConversations, mapConversationMessageRow, markConversationRead, setConversationArchived, sortConversationMessages,
-  type ChatChip, type Conversation, type ConversationMessage,
+  getConversationDelta, ignoreConversationContact, listChatChips, listConversationMessages, listConversationUnreadCounts, listConversationsPage,
+  listPromotionBranches, listPromotionCities, listPromotionContactSources, listPromotionCountries, listPromotionStates, mapConversationMessageRow,
+  markConversationRead, promoteConversationContact, restoreConversationContact, setConversationArchived, sortConversationMessages,
+  type ChatChip, type Conversation, type ConversationCursor, type ConversationMessage, type PromotionOption,
 } from '../repositories/conversations/conversations.repository';
 import {
   getConversationCommercial,
@@ -83,20 +85,27 @@ function commercialStageOptions(context: ConversationCommercialContext) {
 }
 
 const MESSAGE_PAGE_SIZE = 80;
+type ContactFilter='active'|'ignored';
+type PromotionForm={name:string;alternativeName:string;branchId:string;countryId:string;stateId:string;cityId:string;contactSourceId:string};
+const emptyPromotionForm:PromotionForm={name:'',alternativeName:'',branchId:'',countryId:'',stateId:'',cityId:'',contactSourceId:''};
 
 export function ConversationsPage() {
   const { hasPermission, organizationId } = useOrganizationContext();
   const canReply = hasPermission('whatsapp.reply');
   const canEditLeads = hasPermission('leads.edit');
+  const canCreateLeads = hasPermission('leads.create');
   const [chips, setChips] = useState<ChatChip[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [conversationCursor,setConversationCursor]=useState<ConversationCursor|null>(null);
+  const [loadingMoreConversations,setLoadingMoreConversations]=useState(false);
   const [unreadByChip, setUnreadByChip] = useState<Record<string, number>>({});
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [contactFilter, setContactFilter] = useState<ContactFilter>('active');
   const [search, setSearch] = useState('');
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
@@ -107,6 +116,14 @@ export function ConversationsPage() {
   const [commercialSaving, setCommercialSaving] = useState(false);
   const [previewDueDateDraft, setPreviewDueDateDraft] = useState('');
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [promotionOpen,setPromotionOpen]=useState(false);
+  const [promotionSaving,setPromotionSaving]=useState(false);
+  const [promotionForm,setPromotionForm]=useState<PromotionForm>(emptyPromotionForm);
+  const [promotionBranches,setPromotionBranches]=useState<PromotionOption[]>([]);
+  const [promotionCountries,setPromotionCountries]=useState<PromotionOption[]>([]);
+  const [promotionStates,setPromotionStates]=useState<PromotionOption[]>([]);
+  const [promotionCities,setPromotionCities]=useState<PromotionOption[]>([]);
+  const [promotionSources,setPromotionSources]=useState<PromotionOption[]>([]);
   const threadRef = useRef<HTMLDivElement>(null);
   const notificationTargetRef = useRef(readNotificationConversationTarget());
   const commercialRequestRef = useRef(0);
@@ -121,6 +138,7 @@ export function ConversationsPage() {
   const conversationRealtimeReadyRef = useRef(false);
   const messageRealtimeReadyRef = useRef(false);
   const unreadRefreshTimerRef = useRef<number | null>(null);
+  const hiddenAtRef=useRef<number|null>(null);
 
   const selectedConversation = conversations.find((item) => item.id === selectedConversationId) ?? null;
   const visibleConversations = useMemo(() => {
@@ -159,15 +177,18 @@ export function ConversationsPage() {
     const requestId = ++conversationsRequestRef.current;
     if (!organizationId || !selectedChipId) {
       setConversations([]);
+      setConversationCursor(null);
       setSelectedConversationId(null);
       if (!quiet) setLoading(false);
       return;
     }
     if (!quiet) setLoading(true);
     try {
-      const next = await listConversations(organizationId, selectedChipId, includeArchived);
+      const page = await listConversationsPage(organizationId, selectedChipId, includeArchived, 50, contactFilter, null);
+      const next=page.items;
       if (requestId !== conversationsRequestRef.current) return;
       setConversations(next);
+      setConversationCursor(page.nextCursor);
       setSelectedConversationId((current) => {
         const targetConversationId = notificationTargetRef.current?.conversationId;
         if (targetConversationId && next.some((conversation) => conversation.id === targetConversationId)) {
@@ -184,7 +205,18 @@ export function ConversationsPage() {
     } finally {
       if (!quiet && requestId === conversationsRequestRef.current) setLoading(false);
     }
-  }, [organizationId, selectedChipId, includeArchived]);
+  }, [organizationId, selectedChipId, includeArchived, contactFilter]);
+
+  const loadMoreConversations=useCallback(async()=>{
+    if(!organizationId||!selectedChipId||!conversationCursor||loadingMoreConversations)return;
+    setLoadingMoreConversations(true);
+    try{
+      const page=await listConversationsPage(organizationId,selectedChipId,includeArchived,50,contactFilter,conversationCursor);
+      setConversations((current)=>{const byId=new Map(current.map((item)=>[item.id,item]));for(const item of page.items)byId.set(item.id,item);return [...byId.values()];});
+      setConversationCursor(page.nextCursor);
+    }catch(cause){setError(cause instanceof Error?cause.message:'Falha ao carregar mais conversas.');}
+    finally{setLoadingMoreConversations(false);}
+  },[contactFilter,conversationCursor,includeArchived,loadingMoreConversations,organizationId,selectedChipId]);
 
   const loadMessages = useCallback(async (conversationId: string | null, quiet = false) => {
     const requestId = ++messagesRequestRef.current;
@@ -327,14 +359,15 @@ export function ConversationsPage() {
     setPreviewDueDateDraft('');
     void Promise.all([loadMessages(selectedConversationId), loadCommercial(selectedConversationId)]);
     if (selectedConversationId) {
-      void markConversationRead(selectedConversationId).then(() => {
+      if (!organizationId) return;
+      void markConversationRead(organizationId, selectedConversationId).then(() => {
         setConversations((current) => current.map((item) => item.id === selectedConversationId ? { ...item, unreadCount: 0 } : item));
         const selected = conversations.find((item) => item.id === selectedConversationId);
         const chipId = selected?.chipId;
         if (chipId) setUnreadByChip((current) => ({ ...current, [chipId]: Math.max(0, (current[chipId] ?? 0) - (selected?.unreadCount ?? 0)) }));
       }).catch(() => undefined);
     }
-  }, [loadCommercial, loadMessages, selectedConversationId]);
+  }, [loadCommercial, loadMessages, organizationId, selectedConversationId]);
 
   useEffect(() => {
     if (!organizationId) return;
@@ -342,7 +375,6 @@ export function ConversationsPage() {
     let cancelled = false;
     let conversationChannel: ReturnType<typeof client.channel> | null = null;
     let messageChannel: ReturnType<typeof client.channel> | null = null;
-    let newConversationTimer: number | null = null;
 
     const scheduleUnreadRefresh = () => {
       if (unreadRefreshTimerRef.current !== null) window.clearTimeout(unreadRefreshTimerRef.current);
@@ -352,51 +384,32 @@ export function ConversationsPage() {
       }, 1_200);
     };
 
-    const scheduleNewConversationRefresh = () => {
-      if (newConversationTimer !== null) window.clearTimeout(newConversationTimer);
-      newConversationTimer = window.setTimeout(() => {
-        if (!cancelled && document.visibilityState === 'visible') void syncConversationList();
-      }, 250);
+    const applyConversationDelta = async (conversationId:string) => {
+      try {
+        const delta=await getConversationDelta(organizationId,conversationId);
+        if(cancelled)return;
+        setConversations((current)=>{
+          const without=current.filter((item)=>item.id!==conversationId);
+          if(!delta)return without;
+          const visibleChip=!selectedChipId||delta.chipId===selectedChipId;
+          const visibleArchive=includeArchived?delta.status==='archived':delta.status==='open';
+          const visibleState=contactFilter==='ignored'?delta.contactState==='ignored':delta.contactState!=='ignored';
+          if(!visibleChip||!visibleArchive||!visibleState)return without;
+          return [...without,delta].sort((left,right)=>{
+            const leftAt=left.lastMessageAt?new Date(left.lastMessageAt).getTime():0;
+            const rightAt=right.lastMessageAt?new Date(right.lastMessageAt).getTime():0;
+            return rightAt-leftAt||Number(right.id)-Number(left.id);
+          });
+        });
+      } catch { /* fallback timer reconcilia apenas se Realtime cair */ }
     };
 
     const handleConversationChange = (payload: { eventType?: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
-      const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old ?? {};
-      const conversationId = String(row.conversations_id ?? '').trim();
-      const chipId = String(row.chips_id ?? '').trim();
-      if (!conversationId) return;
+      const row=payload.new&&Object.keys(payload.new).length?payload.new:payload.old??{};
+      const conversationId=String(row.conversations_id??'').trim();
+      if(!conversationId)return;
       scheduleUnreadRefresh();
-      if (chipId && chipId !== selectedChipId) return;
-
-      setConversations((current) => {
-        const index = current.findIndex((item) => item.id === conversationId);
-        if (index < 0) return current;
-        const previous = current[index];
-        const rawContactName = String(row.contact_name ?? '').trim();
-        const contactName = rawContactName && !/^\d+@(?:s\.whatsapp\.net|c\.us|lid)$/i.test(rawContactName) ? rawContactName : previous.contactName;
-        const next: Conversation = {
-          ...previous,
-          remoteJid: String(row.remote_jid ?? previous.remoteJid),
-          phone: String(row.contact_phone ?? previous.phone),
-          contactName,
-          displayName: previous.alternativeName || previous.leadName || contactName,
-          status: String(row.conversation_status ?? previous.status) === 'archived' ? 'archived' : 'open',
-          unreadCount: Number.isFinite(Number(row.unread_count)) ? Number(row.unread_count) : previous.unreadCount,
-          lastMessageAt: row.last_message_at ? String(row.last_message_at) : previous.lastMessageAt,
-          lastMessagePreview: row.last_message_preview == null ? previous.lastMessagePreview : String(row.last_message_preview),
-          lastMessageDirection: ['inbound', 'outbound'].includes(String(row.last_message_direction)) ? String(row.last_message_direction) as 'inbound' | 'outbound' : previous.lastMessageDirection,
-          updatedAt: row.conversations_updated_at ? String(row.conversations_updated_at) : previous.updatedAt,
-        };
-        const replaced = [...current];
-        replaced[index] = next;
-        return replaced
-          .filter((item) => includeArchived || item.status !== 'archived')
-          .sort((left, right) => {
-            const leftAt = left.lastMessageAt ? new Date(left.lastMessageAt).getTime() : 0;
-            const rightAt = right.lastMessageAt ? new Date(right.lastMessageAt).getTime() : 0;
-            return rightAt - leftAt || Number(right.id) - Number(left.id);
-          });
-      });
-      if (payload.eventType === 'INSERT') scheduleNewConversationRefresh();
+      void applyConversationDelta(conversationId);
     };
 
     const handleMessageChange = (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
@@ -444,19 +457,14 @@ export function ConversationsPage() {
       if (!messageRealtimeReadyRef.current) void syncSelectedMessages();
     }, 15_000);
 
-    const selfHealTimer = window.setInterval(() => {
-      if (cancelled || document.visibilityState !== 'visible') return;
-      // Uma única reconciliação por minuto é suficiente para corrigir perda de evento.
-      void syncConversationList();
-      void syncSelectedMessages();
-      void loadUnreadCounts().catch(() => undefined);
-    }, 60_000);
-
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if(document.visibilityState==='hidden'){hiddenAtRef.current=Date.now();return;}
+      const hiddenFor=hiddenAtRef.current?Date.now()-hiddenAtRef.current:0;
+      hiddenAtRef.current=null;
+      if(hiddenFor>120_000){
         void syncConversationList();
         void syncSelectedMessages();
-        void loadUnreadCounts().catch(() => undefined);
+        void loadUnreadCounts().catch(()=>undefined);
       }
     };
     window.addEventListener('focus', onVisibilityChange);
@@ -466,24 +474,41 @@ export function ConversationsPage() {
       cancelled = true;
       conversationRealtimeReadyRef.current = false;
       messageRealtimeReadyRef.current = false;
-      if (newConversationTimer !== null) window.clearTimeout(newConversationTimer);
       if (unreadRefreshTimerRef.current !== null) {
         window.clearTimeout(unreadRefreshTimerRef.current);
         unreadRefreshTimerRef.current = null;
       }
       window.clearInterval(fallbackTimer);
-      window.clearInterval(selfHealTimer);
       window.removeEventListener('focus', onVisibilityChange);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       if (conversationChannel) void client.removeChannel(conversationChannel);
       if (messageChannel) void client.removeChannel(messageChannel);
     };
-  }, [includeArchived, loadUnreadCounts, organizationId, selectedChipId, selectedConversationId, syncConversationList, syncSelectedMessages]);
+  }, [contactFilter, includeArchived, loadUnreadCounts, organizationId, selectedChipId, selectedConversationId, syncConversationList, syncSelectedMessages]);
 
   useEffect(() => {
     if (!threadRef.current) return;
     threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [selectedConversationId]);
+
+  const openPromotionDrawer=async()=>{
+    if(!organizationId||!selectedConversation||!canCreateLeads)return;
+    try{
+      const [branches,countries,sources]=await Promise.all([listPromotionBranches(organizationId),listPromotionCountries(),listPromotionContactSources(organizationId)]);
+      const brazil=countries.find((item)=>item.name.toLocaleLowerCase('pt-BR')==='brasil')??countries[0];
+      const source=sources.find((item)=>/whatsapp|manual/i.test(`${item.key??''} ${item.name}`))??sources[0];
+      setPromotionBranches(branches);setPromotionCountries(countries);setPromotionSources(sources);
+      setPromotionForm({name:selectedConversation.contactName||selectedConversation.displayName||selectedConversation.phone||'Contato WhatsApp',alternativeName:'',branchId:'',countryId:brazil?.id??'',stateId:'',cityId:'',contactSourceId:source?.id??''});
+      setPromotionOpen(true);
+    }catch(cause){setError(cause instanceof Error?cause.message:'Falha ao preparar cadastro do lead.');}
+  };
+
+  useEffect(()=>{if(!promotionOpen||!promotionForm.countryId){setPromotionStates([]);return;}void listPromotionStates(promotionForm.countryId).then(setPromotionStates).catch(()=>setPromotionStates([]));},[promotionOpen,promotionForm.countryId]);
+  useEffect(()=>{if(!promotionOpen||!promotionForm.stateId){setPromotionCities([]);return;}void listPromotionCities(promotionForm.stateId).then(setPromotionCities).catch(()=>setPromotionCities([]));},[promotionOpen,promotionForm.stateId]);
+
+  const handleIgnoreContact=async()=>{if(!organizationId||!selectedConversation||!canReply)return;try{await ignoreConversationContact(organizationId,selectedConversation.id);setConversations((current)=>current.filter((item)=>item.id!==selectedConversation.id));setSelectedConversationId(null);toast({title:'Contato ignorado',description:'Novas mensagens deste contato serão descartadas operacionalmente.',tone:'success'});}catch(cause){setError(cause instanceof Error?cause.message:'Falha ao ignorar contato.');}};
+  const handleRestoreContact=async()=>{if(!organizationId||!selectedConversation||!canReply)return;try{await restoreConversationContact(organizationId,selectedConversation.id,selectedConversation.contactId);setConversations((current)=>current.filter((item)=>item.id!==selectedConversation.id));setSelectedConversationId(null);toast({title:'Contato restaurado',description:'Mensagens futuras voltarão a entrar como Não cadastrado.',tone:'success'});}catch(cause){setError(cause instanceof Error?cause.message:'Falha ao restaurar contato.');}};
+  const handlePromoteContact=async()=>{if(!organizationId||!selectedConversation||promotionSaving)return;setPromotionSaving(true);try{await promoteConversationContact(organizationId,selectedConversation.id,{name:promotionForm.name,alternativeName:promotionForm.alternativeName||undefined,branchId:Number(promotionForm.branchId),countryId:Number(promotionForm.countryId),stateId:promotionForm.stateId?Number(promotionForm.stateId):null,cityId:promotionForm.cityId?Number(promotionForm.cityId):null,contactSourceId:Number(promotionForm.contactSourceId)});const delta=await getConversationDelta(organizationId,selectedConversation.id);if(delta)setConversations((current)=>current.map((item)=>item.id===delta.id?delta:item));setPromotionOpen(false);toast({title:'Lead criado',description:'A conversa e o histórico foram preservados no mesmo contato.',tone:'success'});}catch(cause){setError(cause instanceof Error?cause.message:'Falha ao cadastrar contato como lead.');}finally{setPromotionSaving(false);}};
 
   const handleSend = async () => {
     if (!canReply) return;
@@ -510,11 +535,11 @@ export function ConversationsPage() {
   };
 
   const handleArchive = async () => {
-    if (!canReply) return;
+    if (!canReply || !organizationId) return;
     if (!selectedConversation) return;
     try {
-      await setConversationArchived(selectedConversation.id, selectedConversation.status !== 'archived');
-      await loadConversations();
+      await setConversationArchived(organizationId, selectedConversation.id, selectedConversation.status !== 'archived', selectedConversation.version);
+      await getConversationDelta(organizationId,selectedConversation.id).then((delta)=>{if(delta)setConversations((current)=>current.map((item)=>item.id===delta.id?delta:item));});
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao alterar a conversa.'); }
   };
 
@@ -579,7 +604,7 @@ export function ConversationsPage() {
         </Panel>
 
         <Panel className="chat-conversations" title="Conversas" actions={(
-          <label className="chat-archive-toggle"><input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} /> Arquivadas</label>
+          <div className="chat-list-actions"><SelectField density="compact" value={contactFilter} options={[{value:'active',label:'Ativos'},{value:'ignored',label:'Ignorados'}]} onChange={(value)=>{setContactFilter(value as ContactFilter);setSelectedConversationId(null);}} /><label className="chat-archive-toggle"><input type="checkbox" checked={includeArchived} onChange={(event) => setIncludeArchived(event.target.checked)} /> Arquivadas</label></div>
         )}>
           <label className="chat-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar contato ou mensagem" /></label>
           <div className="chat-conversation-list">
@@ -589,12 +614,13 @@ export function ConversationsPage() {
               <button key={conversation.id} className={`chat-conversation ${selectedConversationId === conversation.id ? 'is-active' : ''}`} onClick={() => setSelectedConversationId(conversation.id)}>
                 <span className="chat-avatar">{initials(displayContact(conversation))}</span>
                 <span className="chat-conversation__content">
-                  <span className="chat-conversation__title"><strong>{displayContact(conversation)}</strong><time>{formatTime(conversation.lastMessageAt)}</time></span>
+                  <span className="chat-conversation__title"><strong>{displayContact(conversation)}</strong><time>{formatTime(conversation.lastMessageAt)}</time></span><span className="chat-conversation__state">{conversation.contactState==='unknown'?'Não cadastrado':conversation.contactState==='ignored'?'Ignorado':'Lead'}</span>
                   <span className="chat-conversation__preview">{conversation.lastMessageDirection === 'outbound' ? 'Você: ' : ''}{conversation.lastMessagePreview || 'Sem mensagens'}</span>
                 </span>
                 {conversation.unreadCount ? <span className="chat-badge">{conversation.unreadCount}</span> : null}
               </button>
             ))}
+            {conversationCursor?<div className="chat-load-older"><Button size="sm" variant="secondary" loading={loadingMoreConversations} onClick={()=>void loadMoreConversations()}>Carregar mais conversas</Button></div>:null}
           </div>
         </Panel>
 
@@ -607,7 +633,9 @@ export function ConversationsPage() {
             <>
               <div className="chat-thread__identity">
                 <span>{selectedConversation.phone || selectedConversation.remoteJid}</span>
-                {selectedConversation.leadId ? <Tag tone="primary">Empresa #{selectedConversation.leadId}</Tag> : <Tag tone="neutral">Sem empresa vinculada</Tag>}
+                {selectedConversation.contactState==='lead' && selectedConversation.leadId ? <Tag tone="primary">Empresa #{selectedConversation.leadId}</Tag> : selectedConversation.contactState==='ignored'?<Tag tone="neutral">Ignorado</Tag>:<Tag tone="neutral">Não cadastrado</Tag>}
+                {selectedConversation.contactState==='unknown' ? <span className="chat-contact-actions">{canCreateLeads?<Button size="sm" onClick={()=>void openPromotionDrawer()}>Cadastrar como lead</Button>:null}{canReply?<Button size="sm" variant="secondary" onClick={()=>void handleIgnoreContact()}>Ignorar</Button>:null}</span>:null}
+                {selectedConversation.contactState==='ignored'&&canReply?<span className="chat-contact-actions"><Button size="sm" variant="secondary" onClick={()=>void handleRestoreContact()}>Restaurar</Button></span>:null}
               </div>
 
               <div className="chat-commercial-context">
@@ -687,6 +715,10 @@ export function ConversationsPage() {
           )}
         </Panel>
       </div>
+      <Drawer open={promotionOpen} title="Cadastrar como lead" description="O contato canônico e a conversa serão preservados; apenas o vínculo com o novo lead será criado." onClose={()=>!promotionSaving&&setPromotionOpen(false)} footer={<><Button variant="secondary" disabled={promotionSaving} onClick={()=>setPromotionOpen(false)}>Cancelar</Button><Button loading={promotionSaving} disabled={!promotionForm.name.trim()||!promotionForm.branchId||!promotionForm.countryId||!promotionForm.contactSourceId} onClick={()=>void handlePromoteContact()}>Cadastrar lead</Button></>}>
+        <div className="drawer-form"><Field label="Nome" value={promotionForm.name} onChange={(name)=>setPromotionForm((v)=>({...v,name}))}/><Field label="Nome alternativo" value={promotionForm.alternativeName} onChange={(alternativeName)=>setPromotionForm((v)=>({...v,alternativeName}))}/><Field label="WhatsApp" value={selectedConversation?.phone||''} readOnly/><label className="drawer-field"><span>Ramo</span><SelectField value={promotionForm.branchId} options={promotionBranches.map((x)=>({value:x.id,label:x.name}))} placeholder="Selecione" onChange={(branchId)=>setPromotionForm((v)=>({...v,branchId}))}/></label><label className="drawer-field"><span>País</span><SelectField value={promotionForm.countryId} options={promotionCountries.map((x)=>({value:x.id,label:x.name}))} placeholder="Selecione" onChange={(countryId)=>setPromotionForm((v)=>({...v,countryId,stateId:'',cityId:''}))}/></label><label className="drawer-field"><span>Estado</span><SelectField value={promotionForm.stateId} options={promotionStates.map((x)=>({value:x.id,label:x.name}))} placeholder="Opcional" onChange={(stateId)=>setPromotionForm((v)=>({...v,stateId,cityId:''}))}/></label><label className="drawer-field"><span>Cidade</span><SelectField value={promotionForm.cityId} options={promotionCities.map((x)=>({value:x.id,label:x.name}))} placeholder="Opcional" onChange={(cityId)=>setPromotionForm((v)=>({...v,cityId}))}/></label><label className="drawer-field"><span>Origem</span><SelectField value={promotionForm.contactSourceId} options={promotionSources.map((x)=>({value:x.id,label:x.name}))} placeholder="Selecione" onChange={(contactSourceId)=>setPromotionForm((v)=>({...v,contactSourceId}))}/></label></div>
+      </Drawer>
+
       <ToastViewport toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((item) => item.id !== id))} />
     </div>
   );

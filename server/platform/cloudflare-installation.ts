@@ -11,7 +11,6 @@ type InstallationCloudflareMetadata = {
   tunnelId: string;
   tunnelName: string;
   evolutionPublicUrl: string;
-  workerPublicUrl: string;
   confirmedAt?: string;
 };
 
@@ -86,16 +85,15 @@ async function createTunnel(accountId: string, name: string) {
   return { tunnelId, tunnelName: text(result.name) || name };
 }
 
-async function configureTunnel(accountId: string, tunnelId: string, input: { evolutionHostname: string; workerHostname: string }) {
-  const gatewayService = env('DESKTOP_EVOLUTION_SERVICE_URL') || 'http://host.docker.internal:8080';
-  const workerService = env('DESKTOP_WORKER_SERVICE_URL') || 'http://lead-certo-whatsapp-worker:8787';
+async function configureTunnel(accountId: string, tunnelId: string, input: { evolutionHostname: string }) {
+  // R60 keeps a single public surface: the Gateway public listener. Evolution and Worker stay internal.
+  const gatewayService = env('DESKTOP_GATEWAY_SERVICE_URL') || 'http://host.docker.internal:8090';
   await cfRequest(`/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/configurations`, {
     method: 'PUT',
     body: {
       config: {
         ingress: [
           { hostname: input.evolutionHostname, service: gatewayService, originRequest: {} },
-          { hostname: input.workerHostname, service: workerService, originRequest: {} },
           { service: 'http_status:404' },
         ],
       },
@@ -115,6 +113,16 @@ async function upsertTunnelDns(zoneId: string, hostname: string, tunnelId: strin
   }
 }
 
+async function deleteTunnelDns(zoneId: string, hostname: string) {
+  const query = new URLSearchParams({ type: 'CNAME', name: hostname });
+  const records = await cfRequest<DnsRecord[]>(`/zones/${encodeURIComponent(zoneId)}/dns_records?${query.toString()}`);
+  for (const record of records) {
+    if (record.id && text(record.name).toLowerCase() === hostname.toLowerCase()) {
+      await cfRequest(`/zones/${encodeURIComponent(zoneId)}/dns_records/${encodeURIComponent(record.id)}`, { method: 'DELETE' });
+    }
+  }
+}
+
 async function tunnelToken(accountId: string, tunnelId: string) {
   const token = await cfRequest<string>(`/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/token`);
   const normalized = text(token);
@@ -131,7 +139,6 @@ function storedCloudflare(metadata: Row): Partial<InstallationCloudflareMetadata
     tunnelId: text(row.tunnelId),
     tunnelName: text(row.tunnelName),
     evolutionPublicUrl: text(row.evolutionPublicUrl),
-    workerPublicUrl: text(row.workerPublicUrl),
     confirmedAt: text(row.confirmedAt),
   };
 }
@@ -165,13 +172,12 @@ export async function provisionInstallationCloudflare(input: {
   }
 
   const evolutionHostname = `evolution-${suffix}.${baseDomain}`;
-  const workerHostname = `worker-${suffix}.${baseDomain}`;
+  const legacyWorkerHostname = `worker-${suffix}.${baseDomain}`;
   const cloudflareMetadata: InstallationCloudflareMetadata = {
     provisioningVersion: 1,
     tunnelId,
     tunnelName,
-    evolutionPublicUrl: `https://${evolutionHostname}`,
-    workerPublicUrl: `https://${workerHostname}`,
+    evolutionPublicUrl: `https://${evolutionHostname}`, 
   };
 
   // Persista a identidade do túnel antes das etapas remotas seguintes. Se DNS ou
@@ -184,11 +190,9 @@ export async function provisionInstallationCloudflare(input: {
   }).eq('organization_tool_installations_id', input.organizationToolInstallationId);
   if (prepared.error) throw new Error(`cloudflare_installation_metadata_update_failed:${prepared.error.message}`);
 
-  await configureTunnel(accountId, tunnelId, { evolutionHostname, workerHostname });
-  await Promise.all([
-    upsertTunnelDns(zoneId, evolutionHostname, tunnelId),
-    upsertTunnelDns(zoneId, workerHostname, tunnelId),
-  ]);
+  await configureTunnel(accountId, tunnelId, { evolutionHostname });
+  await upsertTunnelDns(zoneId, evolutionHostname, tunnelId);
+  await deleteTunnelDns(zoneId, legacyWorkerHostname);
   const token = await tunnelToken(accountId, tunnelId);
 
   // A troca da origem pública é deliberadamente bifásica. Provisionar o novo
@@ -228,7 +232,6 @@ export async function confirmInstallationCloudflare(input: {
     tunnelId: stored.tunnelId,
     tunnelName: stored.tunnelName || '',
     evolutionPublicUrl: stored.evolutionPublicUrl,
-    workerPublicUrl: stored.workerPublicUrl || '',
     confirmedAt,
   };
 

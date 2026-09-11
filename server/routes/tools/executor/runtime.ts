@@ -8,7 +8,7 @@ const TABLES=new Set([
 ]);
 const GLOBAL_TABLES=new Set(['status','lead_status','channels']);
 const RPCS=new Set([
-  'service_get_evolution_instances','worker_claim_dispatch_part','worker_complete_dispatch_part',
+  'worker_claim_dispatch_job','worker_move_dispatch_to_dlq','worker_claim_dispatch_part','worker_complete_dispatch_part',
   'worker_finalize_whatsapp_queue_item','worker_fail_whatsapp_queue_item','worker_start_whatsapp_batch',
   'worker_set_whatsapp_batch_state','worker_claim_next_batch_item','worker_complete_batch_item',
   'refresh_operational_alerts','service_worker_heartbeat','service_claim_recovery_request',
@@ -89,28 +89,10 @@ export default async function handler(req:ApiRequest,res:ApiResponse){
 
       if(!RPCS.has(name))throw new Error('runtime_rpc_forbidden');
       const rawArgs=(input.args&&typeof input.args==='object')?input.args as Row:{};
-      const args:{[key:string]:unknown}={...rawArgs};
-      const stage11TenantRpc=[
-        'service_worker_heartbeat','service_claim_recovery_request','service_complete_recovery_request',
-        'refresh_operational_alerts','worker_recover_stale_whatsapp_v2','instagram_recover_stale_items_v2',
-      ].includes(name);
-      const legacyOrganizationRpc=!stage11TenantRpc
-        && name!=='service_stage5_converge_automatic_message'
-        && (Object.prototype.hasOwnProperty.call(args,'p_organizations_id')||name==='service_get_evolution_instances');
-
-      if(stage11TenantRpc){
-        args.p_organizations_id=scope.organizationId;
-      }else if(legacyOrganizationRpc){
-        const organization=await scope.client.from('organizations')
-          .select('legacy_scope_users_id')
-          .eq('organizations_id',scope.organizationId)
-          .single();
-        if(organization.error)throw new Error(organization.error.message);
-        args.p_users_id=Number(organization.data.legacy_scope_users_id);
-        delete args.p_organizations_id;
-      }else if(name==='service_stage5_converge_automatic_message'){
-        args.p_organizations_id=scope.organizationId;
-      }
+      const args:{[key:string]:unknown}={...rawArgs,p_organizations_id:scope.organizationId};
+      // R60: installation scope is the sole tenant authority. Worker-supplied tenant
+      // values are overwritten and no legacy users_id translation exists on the hot path.
+      delete args.p_users_id;
 
       // Fase 4: platform_runtime_heartbeats é a única fonte canônica de saúde.
       // O nome service_worker_heartbeat é mantido no contrato do Worker por

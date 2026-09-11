@@ -18,19 +18,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (leadStatus.error) throw new Error(leadStatus.error.message);
     if (channels.error) throw new Error(channels.error.message);
     const expectedStatuses = ['importado','revisao','sem_contato','na_fila','enviado','invalido','duplicado'];
-    const actualStatuses = (leadStatus.data ?? []).map((row) => norm(row.lead_status_name));
+    const actualStatuses = ((leadStatus.data ?? []) as Array<Record<string, unknown>>).map((row) => norm(row.lead_status_name));
     const expectedChannels = ['instagram','sem_destino','whatsapp'].sort();
-    const actualChannels = (channels.data ?? []).map((row) => norm(row.channels_name)).sort();
+    const actualChannels = ((channels.data ?? []) as Array<Record<string, unknown>>).map((row) => norm(row.channels_name)).sort();
     const statusOk = actualStatuses.length === expectedStatuses.length && expectedStatuses.every((value, index) => actualStatuses[index] === value);
     const channelsOk = actualChannels.length === expectedChannels.length && expectedChannels.every((value, index) => actualChannels[index] === value);
     return send(req, res, statusOk && channelsOk ? 200 : 503, {
       ok: statusOk && channelsOk,
       schema: {
-        contract: 'R59',
+        contract: 'R60',
         leadStatus: { ok: statusOk, actual: actualStatuses },
         channels: { ok: channelsOk, actual: actualChannels },
       },
-      release: { release_key: 'crm-r59-final-contract', application_version: '2.4.0-R59', is_stable: true },
+      release: { release_key: 'crm-r60-candidate-contract', application_version: '2.4.0-R60', release_sequence: 60, production_ready: false, is_stable: false },
     });
   } catch (error) {
     return send(req, res, 503, { ok: false, error: error instanceof Error ? error.message : String(error) });

@@ -1,0 +1,406 @@
+{
+  "releaseSequence": 60,
+  "schemaTarget": "r60",
+  "securityBaseline": "r60-security-baseline-v1",
+  "contracts": [
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_claim_dispatch_job",
+      "arguments": [
+        "p_organizations_id",
+        "p_queue_items_id",
+        "p_worker_id",
+        "p_lease_seconds"
+      ],
+      "returns": [
+        "context",
+        "claimed",
+        "claim_token",
+        "attempt",
+        "max_attempts",
+        "lease_expires_at",
+        "already_sent",
+        "dlq_required",
+        "state",
+        "error_reason"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_claim_dispatch_part",
+      "arguments": [
+        "p_organizations_id",
+        "p_queue_items_id",
+        "p_part_key",
+        "p_content_hash",
+        "p_body",
+        "p_reserved_external_id",
+        "p_worker_id",
+        "p_lease_seconds"
+      ],
+      "returns": [
+        "part_id",
+        "part_state",
+        "should_send",
+        "claim_token",
+        "external_id",
+        "reserved_external_id",
+        "operation_id",
+        "attempt",
+        "max_attempts"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_complete_dispatch_part",
+      "arguments": [
+        "p_organizations_id",
+        "p_queue_items_id",
+        "p_part_key",
+        "p_claim_token",
+        "p_outcome",
+        "p_external_id",
+        "p_operation_id",
+        "p_error_message"
+      ],
+      "returns": [
+        "void"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_finalize_whatsapp_queue_item",
+      "arguments": [
+        "p_organizations_id",
+        "p_queue_items_id"
+      ],
+      "returns": [
+        "void"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_fail_whatsapp_queue_item",
+      "arguments": [
+        "p_organizations_id",
+        "p_queue_items_id",
+        "p_error_message"
+      ],
+      "returns": [
+        "void"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_move_dispatch_to_dlq",
+      "arguments": [
+        "p_organizations_id",
+        "p_queue_items_id",
+        "p_worker_id",
+        "p_reason",
+        "p_attempts",
+        "p_max_attempts"
+      ],
+      "returns": [
+        "void"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_start_whatsapp_batch",
+      "arguments": [
+        "p_organizations_id",
+        "p_chip_instance",
+        "p_queue_item_ids",
+        "p_worker_id"
+      ],
+      "returns": [
+        "batch status row"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_set_whatsapp_batch_state",
+      "arguments": [
+        "p_organizations_id",
+        "p_chip_instance",
+        "p_action",
+        "p_worker_id"
+      ],
+      "returns": [
+        "batch status row"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_claim_next_batch_item",
+      "arguments": [
+        "p_worker_batches_id",
+        "p_worker_id"
+      ],
+      "returns": [
+        "batch_item_id",
+        "queue_item_id",
+        "item_position",
+        "total",
+        "processed",
+        "policy"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_complete_batch_item",
+      "arguments": [
+        "p_worker_batch_items_id",
+        "p_result",
+        "p_error_message",
+        "p_next_run_at"
+      ],
+      "returns": [
+        "void"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "worker_recover_stale_whatsapp_v2",
+      "arguments": [
+        "p_organizations_id",
+        "p_stale_before"
+      ],
+      "returns": [
+        "jsonb recovery summary"
+      ],
+      "sql": "08_WORKER_GATING_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "service_stage5_converge_automatic_message",
+      "arguments": [
+        "p_organizations_id",
+        "p_queue_items_id",
+        "p_external_message_id",
+        "p_remote_jid",
+        "p_message_body",
+        "p_message_type"
+      ],
+      "returns": [
+        "conversationId",
+        "messageId",
+        "contactId"
+      ],
+      "sql": "06_MESSAGING_RPC_R60.sql"
+    },
+    {
+      "caller": "Worker 3.14.6 via runtime",
+      "operation": "service_worker_heartbeat",
+      "arguments": [
+        "p_worker_id",
+        "p_worker_version",
+        "p_status",
+        "p_metrics",
+        "p_metadata"
+      ],
+      "returns": [
+        "null"
+      ],
+      "sql": "runtime adapter -> service_runtime_heartbeat; baseline required by 02_PRECHECK.sql"
+    },
+    {
+      "caller": "Worker 3.14.6 via runtime",
+      "operation": "service_claim_recovery_request",
+      "arguments": [
+        "p_worker_id"
+      ],
+      "returns": [
+        "recovery request row"
+      ],
+      "sql": "baseline organization-native; required by 02_PRECHECK.sql"
+    },
+    {
+      "caller": "Worker 3.14.6 via runtime",
+      "operation": "service_complete_recovery_request",
+      "arguments": [
+        "p_request_id",
+        "p_result",
+        "p_error"
+      ],
+      "returns": [
+        "void"
+      ],
+      "sql": "baseline organization-native; required by 02_PRECHECK.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "refresh_operational_alerts",
+      "arguments": [
+        "p_organizations_id"
+      ],
+      "returns": [
+        "integer"
+      ],
+      "sql": "baseline organization-native; required by 02_PRECHECK.sql"
+    },
+    {
+      "caller": "Worker 3.14.6",
+      "operation": "instagram_recover_stale_items_v2",
+      "arguments": [
+        "p_organizations_id",
+        "p_stale_before"
+      ],
+      "returns": [
+        "jsonb"
+      ],
+      "sql": "baseline organization-native; required by 02_PRECHECK.sql"
+    },
+    {
+      "caller": "Gateway 1.2.30 -> CRM webhook",
+      "operation": "service_ingest_evolution_message",
+      "arguments": [
+        "p_instances_id",
+        "p_event_type",
+        "p_external_message_id",
+        "p_remote_jid",
+        "p_from_me",
+        "p_message_type",
+        "p_message_body",
+        "p_message_status",
+        "p_contact_name",
+        "p_provider_timestamp",
+        "p_raw_payload",
+        "p_media_url",
+        "p_media_mime_type",
+        "p_media_file_name",
+        "p_quoted_external_message_id"
+      ],
+      "returns": [
+        "ignored/duplicate/conversationId/messageId/contactId/contactState"
+      ],
+      "sql": "06_MESSAGING_RPC_R60.sql"
+    },
+    {
+      "caller": "Gateway 1.2.30 -> CRM webhook",
+      "operation": "service_update_evolution_message_status",
+      "arguments": [
+        "p_instances_id",
+        "p_external_message_id",
+        "p_message_status",
+        "p_event_type",
+        "p_raw_payload",
+        "p_provider_timestamp"
+      ],
+      "returns": [
+        "noop/messageId/status"
+      ],
+      "sql": "06_MESSAGING_RPC_R60.sql"
+    },
+    {
+      "caller": "Gateway 1.2.30 -> CRM webhook",
+      "operation": "service_update_evolution_connection_state_r60",
+      "arguments": [
+        "p_instances_id",
+        "p_provider_state"
+      ],
+      "returns": [
+        "instanceId/state"
+      ],
+      "sql": "06_MESSAGING_RPC_R60.sql"
+    },
+    {
+      "caller": "CRM Inbox",
+      "operation": "service_stage5_list_conversations",
+      "arguments": [
+        "p_organizations_id",
+        "p_chip_id",
+        "p_scope",
+        "p_unread_only",
+        "p_archived",
+        "p_search",
+        "p_cursor_at",
+        "p_cursor_id",
+        "p_limit",
+        "p_contact_state"
+      ],
+      "returns": [
+        "items",
+        "limit",
+        "nextCursor"
+      ],
+      "sql": "06_MESSAGING_RPC_R60.sql"
+    },
+    {
+      "caller": "CRM Inbox",
+      "operation": "service_stage5_list_messages",
+      "arguments": [
+        "p_organizations_id",
+        "p_conversations_id",
+        "p_before_id",
+        "p_after_id",
+        "p_limit"
+      ],
+      "returns": [
+        "items",
+        "limit",
+        "hasMoreBefore"
+      ],
+      "sql": "06_MESSAGING_RPC_R60.sql"
+    },
+    {
+      "caller": "CRM Inbox",
+      "operation": "ignore/restore/promote/read/archive/assign",
+      "arguments": [
+        "organization derived from authenticated context"
+      ],
+      "returns": [
+        "operation result"
+      ],
+      "sql": "06_MESSAGING_RPC_R60.sql"
+    },
+    {
+      "caller": "Manager 1.5.71 MaintenanceCoordinator",
+      "operation": "GET /api/system?route=public-config",
+      "arguments": [],
+      "returns": [
+        "platformRelease schemaVersion 2",
+        "releaseSequence",
+        "productionReady",
+        "resumeAllowed",
+        "schemaTarget",
+        "securityBaseline",
+        "resources",
+        "signature",
+        "healthPolicy"
+      ],
+      "sql": "01_SUPPLY_CHAIN_BOOTSTRAP.sql + 10B_SUPPLY_CHAIN_HARDENING_R60.sql"
+    },
+    {
+      "caller": "trusted release service only",
+      "operation": "service_arm_messaging_resume_gate_r60",
+      "arguments": [
+        "p_organizations_id",
+        "p_release_candidate_id",
+        "p_installation_id",
+        "p_expected_release_sequence"
+      ],
+      "returns": [
+        "maintenance",
+        "resumeAllowed",
+        "revision",
+        "releaseSequence",
+        "schemaTarget",
+        "securityBaseline",
+        "candidateId"
+      ],
+      "sql": "10C_PRODUCTION_RESUME_GATE_R60.sql"
+    }
+  ]
+}
