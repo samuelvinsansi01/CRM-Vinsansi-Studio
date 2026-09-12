@@ -24,7 +24,7 @@ export type HomologationCheck = {
 
 export type HomologationSnapshot = { run: HomologationRun; checks: HomologationCheck[] };
 
-const RELEASE = '2.4.0-R60.8';
+const RELEASE = '2.4.0-R60.9';
 const MANAGER_TOOL_ID = 'vinsansi_whatsapp_manager';
 const CORE_RUNTIME_TYPES = ['manager', 'worker', 'gateway', 'evolution'] as const;
 

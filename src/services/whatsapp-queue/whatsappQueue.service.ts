@@ -179,7 +179,8 @@ export const whatsappQueueService = {
   },
 
   async page(filters: WhatsAppQueueFilters, request: PageRequest) {
-    await rolloverOverdueWhatsAppItems();
+    // Consultar a Fila final é leitura pura. O rollover pertence ao caminho
+    // operacional/Worker e não deve atrasar nem alterar uma consulta histórica.
     return repositories.whatsappQueue.page(filters, request);
   },
 

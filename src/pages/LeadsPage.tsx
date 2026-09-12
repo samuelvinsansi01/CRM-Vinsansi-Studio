@@ -207,7 +207,7 @@ export function LeadsPage() {
 
   const rows = useMemo<Row[]>(() => items.map((lead) => ({
     id: lead.id,
-    company: lead.alternativeName ? <span title={`Nome original: ${lead.company}`}><strong>{lead.alternativeName}</strong></span> : lead.company,
+    company: lead.alternativeName ? <span title={`Nome alternativo: ${lead.alternativeName}`}><strong>{lead.company}</strong></span> : lead.company,
     branch: lead.branch || '—',
     state: lead.state || '—',
     city: lead.city || '—',

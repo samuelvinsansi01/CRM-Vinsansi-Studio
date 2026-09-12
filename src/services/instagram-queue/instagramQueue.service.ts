@@ -64,7 +64,8 @@ export const instagramQueueService = {
   },
 
   async page(filters: InstagramQueueFilters, request: PageRequest) {
-    await rolloverOverdueInstagramItems();
+    // Consulta histórica/final não executa rollover. A virada de capacidade
+    // continua no caminho operacional, sem transformar uma leitura em escrita.
     return repositories.instagramQueue.page(filters, request);
   },
 

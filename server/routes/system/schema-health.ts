@@ -30,7 +30,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         leadStatus: { ok: statusOk, actual: actualStatuses },
         channels: { ok: channelsOk, actual: actualChannels },
       },
-      release: { release_key: 'crm-r60-candidate-contract', application_version: '2.4.0-R60.8', release_sequence: 60, production_ready: false, is_stable: false },
+      release: { release_key: 'crm-r60-candidate-contract', application_version: '2.4.0-R60.9', release_sequence: 60, production_ready: false, is_stable: false },
     });
   } catch (error) {
     return send(req, res, 503, { ok: false, error: error instanceof Error ? error.message : String(error) });

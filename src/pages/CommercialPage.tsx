@@ -143,9 +143,15 @@ export function CommercialPage() {
     { key: 'updatedAt', label: 'Alterado em', width: '10%' },
   ];
 
-  const rows = useMemo<Row[]>(() => items.map((lead) => ({
+  const commercialItems = useMemo(() => items.slice().sort((a, b) => {
+    const aKey = a.commercialUpdatedAt || a.lastSentAt || a.createdAt;
+    const bKey = b.commercialUpdatedAt || b.lastSentAt || b.createdAt;
+    return bKey.localeCompare(aKey) || Number(b.id) - Number(a.id);
+  }), [items]);
+
+  const rows = useMemo<Row[]>(() => commercialItems.map((lead) => ({
     id: lead.id,
-    company: lead.alternativeName ? <span title={`Nome original: ${lead.company}`}><strong>{lead.alternativeName}</strong></span> : lead.company,
+    company: lead.alternativeName ? <span title={`Nome alternativo: ${lead.alternativeName}`}><strong>{lead.company}</strong></span> : lead.company,
     branch: lead.branch || '—',
     location: [lead.city, lead.state].filter(Boolean).join(' · ') || '—',
     channel: <Tag tone={lead.channel === 'WhatsApp' ? 'success' : lead.channel === 'Instagram' ? 'primary' : 'neutral'}>{lead.channel}</Tag>,
@@ -159,7 +165,7 @@ export function CommercialPage() {
       return lead.previewDueDate ? <span className={`commercial-design-date-text commercial-design-date-text--${state}`}>{formatDateOnly(lead.previewDueDate)}</span> : '—';
     })(),
     updatedAt: lead.commercialUpdatedAt ? formatDate(lead.commercialUpdatedAt) : '—',
-  })), [canEdit, items, savingLeadId]);
+  })), [canEdit, commercialItems, savingLeadId]);
 
   const selectStage = (value: CommercialStage | '') => { setStage(value); setPage(1); };
 

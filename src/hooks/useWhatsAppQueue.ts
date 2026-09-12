@@ -102,6 +102,19 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
 
   useEffect(() => {
     let active = true;
+    void whatsappQueueService.listChips()
+      .then((next) => {
+        if (!active) return;
+        setChips((current) => current.length === next.length && current.every((item, index) => item === next[index]) ? current : next);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : 'Erro ao carregar chips WhatsApp.');
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
 
     async function load() {
       const scopeKey = `${chip}:${scheduledDate}`;
@@ -119,18 +132,16 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
       setError(null);
 
       try {
-        const nextChips = await whatsappQueueService.listChips();
         const [pageResult, nextBatchState] = chip
           ? await Promise.all([
               whatsappQueueService.page({ chip, scheduledDate }, { page, pageSize: rowsPerPage }),
-              batchStatusForScope(chip, nextChips),
+              batchStatusForScope(chip, chips),
             ])
           : [{ batches: [], total: 0, summary: emptySummary }, idleBatchState];
         const nextBatches = pageResult.batches;
         const nextSummary = pageResult.summary;
 
         if (!active) return;
-        setChips(nextChips);
         setBatches(nextBatches);
         setTotal(pageResult.total);
         setSummary(nextSummary);
@@ -139,7 +150,6 @@ export function useWhatsAppQueue(chip: string, scheduledDate: string) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar fila WhatsApp.');
         if (isInitialLoad) {
-          setChips([]);
           setBatches([]);
           setTotal(0);
           setSummary(emptySummary);

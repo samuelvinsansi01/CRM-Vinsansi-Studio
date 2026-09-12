@@ -30,6 +30,19 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
 
   useEffect(() => {
     let active = true;
+    void instagramQueueService.listProfiles()
+      .then((next) => {
+        if (!active) return;
+        setProfiles((current) => current.length === next.length && current.every((item, index) => item === next[index]) ? current : next);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : 'Erro ao carregar perfis Instagram.');
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
 
     async function load() {
       const scopeKey = `${profile}:${scheduledDate}`;
@@ -47,7 +60,6 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
       setError(null);
 
       try {
-        const nextProfiles = await instagramQueueService.listProfiles();
         const pageResult = profile
           ? await instagramQueueService.page({ profile, scheduledDate }, { page, pageSize: rowsPerPage })
           : { batches: [], total: 0, summary: emptySummary };
@@ -55,7 +67,6 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
         const nextSummary = pageResult.summary;
 
         if (!active) return;
-        setProfiles(nextProfiles);
         setBatches(nextBatches);
         setTotal(pageResult.total);
         setSummary(nextSummary);
@@ -63,7 +74,6 @@ export function useInstagramQueue(profile: string, scheduledDate: string) {
         if (!active) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar fila Instagram.');
         if (isInitialLoad) {
-          setProfiles([]);
           setBatches([]);
           setTotal(0);
           setSummary(emptySummary);
