@@ -7,9 +7,9 @@ const publicConfig=readFileSync(new URL('../server/routes/system/public-config.t
 const bootstrap=readFileSync(new URL('../sql/r60/01_SUPPLY_CHAIN_BOOTSTRAP.sql',import.meta.url),'utf8');
 const hardening=readFileSync(new URL('../sql/r60/10B_SUPPLY_CHAIN_HARDENING_R60.sql',import.meta.url),'utf8');
 pass('candidate manifest schema 2',()=>assert.equal(manifest.schemaVersion,2));
-pass('candidate identity and stage',()=>{assert.equal(manifest.release,'2.4.0-R60.6');assert.equal(manifest.releaseStage,'candidate');assert.equal(manifest.releaseSequence,60);});
+pass('candidate identity and stage',()=>{assert.equal(manifest.release,'2.4.0-R60.7');assert.equal(manifest.releaseStage,'candidate');assert.equal(manifest.releaseSequence,60);});
 pass('candidate is closed',()=>{assert.equal(manifest.productionReady,false);assert.equal(manifest.resumeAllowed,false);});
-pass('candidate versions projected correctly',()=>{assert.equal(manifest.manager.latestVersion,'1.5.76');assert.equal(manifest.components.worker.version,'3.14.8');assert.equal(manifest.components.gateway.version,'1.2.31');assert.equal(manifest.components.evolution.version,'0.7.2');assert.equal(manifest.capture.latestVersion,'1.0.53');assert.equal(manifest.instagram.latestVersion,'2.0.8');});
+pass('candidate versions projected correctly',()=>{assert.equal(manifest.manager.latestVersion,'1.5.77');assert.equal(manifest.components.worker.version,'3.14.8');assert.equal(manifest.components.gateway.version,'1.2.31');assert.equal(manifest.components.evolution.version,'0.7.2');assert.equal(manifest.capture.latestVersion,'1.0.53');assert.equal(manifest.instagram.latestVersion,'2.0.8');});
 pass('release candidate table is schema v2 authority',()=>{assert.match(bootstrap,/platform_release_candidates/);assert.match(bootstrap,/CHECK \(schema_version = 2\)/);});
 pass('Control Plane reads platform_release_candidates',()=>assert.match(release,/from\('platform_release_candidates'\)/));
 pass('Control Plane never reads platform_tools as authority',()=>assert.doesNotMatch(release,/from\('platform_tools'\)\.select/));

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { Archive, ArchiveRestore, CalendarDays, Check, CheckCheck, Clock3, Inbox, MessageCircle, RefreshCcw, Search, Send, Smartphone, TriangleAlert } from 'lucide-react';
 import { Button, Drawer, Field, Panel, SelectField, Tag, ToastViewport, type ToastItem } from '../design-system/components';
 import { PageHeader } from '../design-system/layouts/PageHeader';
@@ -107,6 +108,7 @@ export function ConversationsPage() {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [contactFilter, setContactFilter] = useState<ContactFilter>('active');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search.trim(), 250);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -184,7 +186,7 @@ export function ConversationsPage() {
     }
     if (!quiet) setLoading(true);
     try {
-      const page = await listConversationsPage(organizationId, selectedChipId, includeArchived, 50, contactFilter, null);
+      const page = await listConversationsPage(organizationId, selectedChipId, includeArchived, 50, contactFilter, null, debouncedSearch);
       const next=page.items;
       if (requestId !== conversationsRequestRef.current) return;
       setConversations(next);
@@ -196,7 +198,9 @@ export function ConversationsPage() {
           window.sessionStorage.removeItem('crm:notification:conversation-target');
           return targetConversationId;
         }
-        return current && next.some((conversation) => conversation.id === current) ? current : next[0]?.id ?? null;
+        // Não seleciona a primeira conversa automaticamente. Abrir a Inbox não pode
+        // marcar uma mensagem como lida sem uma ação explícita do operador.
+        return current && next.some((conversation) => conversation.id === current) ? current : null;
       });
       setError('');
     } catch (cause) {
@@ -205,18 +209,18 @@ export function ConversationsPage() {
     } finally {
       if (!quiet && requestId === conversationsRequestRef.current) setLoading(false);
     }
-  }, [organizationId, selectedChipId, includeArchived, contactFilter]);
+  }, [organizationId, selectedChipId, includeArchived, contactFilter, debouncedSearch]);
 
   const loadMoreConversations=useCallback(async()=>{
     if(!organizationId||!selectedChipId||!conversationCursor||loadingMoreConversations)return;
     setLoadingMoreConversations(true);
     try{
-      const page=await listConversationsPage(organizationId,selectedChipId,includeArchived,50,contactFilter,conversationCursor);
+      const page=await listConversationsPage(organizationId,selectedChipId,includeArchived,50,contactFilter,conversationCursor,debouncedSearch);
       setConversations((current)=>{const byId=new Map(current.map((item)=>[item.id,item]));for(const item of page.items)byId.set(item.id,item);return [...byId.values()];});
       setConversationCursor(page.nextCursor);
     }catch(cause){setError(cause instanceof Error?cause.message:'Falha ao carregar mais conversas.');}
     finally{setLoadingMoreConversations(false);}
-  },[contactFilter,conversationCursor,includeArchived,loadingMoreConversations,organizationId,selectedChipId]);
+  },[contactFilter,conversationCursor,debouncedSearch,includeArchived,loadingMoreConversations,organizationId,selectedChipId]);
 
   const loadMessages = useCallback(async (conversationId: string | null, quiet = false) => {
     const requestId = ++messagesRequestRef.current;
@@ -523,9 +527,10 @@ export function ConversationsPage() {
     setDraft(''); setSending(true); setMessages((current) => [...current, optimistic]);
     try {
       await sendConversationMessage(selectedConversation.id, body);
-      // A lista é atualizada pelo UPDATE Realtime da conversa; só reconciliamos
-      // a pequena janela da thread para substituir o item otimista pelo canônico.
-      await loadMessages(selectedConversation.id, true);
+      // O envio já foi aceito pelo backend/provider. A reconciliação visual é
+      // secundária e jamais pode transformar um envio confirmado em "Falha".
+      setMessages((current) => current.filter((item) => item.id !== optimisticId));
+      void loadMessages(selectedConversation.id, true).catch(() => undefined);
       setError('');
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Falha ao enviar a mensagem.';
