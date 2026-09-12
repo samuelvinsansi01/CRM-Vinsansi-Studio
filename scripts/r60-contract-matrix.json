@@ -366,7 +366,7 @@
       "sql": "06_MESSAGING_RPC_R60.sql"
     },
     {
-      "caller": "Manager 1.5.73 MaintenanceCoordinator",
+      "caller": "Manager 1.5.74 MaintenanceCoordinator",
       "operation": "GET /api/system?route=public-config",
       "arguments": [],
       "returns": [

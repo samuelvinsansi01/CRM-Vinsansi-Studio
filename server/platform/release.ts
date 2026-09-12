@@ -121,12 +121,22 @@ function validateStoredCandidate(candidate:Row){
 export async function loadPlatformRelease():Promise<PlatformReleaseManifest>{
   const client=serviceClient();
   const promoted=await readCandidate(client,true);if(promoted?.manifest)return validateStoredCandidate(promoted as Row);
-  let candidate=await readCandidate(client,false);if(candidate?.manifest)return validateStoredCandidate(candidate as Row);
-  // Bootstrap canônico: depois que 01_SUPPLY_CHAIN_BOOTSTRAP existe, o próprio
-  // deployment R60 publica sua Candidate embarcada. platform_tools nunca é lido
-  // como autoridade e só é reconciliado como projeção dentro do registro.
   const bundled=parsePlatformReleaseManifest(bundledCandidateJson);
   if(bundled.releaseStage!=='candidate')throw new Error('bundled_release_must_be_candidate');
+  const bundledSha=canonicalManifestSha256(bundled);
+  let candidate=await readCandidate(client,false);
+  if(candidate?.manifest){
+    const current=validateStoredCandidate(candidate as Row);
+    const currentSha=text(candidate.canonical_manifest_sha256);
+    const currentGenerated=Date.parse(current.generatedAt);
+    const bundledGenerated=Date.parse(bundled.generatedAt);
+    const shouldBootstrapBundled=current.releaseSequence<bundled.releaseSequence
+      ||(current.releaseSequence===bundled.releaseSequence&&currentSha!==bundledSha&&bundledGenerated>currentGenerated);
+    if(!shouldBootstrapBundled)return current;
+  }
+  // Bootstrap/upgrade canônico de Candidate: um deployment mais novo pode
+  // registrar sua própria Candidate fechada sem token administrativo. Uma
+  // Candidate armazenada mais nova nunca é rebaixada por rollback de código.
   await registerVerifiedReleaseCandidate(bundled);
   candidate=await readCandidate(client,false);if(candidate?.manifest)return validateStoredCandidate(candidate as Row);
   throw new Error('platform_release_r60_not_published');
