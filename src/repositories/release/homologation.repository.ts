@@ -24,7 +24,7 @@ export type HomologationCheck = {
 
 export type HomologationSnapshot = { run: HomologationRun; checks: HomologationCheck[] };
 
-const RELEASE = '2.4.0-R60';
+const RELEASE = '2.4.0-R60.2';
 const MANAGER_TOOL_ID = 'vinsansi_whatsapp_manager';
 const CORE_RUNTIME_TYPES = ['manager', 'worker', 'gateway', 'evolution'] as const;
 
@@ -57,6 +57,10 @@ function check(key: string, section: string, label: string, passed: boolean, evi
   };
 }
 
+function optionalCheck(key: string, section: string, label: string, passed: boolean, evidence: string): HomologationCheck {
+  return { ...check(key, section, label, passed, evidence), required: false };
+}
+
 function normalized(value: unknown) {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
 }
@@ -84,6 +88,15 @@ function hasSecretLikeKey(value: unknown): boolean {
   return false;
 }
 
+async function loadCanonicalPlatformRelease(): Promise<Row> {
+  const response = await fetch('/api/system?route=public-config', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+  const payload = object(await response.json().catch(() => ({})));
+  if (!response.ok || payload.ok === false) throw new Error(`Homologação: Control Plane canônico indisponível (${response.status}).`);
+  const manifest = object(payload.platformRelease);
+  if (Number(manifest.schemaVersion) !== 2) throw new Error('Homologação: manifesto canônico R60 schema 2 ausente.');
+  return manifest;
+}
+
 export async function getHomologationSnapshot(): Promise<HomologationSnapshot> {
   const client = getSupabaseClient();
   const checks: HomologationCheck[] = [];
@@ -108,26 +121,27 @@ export async function getHomologationSnapshot(): Promise<HomologationSnapshot> {
     `Atual: ${actualChannels.join(', ') || 'vazio'}`,
   ));
 
+  const releaseManifest = await loadCanonicalPlatformRelease();
   const platform = await client.from('platform_tools')
-    .select('tool_id,catalog_status,latest_version,minimum_supported_version,release_manifest')
+    .select('tool_id,catalog_status,latest_version,minimum_supported_version')
     .eq('tool_id', MANAGER_TOOL_ID).maybeSingle();
-  if (platform.error) throw new Error(`Homologação: falha ao ler Control Plane: ${platform.error.message}`);
+  if (platform.error) throw new Error(`Homologação: falha ao ler projeção compatível do catálogo: ${platform.error.message}`);
   const platformRow = object(platform.data);
-  const releaseManifest = object(platformRow.release_manifest);
   const releaseComponents = object(releaseManifest.components);
   const healthPolicy = object(releaseManifest.healthPolicy);
-  const latestManagerVersion = text(platformRow.latest_version);
-  const minimumManagerVersion = text(platformRow.minimum_supported_version);
+  const latestManagerVersion = text(object(releaseManifest.manager).latestVersion);
+  const minimumManagerVersion = text(object(releaseManifest.manager).minimumSupportedVersion);
   const manifestVersions = {
     worker: componentVersion(releaseManifest, 'worker'),
     gateway: componentVersion(releaseManifest, 'gateway'),
     evolution: componentVersion(releaseManifest, 'evolution'),
     cloudflared: componentVersion(releaseManifest, 'cloudflared'),
   };
-  const releaseReady = text(platformRow.catalog_status) === 'active'
-    && Boolean(latestManagerVersion)
-    && latestManagerVersion === minimumManagerVersion
-    && Number(releaseManifest.schemaVersion) >= 1
+  const releaseReady = Boolean(latestManagerVersion)
+    && Number(releaseManifest.schemaVersion) === 2
+    && text(releaseManifest.releaseStage) === 'candidate'
+    && releaseManifest.productionReady === false
+    && releaseManifest.resumeAllowed === false
     && Object.values(manifestVersions).every(Boolean)
     && number(healthPolicy.runtimeTtlSeconds) >= 30
     && number(healthPolicy.managerHeartbeatSeconds) >= 15
@@ -135,6 +149,11 @@ export async function getHomologationSnapshot(): Promise<HomologationSnapshot> {
   checks.push(check(
     'control_plane_release', 'Control Plane', 'Versão oficial e manifesto central consistentes', releaseReady,
     `Gerenciador ${latestManagerVersion || '—'}; Worker ${manifestVersions.worker || '—'}; Gateway ${manifestVersions.gateway || '—'}; Evolution ${manifestVersions.evolution || '—'}; Cloudflared ${manifestVersions.cloudflared || '—'}; TTL ${number(healthPolicy.runtimeTtlSeconds) || 0}s.`,
+  ));
+  const projectionAligned = !platform.data || (text(platformRow.latest_version) === latestManagerVersion && text(platformRow.minimum_supported_version) === minimumManagerVersion);
+  checks.push(optionalCheck(
+    'legacy_catalog_projection', 'Compatibilidade', 'platform_tools acompanha a release canônica como projeção não autoritativa', projectionAligned,
+    !platform.data ? 'Nenhuma projeção legada presente; Control Plane canônico permanece autoridade.' : `Projeção ${text(platformRow.latest_version) || '—'} / mínimo ${text(platformRow.minimum_supported_version) || '—'}; autoridade ${latestManagerVersion || '—'} / mínimo ${minimumManagerVersion || '—'}.`,
   ));
 
   const health = await client.rpc('get_operational_health');
@@ -183,7 +202,7 @@ export async function getHomologationSnapshot(): Promise<HomologationSnapshot> {
     && evolutionPublicUrl.startsWith('https://')
     && evolutionHost.startsWith('evolution-');
   checks.push(check(
-    'cloudflare_installation_isolated', 'Instalação', 'Cloudflare Tunnel exclusivo preparado e confirmado', cloudflareReady,
+    'cloudflare_installation_isolated', 'Instalação', 'Cloudflare Tunnel exclusivo aponta para o Gateway público e está confirmado', cloudflareReady,
     cloudflareReady ? `${text(cloudflare.tunnelName)} · ${evolutionHost} · Worker interno sem ingress público` : 'Metadata Cloudflare exclusiva ainda incompleta ou não confirmada.',
   ));
 
@@ -198,7 +217,7 @@ export async function getHomologationSnapshot(): Promise<HomologationSnapshot> {
   const instanceRows = (instances.data ?? []).map((row) => object(row));
   const instancesAligned = Boolean(evolutionPublicUrl) && instanceRows.every((row) => text(row.instances_url) === evolutionPublicUrl);
   checks.push(check(
-    'instances_cloudflare_origin', 'Instalação', 'Instâncias WhatsApp usam a origem pública da instalação corrente',
+    'instances_cloudflare_origin', 'Instalação', 'Instâncias WhatsApp usam o listener público do Gateway da instalação corrente',
     instanceRows.length === 0 ? cloudflareReady : instancesAligned,
     instanceRows.length === 0 ? 'Nenhuma instância WhatsApp cadastrada nesta organização.' : `${instanceRows.filter((row) => text(row.instances_url) === evolutionPublicUrl).length}/${instanceRows.length} instância(s) apontando para ${evolutionHost || 'origem não confirmada'}.`,
   ));

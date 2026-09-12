@@ -4,6 +4,7 @@ import evolutionInstances from './desktop/evolution-instances.js';
 import workerProvision from './desktop/worker-provision.js';
 import schemaHealth from './schema-health.js';
 import publicConfig from './public-config.js';
+import releaseCandidate from './release-candidate.js';
 
 const handlers = {
   'chat/send': sendChatMessage,
@@ -11,6 +12,7 @@ const handlers = {
   'desktop/worker-provision': workerProvision,
   'schema-health': schemaHealth,
   'public-config': publicConfig,
+  'release-candidate': releaseCandidate,
 };
 
 export default function systemRouter(req: RoutedRequest, res: RoutedResponse) {

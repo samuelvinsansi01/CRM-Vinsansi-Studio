@@ -1,0 +1,382 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vinsansi.local/contracts/platform-release-manifest-v2.schema.json",
+  "title": "VINSANSI Platform Release Manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "releaseId",
+    "release",
+    "releaseStage",
+    "generatedAt",
+    "releaseSequence",
+    "issuedAt",
+    "expiresAt",
+    "productionReady",
+    "resumeAllowed",
+    "schemaTarget",
+    "securityBaseline",
+    "signature",
+    "resources",
+    "imageDigests",
+    "distribution",
+    "manager",
+    "capture",
+    "instagram",
+    "healthPolicy",
+    "components"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "releaseId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "release": {
+      "type": "string",
+      "minLength": 1
+    },
+    "releaseStage": {
+      "enum": [
+        "candidate",
+        "production"
+      ]
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "releaseSequence": {
+      "type": "integer",
+      "minimum": 60
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "productionReady": {
+      "type": "boolean"
+    },
+    "resumeAllowed": {
+      "type": "boolean"
+    },
+    "schemaTarget": {
+      "const": "r60"
+    },
+    "securityBaseline": {
+      "const": "r60-security-baseline-v1"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "keyId",
+        "signature"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "ed25519"
+        },
+        "keyId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signature": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sha256"
+        ],
+        "properties": {
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      },
+      "required": [
+        "manager",
+        "worker",
+        "gateway",
+        "capture",
+        "instagram"
+      ]
+    },
+    "imageDigests": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manager"
+      ],
+      "properties": {
+        "manager": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "url",
+            "sha256"
+          ],
+          "properties": {
+            "kind": {
+              "const": "windows-nsis"
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sha256": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "manager": {
+      "$ref": "#/$defs/tool"
+    },
+    "capture": {
+      "$ref": "#/$defs/tool"
+    },
+    "instagram": {
+      "$ref": "#/$defs/tool"
+    },
+    "healthPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeTtlSeconds",
+        "managerHeartbeatSeconds",
+        "workerHeartbeatSeconds"
+      ],
+      "properties": {
+        "runtimeTtlSeconds": {
+          "type": "integer",
+          "minimum": 30
+        },
+        "managerHeartbeatSeconds": {
+          "type": "integer",
+          "minimum": 15
+        },
+        "workerHeartbeatSeconds": {
+          "type": "integer",
+          "minimum": 15
+        }
+      }
+    },
+    "components": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "worker",
+        "gateway",
+        "evolution",
+        "cloudflared"
+      ],
+      "properties": {
+        "worker": {
+          "$ref": "#/$defs/component"
+        },
+        "gateway": {
+          "$ref": "#/$defs/component"
+        },
+        "evolution": {
+          "$ref": "#/$defs/component"
+        },
+        "cloudflared": {
+          "$ref": "#/$defs/component"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "toolId",
+        "latestVersion",
+        "minimumSupportedVersion"
+      ],
+      "properties": {
+        "toolId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "latestVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minimumSupportedVersion": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "releaseStage": {
+            "const": "candidate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "productionReady": {
+            "const": false
+          },
+          "resumeAllowed": {
+            "const": false
+          },
+          "signature": {
+            "properties": {
+              "keyId": {
+                "type": "null"
+              },
+              "signature": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "releaseStage": {
+            "const": "production"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "productionReady": {
+            "const": true
+          },
+          "resumeAllowed": {
+            "const": true
+          },
+          "signature": {
+            "properties": {
+              "keyId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "signature": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "distribution": {
+            "properties": {
+              "manager": {
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https://"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
+          },
+          "imageDigests": {
+            "type": "object",
+            "required": [
+              "worker",
+              "gateway",
+              "evolution",
+              "cloudflared"
+            ],
+            "properties": {
+              "worker": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "gateway": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "evolution": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "cloudflared": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "required": [
+          "imageDigests"
+        ]
+      }
+    }
+  ]
+}

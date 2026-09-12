@@ -3,17 +3,19 @@ BEGIN;
 CREATE OR REPLACE FUNCTION public.service_register_release_candidate_r60(
  p_manifest jsonb,p_canonical_manifest_sha256 text,p_signature_base64 text
 ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE id uuid; seq bigint; issued timestamptz; expires timestamptz; prod boolean; resume boolean; target text; baseline text; hashes jsonb;digests jsonb;key_id text;
+DECLARE id uuid; seq bigint; issued timestamptz; expires timestamptz; prod boolean; resume boolean; target text; baseline text; hashes jsonb;digests jsonb;key_id text;stage text;release_id text;release_name text;manifest_signature text;
 BEGIN
  IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'service_role_required'; END IF;
  IF jsonb_typeof(p_manifest)<>'object' OR coalesce((p_manifest->>'schemaVersion')::integer,0)<>2 THEN RAISE EXCEPTION 'manifest_schema_invalid'; END IF;
  IF p_canonical_manifest_sha256 !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'manifest_hash_invalid'; END IF;
- seq:=(p_manifest->>'releaseSequence')::bigint;issued:=(p_manifest->>'issuedAt')::timestamptz;expires:=(p_manifest->>'expiresAt')::timestamptz;prod:=coalesce((p_manifest->>'productionReady')::boolean,false);resume:=coalesce((p_manifest->>'resumeAllowed')::boolean,false);target:=p_manifest->>'schemaTarget';baseline:=p_manifest->>'securityBaseline';hashes:=coalesce(p_manifest->'resources','{}'::jsonb);digests:=coalesce(p_manifest->'imageDigests','{}'::jsonb);key_id:=nullif(btrim(coalesce(p_manifest#>>'{signature,keyId}','')),'');
- IF seq<60 OR target<>'r60' OR baseline<>'r60-security-baseline-v1' OR expires<=issued OR issued>now()+interval '5 minutes' OR expires<=now() THEN RAISE EXCEPTION 'manifest_gate_invalid'; END IF;
- IF resume AND NOT prod THEN RAISE EXCEPTION 'candidate_manifest_cannot_allow_resume'; END IF;
- IF prod AND NOT resume THEN RAISE EXCEPTION 'production_manifest_resume_flag_required'; END IF;
+ seq:=(p_manifest->>'releaseSequence')::bigint;issued:=(p_manifest->>'issuedAt')::timestamptz;expires:=(p_manifest->>'expiresAt')::timestamptz;prod:=coalesce((p_manifest->>'productionReady')::boolean,false);resume:=coalesce((p_manifest->>'resumeAllowed')::boolean,false);target:=p_manifest->>'schemaTarget';baseline:=p_manifest->>'securityBaseline';hashes:=coalesce(p_manifest->'resources','{}'::jsonb);digests:=coalesce(p_manifest->'imageDigests','{}'::jsonb);key_id:=nullif(btrim(coalesce(p_manifest#>>'{signature,keyId}','')),'');stage:=btrim(coalesce(p_manifest->>'releaseStage',''));release_id:=btrim(coalesce(p_manifest->>'releaseId',''));release_name:=btrim(coalesce(p_manifest->>'release',''));manifest_signature:=nullif(btrim(coalesce(p_manifest#>>'{signature,signature}','')),'');
+ IF seq<60 OR target<>'r60' OR baseline<>'r60-security-baseline-v1' OR expires<=issued OR issued>now()+interval '5 minutes' OR expires<=now() OR release_id='' OR release_name='' OR stage NOT IN('candidate','production') THEN RAISE EXCEPTION 'manifest_gate_invalid'; END IF;
+ IF stage='candidate' AND (prod OR resume OR key_id IS NOT NULL OR manifest_signature IS NOT NULL OR nullif(btrim(coalesce(p_signature_base64,'')),'') IS NOT NULL) THEN RAISE EXCEPTION 'candidate_manifest_must_be_unsigned_and_closed'; END IF;
+ IF stage='production' AND (NOT prod OR NOT resume OR key_id IS NULL OR key_id='LOCAL_TEST_ONLY' OR manifest_signature IS NULL) THEN RAISE EXCEPTION 'production_manifest_gate_invalid'; END IF;
+ IF stage='production' AND (coalesce(digests->>'worker','') !~ '^sha256:[0-9a-f]{64}$' OR coalesce(digests->>'gateway','') !~ '^sha256:[0-9a-f]{64}$' OR coalesce(digests->>'evolution','') !~ '^sha256:[0-9a-f]{64}$' OR coalesce(digests->>'cloudflared','') !~ '^sha256:[0-9a-f]{64}$' OR coalesce(p_manifest#>>'{distribution,manager,url}','') !~ '^https://' OR coalesce(p_manifest#>>'{distribution,manager,sha256}','') !~ '^[0-9a-f]{64}$') THEN RAISE EXCEPTION 'production_artifacts_unresolved'; END IF;
+ IF nullif(btrim(coalesce(p_signature_base64,'')),'') IS DISTINCT FROM manifest_signature THEN RAISE EXCEPTION 'manifest_signature_argument_mismatch'; END IF;
  IF EXISTS(SELECT 1 FROM public.platform_release_promotions WHERE release_sequence>seq) THEN RAISE EXCEPTION 'release_downgrade_rejected'; END IF;
- IF prod AND (nullif(btrim(coalesce(p_signature_base64,'')),'') IS NULL OR key_id IS NULL) THEN RAISE EXCEPTION 'production_manifest_signature_required'; END IF;
+ IF prod AND (manifest_signature IS NULL OR key_id IS NULL) THEN RAISE EXCEPTION 'production_manifest_signature_required'; END IF;
  INSERT INTO public.platform_release_candidates(release_sequence,schema_target,security_baseline,issued_at,expires_at,production_ready,resume_allowed,manifest,canonical_manifest_sha256,signature_base64,signature_key_id,component_hashes,docker_digests)
  VALUES(seq,target,baseline,issued,expires,prod,resume,p_manifest,p_canonical_manifest_sha256,nullif(p_signature_base64,''),key_id,hashes,digests)
  ON CONFLICT(release_sequence,canonical_manifest_sha256) DO UPDATE SET
@@ -21,6 +23,10 @@ BEGIN
    signature_base64=coalesce(excluded.signature_base64,platform_release_candidates.signature_base64),
    signature_key_id=coalesce(excluded.signature_key_id,platform_release_candidates.signature_key_id)
  RETURNING release_candidate_id INTO id;
+ -- platform_tools is compatibility metadata only; the canonical manifest remains platform_release_candidates.manifest.
+ UPDATE public.platform_tools SET latest_version=p_manifest#>>'{manager,latestVersion}',minimum_supported_version=p_manifest#>>'{manager,minimumSupportedVersion}',updated_at=now() WHERE tool_id='vinsansi_whatsapp_manager';
+ UPDATE public.platform_tools SET latest_version=p_manifest#>>'{capture,latestVersion}',minimum_supported_version=p_manifest#>>'{capture,minimumSupportedVersion}',updated_at=now() WHERE tool_id='vinsansi_capture';
+ UPDATE public.platform_tools SET latest_version=p_manifest#>>'{instagram,latestVersion}',minimum_supported_version=p_manifest#>>'{instagram,minimumSupportedVersion}',updated_at=now() WHERE tool_id='vinsansi_instagram';
  RETURN id;
 END $$;
 
@@ -41,7 +47,8 @@ BEGIN
  IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'service_role_required'; END IF;
  SELECT * INTO c FROM public.platform_release_candidates WHERE release_candidate_id=p_release_candidate_id FOR UPDATE;
  IF c.release_candidate_id IS NULL THEN RAISE EXCEPTION 'release_candidate_not_found'; END IF;
- IF c.production_ready OR c.resume_allowed OR c.release_sequence<>60 OR c.schema_target<>'r60' OR c.security_baseline<>'r60-security-baseline-v1' OR c.expires_at<=now() THEN RAISE EXCEPTION 'homologation_candidate_gate_invalid'; END IF;
+ IF c.production_ready OR c.resume_allowed OR c.release_sequence<>60 OR c.schema_target<>'r60' OR c.security_baseline<>'r60-security-baseline-v1' OR c.expires_at<=now() OR c.manifest->>'releaseStage'<>'candidate' THEN RAISE EXCEPTION 'homologation_candidate_gate_invalid'; END IF;
+ IF coalesce(c.docker_digests->>'worker','') !~ '^sha256:[0-9a-f]{64}$' OR coalesce(c.docker_digests->>'gateway','') !~ '^sha256:[0-9a-f]{64}$' OR coalesce(c.docker_digests->>'evolution','') !~ '^sha256:[0-9a-f]{64}$' OR coalesce(c.docker_digests->>'cloudflared','') !~ '^sha256:[0-9a-f]{64}$' OR coalesce(c.manifest#>>'{distribution,manager,url}','') !~ '^https://' OR coalesce(c.manifest#>>'{distribution,manager,sha256}','') !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'homologation_artifacts_unresolved'; END IF;
  UPDATE public.platform_release_candidates SET homologated_at=coalesce(homologated_at,now()) WHERE release_candidate_id=p_release_candidate_id;
  RETURN jsonb_build_object('releaseCandidateId',p_release_candidate_id,'releaseSequence',c.release_sequence,'manifestSha256',c.canonical_manifest_sha256,'homologated',true);
 END $$;
@@ -53,10 +60,10 @@ BEGIN
  IF auth.role()<>'service_role' THEN RAISE EXCEPTION 'service_role_required'; END IF;
  SELECT * INTO c FROM public.platform_release_candidates WHERE release_candidate_id=p_release_candidate_id FOR UPDATE;
  IF c.release_candidate_id IS NULL THEN RAISE EXCEPTION 'release_candidate_not_found'; END IF;
- IF NOT c.production_ready OR NOT c.resume_allowed OR c.signature_base64 IS NULL OR c.signature_verified_at IS NULL OR c.expires_at<=now() OR c.release_sequence<60 THEN RAISE EXCEPTION 'release_candidate_not_promotable'; END IF;
+ IF NOT c.production_ready OR NOT c.resume_allowed OR c.manifest->>'releaseStage'<>'production' OR c.signature_base64 IS NULL OR c.signature_verified_at IS NULL OR c.expires_at<=now() OR c.release_sequence<60 THEN RAISE EXCEPTION 'release_candidate_not_promotable'; END IF;
  SELECT * INTO prior FROM public.platform_release_candidates WHERE release_sequence=c.release_sequence AND homologated_at IS NOT NULL ORDER BY homologated_at DESC LIMIT 1;
  IF prior.release_candidate_id IS NULL THEN RAISE EXCEPTION 'homologated_candidate_required'; END IF;
- IF prior.component_hashes<>c.component_hashes OR prior.docker_digests<>c.docker_digests OR prior.schema_target<>c.schema_target OR prior.security_baseline<>c.security_baseline THEN RAISE EXCEPTION 'immutable_promotion_mismatch'; END IF;
+ IF prior.component_hashes<>c.component_hashes OR prior.docker_digests<>c.docker_digests OR prior.schema_target<>c.schema_target OR prior.security_baseline<>c.security_baseline OR prior.manifest->>'releaseId' IS DISTINCT FROM c.manifest->>'releaseId' OR prior.manifest->>'release' IS DISTINCT FROM c.manifest->>'release' OR prior.manifest->'manager' IS DISTINCT FROM c.manifest->'manager' OR prior.manifest->'capture' IS DISTINCT FROM c.manifest->'capture' OR prior.manifest->'instagram' IS DISTINCT FROM c.manifest->'instagram' OR prior.manifest->'components' IS DISTINCT FROM c.manifest->'components' OR prior.manifest->'distribution' IS DISTINCT FROM c.manifest->'distribution' THEN RAISE EXCEPTION 'immutable_promotion_mismatch'; END IF;
  IF EXISTS(SELECT 1 FROM public.platform_release_promotions WHERE release_sequence>c.release_sequence) THEN RAISE EXCEPTION 'release_downgrade_rejected'; END IF;
  INSERT INTO public.platform_release_promotions(release_candidate_id,release_sequence,canonical_manifest_sha256,component_hashes,docker_digests,schema_target,security_baseline,promoted_by)
  VALUES(c.release_candidate_id,c.release_sequence,c.canonical_manifest_sha256,c.component_hashes,c.docker_digests,c.schema_target,c.security_baseline,left(coalesce(p_promoted_by,'service'),160));

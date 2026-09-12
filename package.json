@@ -1,14 +1,15 @@
 {
   "name": "gease-visual-shell",
-  "version": "2.4.0-R60",
+  "version": "2.4.0-R60.2",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "verify:release": "node scripts/verify-syntax.mjs && node scripts/r60-supply-chain-test.mjs && node scripts/verify-r60.mjs",
-    "verify:r60": "node scripts/verify-r60.mjs"
+    "verify:release": "node scripts/verify-syntax.mjs && node scripts/r60-supply-chain-test.mjs && node scripts/r60-control-plane-test.mjs && node scripts/verify-r60.mjs",
+    "verify:r60": "node scripts/verify-r60.mjs",
+    "release:publish-candidate": "node scripts/publish-r60-candidate.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

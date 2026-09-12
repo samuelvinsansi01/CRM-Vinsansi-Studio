@@ -4,7 +4,7 @@
   "securityBaseline": "r60-security-baseline-v1",
   "contracts": [
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_claim_dispatch_job",
       "arguments": [
         "p_organizations_id",
@@ -27,7 +27,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_claim_dispatch_part",
       "arguments": [
         "p_organizations_id",
@@ -53,7 +53,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_complete_dispatch_part",
       "arguments": [
         "p_organizations_id",
@@ -71,7 +71,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_finalize_whatsapp_queue_item",
       "arguments": [
         "p_organizations_id",
@@ -83,7 +83,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_fail_whatsapp_queue_item",
       "arguments": [
         "p_organizations_id",
@@ -96,7 +96,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_move_dispatch_to_dlq",
       "arguments": [
         "p_organizations_id",
@@ -112,7 +112,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_start_whatsapp_batch",
       "arguments": [
         "p_organizations_id",
@@ -126,7 +126,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_set_whatsapp_batch_state",
       "arguments": [
         "p_organizations_id",
@@ -140,7 +140,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_claim_next_batch_item",
       "arguments": [
         "p_worker_batches_id",
@@ -157,7 +157,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_complete_batch_item",
       "arguments": [
         "p_worker_batch_items_id",
@@ -171,7 +171,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "worker_recover_stale_whatsapp_v2",
       "arguments": [
         "p_organizations_id",
@@ -183,7 +183,7 @@
       "sql": "08_WORKER_GATING_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "service_stage5_converge_automatic_message",
       "arguments": [
         "p_organizations_id",
@@ -201,7 +201,7 @@
       "sql": "06_MESSAGING_RPC_R60.sql"
     },
     {
-      "caller": "Worker 3.14.6 via runtime",
+      "caller": "Worker 3.14.8 via runtime",
       "operation": "service_worker_heartbeat",
       "arguments": [
         "p_worker_id",
@@ -216,7 +216,7 @@
       "sql": "runtime adapter -> service_runtime_heartbeat; baseline required by 02_PRECHECK.sql"
     },
     {
-      "caller": "Worker 3.14.6 via runtime",
+      "caller": "Worker 3.14.8 via runtime",
       "operation": "service_claim_recovery_request",
       "arguments": [
         "p_worker_id"
@@ -227,7 +227,7 @@
       "sql": "baseline organization-native; required by 02_PRECHECK.sql"
     },
     {
-      "caller": "Worker 3.14.6 via runtime",
+      "caller": "Worker 3.14.8 via runtime",
       "operation": "service_complete_recovery_request",
       "arguments": [
         "p_request_id",
@@ -240,7 +240,7 @@
       "sql": "baseline organization-native; required by 02_PRECHECK.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "refresh_operational_alerts",
       "arguments": [
         "p_organizations_id"
@@ -251,7 +251,7 @@
       "sql": "baseline organization-native; required by 02_PRECHECK.sql"
     },
     {
-      "caller": "Worker 3.14.6",
+      "caller": "Worker 3.14.8",
       "operation": "instagram_recover_stale_items_v2",
       "arguments": [
         "p_organizations_id",
@@ -263,7 +263,7 @@
       "sql": "baseline organization-native; required by 02_PRECHECK.sql"
     },
     {
-      "caller": "Gateway 1.2.30 -> CRM webhook",
+      "caller": "Gateway 1.2.31 -> CRM webhook",
       "operation": "service_ingest_evolution_message",
       "arguments": [
         "p_instances_id",
@@ -288,7 +288,7 @@
       "sql": "06_MESSAGING_RPC_R60.sql"
     },
     {
-      "caller": "Gateway 1.2.30 -> CRM webhook",
+      "caller": "Gateway 1.2.31 -> CRM webhook",
       "operation": "service_update_evolution_message_status",
       "arguments": [
         "p_instances_id",
@@ -304,7 +304,7 @@
       "sql": "06_MESSAGING_RPC_R60.sql"
     },
     {
-      "caller": "Gateway 1.2.30 -> CRM webhook",
+      "caller": "Gateway 1.2.31 -> CRM webhook",
       "operation": "service_update_evolution_connection_state_r60",
       "arguments": [
         "p_instances_id",
@@ -366,7 +366,7 @@
       "sql": "06_MESSAGING_RPC_R60.sql"
     },
     {
-      "caller": "Manager 1.5.71 MaintenanceCoordinator",
+      "caller": "Manager 1.5.73 MaintenanceCoordinator",
       "operation": "GET /api/system?route=public-config",
       "arguments": [],
       "returns": [

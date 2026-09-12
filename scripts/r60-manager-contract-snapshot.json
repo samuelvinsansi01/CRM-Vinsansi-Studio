@@ -1,8 +1,8 @@
 {
-  "source": "CRM - Gerenciador de Disparos v1.5.71 - CANDIDATE.zip",
-  "managerVersion": "1.5.71",
-  "workerVersion": "3.14.6",
-  "gatewayVersion": "1.2.30",
+  "source": "CRM - Gerenciador de Disparos v1.5.73 - CANDIDATE.zip",
+  "managerVersion": "1.5.73",
+  "workerVersion": "3.14.8",
+  "gatewayVersion": "1.2.31",
   "captureVersion": "1.0.53",
   "instagramVersion": "2.0.8",
   "releaseSequence": 60,
@@ -11,23 +11,105 @@
   "productionReady": false,
   "resumeAllowed": false,
   "workerRpcCalls": {
-    "worker_claim_dispatch_job": ["p_organizations_id","p_queue_items_id","p_worker_id","p_lease_seconds"],
-    "worker_move_dispatch_to_dlq": ["p_organizations_id","p_queue_items_id","p_worker_id","p_reason","p_attempts","p_max_attempts"],
-    "worker_claim_dispatch_part": ["p_organizations_id","p_queue_items_id","p_part_key","p_content_hash","p_body","p_reserved_external_id","p_worker_id","p_lease_seconds"],
-    "worker_complete_dispatch_part": ["p_organizations_id","p_queue_items_id","p_part_key","p_claim_token","p_outcome","p_external_id","p_operation_id","p_error_message"],
-    "service_stage5_converge_automatic_message": ["p_organizations_id","p_queue_items_id","p_external_message_id","p_remote_jid","p_message_body","p_message_type"],
-    "worker_finalize_whatsapp_queue_item": ["p_organizations_id","p_queue_items_id"],
-    "worker_fail_whatsapp_queue_item": ["p_organizations_id","p_queue_items_id","p_error_message"],
-    "worker_start_whatsapp_batch": ["p_organizations_id","p_chip_instance","p_queue_item_ids","p_worker_id"],
-    "worker_set_whatsapp_batch_state": ["p_organizations_id","p_chip_instance","p_action","p_worker_id"],
-    "worker_recover_stale_whatsapp_v2": ["p_organizations_id","p_stale_before"],
-    "worker_claim_next_batch_item": ["p_worker_batches_id","p_worker_id"],
-    "worker_complete_batch_item": ["p_worker_batch_items_id","p_result","p_error_message","p_next_run_at"],
-    "service_worker_heartbeat": ["p_worker_id","p_worker_version","p_status","p_metrics","p_metadata"],
-    "refresh_operational_alerts": ["p_organizations_id"],
-    "service_claim_recovery_request": ["p_worker_id"],
-    "service_complete_recovery_request": ["p_request_id","p_result","p_error"],
-    "instagram_recover_stale_items_v2": ["p_organizations_id","p_stale_before"]
+    "worker_claim_dispatch_job": [
+      "p_organizations_id",
+      "p_queue_items_id",
+      "p_worker_id",
+      "p_lease_seconds"
+    ],
+    "worker_move_dispatch_to_dlq": [
+      "p_organizations_id",
+      "p_queue_items_id",
+      "p_worker_id",
+      "p_reason",
+      "p_attempts",
+      "p_max_attempts"
+    ],
+    "worker_claim_dispatch_part": [
+      "p_organizations_id",
+      "p_queue_items_id",
+      "p_part_key",
+      "p_content_hash",
+      "p_body",
+      "p_reserved_external_id",
+      "p_worker_id",
+      "p_lease_seconds"
+    ],
+    "worker_complete_dispatch_part": [
+      "p_organizations_id",
+      "p_queue_items_id",
+      "p_part_key",
+      "p_claim_token",
+      "p_outcome",
+      "p_external_id",
+      "p_operation_id",
+      "p_error_message"
+    ],
+    "service_stage5_converge_automatic_message": [
+      "p_organizations_id",
+      "p_queue_items_id",
+      "p_external_message_id",
+      "p_remote_jid",
+      "p_message_body",
+      "p_message_type"
+    ],
+    "worker_finalize_whatsapp_queue_item": [
+      "p_organizations_id",
+      "p_queue_items_id"
+    ],
+    "worker_fail_whatsapp_queue_item": [
+      "p_organizations_id",
+      "p_queue_items_id",
+      "p_error_message"
+    ],
+    "worker_start_whatsapp_batch": [
+      "p_organizations_id",
+      "p_chip_instance",
+      "p_queue_item_ids",
+      "p_worker_id"
+    ],
+    "worker_set_whatsapp_batch_state": [
+      "p_organizations_id",
+      "p_chip_instance",
+      "p_action",
+      "p_worker_id"
+    ],
+    "worker_recover_stale_whatsapp_v2": [
+      "p_organizations_id",
+      "p_stale_before"
+    ],
+    "worker_claim_next_batch_item": [
+      "p_worker_batches_id",
+      "p_worker_id"
+    ],
+    "worker_complete_batch_item": [
+      "p_worker_batch_items_id",
+      "p_result",
+      "p_error_message",
+      "p_next_run_at"
+    ],
+    "service_worker_heartbeat": [
+      "p_worker_id",
+      "p_worker_version",
+      "p_status",
+      "p_metrics",
+      "p_metadata"
+    ],
+    "refresh_operational_alerts": [
+      "p_organizations_id"
+    ],
+    "service_claim_recovery_request": [
+      "p_worker_id"
+    ],
+    "service_complete_recovery_request": [
+      "p_request_id",
+      "p_result",
+      "p_error"
+    ],
+    "instagram_recover_stale_items_v2": [
+      "p_organizations_id",
+      "p_stale_before"
+    ]
   },
   "gateway": {
     "crmPath": "/api/whatsapp/evolution-webhook",
@@ -39,5 +121,15 @@
     "remoteJidAlt": true,
     "messageStatus": true,
     "dropNonDirectBeforeCrm": true
+  },
+  "manifestSchemaVersion": 2,
+  "releaseStage": "candidate",
+  "managerZipSha256": "33b023b6722223e1acec5c83cf13a734152543a30574d03d3216ed39482bc15e",
+  "resourceHashes": {
+    "manager": "b220ce4d1c919434f802ae5e907c2eaa8e962d6910677a3b58b4604aa181df79",
+    "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
+    "gateway": "8a8c6d8d29db16fabf6587c92062a07b19c6cff548bc6beb55d1f55e89b6f1aa",
+    "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",
+    "instagram": "f8826927aaf2d199f1e960ce47f3934433e697c37f76289af2870971449e20d7"
   }
 }

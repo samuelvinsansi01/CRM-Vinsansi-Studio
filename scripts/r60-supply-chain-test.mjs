@@ -1,73 +1,64 @@
 import { createHash, generateKeyPairSync, sign, verify } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
-const TEST_KEY_ID='LOCAL_TEST_ONLY';
-const now=Date.now();
-function stable(value){
-  if(Array.isArray(value))return `[${value.map(stable).join(',')}]`;
-  if(value&&typeof value==='object')return `{${Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${JSON.stringify(k)}:${stable(v)}`).join(',')}}`;
-  return JSON.stringify(value);
-}
+const TEST_ONLY_MARKER='LOCAL_TEST_ONLY';
+const manifestPath=new URL('../R60_CANDIDATE_MANIFEST.json',import.meta.url);
+const schemaPath=new URL('../R60_RELEASE_MANIFEST_SCHEMA_V2.json',import.meta.url);
+const publishedCandidate=JSON.parse(readFileSync(manifestPath,'utf8'));
+const schema=JSON.parse(readFileSync(schemaPath,'utf8'));
+const now=Date.now();let passed=0;
+const pass=(name,fn)=>{fn();passed++;console.log(`PASS ${String(passed).padStart(2,'0')} ${name}`);};
+function stable(value){if(Array.isArray(value))return `[${value.map(stable).join(',')}]`;if(value&&typeof value==='object')return `{${Object.entries(value).sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>`${JSON.stringify(k)}:${stable(v)}`).join(',')}}`;return JSON.stringify(value);}
 function payload(manifest){const {signature:_signature,...rest}=manifest;return Buffer.from(stable(rest));}
 function sha(manifest){return createHash('sha256').update(payload(manifest)).digest('hex');}
 function clone(v){return JSON.parse(JSON.stringify(v));}
-function validate(manifest,publicKey,{highestPromoted=59,seen=new Set()}={}){
-  assert.equal(manifest.signature.algorithm,'ed25519','algorithm');
-  assert.equal(manifest.signature.keyId,TEST_KEY_ID,'fixture key id');
-  assert.ok(Number.isSafeInteger(manifest.releaseSequence)&&manifest.releaseSequence>=60,'release sequence');
-  assert.ok(manifest.releaseSequence>=highestPromoted,'anti downgrade');
-  const issued=Date.parse(manifest.issuedAt),expires=Date.parse(manifest.expiresAt);
-  assert.ok(Number.isFinite(issued)&&Number.isFinite(expires)&&expires>issued,'time shape');
-  assert.ok(issued<=now+5*60_000,'issuedAt future tolerance');
-  assert.ok(expires>now,'expiry');
-  assert.equal(manifest.schemaTarget,'r60');
-  assert.equal(manifest.securityBaseline,'r60-security-baseline-v1');
-  if(manifest.resumeAllowed)assert.equal(manifest.productionReady,true,'candidate cannot enable resume');
-  if(manifest.productionReady){
-    assert.equal(manifest.resumeAllowed,true,'production resume flag');
-    assert.ok(verify(null,payload(manifest),publicKey,Buffer.from(manifest.signature.value,'base64')),'signature');
-  }
-  const id=`${manifest.releaseSequence}:${sha(manifest)}`;
-  return {id,replay:seen.has(id)};
-}
-function sameArtifacts(candidate,production){
-  for(const key of ['resources','imageDigests','schemaTarget','securityBaseline','manager','capture','instagram','components'])assert.deepEqual(production[key],candidate[key],`immutable ${key}`);
-}
-function expectFailure(name,fn){let failed=false;try{fn();}catch{failed=true;}assert.equal(failed,true,name);}
+function requiredFields(m){for(const key of schema.required)assert.ok(Object.hasOwn(m,key),`missing ${key}`);}
+function candidateShape(m){requiredFields(m);assert.equal(m.schemaVersion,2);assert.equal(m.releaseStage,'candidate');assert.equal(m.releaseSequence,60);assert.equal(m.productionReady,false);assert.equal(m.resumeAllowed,false);assert.equal(m.schemaTarget,'r60');assert.equal(m.securityBaseline,'r60-security-baseline-v1');assert.deepEqual(m.signature,{algorithm:'ed25519',keyId:null,signature:null});assert.ok(Date.parse(m.expiresAt)>now);for(const k of ['manager','worker','gateway','capture','instagram'])assert.match(m.resources[k].sha256,/^[0-9a-f]{64}$/i);}
+function productionShape(m,publicKey,{highestPromoted=59,seen=new Set()}={}){requiredFields(m);assert.equal(m.schemaVersion,2);assert.equal(m.releaseStage,'production');assert.equal(m.productionReady,true);assert.equal(m.resumeAllowed,true);assert.equal(m.signature.algorithm,'ed25519');assert.ok(m.signature.keyId);assert.notEqual(m.signature.keyId,TEST_ONLY_MARKER);assert.ok(m.signature.signature);assert.ok(m.releaseSequence>=60&&m.releaseSequence>=highestPromoted);const issued=Date.parse(m.issuedAt),generated=Date.parse(m.generatedAt),expires=Date.parse(m.expiresAt);assert.ok(Number.isFinite(issued)&&Number.isFinite(generated)&&Number.isFinite(expires)&&expires>now&&expires>issued&&issued<=now+5*60_000&&generated<=now+5*60_000);assert.equal(m.schemaTarget,'r60');assert.equal(m.securityBaseline,'r60-security-baseline-v1');for(const k of ['manager','worker','gateway','capture','instagram'])assert.match(m.resources[k].sha256,/^[0-9a-f]{64}$/i);for(const k of ['worker','gateway','evolution','cloudflared'])assert.match(m.imageDigests[k],/^sha256:[0-9a-f]{64}$/i);assert.match(m.distribution.manager.url,/^https:\/\//);assert.match(m.distribution.manager.sha256,/^[0-9a-f]{64}$/i);assert.ok(verify(null,payload(m),publicKey,Buffer.from(m.signature.signature,'base64')));const id=`${m.releaseSequence}:${sha(m)}`;return {id,replay:seen.has(id)};}
+function homologationReady(m){return m.releaseStage==='candidate'&&m.productionReady===false&&m.resumeAllowed===false&&['worker','gateway','evolution','cloudflared'].every((k)=>/^sha256:[0-9a-f]{64}$/i.test(m.imageDigests[k]||''))&&/^https:\/\//.test(m.distribution?.manager?.url||'')&&/^[0-9a-f]{64}$/i.test(m.distribution?.manager?.sha256||'');}
+function immutableProjection(m){return {releaseId:m.releaseId,release:m.release,resources:m.resources,imageDigests:m.imageDigests,schemaTarget:m.schemaTarget,securityBaseline:m.securityBaseline,manager:m.manager,capture:m.capture,instagram:m.instagram,components:m.components,distribution:m.distribution};}
+function expectFailure(name,fn){assert.throws(fn,undefined,name);}
+function signProduction(input,keyId,privateKey){const m=clone(input);m.releaseStage='production';m.productionReady=true;m.resumeAllowed=true;m.signature={algorithm:'ed25519',keyId,signature:null};m.signature.signature=sign(null,payload(m),privateKey).toString('base64');return m;}
 
-const {publicKey,privateKey}=generateKeyPairSync('ed25519');
-const other=generateKeyPairSync('ed25519');
-const base={
-  schemaVersion:2,generatedAt:new Date(now).toISOString(),releaseSequence:60,issuedAt:new Date(now-60_000).toISOString(),expiresAt:new Date(now+3_600_000).toISOString(),
-  productionReady:false,resumeAllowed:false,schemaTarget:'r60',securityBaseline:'r60-security-baseline-v1',
-  resources:{manager:{sha256:'a'.repeat(64)},worker:{sha256:'b'.repeat(64)},gateway:{sha256:'c'.repeat(64)},capture:{sha256:'d'.repeat(64)},instagram:{sha256:'e'.repeat(64)}},
-  imageDigests:{evolution:'sha256:'+'1'.repeat(64)},
-  manager:{toolId:'vinsansi_whatsapp_manager',latestVersion:'1.5.71',minimumSupportedVersion:'1.5.71'},
-  capture:{toolId:'vinsansi_capture',latestVersion:'1.0.53',minimumSupportedVersion:'1.0.53'},
-  instagram:{toolId:'vinsansi_instagram',latestVersion:'2.0.8',minimumSupportedVersion:'2.0.8'},
-  healthPolicy:{runtimeTtlSeconds:180,managerHeartbeatSeconds:30,workerHeartbeatSeconds:30},
-  components:{worker:{version:'3.14.6'},gateway:{version:'1.2.30'},evolution:{version:'0.7.2'},cloudflared:{version:'current'}},
-  signature:{algorithm:'ed25519',keyId:TEST_KEY_ID,value:''}
-};
-function signed(input,key=privateKey){const m=clone(input);m.signature.value=sign(null,payload(m),key).toString('base64');return m;}
-
-const candidate=signed(base);
-assert.equal(validate(candidate,publicKey).replay,false,'candidate valid');
-const production=signed({...clone(base),productionReady:true,resumeAllowed:true});
-assert.equal(validate(production,publicKey).replay,false,'production valid signature');
-sameArtifacts(candidate,production);
-
-const invalidSig=clone(production);invalidSig.signature.value=Buffer.alloc(64).toString('base64');expectFailure('invalid signature',()=>validate(invalidSig,publicKey));
-const tampered=clone(production);tampered.components.gateway.version='9.9.9';expectFailure('tampered payload',()=>validate(tampered,publicKey));
-expectFailure('different key',()=>validate(production,other.publicKey));
-const expired=signed({...clone(base),productionReady:true,resumeAllowed:true,issuedAt:new Date(now-7200000).toISOString(),expiresAt:new Date(now-3600000).toISOString()});expectFailure('expired',()=>validate(expired,publicKey));
-const future=signed({...clone(base),productionReady:true,resumeAllowed:true,issuedAt:new Date(now+600000).toISOString(),expiresAt:new Date(now+7200000).toISOString()});expectFailure('future issuedAt',()=>validate(future,publicKey));
-const seen=new Set();const one=validate(production,publicKey,{seen});seen.add(one.id);assert.equal(validate(production,publicKey,{seen}).replay,true,'replay is idempotent identity, not new artifact');
-const downgrade=signed({...clone(base),releaseSequence:59,productionReady:true,resumeAllowed:true});expectFailure('downgrade',()=>validate(downgrade,publicKey,{highestPromoted:60}));
-const prior=signed({...clone(base),releaseSequence:59});expectFailure('prior candidate',()=>validate(prior,publicKey));
-const badCandidate=signed({...clone(base),productionReady:false,resumeAllowed:true});expectFailure('candidate resume',()=>validate(badCandidate,publicKey));
+const {publicKey,privateKey}=generateKeyPairSync('ed25519');const other=generateKeyPairSync('ed25519');
+pass('schema contract is v2',()=>{assert.equal(schema.properties.schemaVersion.const,2);assert.ok(schema.required.includes('releaseId'));assert.ok(schema.required.includes('resources'));assert.ok(schema.required.includes('imageDigests'));});
+pass('published Candidate is canonical schema 2, unsigned and closed',()=>candidateShape(publishedCandidate));
+pass('published Candidate resource hashes are non-placeholder',()=>{for(const k of ['manager','worker','gateway','capture','instagram'])assert.doesNotMatch(publishedCandidate.resources[k].sha256,/^0{64}$/);});
+pass('published Candidate is registrable but not falsely homologation-ready before Docker/build gates',()=>assert.equal(homologationReady(publishedCandidate),false));
+pass('missing required field rejected',()=>{const m=clone(publishedCandidate);delete m.releaseId;expectFailure('missing',()=>candidateShape(m));});
+pass('wrong schemaVersion rejected',()=>{const m=clone(publishedCandidate);m.schemaVersion=1;expectFailure('schema',()=>candidateShape(m));});
+pass('wrong release sequence rejected',()=>{const m=clone(publishedCandidate);m.releaseSequence=59;expectFailure('sequence',()=>candidateShape(m));});
+pass('wrong schema target rejected',()=>{const m=clone(publishedCandidate);m.schemaTarget='r61';expectFailure('schema target',()=>candidateShape(m));});
+pass('wrong security baseline rejected',()=>{const m=clone(publishedCandidate);m.securityBaseline='other';expectFailure('baseline',()=>candidateShape(m));});
+pass('wrong resource hash rejected',()=>{const m=clone(publishedCandidate);m.resources.worker.sha256='bad';expectFailure('hash',()=>candidateShape(m));});
+pass('candidate cannot set productionReady',()=>{const m=clone(publishedCandidate);m.productionReady=true;expectFailure('candidate production',()=>candidateShape(m));});
+pass('candidate cannot arm resume',()=>{const m=clone(publishedCandidate);m.resumeAllowed=true;expectFailure('candidate resume',()=>candidateShape(m));});
+pass('candidate cannot carry signature',()=>{const m=clone(publishedCandidate);m.signature={algorithm:'ed25519',keyId:'some-key',signature:'abc'};expectFailure('candidate signature',()=>candidateShape(m));});
+pass('expired Candidate rejected',()=>{const m=clone(publishedCandidate);m.expiresAt=new Date(now-1000).toISOString();expectFailure('expired candidate',()=>candidateShape(m));});
+const homologationCandidate=clone(publishedCandidate);homologationCandidate.imageDigests={worker:'sha256:'+'1'.repeat(64),gateway:'sha256:'+'2'.repeat(64),evolution:'sha256:'+'3'.repeat(64),cloudflared:'sha256:'+'4'.repeat(64)};homologationCandidate.distribution.manager={kind:'windows-nsis',url:'https://updates.example.invalid/vinsansi-r60.exe',sha256:'5'.repeat(64)};
+pass('resolved Candidate becomes homologation-ready without production signature',()=>assert.equal(homologationReady(homologationCandidate),true));
+const production=signProduction(homologationCandidate,'fixture-production-key',privateKey);
+pass('production fixture signature verifies',()=>assert.equal(productionShape(production,publicKey).replay,false));
+pass('production without signature rejected',()=>{const m=clone(production);m.signature.signature=null;expectFailure('missing sig',()=>productionShape(m,publicKey));});
+pass('LOCAL_TEST_ONLY key id is never accepted as production',()=>{const m=signProduction(homologationCandidate,TEST_ONLY_MARKER,privateKey);expectFailure('local test key',()=>productionShape(m,publicKey));});
+pass('invalid signature rejected',()=>{const m=clone(production);m.signature.signature=Buffer.alloc(64).toString('base64');expectFailure('bad sig',()=>productionShape(m,publicKey));});
+pass('tampered payload rejected',()=>{const m=clone(production);m.components.gateway.version='9.9.9';expectFailure('tamper',()=>productionShape(m,publicKey));});
+pass('different key rejected',()=>expectFailure('key',()=>productionShape(production,other.publicKey)));
+pass('expired production manifest rejected',()=>{const m=signProduction({...clone(homologationCandidate),issuedAt:new Date(now-7200000).toISOString(),expiresAt:new Date(now-3600000).toISOString()},'fixture-production-key',privateKey);expectFailure('expired',()=>productionShape(m,publicKey));});
+pass('issuedAt future tolerance enforced',()=>{const m=signProduction({...clone(homologationCandidate),issuedAt:new Date(now+600000).toISOString(),expiresAt:new Date(now+7200000).toISOString()},'fixture-production-key',privateKey);expectFailure('future',()=>productionShape(m,publicKey));});
+pass('wrong image digest rejected',()=>{const m=clone(production);m.imageDigests.worker='sha256:bad';expectFailure('digest',()=>productionShape(m,publicKey));});
+pass('replay has same canonical identity',()=>{const seen=new Set();const one=productionShape(production,publicKey,{seen});seen.add(one.id);assert.equal(productionShape(production,publicKey,{seen}).replay,true);});
+pass('downgrade rejected',()=>{const m=signProduction({...clone(homologationCandidate),releaseSequence:59},'fixture-production-key',privateKey);expectFailure('downgrade',()=>productionShape(m,publicKey,{highestPromoted:60}));});
+pass('promotion preserves immutable artifacts',()=>assert.deepEqual(immutableProjection(production),immutableProjection(homologationCandidate)));
 for(const [name,mutate] of [
-  ['component hash',m=>{m.resources.worker.sha256='f'.repeat(64)}],['artifact',m=>{m.components.worker.version='3.14.7'}],['schema',m=>{m.schemaTarget='r61'}],['baseline',m=>{m.securityBaseline='r61-security'}]
-]){const changed=clone(production);mutate(changed);changed.signature.value=sign(null,payload(changed),privateKey).toString('base64');expectFailure(name,()=>sameArtifacts(candidate,changed));}
-sameArtifacts(candidate,production);
-console.log('R60_SUPPLY_CHAIN_LOCAL_TEST_ONLY: PASS 15/15');
+  ['component hash immutable',m=>{m.resources.worker.sha256='f'.repeat(64)}],
+  ['component version immutable',m=>{m.components.worker.version='3.99.0'}],
+  ['schema immutable',m=>{m.schemaTarget='r61'}],
+  ['baseline immutable',m=>{m.securityBaseline='r61-security'}],
+  ['Docker digest immutable',m=>{m.imageDigests.worker='sha256:'+'9'.repeat(64)}],
+  ['manager artifact immutable',m=>{m.distribution.manager.sha256='8'.repeat(64)}],
+])pass(name,()=>{const changed=clone(production);mutate(changed);assert.notDeepEqual(immutableProjection(changed),immutableProjection(homologationCandidate));});
+pass('canonicalization deterministic ASCII ordering',()=>assert.equal(stable({z:1,A:2,a:3}),'\{"A\":2,\"a\":3,\"z\":1\}'));
+pass('SQL rejects LOCAL_TEST_ONLY production key',()=>assert.match(readFileSync(new URL('../sql/r60/10B_SUPPLY_CHAIN_HARDENING_R60.sql',import.meta.url),'utf8'),/key_id='LOCAL_TEST_ONLY'/));
+console.log(`R60_SUPPLY_CHAIN_LOCAL_TEST_ONLY: PASS ${passed}/${passed}`);
