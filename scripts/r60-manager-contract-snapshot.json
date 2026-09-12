@@ -1,6 +1,6 @@
 {
-  "source": "CRM - Gerenciador de Disparos v1.5.74 - CANDIDATE.zip",
-  "managerVersion": "1.5.74",
+  "source": "CRM - Gerenciador de Disparos v1.5.75 - CANDIDATE.zip",
+  "managerVersion": "1.5.75",
   "workerVersion": "3.14.8",
   "gatewayVersion": "1.2.31",
   "captureVersion": "1.0.53",
@@ -124,9 +124,9 @@
   },
   "manifestSchemaVersion": 2,
   "releaseStage": "candidate",
-  "managerZipSha256": "3799d857c050f1249e691b3d2953d27872ea1624671fdf089dae0ec4c8f19247",
+  "managerZipSha256": "2a264899ec1e48b126b762d6d7e56f2fff03f8f154f8f4ca245c4b95ca62931f",
   "resourceHashes": {
-    "manager": "21706ef4682477af1436ddc09b0319f491f41e50491c66d0fc4d69e0dc1572ee",
+    "manager": "003387682d9c351ddd0bbf5c8fec05d7d2399751f898669ab01d3c90eb5e12b9",
     "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
     "gateway": "8a8c6d8d29db16fabf6587c92062a07b19c6cff548bc6beb55d1f55e89b6f1aa",
     "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",
