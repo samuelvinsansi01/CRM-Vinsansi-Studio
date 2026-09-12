@@ -1,4 +1,4 @@
-import bundledCandidateJson from '../../R60_CANDIDATE_MANIFEST.json';
+import bundledCandidateJson from '../../R60_CANDIDATE_MANIFEST.json' with { type: 'json' };
 import { createHash, createPublicKey, timingSafeEqual, verify as verifySignature } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 

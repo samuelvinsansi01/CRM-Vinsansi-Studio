@@ -45,7 +45,7 @@ export function HomologationPage() {
       action={<Button variant="secondary" iconLeft={RefreshCcw} disabled={loading} onClick={() => void refresh()}>Atualizar</Button>}
     />
     <section className="metric-grid metric-grid--4">
-      <MetricCard icon={ShieldCheck} value={snapshot?.run.releaseVersion || '2.4.0-R60.2'} label="Release alvo" tone="primary" />
+      <MetricCard icon={ShieldCheck} value={snapshot?.run.releaseVersion || '2.4.0-R60.3'} label="Release alvo" tone="primary" />
       <MetricCard icon={CheckCircle2} value={String(summary.passed)} label="Aprovados" tone="success" />
       <MetricCard icon={CircleX} value={String(summary.failed)} label="Falhas" tone={summary.failed ? 'danger' : 'neutral'} />
       <MetricCard icon={ShieldCheck} value={ready ? 'PRONTO' : 'REVISAR'} label="Readiness" tone={ready ? 'success' : 'warning'} />
