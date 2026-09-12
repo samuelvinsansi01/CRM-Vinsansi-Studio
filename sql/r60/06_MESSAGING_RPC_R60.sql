@@ -7,17 +7,60 @@ STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
-DECLARE v_member bigint;
+DECLARE
+  v_actor bigint;
+  v_member bigint;
+  v_access_level text;
+  v_role bigint;
+  v_allowed boolean := false;
 BEGIN
   IF auth.uid() IS NULL THEN RAISE EXCEPTION 'auth_required'; END IF;
-  SELECT m.organization_members_id INTO v_member
+  IF p_organizations_id IS NULL OR nullif(btrim(coalesce(p_permission,'')),'') IS NULL THEN
+    RAISE EXCEPTION 'conversation_permission_request_invalid';
+  END IF;
+
+  SELECT u.users_id,m.organization_members_id,m.access_level,m.organization_roles_id
+    INTO v_actor,v_member,v_access_level,v_role
   FROM public.users u
   JOIN public.organization_members m ON m.users_id=u.users_id
-  WHERE u.auth_user_id=auth.uid() AND u.status_id=1
-    AND m.organizations_id=p_organizations_id AND m.status_id=1
-  ORDER BY m.organization_members_id LIMIT 1;
+  WHERE u.auth_user_id=auth.uid()
+    AND u.status_id=1
+    AND coalesce(u.users_is_scope,false)=false
+    AND m.organizations_id=p_organizations_id
+    AND m.status_id=1
+  ORDER BY m.organization_members_id
+  LIMIT 1;
+
   IF v_member IS NULL THEN RAISE EXCEPTION 'conversation_active_membership_required'; END IF;
-  IF NOT public.auth_user_has_organization_permission(auth.uid(),p_organizations_id,p_permission) THEN
+
+  -- Human RPCs authorize the authenticated actor directly. The machine-side
+  -- permission helper remains service_role-only after the R60 ACL hardening.
+  IF public.is_platform_owner(v_actor) THEN
+    v_allowed := true;
+  ELSIF v_access_level='owner' THEN
+    SELECT EXISTS(
+      SELECT 1
+      FROM public.permissions p
+      WHERE p.permissions_key=p_permission
+        AND p.permissions_sensitivity<>'platform_only'
+    ) INTO v_allowed;
+  ELSIF v_access_level='manager' AND p_permission = ANY(ARRAY[
+    'organization.view','members.view','members.invite','members.edit',
+    'members.deactivate','roles.view','audit.view'
+  ]) THEN
+    v_allowed := true;
+  ELSE
+    SELECT EXISTS(
+      SELECT 1
+      FROM public.organization_role_permissions rp
+      JOIN public.permissions p ON p.permissions_id=rp.permissions_id
+      WHERE rp.organization_roles_id=v_role
+        AND p.permissions_key=p_permission
+        AND p.permissions_sensitivity='delegable'
+    ) INTO v_allowed;
+  END IF;
+
+  IF NOT coalesce(v_allowed,false) THEN
     RAISE EXCEPTION 'conversation_permission_denied:%',p_permission;
   END IF;
   RETURN v_member;
