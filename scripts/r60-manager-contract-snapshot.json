@@ -1,6 +1,6 @@
 {
-  "source": "CRM - Gerenciador de Disparos v1.5.79 - CANDIDATE DEPENDENCY-GRAPH-FIX.zip",
-  "managerVersion": "1.5.79",
+  "source": "CRM - Gerenciador de Disparos v1.5.80 - CANDIDATE.zip",
+  "managerVersion": "1.5.80",
   "workerVersion": "3.14.8",
   "gatewayVersion": "1.2.32",
   "captureVersion": "1.0.53",
@@ -124,9 +124,9 @@
   },
   "manifestSchemaVersion": 2,
   "releaseStage": "candidate",
-  "managerZipSha256": "5155b6067835cdc679d49a1f4d7bf293c7c7fa1b69c0a448c63e63f92210539c",
+  "managerZipSha256": "588dd79572f8a438278b07f5145cbd2cc4d31c25b0b818d848d6e4f0cacf234b",
   "resourceHashes": {
-    "manager": "6ad07384295a47fa3235e5d4239a29aa175ebb24a035bca43519be478b0f7c16",
+    "manager": "5fbed55d379ea40a7d71edee7f675cfbb2f5e9577330b54476ceb91fe80de0fb",
     "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
     "gateway": "6336dcff08adbf8061ffa339703a67a43903b1e89c528c60f9def2ded7b331fa",
     "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "releaseId": "vinsansi-r60-seq60-r60.12",
-  "release": "2.4.0-R60.12",
+  "releaseId": "vinsansi-r60-seq60-r60.13",
+  "release": "2.4.0-R60.13",
   "releaseStage": "candidate",
-  "generatedAt": "2026-09-15T23:16:38Z",
+  "generatedAt": "2026-09-15T23:30:00Z",
   "releaseSequence": 60,
-  "issuedAt": "2026-09-15T23:16:38Z",
-  "expiresAt": "2027-09-15T23:16:38Z",
+  "issuedAt": "2026-09-15T23:30:00Z",
+  "expiresAt": "2027-09-15T23:30:00Z",
   "productionReady": false,
   "resumeAllowed": false,
   "schemaTarget": "r60",
@@ -18,7 +18,7 @@
   },
   "resources": {
     "manager": {
-      "sha256": "6ad07384295a47fa3235e5d4239a29aa175ebb24a035bca43519be478b0f7c16"
+      "sha256": "5fbed55d379ea40a7d71edee7f675cfbb2f5e9577330b54476ceb91fe80de0fb"
     },
     "worker": {
       "sha256": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973"
@@ -43,7 +43,7 @@
   },
   "manager": {
     "toolId": "vinsansi_whatsapp_manager",
-    "latestVersion": "1.5.79",
+    "latestVersion": "1.5.80",
     "minimumSupportedVersion": "1.5.76"
   },
   "capture": {
