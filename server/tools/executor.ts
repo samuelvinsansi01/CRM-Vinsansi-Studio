@@ -27,6 +27,51 @@ async function authenticatedAuthUser(req: ApiRequest) {
   return auth.data.user;
 }
 
+async function ensureDesktopManagerRegistrationPrerequisites(client: SupabaseClient, authUserId: string, organizationId: number) {
+  const user=await client.from('users').select('users_id').eq('auth_user_id',authUserId).eq('users_is_scope',false).maybeSingle();
+  if(user.error)throw new Error(`executor_user_query_failed:${user.error.message}`);
+  const usersId=Number(user.data?.users_id||0);if(!Number.isSafeInteger(usersId)||usersId<=0)throw new Error('executor_user_not_found');
+  const member=await client.from('organization_members').select('organization_members_id,access_level,organization_roles_id,status_id').eq('organizations_id',organizationId).eq('users_id',usersId).eq('status_id',1).maybeSingle();
+  if(member.error)throw new Error(`executor_membership_query_failed:${member.error.message}`);
+  if(!member.data?.organization_members_id)throw new Error('executor_active_membership_required');
+  const organization=await client.from('organizations').select('organizations_id,status_id').eq('organizations_id',organizationId).eq('status_id',1).maybeSingle();
+  if(organization.error)throw new Error(`executor_organization_query_failed:${organization.error.message}`);
+  if(!organization.data?.organizations_id)throw new Error('executor_organization_inactive');
+  const tool=await client.from('platform_tools').select('tool_id,catalog_status').eq('tool_id','vinsansi_whatsapp_manager').maybeSingle();
+  if(tool.error)throw new Error(`executor_tool_catalog_query_failed:${tool.error.message}`);
+  if(!tool.data||tool.data.catalog_status!=='active')throw new Error('executor_tool_not_available');
+
+  const accessLevel=String(member.data.access_level||'');
+  let permissions=new Set<string>();
+  if(accessLevel==='owner'){
+    permissions.add('whatsapp.view');permissions.add('tools.manage');
+  }else{
+    const roleId=Number(member.data.organization_roles_id||0);
+    if(Number.isSafeInteger(roleId)&&roleId>0){
+      const links=await client.from('organization_role_permissions').select('permissions_id').eq('organization_roles_id',roleId);
+      if(links.error)throw new Error(`executor_role_permissions_query_failed:${links.error.message}`);
+      const ids=(links.data||[]).map((row)=>Number(row.permissions_id)).filter((value)=>Number.isSafeInteger(value)&&value>0);
+      if(ids.length){
+        const rows=await client.from('permissions').select('permissions_key,permissions_sensitivity').in('permissions_id',ids);
+        if(rows.error)throw new Error(`executor_permissions_query_failed:${rows.error.message}`);
+        permissions=new Set((rows.data||[]).filter((row)=>String(row.permissions_sensitivity||'')==='delegable').map((row)=>String(row.permissions_key||'')));
+      }
+    }
+  }
+  if(!permissions.has('whatsapp.view'))throw new Error('executor_tool_permission_denied');
+  if(!permissions.has('tools.manage'))throw new Error('tools_manage_required_for_desktop_registration');
+
+  const current=await client.from('organization_tools').select('organization_tools_id,enabled').eq('organizations_id',organizationId).eq('tool_id','vinsansi_whatsapp_manager').maybeSingle();
+  if(current.error)throw new Error(`executor_organization_tool_query_failed:${current.error.message}`);
+  if(current.data){if(current.data.enabled!==true)throw new Error('executor_tool_not_enabled');return;}
+  const inserted=await client.from('organization_tools').insert({organizations_id:organizationId,tool_id:'vinsansi_whatsapp_manager',enabled:true,registered_by_member_id:Number(member.data.organization_members_id)});
+  if(inserted.error){
+    // Race-safe: another authorized request may have created the row meanwhile.
+    const retry=await client.from('organization_tools').select('enabled').eq('organizations_id',organizationId).eq('tool_id','vinsansi_whatsapp_manager').maybeSingle();
+    if(retry.error||retry.data?.enabled!==true)throw new Error(`executor_tool_enable_failed:${inserted.error.message}`);
+  }
+}
+
 async function memberContext(client: SupabaseClient, authUserId: string, organizationId: number, id: ToolId) {
   const result=await client.rpc('service_executor_member_context',{p_auth_users_id:authUserId,p_organizations_id:organizationId,p_tool_id:id});
   if (result.error) throw new Error(result.error.message);
@@ -42,6 +87,7 @@ export async function startPairing(req: ApiRequest, input: Record<string, unknow
   const organizationId=numericId(input.organizationId ?? header(req,EXECUTOR_ORGANIZATION_HEADER));
   const externalInstallationId=text(input.externalInstallationId);
   if (!externalInstallationId||externalInstallationId.length>200) throw new Error('external_installation_id_invalid');
+  if(id==='vinsansi_whatsapp_manager')await ensureDesktopManagerRegistrationPrerequisites(client,user.id,organizationId);
   const context=await memberContext(client,user.id,organizationId,id);
   if (id==='vinsansi_whatsapp_manager' && !(context.permissions as unknown[]).includes('tools.manage')) throw new Error('tools_manage_required_for_desktop_registration');
   const requested=capabilities(input.capabilities);

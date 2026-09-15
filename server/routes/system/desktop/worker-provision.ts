@@ -160,10 +160,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const code = message.split(':',1)[0];
     if (/installation_credential_required|installation_credential_invalid/.test(message)) return send(res, 401, { ok: false, error: 'installation_credential_invalid' });
     if (/installation_superseded|installation_revoked/.test(message)) return send(res, 409, { ok: false, error: 'installation_superseded' });
     if (/cloudflare_installation_provisioning_not_configured/.test(message)) return send(res, 503, { ok: false, error: 'cloudflare_installation_provisioning_not_configured' });
     if (/cloudflare_api_failed|cloudflare_tunnel_|cloudflare_installation_/.test(message)) return send(res, 502, { ok: false, error: 'cloudflare_installation_provisioning_failed' });
-    return send(res, 500, { ok: false, error: 'worker_provisioning_failed' });
+    if (['executor_tool_permission_denied','tools_manage_required_for_desktop_registration'].includes(code)) return send(res, 403, { ok: false, error: code });
+    if (['executor_user_not_found','executor_active_membership_required','executor_organization_inactive','executor_tool_not_enabled','executor_tool_not_available','reported_capability_not_supported','pairing_context_divergent'].includes(code)) return send(res, 409, { ok: false, error: code });
+    if (['service_role_required','tool_capability_invalid','tool_installation_contract_invalid','pairing_invalid_or_expired'].includes(code) || code.startsWith('pairing_create_failed') || code.startsWith('installation_register_failed')) return send(res, 503, { ok: false, error: `worker_provisioning_database_contract:${code}` });
+    return send(res, 500, { ok: false, error: `worker_provisioning_failed:${code || 'unknown'}` });
   }
 }
