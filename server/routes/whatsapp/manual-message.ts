@@ -4,7 +4,7 @@ export default async function handler(req:Stage5Request,res:Stage5Response){
   try{
     const input=body(req);const operation=text(input.operation);const scope=await humanScope(req,'whatsapp.reply');
     if(operation==='report'){
-      const data=await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:integer(input.messageId,'message_id_required'),p_status:text(input.status),p_external_message_id:text(input.externalMessageId)||null,p_error_message:text(input.errorMessage)||null,p_provider_payload:record(input.providerPayload)});
+      const data=await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:integer(input.messageId,'message_id_required'),p_status:text(input.status),p_external_message_id:text(input.externalMessageId)||null,p_error_message:text(input.errorMessage)||null,p_provider_payload:{}});
       return send(res,200,{ok:true,data});
     }
     if(operation!=='prepare')throw new Error('manual_message_operation_invalid');

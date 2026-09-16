@@ -63,7 +63,7 @@ export default async function handler(req:Stage5Request,res:Stage5Response){
 
     // A identidade do provider é persistida ANTES do primeiro byte sair para o Gateway.
     // Assim, se o webhook chegar primeiro, ele converge na mesma linha do operador.
-    await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:messageId,p_status:'sending',p_external_message_id:reservedMessageId,p_error_message:null,p_provider_payload:{reservedMessageId}});
+    await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:messageId,p_status:'sending',p_external_message_id:reservedMessageId,p_error_message:null,p_provider_payload:{}});
 
     let command;
     let recipient='';
@@ -84,18 +84,18 @@ export default async function handler(req:Stage5Request,res:Stage5Response){
       const status=providerError.uncertain?'reconciliation_required':'failed';
       const providerActualId=text(providerError.payload?.providerMessageId).toUpperCase();
       const convergedMessageId=/^[A-F0-9]{20}$/.test(providerActualId)?providerActualId:reservedMessageId;
-      const data=await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:messageId,p_status:status,p_external_message_id:convergedMessageId,p_error_message:error instanceof Error?error.message:String(error),p_provider_payload:providerError.payload??{}}).catch(()=>null);
+      const data=await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:messageId,p_status:status,p_external_message_id:convergedMessageId,p_error_message:error instanceof Error?error.message:String(error),p_provider_payload:{}}).catch(()=>null);
       if(providerError.uncertain)return send(res,202,{ok:true,prepared,data,status:'reconciliation_required',external_message_id:convergedMessageId});
       throw error;
     }
 
     try{
-      const data=await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:messageId,p_status:'sent',p_external_message_id:reservedMessageId,p_error_message:null,p_provider_payload:sent.payload});
+      const data=await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:messageId,p_status:'sent',p_external_message_id:reservedMessageId,p_error_message:null,p_provider_payload:{}});
       return send(res,200,{ok:true,prepared,data,status:'sent',external_message_id:reservedMessageId});
     }catch(error){
       // O provider confirmou. Se a persistência final falhar, o webhook ainda possui a
       // mesma identidade reservada e concluirá a linha. Nunca reenviar automaticamente.
-      await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:messageId,p_status:'reconciliation_required',p_external_message_id:reservedMessageId,p_error_message:error instanceof Error?error.message:String(error),p_provider_payload:sent.payload}).catch(()=>undefined);
+      await rpc(scope,'service_stage5_report_manual_message',{p_conversation_messages_id:messageId,p_status:'reconciliation_required',p_external_message_id:reservedMessageId,p_error_message:error instanceof Error?error.message:String(error),p_provider_payload:{}}).catch(()=>undefined);
       return send(res,202,{ok:true,prepared,status:'reconciliation_required',external_message_id:reservedMessageId,persistenceError:error instanceof Error?error.message:String(error)});
     }
   }catch(error){return failure(res,error);}
