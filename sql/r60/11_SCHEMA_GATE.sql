@@ -18,7 +18,7 @@ BEGIN
  FOREACH n IN ARRAY ARRAY[
    'r60_require_actor','r60_resolve_whatsapp_contact','r60_is_direct_whatsapp_alias',
    'service_ingest_evolution_message','service_update_evolution_message_status','service_update_evolution_connection_state_r60',
-   'service_stage5_list_conversations','service_stage5_list_messages','service_stage5_ignore_contact','service_stage5_restore_contact','service_stage5_promote_unknown_contact','service_stage5_presence','service_stage5_converge_automatic_message',
+   'service_stage5_list_conversations','service_stage5_list_messages','service_stage5_ignore_contact','service_stage5_restore_contact','service_stage5_promote_unknown_contact','service_stage5_promote_unknown_contact_v2','service_stage5_presence','service_stage5_converge_automatic_message',
    'worker_claim_dispatch_job','worker_claim_dispatch_part','worker_complete_dispatch_part','worker_finalize_whatsapp_queue_item','worker_fail_whatsapp_queue_item','worker_move_dispatch_to_dlq','worker_start_whatsapp_batch','worker_set_whatsapp_batch_state','worker_claim_next_batch_item','worker_complete_batch_item','worker_recover_stale_whatsapp_v2',
    'service_exchange_executor_pairing','service_cleanup_pairings_r60','service_retention_r60','service_expire_awaiting_response_leads_r60',
    'service_register_release_candidate_r60','service_mark_release_signature_verified_r60','service_mark_release_candidate_homologated_r60','service_promote_release_candidate_r60','service_arm_messaging_resume_gate_r60'

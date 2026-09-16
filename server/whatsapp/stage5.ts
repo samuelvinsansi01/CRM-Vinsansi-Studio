@@ -45,7 +45,7 @@ export async function humanScope(req:Stage5Request,permission:'whatsapp.view'|'w
 const ACTOR_DERIVED_R60_RPCS=new Set([
   'service_stage5_list_conversations','service_stage5_list_messages','service_stage5_mark_read',
   'service_stage5_set_archived','service_stage5_assign_conversation','service_stage5_presence',
-  'service_stage5_ignore_contact','service_stage5_restore_contact','service_stage5_promote_unknown_contact',
+  'service_stage5_ignore_contact','service_stage5_restore_contact','service_stage5_promote_unknown_contact','service_stage5_promote_unknown_contact_v2',
 ]);
 
 export async function rpc(scope:HumanScope,name:string,args:Row){

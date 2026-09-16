@@ -15,11 +15,11 @@ export default async function handler(req:Stage5Request,res:Stage5Response){
     }else if(action==='restore'){
       data=await rpc(scope,'service_stage5_restore_contact',{p_whatsapp_contacts_id:integer(input.contactId,'contact_id_required')});
     }else if(action==='promote'){
-      data=await rpc(scope,'service_stage5_promote_unknown_contact',{
+      data=await rpc(scope,'service_stage5_promote_unknown_contact_v2',{
         p_conversations_id:conversationId,p_name:text(input.name),p_alternative_name:text(input.alternativeName)||null,
         p_branches_id:integer(input.branchId,'branch_id_required'),p_countries_id:integer(input.countryId,'country_id_required'),
         p_states_id:integer(input.stateId,'state_id_invalid',true),p_cities_id:integer(input.cityId,'city_id_invalid',true),
-        p_contact_sources_id:integer(input.contactSourceId,'contact_source_id_required'),p_channels_id:integer(input.channelId,'channel_id_invalid',true)??1,
+        p_contact_sources_id:integer(input.contactSourceId,'contact_source_id_required'),p_instagram:text(input.instagram)||null,p_website:text(input.website)||null,p_maps:text(input.mapsUrl)||null,p_channels_id:integer(input.channelId,'channel_id_invalid',true),
       });
     }else{
       const expectedVersion=integer(input.expectedVersion,'conversation_version_required');

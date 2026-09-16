@@ -28,7 +28,7 @@ BEGIN
    'leadLink',resolve_def ILIKE '%leads_normalized_phone%' AND resolve_def ILIKE '%contact_state%',
    'ignoredDrop',ingest_def ILIKE '%contact_ignored%',
    'restore',EXISTS(SELECT 1 FROM pg_proc WHERE proname='service_stage5_restore_contact'),
-   'promotion',pg_get_functiondef((SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='service_stage5_promote_unknown_contact' LIMIT 1)) ILIKE '%leads.create%',
+   'promotion',pg_get_functiondef((SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='service_stage5_promote_unknown_contact_v2' LIMIT 1)) ILIKE '%leads.create%' AND pg_get_functiondef((SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='service_stage5_promote_unknown_contact_v2' LIMIT 1)) ILIKE '%leads_instagram%' AND pg_get_functiondef((SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='service_stage5_promote_unknown_contact_v2' LIMIT 1)) ILIKE '%whatsapp_phone_required%',
    'duplicateNoop',ingest_def ILIKE '%duplicate%' AND EXISTS(SELECT 1 FROM pg_indexes WHERE indexname='conversation_message_provider_unique'),
    'sameStatusNoop',status_def ILIKE '%<=public.chat_message_status_rank%',
    'statusMonotonic',public.chat_message_status_rank('read')>public.chat_message_status_rank('delivered') AND public.chat_message_status_rank('delivered')>public.chat_message_status_rank('sent'),
