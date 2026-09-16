@@ -7,9 +7,9 @@ const publicConfig=readFileSync(new URL('../server/routes/system/public-config.t
 const bootstrap=readFileSync(new URL('../sql/r60/01_SUPPLY_CHAIN_BOOTSTRAP.sql',import.meta.url),'utf8');
 const hardening=readFileSync(new URL('../sql/r60/10B_SUPPLY_CHAIN_HARDENING_R60.sql',import.meta.url),'utf8');
 pass('candidate manifest schema 2',()=>assert.equal(manifest.schemaVersion,2));
-pass('candidate identity and stage',()=>{assert.equal(manifest.release,'2.4.0-R60.20');assert.equal(manifest.releaseStage,'candidate');assert.equal(manifest.releaseSequence,60);});
+pass('candidate identity and stage',()=>{assert.equal(manifest.release,'2.4.0-R60.21');assert.equal(manifest.releaseStage,'candidate');assert.equal(manifest.releaseSequence,60);});
 pass('candidate is closed',()=>{assert.equal(manifest.productionReady,false);assert.equal(manifest.resumeAllowed,false);});
-pass('candidate versions projected correctly',()=>{assert.equal(manifest.manager.latestVersion,'1.5.85');assert.equal(manifest.components.worker.version,'3.14.8');assert.equal(manifest.components.gateway.version,'1.2.33');assert.equal(manifest.components.evolution.version,'0.7.2');assert.equal(manifest.capture.latestVersion,'1.0.53');assert.equal(manifest.instagram.latestVersion,'2.0.8');});
+pass('candidate versions projected correctly',()=>{assert.equal(manifest.manager.latestVersion,'1.5.86');assert.equal(manifest.components.worker.version,'3.14.8');assert.equal(manifest.components.gateway.version,'1.2.34');assert.equal(manifest.components.evolution.version,'0.7.2');assert.equal(manifest.capture.latestVersion,'1.0.53');assert.equal(manifest.instagram.latestVersion,'2.0.8');});
 pass('release candidate table is schema v2 authority',()=>{assert.match(bootstrap,/platform_release_candidates/);assert.match(bootstrap,/CHECK \(schema_version = 2\)/);});
 pass('Control Plane reads platform_release_candidates',()=>assert.match(release,/from\('platform_release_candidates'\)/));
 pass('Control Plane never reads platform_tools as authority',()=>assert.doesNotMatch(release,/from\('platform_tools'\)\.select/));
@@ -22,6 +22,9 @@ pass('hardening derives platform_tools projection',()=>assert.match(hardening,/p
 pass('hardening rejects LOCAL_TEST_ONLY production',()=>assert.match(hardening,/key_id='LOCAL_TEST_ONLY'/));
 pass('schema and baseline fixed to R60',()=>{assert.equal(manifest.schemaTarget,'r60');assert.equal(manifest.securityBaseline,'r60-security-baseline-v1');});
 pass('newer bundled Candidate upgrades same-sequence authority without downgrade on rollback',()=>{assert.match(release,/shouldBootstrapBundled/);assert.match(release,/current\.releaseSequence<bundled\.releaseSequence/);assert.match(release,/bundledGenerated>currentGenerated/);assert.match(release,/if\(!shouldBootstrapBundled\)return current/);});
+
+const manualConversationSend=readFileSync(new URL('../server/routes/whatsapp/conversation-send.ts',import.meta.url),'utf8');
+pass('manual CRM reply carries explicit Candidate homologation marker',()=>assert.match(manualConversationSend,/X-Vinsansi-Homologation-Manual/));
 
 const workerProvision=readFileSync(new URL('../server/routes/system/desktop/worker-provision.ts',import.meta.url),'utf8');
 const cloudflareInstall=readFileSync(new URL('../server/platform/cloudflare-installation.ts',import.meta.url),'utf8');

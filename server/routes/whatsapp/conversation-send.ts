@@ -16,7 +16,7 @@ async function gatewaySend(instanceUrl:string,instanceName:string,apiKey:string,
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),30_000);
   try{
     const endpoint=`${instanceUrl.replace(/\/$/,'')}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/messages/text`;
-    const response=await fetch(endpoint,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json',apikey:apiKey},body:JSON.stringify({number:recipient,text:message,delay:0,messageId:reservedMessageId}),signal:controller.signal});
+    const response=await fetch(endpoint,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json',apikey:apiKey,'X-Vinsansi-Homologation-Manual':'1'},body:JSON.stringify({number:recipient,text:message,delay:0,messageId:reservedMessageId}),signal:controller.signal});
     const raw=await response.text();let payload:Record<string,unknown>={};try{payload=raw?JSON.parse(raw) as Record<string,unknown>:{};}catch{payload={raw};}
     if(!response.ok){
       const error=new Error(String(payload.error||payload.message||`gateway_http_${response.status}`)) as ProviderError;

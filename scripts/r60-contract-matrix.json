@@ -263,7 +263,7 @@
       "sql": "baseline organization-native; required by 02_PRECHECK.sql"
     },
     {
-      "caller": "Gateway 1.2.33 -> CRM webhook",
+      "caller": "Gateway 1.2.34 -> CRM webhook",
       "operation": "service_ingest_evolution_message",
       "arguments": [
         "p_instances_id",
@@ -288,7 +288,7 @@
       "sql": "06_MESSAGING_RPC_R60.sql"
     },
     {
-      "caller": "Gateway 1.2.33 -> CRM webhook",
+      "caller": "Gateway 1.2.34 -> CRM webhook",
       "operation": "service_update_evolution_message_status",
       "arguments": [
         "p_instances_id",
@@ -304,7 +304,7 @@
       "sql": "06_MESSAGING_RPC_R60.sql"
     },
     {
-      "caller": "Gateway 1.2.33 -> CRM webhook",
+      "caller": "Gateway 1.2.34 -> CRM webhook",
       "operation": "service_update_evolution_connection_state_r60",
       "arguments": [
         "p_instances_id",
@@ -366,7 +366,7 @@
       "sql": "06_MESSAGING_RPC_R60.sql"
     },
     {
-      "caller": "Manager 1.5.85 MaintenanceCoordinator",
+      "caller": "Manager 1.5.86 MaintenanceCoordinator",
       "operation": "GET /api/system?route=public-config",
       "arguments": [],
       "returns": [

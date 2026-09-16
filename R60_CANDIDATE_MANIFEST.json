@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "releaseId": "vinsansi-r60-seq60-r60.20",
-  "release": "2.4.0-R60.20",
+  "releaseId": "vinsansi-r60-seq60-r60.21",
+  "release": "2.4.0-R60.21",
   "releaseStage": "candidate",
-  "generatedAt": "2026-09-16T02:38:35Z",
+  "generatedAt": "2026-09-16T02:55:00Z",
   "releaseSequence": 60,
-  "issuedAt": "2026-09-16T02:38:35Z",
-  "expiresAt": "2027-09-16T02:38:35Z",
+  "issuedAt": "2026-09-16T02:55:00Z",
+  "expiresAt": "2027-09-16T02:55:00Z",
   "productionReady": false,
   "resumeAllowed": false,
   "schemaTarget": "r60",
@@ -18,13 +18,13 @@
   },
   "resources": {
     "manager": {
-      "sha256": "4524042f638527355ae9f415df6fcc6b794b0fda6c604d43529c84cbf5988282"
+      "sha256": "ca1edc7f060b4ed4153ac2c0ed69406ed25fa266073d28bf68b5e3f31d9eec6e"
     },
     "worker": {
       "sha256": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973"
     },
     "gateway": {
-      "sha256": "a56326d694752f5e78ef20c3488ca55392e3430703203d75742d86d90fae09da"
+      "sha256": "1d3ea138fefd0d2de35daa22e2d6af1c031db09ef37fc50bec7a0234a17b8b0a"
     },
     "capture": {
       "sha256": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1"
@@ -43,7 +43,7 @@
   },
   "manager": {
     "toolId": "vinsansi_whatsapp_manager",
-    "latestVersion": "1.5.85",
+    "latestVersion": "1.5.86",
     "minimumSupportedVersion": "1.5.76"
   },
   "capture": {
@@ -67,8 +67,8 @@
       "image": "vinsansi/dispatch-worker:3.14.8"
     },
     "gateway": {
-      "version": "1.2.33",
-      "image": "vinsansi/whatsapp-gateway:1.2.33"
+      "version": "1.2.34",
+      "image": "vinsansi/whatsapp-gateway:1.2.34"
     },
     "evolution": {
       "version": "0.7.2",
