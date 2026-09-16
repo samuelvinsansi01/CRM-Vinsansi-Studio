@@ -7,7 +7,7 @@ type ApiResponse = { status(code: number): ApiResponse; json(body: unknown): voi
 type RecordValue = Record<string, unknown>;
 declare const process: { env: Record<string, string | undefined> };
 
-const DEFAULT_GATEWAY_TUNNEL_SERVICE_URL = 'http://host.docker.internal:8090';
+const DEFAULT_GATEWAY_TUNNEL_SERVICE_URL = 'http://vinsansi-whatsapp-gateway:8090';
 const DEFAULT_CLOUDFLARE_IMAGE = 'cloudflare/cloudflared:2026.7.3';
 const DEFAULT_CLOUDFLARE_CONTAINER = 'vinsansi-cloudflared';
 const DEFAULT_DOCKER_NETWORK = 'vinsansi-network';

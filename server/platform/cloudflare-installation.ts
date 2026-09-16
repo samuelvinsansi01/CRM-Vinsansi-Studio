@@ -87,7 +87,7 @@ async function createTunnel(accountId: string, name: string) {
 
 async function configureTunnel(accountId: string, tunnelId: string, input: { evolutionHostname: string }) {
   // R60 keeps a single public surface: the Gateway public listener. Evolution and Worker stay internal.
-  const gatewayService = env('DESKTOP_GATEWAY_SERVICE_URL') || 'http://host.docker.internal:8090';
+  const gatewayService = env('DESKTOP_GATEWAY_SERVICE_URL') || 'http://vinsansi-whatsapp-gateway:8090';
   await cfRequest(`/accounts/${encodeURIComponent(accountId)}/cfd_tunnel/${encodeURIComponent(tunnelId)}/configurations`, {
     method: 'PUT',
     body: {
