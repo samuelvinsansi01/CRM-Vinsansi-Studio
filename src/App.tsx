@@ -67,7 +67,7 @@ function initialPage(): PageId {
 
 export function App() {
   const { isAuthenticated, loading, passwordRecovery } = useAuthContext();
-  const { context: organizationContext, organizationId, loading: organizationLoading, error: organizationError, hasPermission } = useOrganizationContext();
+  const { context: organizationContext, organizationId, loading: organizationLoading, error: organizationError, hasPermission, refreshOrganization } = useOrganizationContext();
   const [activePage, setActivePage] = useState<PageId>(initialPage);
   useEffect(() => {
     window.sessionStorage.setItem(ACTIVE_PAGE_STORAGE_KEY, activePage);
@@ -106,6 +106,9 @@ export function App() {
         <div className="login-panel">
           <strong>Não foi possível carregar a organização.</strong>
           <p>{organizationError}</p>
+          <button type="button" className="button button--primary" onClick={() => void refreshOrganization()}>
+            Tentar novamente
+          </button>
         </div>
       </div>
     );

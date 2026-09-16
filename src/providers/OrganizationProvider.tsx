@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useAuthContext } from './AuthProvider';
+import { getSupabaseClient } from '../lib/supabase';
 import {
   acceptPendingOrganizationInvitations,
   getOrganizationContext,
@@ -74,6 +75,36 @@ async function withDeadline<T>(promise: Promise<T>, ms: number, message: string)
   }
 }
 
+function wait(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function loadOrganizationContextResilient(): Promise<OrganizationContext> {
+  const client = getSupabaseClient();
+  const { data: sessionData, error: sessionError } = await withDeadline(
+    client.auth.getSession(),
+    5_000,
+    'Tempo excedido ao validar a sessão antes de carregar a organização.',
+  );
+  if (sessionError) throw new Error(`Não foi possível validar a sessão: ${sessionError.message}`);
+  if (!sessionData.session) throw new Error('Sessão expirada. Entre novamente para carregar a organização.');
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await withDeadline(
+        getOrganizationContext(),
+        15_000,
+        'Tempo excedido ao carregar a organização.',
+      );
+    } catch (cause) {
+      lastError = cause;
+      if (attempt === 0) await wait(600);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Falha ao carregar organização.');
+}
+
 export function OrganizationProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, user, passwordRecovery } = useAuthContext();
   const [context, setContextState] = useState<OrganizationContext | null>(null);
@@ -103,7 +134,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     try {
       // get_organization_context é a leitura autoritativa. Convites não fazem mais
       // parte do caminho bloqueante de todo refresh do navegador.
-      const next = await withDeadline(getOrganizationContext(), 8_000, 'Tempo excedido ao carregar a organização.');
+      const next = await loadOrganizationContextResilient();
       if (sequence.current !== current) return;
       if (next.organization?.id && getActiveOrganizationSessionId() !== next.organization.id) {
         setActiveOrganizationSessionId(next.organization.id);
@@ -175,7 +206,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     try {
       setActiveOrganizationSessionId(organizationId);
       await switchActiveOrganization(organizationId);
-      const next = await withDeadline(getOrganizationContext(), 8_000, 'Tempo excedido ao trocar organização.');
+      const next = await loadOrganizationContextResilient();
       setContext(next);
       window.sessionStorage.removeItem('painel:active-page');
       window.location.assign(window.location.pathname);
