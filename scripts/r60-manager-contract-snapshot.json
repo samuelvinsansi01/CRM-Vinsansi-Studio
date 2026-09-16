@@ -1,8 +1,8 @@
 {
-  "source": "CRM - Gerenciador de Disparos v1.5.84 - CANDIDATE.zip",
-  "managerVersion": "1.5.84",
+  "source": "CRM - Gerenciador de Disparos v1.5.85 - CANDIDATE.zip",
+  "managerVersion": "1.5.85",
   "workerVersion": "3.14.8",
-  "gatewayVersion": "1.2.32",
+  "gatewayVersion": "1.2.33",
   "captureVersion": "1.0.53",
   "instagramVersion": "2.0.8",
   "releaseSequence": 60,
@@ -124,11 +124,11 @@
   },
   "manifestSchemaVersion": 2,
   "releaseStage": "candidate",
-  "managerZipSha256": "705b16ab3a36d937e6ecfd330dd45b80b1758b3912d05a641a49dab20e9c40a0",
+  "managerZipSha256": "a08c0f0c03f3470e4de758a21a34013fbf3d8047ef5bcf173cb4e048987698d0",
   "resourceHashes": {
-    "manager": "94b018148aa9cc61bad4eb293ac22e01a3bddfae9232dbb55de518f19bea1daf",
+    "manager": "4524042f638527355ae9f415df6fcc6b794b0fda6c604d43529c84cbf5988282",
     "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
-    "gateway": "6336dcff08adbf8061ffa339703a67a43903b1e89c528c60f9def2ded7b331fa",
+    "gateway": "a56326d694752f5e78ef20c3488ca55392e3430703203d75742d86d90fae09da",
     "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",
     "instagram": "f8826927aaf2d199f1e960ce47f3934433e697c37f76289af2870971449e20d7"
   }
