@@ -198,7 +198,7 @@ export function CommercialPage() {
     <div className="dashboard-table-page commercial-page">
       <PageHeader
         title="Comercial"
-        description="Acompanhamento manual das empresas que já receberam uma abordagem comercial. Nenhuma mensagem ou automação altera estes estágios."
+        description="Acompanhamento das empresas abordadas. Leads em Aguardando resposta há 72h ou mais sem retorno são movidos automaticamente para Recusado na rotina diária da meia-noite."
         action={<Button variant="secondary" iconLeft={RefreshCcw} loading={refreshing} disabled={loading} onClick={() => void refresh()}>Atualizar</Button>}
       />
 

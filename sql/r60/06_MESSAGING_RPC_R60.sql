@@ -275,7 +275,10 @@ BEGIN
   IF v_org IS NULL THEN RAISE EXCEPTION 'instance_scope_not_found'; END IF;
   v_aliases:=public.r60_contact_aliases_from_payload(p_remote_jid,coalesce(p_raw_payload,'{}'::jsonb));
   SELECT x INTO v_alt FROM unnest(v_aliases) x WHERE x<>public.r60_normalize_provider_alias(p_remote_jid) ORDER BY x LIKE '%@lid',x LIMIT 1;
-  v_contact:=public.r60_resolve_whatsapp_contact(v_org,p_instances_id,v_chip,p_remote_jid,v_alt,p_contact_name);
+  v_contact:=public.r60_resolve_whatsapp_contact(v_org,p_instances_id,v_chip,p_remote_jid,v_alt,CASE WHEN p_from_me THEN NULL ELSE p_contact_name END);
+  IF NOT p_from_me AND nullif(btrim(coalesce(p_contact_name,'')),'') IS NOT NULL THEN
+    UPDATE public.whatsapp_contacts SET display_name=left(btrim(p_contact_name),160),whatsapp_contacts_updated_at=now() WHERE whatsapp_contacts_id=v_contact;
+  END IF;
   SELECT contact_state,normalized_phone INTO v_state,v_phone FROM public.whatsapp_contacts WHERE whatsapp_contacts_id=v_contact;
   IF v_state='ignored' THEN RETURN jsonb_build_object('ignored',true,'reason','contact_ignored','contactId',v_contact); END IF;
   IF nullif(btrim(coalesce(p_external_message_id,'')),'') IS NULL THEN RAISE EXCEPTION 'external_message_id_required'; END IF;
@@ -284,7 +287,7 @@ BEGIN
   SELECT conversations_id INTO v_conv FROM public.conversations WHERE organizations_id=v_org AND chips_id=v_chip AND whatsapp_contacts_id=v_contact FOR UPDATE;
   IF v_conv IS NULL THEN
     INSERT INTO public.conversations(users_id,organizations_id,chips_id,instances_id,leads_id,whatsapp_contacts_id,remote_jid,contact_phone,contact_name,conversation_status,unread_count)
-    SELECT v_user,v_org,v_chip,p_instances_id,wc.leads_id,v_contact,public.r60_normalize_provider_alias(p_remote_jid),v_phone,nullif(btrim(coalesce(p_contact_name,'')),''),'open',0
+    SELECT v_user,v_org,v_chip,p_instances_id,wc.leads_id,v_contact,public.r60_normalize_provider_alias(p_remote_jid),v_phone,CASE WHEN p_from_me THEN NULL ELSE nullif(btrim(coalesce(p_contact_name,'')),'') END,'open',0
     FROM public.whatsapp_contacts wc WHERE wc.whatsapp_contacts_id=v_contact RETURNING conversations_id INTO v_conv;
   END IF;
   v_type:=lower(coalesce(nullif(btrim(p_message_type),''),'text'));
@@ -297,7 +300,7 @@ BEGIN
   ON CONFLICT(organizations_id,instances_id,external_message_id) WHERE external_message_id IS NOT NULL DO NOTHING RETURNING conversation_messages_id INTO v_msg;
   IF v_msg IS NULL THEN SELECT conversation_messages_id INTO v_msg FROM public.conversation_messages WHERE organizations_id=v_org AND instances_id=p_instances_id AND external_message_id=p_external_message_id; RETURN jsonb_build_object('duplicate',true,'messageId',v_msg); END IF;
   UPDATE public.conversations SET remote_jid=public.r60_normalize_provider_alias(p_remote_jid),contact_phone=v_phone,
-    contact_name=coalesce(nullif(btrim(coalesce(p_contact_name,'')),''),contact_name),last_message_at=coalesce(p_provider_timestamp,now()),last_message_preview=left(v_body,300),
+    contact_name=CASE WHEN NOT p_from_me AND nullif(btrim(coalesce(p_contact_name,'')),'') IS NOT NULL THEN left(btrim(p_contact_name),160) ELSE contact_name END,last_message_at=coalesce(p_provider_timestamp,now()),last_message_preview=left(v_body,300),
     last_message_direction=CASE WHEN p_from_me THEN 'outbound' ELSE 'inbound' END,
     unread_count=CASE WHEN p_from_me THEN unread_count ELSE unread_count+1 END,conversation_status='open',conversation_version=conversation_version+1,conversations_updated_at=now()
   WHERE conversations_id=v_conv;
