@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const errors=[];const passes=[];
-const expectedSql=['00_MAINTENANCE_BOOTSTRAP.sql','01_SUPPLY_CHAIN_BOOTSTRAP.sql','02_PRECHECK.sql','03_RESET_MESSAGING_HOMOLOGATION.sql','04_MESSAGING_SCHEMA_R60.sql','05_CONTACT_IDENTITY_R60.sql','06_MESSAGING_RPC_R60.sql','07_RLS_R60.sql','08_WORKER_GATING_R60.sql','09_SECURITY_ACL_R60.sql','10_PAIRING_R60.sql','10A_RETENTION_R60.sql','10B_SUPPLY_CHAIN_HARDENING_R60.sql','10C_PRODUCTION_RESUME_GATE_R60.sql','10D_PAIRING_CURRENT_SLOT_IDEMPOTENCY_R60.sql','10E_COMMERCIAL_RESPONSE_TIMEOUT_R60.sql','10F_COMMERCIAL_RESPONSE_TIMEOUT_DAILY_R60.sql','10G_COMMERCIAL_RESPONSE_TIMEOUT_LEGACY_FALLBACK_R60.sql','10H_MESSAGING_OUTBOUND_IDENTITY_R60.sql','10I_MESSAGING_RAW_PAYLOAD_COMPACTION_R60.sql','10J_CONVERSATION_LEAD_PROMOTION_R60.sql','11_SCHEMA_GATE.sql','12_HOMOLOGATION_SMOKE.sql'];
+const expectedSql=['00_MAINTENANCE_BOOTSTRAP.sql','01_SUPPLY_CHAIN_BOOTSTRAP.sql','02_PRECHECK.sql','03_RESET_MESSAGING_HOMOLOGATION.sql','04_MESSAGING_SCHEMA_R60.sql','05_CONTACT_IDENTITY_R60.sql','06_MESSAGING_RPC_R60.sql','07_RLS_R60.sql','08_WORKER_GATING_R60.sql','09_SECURITY_ACL_R60.sql','10_PAIRING_R60.sql','10A_RETENTION_R60.sql','10B_SUPPLY_CHAIN_HARDENING_R60.sql','10C_PRODUCTION_RESUME_GATE_R60.sql','10D_PAIRING_CURRENT_SLOT_IDEMPOTENCY_R60.sql','10E_COMMERCIAL_RESPONSE_TIMEOUT_R60.sql','10F_COMMERCIAL_RESPONSE_TIMEOUT_DAILY_R60.sql','10G_COMMERCIAL_RESPONSE_TIMEOUT_LEGACY_FALLBACK_R60.sql','10H_MESSAGING_OUTBOUND_IDENTITY_R60.sql','10I_MESSAGING_RAW_PAYLOAD_COMPACTION_R60.sql','10J_CONVERSATION_LEAD_PROMOTION_R60.sql','10K_COMMERCIAL_RESPONSE_TIMEOUT_BOUNDED_R60.sql','10L_RESOURCE_EMERGENCY_RELIEF_R60.sql','10M_COMMERCIAL_RESPONSE_DEADLINE_R60.sql','11_SCHEMA_GATE.sql','12_HOMOLOGATION_SMOKE.sql'];
 const expectedResources={manager:'dc97ff15fd8d7e7dabdfb99a8283bbcab395b32dfb8e7bb24c58b02f22f7cc9b',worker:'385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973',gateway:'1d3ea138fefd0d2de35daa22e2d6af1c031db09ef37fc50bec7a0234a17b8b0a',capture:'fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1',instagram:'f8826927aaf2d199f1e960ce47f3934433e697c37f76289af2870971449e20d7'};
 const expectedManagerZip='3c4852f4b2cf70fd2b8d9020a2190585999e4b2e2f0f6002a333d837a31a45c5';
 function rel(p){return path.relative(root,p).replaceAll(path.sep,'/');}function read(p){return fs.readFileSync(path.join(root,p),'utf8');}function sha(p){return crypto.createHash('sha256').update(fs.readFileSync(path.join(root,p))).digest('hex');}
@@ -17,9 +17,9 @@ const supplyFiles=['R60_RELEASE_MANIFEST_SCHEMA_V2.json','server/platform/releas
 function supplyHash(){return treeHash(supplyFiles);}
 function orderedSql(){return crypto.createHash('sha256').update(expectedSql.map(f=>`${sha(`sql/r60/${f}`)}  sql/r60/${f}\n`).join('')).digest('hex');}
 
-const pkg=JSON.parse(read('package.json'));ok('version:2.4.0-R60.29',pkg.version==='2.4.0-R60.29',pkg.version);ok('package:verify:r60',pkg.scripts?.['verify:r60']==='node scripts/verify-r60.mjs');ok('package:no verify:r59',!JSON.stringify(pkg.scripts||{}).toLowerCase().includes('r59'));
-const sqlDir=path.join(root,'sql/r60');const actualSql=fs.readdirSync(sqlDir).filter(x=>x.endsWith('.sql'));ok('sql:23',actualSql.length===23);ok('sql:set/order names',expectedSql.every(x=>actualSql.includes(x))&&actualSql.every(x=>expectedSql.includes(x)));
-const ledger=read('R60_SQL_SHA256SUMS.txt').split(/\r?\n/).filter(Boolean);const sqlMap=new Map();let ledgerOrdered='';for(const line of ledger){if(line.startsWith('ORDERED_SET_SHA256=')){ledgerOrdered=line.split('=')[1];continue;}const m=line.match(/^([0-9a-f]{64})  (sql\/r60\/.+)$/i);if(m)sqlMap.set(m[2],m[1].toLowerCase());}ok('sql:ledger23',sqlMap.size===23);for(const f of expectedSql)ok(`sql:${f}`,sqlMap.get(`sql/r60/${f}`)===sha(`sql/r60/${f}`));ok('sql:ordered',ledgerOrdered===orderedSql(),`${ledgerOrdered} != ${orderedSql()}`);
+const pkg=JSON.parse(read('package.json'));ok('version:2.4.0-R60.31',pkg.version==='2.4.0-R60.31',pkg.version);ok('package:verify:r60',pkg.scripts?.['verify:r60']==='node scripts/verify-r60.mjs');ok('package:no verify:r59',!JSON.stringify(pkg.scripts||{}).toLowerCase().includes('r59'));
+const sqlDir=path.join(root,'sql/r60');const actualSql=fs.readdirSync(sqlDir).filter(x=>x.endsWith('.sql'));ok('sql:26',actualSql.length===26);ok('sql:set/order names',expectedSql.every(x=>actualSql.includes(x))&&actualSql.every(x=>expectedSql.includes(x)));
+const ledger=read('R60_SQL_SHA256SUMS.txt').split(/\r?\n/).filter(Boolean);const sqlMap=new Map();let ledgerOrdered='';for(const line of ledger){if(line.startsWith('ORDERED_SET_SHA256=')){ledgerOrdered=line.split('=')[1];continue;}const m=line.match(/^([0-9a-f]{64})  (sql\/r60\/.+)$/i);if(m)sqlMap.set(m[2],m[1].toLowerCase());}ok('sql:ledger26',sqlMap.size===26);for(const f of expectedSql)ok(`sql:${f}`,sqlMap.get(`sql/r60/${f}`)===sha(`sql/r60/${f}`));ok('sql:ordered',ledgerOrdered===orderedSql(),`${ledgerOrdered} != ${orderedSql()}`);
 const commercialTimeout=read('sql/r60/10E_COMMERCIAL_RESPONSE_TIMEOUT_R60.sql');
 ok('commercial:auto timeout function',commercialTimeout.includes('service_expire_awaiting_response_leads_r60'));
 ok('commercial:72h threshold',commercialTimeout.includes("interval '72 hours'"));
@@ -46,16 +46,44 @@ ok('conversation promotion:optional canonical fields',conversationsPage.includes
 ok('conversation promotion:push name is reference only',conversationsPage.includes('Nome recebido no WhatsApp')&&conversationsPage.includes("name:''"));
 ok('conversation promotion:persists canonical lead fields',promotionV2.includes('leads_instagram')&&promotionV2.includes('leads_website')&&promotionV2.includes('leads_maps'));
 ok('conversation promotion:preserves canonical conversation',promotionV2.includes('UPDATE public.whatsapp_contacts')&&promotionV2.includes('UPDATE public.conversations')&&promotionV2.includes('UPDATE public.conversation_messages'));
-ok('conversation promotion:whatsapp required',promotionV2.includes('whatsapp_phone_required')&&conversationsPage.includes('!selectedConversation?.phone.trim()'));
+ok('conversation promotion:whatsapp required',promotionV2.includes('whatsapp_phone_required')&&conversationsPage.includes('selectedConversationPhone'));
+ok('conversation promotion:no unsafe optional phone trim',!conversationsPage.includes('selectedConversation?.phone.trim()'));
+
+
+
+const commercialBounded=read('sql/r60/10K_COMMERCIAL_RESPONSE_TIMEOUT_BOUNDED_R60.sql');
+ok('commercial:bounded housekeeping migration',commercialBounded.includes('pg_try_advisory_xact_lock')&&commercialBounded.includes("statement_timeout', '20000")&&commercialBounded.includes("lock_timeout', '2000"));
+ok('commercial:bounded uses direct lead message path',commercialBounded.includes('conversation_messages_org_lead_direction_time_r60_idx')&&commercialBounded.includes('cm.leads_id = w.leads_id')&&!commercialBounded.includes('JOIN public.conversations AS'));
+ok('commercial:bounded daily schedule preserved',commercialBounded.includes("'0 3 * * *'")&&commercialBounded.includes('vinsansi-commercial-awaiting-response-timeout-r60'));
+
+const commercialRelief=read('sql/r60/10L_RESOURCE_EMERGENCY_RELIEF_R60.sql');
+ok('commercial:resource relief unschedules legacy cron',commercialRelief.includes('cron.unschedule')&&commercialRelief.includes('vinsansi-commercial-awaiting-response-timeout-r60'));
+ok('commercial:resource relief cancels only legacy execution',commercialRelief.includes('pg_cancel_backend')&&commercialRelief.includes('service_expire_awaiting_response_leads_r60')&&!commercialRelief.includes('pg_terminate_backend'));
+ok('commercial:resource relief no vacuum or message rewrite',!/\n\s*VACUUM\b/i.test(commercialRelief)&&!commercialRelief.includes('UPDATE public.conversation_messages'));
+const commercialDeadline=read('sql/r60/10M_COMMERCIAL_RESPONSE_DEADLINE_R60.sql');
+const expiryStart=commercialDeadline.indexOf('CREATE OR REPLACE FUNCTION public.service_expire_awaiting_response_leads_r60()');
+const expiryEnd=commercialDeadline.indexOf('REVOKE ALL ON FUNCTION public.service_expire_awaiting_response_leads_r60()',expiryStart);
+const expiryBody=expiryStart>=0&&expiryEnd>expiryStart?commercialDeadline.slice(expiryStart,expiryEnd):'';
+ok('commercial:deadline materialized on lead_commercial',commercialDeadline.includes('awaiting_response_since timestamptz')&&commercialDeadline.includes('response_deadline_at timestamptz')&&commercialDeadline.includes('lead_commercial_response_deadline_r60_idx'));
+ok('commercial:midnight expiry reads only commercial table',expiryBody.includes('UPDATE public.lead_commercial')&&!expiryBody.includes('conversation_messages')&&!expiryBody.includes('public.conversations')&&!expiryBody.includes('public.sents'));
+ok('commercial:event driven outbound deadline',commercialDeadline.includes('r60_refresh_response_deadline_from_sent')&&commercialDeadline.includes('r60_refresh_response_deadline_from_message')&&commercialDeadline.includes("NEW.direction <> 'outbound'")&&commercialDeadline.includes("NEW.message_status NOT IN ('sent', 'delivered', 'read')"));
+ok('commercial:inbound clears deadline',commercialDeadline.includes("NEW.direction = 'inbound'")&&commercialDeadline.includes('response_deadline_at = NULL'));
+ok('commercial:legacy backfill touches only commercial state',commercialDeadline.includes('UPDATE public.lead_commercial AS lc')&&!commercialDeadline.includes('UPDATE public.conversation_messages'));
+ok('commercial:materialized cron midnight',commercialDeadline.includes("'0 3 * * *'")&&commercialDeadline.includes('cron.schedule'));
+const appErrorBoundary=read('src/components/AppErrorBoundary.tsx');
+const mainEntry=read('src/main.tsx');
+ok('ui:global render error boundary',mainEntry.includes('<AppErrorBoundary>')&&appErrorBoundary.includes('[crm-render-error]')&&appErrorBoundary.includes('Abrir Dashboard'));
 
 const organizationProvider=read('src/providers/OrganizationProvider.tsx');
 const appShell=read('src/App.tsx');
 ok('organization bootstrap:session ready before context rpc',organizationProvider.includes('client.auth.getSession()')&&organizationProvider.includes('loadOrganizationContextResilient'));
-ok('organization bootstrap:bounded retry instead of fatal 8s single shot',organizationProvider.includes('for (let attempt = 0; attempt < 2; attempt += 1)')&&organizationProvider.includes('15_000')&&organizationProvider.includes('await wait(600)'));
+ok('organization bootstrap:single bounded authoritative read',organizationProvider.includes('20_000')&&!organizationProvider.includes('for (let attempt = 0; attempt < 2; attempt += 1)')&&organizationProvider.includes('banco pode estar ocupado'));
+ok('organization bootstrap:cached shape validation',organizationProvider.includes('Array.isArray(value?.permissions)')&&organizationProvider.includes('Array.isArray(value?.organizations)'));
+
 ok('organization bootstrap:manual retry available',appShell.includes('Tentar novamente')&&appShell.includes('refreshOrganization'));
 
 const manifest=JSON.parse(read('R60_CANDIDATE_MANIFEST.json'));const schema=JSON.parse(read('R60_RELEASE_MANIFEST_SCHEMA_V2.json'));
-ok('manifest:schemaVersion2',manifest.schemaVersion===2&&schema.properties?.schemaVersion?.const===2);ok('manifest:identity',manifest.releaseId==='vinsansi-r60-seq60-r60.29'&&manifest.release==='2.4.0-R60.29'&&manifest.releaseStage==='candidate');ok('manifest:closed',manifest.productionReady===false&&manifest.resumeAllowed===false&&manifest.signature?.algorithm==='ed25519'&&manifest.signature.keyId===null&&manifest.signature.signature===null);ok('manifest:gate',manifest.releaseSequence===60&&manifest.schemaTarget==='r60'&&manifest.securityBaseline==='r60-security-baseline-v1');ok('manifest:no image digests invented',Object.keys(manifest.imageDigests||{}).length===0);ok('manifest:no production distribution invented',manifest.distribution?.manager?.url===null&&manifest.distribution?.manager?.sha256===null);
+ok('manifest:schemaVersion2',manifest.schemaVersion===2&&schema.properties?.schemaVersion?.const===2);ok('manifest:identity',manifest.releaseId==='vinsansi-r60-seq60-r60.31'&&manifest.release==='2.4.0-R60.31'&&manifest.releaseStage==='candidate');ok('manifest:closed',manifest.productionReady===false&&manifest.resumeAllowed===false&&manifest.signature?.algorithm==='ed25519'&&manifest.signature.keyId===null&&manifest.signature.signature===null);ok('manifest:gate',manifest.releaseSequence===60&&manifest.schemaTarget==='r60'&&manifest.securityBaseline==='r60-security-baseline-v1');ok('manifest:no image digests invented',Object.keys(manifest.imageDigests||{}).length===0);ok('manifest:no production distribution invented',manifest.distribution?.manager?.url===null&&manifest.distribution?.manager?.sha256===null);
 ok('manifest:versions',manifest.manager.latestVersion==='1.5.89'&&manifest.components.worker.version==='3.14.8'&&manifest.components.gateway.version==='1.2.34'&&manifest.capture.latestVersion==='1.0.53'&&manifest.instagram.latestVersion==='2.0.8'&&manifest.components.evolution.version==='0.7.2');for(const [k,v] of Object.entries(expectedResources))ok(`manifest:resource:${k}`,manifest.resources?.[k]?.sha256===v);
 for(const req of schema.required||[])ok(`schema:required:${req}`,Object.hasOwn(manifest,req));ok('schema:production requires signature/digests/artifact',JSON.stringify(schema).includes('imageDigests')&&JSON.stringify(schema).includes('^https://')&&JSON.stringify(schema).includes('sha256:[0-9a-f]{64}'));
 

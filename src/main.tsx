@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { AppProviders } from './providers';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { applyThemeVariables } from './design-system/theme/applyTheme';
 import { loadRuntimeConfig } from './lib/runtimeConfig';
 import './styles/base.css';
@@ -14,9 +15,11 @@ async function start() {
   await loadRuntimeConfig();
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <AppProviders>
-        <App />
-      </AppProviders>
+      <AppErrorBoundary>
+        <AppProviders>
+          <App />
+        </AppProviders>
+      </AppErrorBoundary>
     </React.StrictMode>,
   );
 }

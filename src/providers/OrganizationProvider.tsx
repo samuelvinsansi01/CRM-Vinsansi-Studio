@@ -45,6 +45,7 @@ function readCachedOrganizationContext(usersId: string): OrganizationContext | n
     if (!raw) return null;
     const value = JSON.parse(raw) as OrganizationContext;
     if (String(value?.actorUsersId ?? '') !== usersId) return null;
+    if (!Array.isArray(value?.permissions) || !Array.isArray(value?.organizations)) return null;
     return value;
   } catch {
     return null;
@@ -75,10 +76,6 @@ async function withDeadline<T>(promise: Promise<T>, ms: number, message: string)
   }
 }
 
-function wait(ms: number) {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-}
-
 async function loadOrganizationContextResilient(): Promise<OrganizationContext> {
   const client = getSupabaseClient();
   const { data: sessionData, error: sessionError } = await withDeadline(
@@ -89,20 +86,13 @@ async function loadOrganizationContextResilient(): Promise<OrganizationContext> 
   if (sessionError) throw new Error(`Não foi possível validar a sessão: ${sessionError.message}`);
   if (!sessionData.session) throw new Error('Sessão expirada. Entre novamente para carregar a organização.');
 
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      return await withDeadline(
-        getOrganizationContext(),
-        15_000,
-        'Tempo excedido ao carregar a organização.',
-      );
-    } catch (cause) {
-      lastError = cause;
-      if (attempt === 0) await wait(600);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error('Falha ao carregar organização.');
+  // Uma única leitura autoritativa evita duplicar carga justamente quando o banco
+  // já está lento. O cache mantém o painel montado durante refreshes transitórios.
+  return withDeadline(
+    getOrganizationContext(),
+    20_000,
+    'Tempo excedido ao carregar a organização. O banco pode estar ocupado; tente novamente.',
+  );
 }
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
