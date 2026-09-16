@@ -141,6 +141,7 @@ export function ConversationsPage() {
   const messageRealtimeReadyRef = useRef(false);
   const unreadRefreshTimerRef = useRef<number | null>(null);
   const hiddenAtRef=useRef<number|null>(null);
+  const chipsRef=useRef<ChatChip[]>([]);
 
   const selectedConversation = conversations.find((item) => item.id === selectedConversationId) ?? null;
   const visibleConversations = useMemo(() => {
@@ -154,25 +155,35 @@ export function ConversationsPage() {
     selectedConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
 
+  useEffect(() => {
+    chipsRef.current = chips;
+  }, [chips]);
+
   const toast = useCallback((item: Omit<ToastItem, 'id'>) => {
     const id = crypto.randomUUID?.() ?? String(Date.now());
     setToasts((current) => [{ id, ...item }, ...current].slice(0, 4));
     window.setTimeout(() => setToasts((current) => current.filter((entry) => entry.id !== id)), 3400);
   }, []);
 
-  const loadChips = useCallback(async () => {
+  const loadChips = useCallback(async (preserveEstablishedOnEmpty = true) => {
     if (!organizationId) return;
     const [next, unread] = await Promise.all([
       listChatChips(organizationId),
       listConversationUnreadCounts(organizationId),
     ]);
-    setChips(next);
+    // Uma leitura vazia isolada não pode apagar um chip que já estava estável na tela.
+    // Isso protege a Inbox contra snapshots transitórios durante reconciliação/webhook.
+    // O primeiro carregamento continua autoritativo; um reload de página confirma remoções reais.
+    const preserveExisting = preserveEstablishedOnEmpty && next.length === 0 && chipsRef.current.length > 0;
+    if (!preserveExisting) {
+      setChips(next);
+      setSelectedChipId((current) => {
+        const targetChipId = notificationTargetRef.current?.chipId;
+        if (targetChipId && next.some((chip) => chip.id === targetChipId)) return targetChipId;
+        return current && next.some((chip) => chip.id === current) ? current : next[0]?.id ?? null;
+      });
+    }
     setUnreadByChip(unread);
-    setSelectedChipId((current) => {
-      const targetChipId = notificationTargetRef.current?.chipId;
-      if (targetChipId && next.some((chip) => chip.id === targetChipId)) return targetChipId;
-      return current && next.some((chip) => chip.id === current) ? current : next[0]?.id ?? null;
-    });
   }, [organizationId]);
 
   const loadConversations = useCallback(async (quiet = false) => {
@@ -189,7 +200,9 @@ export function ConversationsPage() {
       const page = await listConversationsPage(organizationId, selectedChipId, includeArchived, 50, contactFilter, null, debouncedSearch);
       const next=page.items;
       if (requestId !== conversationsRequestRef.current) return;
-      setConversations(next);
+      // Realtime pode disparar enquanto a projeção da lista ainda está reconciliando.
+      // Um snapshot vazio silencioso não é evidência suficiente para apagar o estado conhecido.
+      setConversations((current) => quiet && next.length === 0 && current.length > 0 ? current : next);
       setConversationCursor(page.nextCursor);
       setSelectedConversationId((current) => {
         const targetConversationId = notificationTargetRef.current?.conversationId;
@@ -233,10 +246,17 @@ export function ConversationsPage() {
       const next = await listConversationMessages(organizationId, conversationId, MESSAGE_PAGE_SIZE);
       if (requestId !== messagesRequestRef.current || selectedConversationIdRef.current !== conversationId) return;
       setMessages((current) => {
-        if (!quiet || current.length <= MESSAGE_PAGE_SIZE) return next;
-        const byId = new Map(current.map((item) => [item.id, item]));
-        next.forEach((item) => byId.set(item.id, item));
-        return sortConversationMessages([...byId.values()]);
+        if (!quiet) return next;
+        const canonicalExternalIds = new Set(next.map((item) => item.externalId).filter((value): value is string => Boolean(value)));
+        const unresolvedOptimistic = current.filter((item) => item.id.startsWith('optimistic-') && (!item.externalId || !canonicalExternalIds.has(item.externalId)));
+        // Durante reconciliação silenciosa, nunca derruba a bolha otimista antes de
+        // a linha canônica aparecer. Histórico antigo já carregado também é preservado.
+        if (current.length > MESSAGE_PAGE_SIZE) {
+          const byId = new Map(current.filter((item) => !item.id.startsWith('optimistic-')).map((item) => [item.id, item]));
+          next.forEach((item) => byId.set(item.id, item));
+          return sortConversationMessages([...byId.values(), ...unresolvedOptimistic]);
+        }
+        return sortConversationMessages([...next, ...unresolvedOptimistic]);
       });
       if (!quiet) setHasOlderMessages(next.length >= MESSAGE_PAGE_SIZE);
       if (!quiet) window.requestAnimationFrame(() => threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight }));
@@ -349,7 +369,7 @@ export function ConversationsPage() {
 
   // Carrega chips primeiro; a conversa só é consultada quando existe chip selecionado.
   useEffect(() => {
-    void loadChips().catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao carregar chips.'));
+    void loadChips(false).catch((cause) => setError(cause instanceof Error ? cause.message : 'Falha ao carregar chips.'));
   }, [loadChips]);
 
   useEffect(() => {
@@ -393,8 +413,13 @@ export function ConversationsPage() {
         const delta=await getConversationDelta(organizationId,conversationId);
         if(cancelled)return;
         setConversations((current)=>{
+          if(!delta){
+            // Delta nulo pode ser uma leitura transitória entre eventos relacionados.
+            // Não apaga uma conversa conhecida sem uma transição explícita de estado.
+            conversationSyncPendingRef.current=true;
+            return current;
+          }
           const without=current.filter((item)=>item.id!==conversationId);
-          if(!delta)return without;
           const visibleChip=!selectedChipId||delta.chipId===selectedChipId;
           const visibleArchive=includeArchived?delta.status==='archived':delta.status==='open';
           const visibleState=contactFilter==='ignored'?delta.contactState==='ignored':delta.contactState!=='ignored';
@@ -425,7 +450,10 @@ export function ConversationsPage() {
       const thread = threadRef.current;
       const stickToBottom = !thread || thread.scrollHeight - thread.scrollTop - thread.clientHeight < 120;
       setMessages((current) => {
-        const byId = new Map(current.map((item) => [item.id, item]));
+        const withoutConfirmedOptimistic = current.filter((item) => !(
+          item.id.startsWith('optimistic-') && item.externalId && message.externalId && item.externalId === message.externalId
+        ));
+        const byId = new Map(withoutConfirmedOptimistic.map((item) => [item.id, item]));
         byId.set(message.id, message);
         return sortConversationMessages([...byId.values()]);
       });
@@ -526,11 +554,19 @@ export function ConversationsPage() {
     };
     setDraft(''); setSending(true); setMessages((current) => [...current, optimistic]);
     try {
-      await sendConversationMessage(selectedConversation.id, body);
-      // O envio já foi aceito pelo backend/provider. A reconciliação visual é
-      // secundária e jamais pode transformar um envio confirmado em "Falha".
-      setMessages((current) => current.filter((item) => item.id !== optimisticId));
+      const result = await sendConversationMessage(selectedConversation.id, body);
+      // O envio confirmado jamais pode transformar um envio confirmado em "Falha" por reconciliação visual.
+      // Ele permanece visível como otimista até a linha canônica aparecer via Realtime/consulta.
+      // Isso evita o "pisca e some" por read-after-write.
+      const confirmedStatus = ['sent','delivered','read','reconciliation_required'].includes(String(result.status))
+        ? String(result.status) as ConversationMessage['status']
+        : 'sent';
+      setMessages((current) => current.map((item) => item.id === optimisticId ? {
+        ...item, externalId: result.external_message_id || item.externalId, status: confirmedStatus, errorMessage: '',
+      } : item));
       void loadMessages(selectedConversation.id, true).catch(() => undefined);
+      window.setTimeout(() => void loadMessages(selectedConversation.id, true).catch(() => undefined), 500);
+      window.setTimeout(() => void loadMessages(selectedConversation.id, true).catch(() => undefined), 1_500);
       setError('');
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Falha ao enviar a mensagem.';
