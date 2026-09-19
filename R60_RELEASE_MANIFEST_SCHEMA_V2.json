@@ -24,6 +24,7 @@
     "manager",
     "capture",
     "instagram",
+    "mobile",
     "healthPolicy",
     "components"
   ],
@@ -119,7 +120,8 @@
         "worker",
         "gateway",
         "capture",
-        "instagram"
+        "instagram",
+        "mobile"
       ]
     },
     "imageDigests": {
@@ -133,7 +135,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "manager"
+        "manager",
+        "mobile"
       ],
       "properties": {
         "manager": {
@@ -159,6 +162,33 @@
                 "string",
                 "null"
               ]
+            }
+          }
+        },
+        "mobile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "url",
+            "sha256"
+          ],
+          "properties": {
+            "kind": {
+              "const": "android-apk"
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sha256": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[0-9a-f]{64}$"
             }
           }
         }
@@ -217,6 +247,22 @@
         },
         "cloudflared": {
           "$ref": "#/$defs/component"
+        }
+      }
+    },
+    "mobile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "androidPackage"
+      ],
+      "properties": {
+        "version": {
+          "const": "0.1.15"
+        },
+        "androidPackage": {
+          "const": "studio.vinsansi.mobile"
         }
       }
     }
@@ -293,6 +339,61 @@
                 "type": "null"
               }
             }
+          },
+          "imageDigests": {
+            "type": "object",
+            "required": [
+              "evolution",
+              "cloudflared",
+              "postgresql",
+              "buildNode"
+            ],
+            "properties": {
+              "evolution": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "cloudflared": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "postgresql": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "buildNode": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            }
+          },
+          "distribution": {
+            "properties": {
+              "manager": {
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https://"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              },
+              "mobile": {
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https://"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -338,26 +439,30 @@
                     "pattern": "^[0-9a-f]{64}$"
                   }
                 }
+              },
+              "mobile": {
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https://"
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  }
+                }
               }
             }
           },
           "imageDigests": {
             "type": "object",
             "required": [
-              "worker",
-              "gateway",
               "evolution",
-              "cloudflared"
+              "cloudflared",
+              "postgresql",
+              "buildNode"
             ],
             "properties": {
-              "worker": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
-              "gateway": {
-                "type": "string",
-                "pattern": "^sha256:[0-9a-f]{64}$"
-              },
               "evolution": {
                 "type": "string",
                 "pattern": "^sha256:[0-9a-f]{64}$"
@@ -365,11 +470,15 @@
               "cloudflared": {
                 "type": "string",
                 "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "postgresql": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "buildNode": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
               }
-            },
-            "additionalProperties": {
-              "type": "string",
-              "pattern": "^sha256:[0-9a-f]{64}$"
             }
           }
         },

@@ -10,7 +10,7 @@ BEGIN
    'organization_messaging_state','platform_release_candidates','platform_release_promotions',
    'whatsapp_contacts','whatsapp_contact_aliases','conversations','conversation_messages','conversation_member_states',
    'queue_item_dispatch_parts','tool_executor_pairings','tool_browser_pairings','tool_installation_credentials','tool_user_sessions',
-   'evolution_webhook_receipts','platform_runtime_heartbeats','recovery_requests'
+   'evolution_webhook_receipts','platform_runtime_heartbeats','recovery_requests','mobile_push_devices'
  ] LOOP
    IF to_regclass('public.'||n) IS NULL THEN missing:=array_append(missing,'table:'||n); END IF;
  END LOOP;
@@ -21,7 +21,7 @@ BEGIN
    'service_stage5_list_conversations','service_stage5_list_messages','service_stage5_ignore_contact','service_stage5_restore_contact','service_stage5_promote_unknown_contact','service_stage5_promote_unknown_contact_v2','service_stage5_presence','service_stage5_converge_automatic_message',
    'worker_claim_dispatch_job','worker_claim_dispatch_part','worker_complete_dispatch_part','worker_finalize_whatsapp_queue_item','worker_fail_whatsapp_queue_item','worker_move_dispatch_to_dlq','worker_start_whatsapp_batch','worker_set_whatsapp_batch_state','worker_claim_next_batch_item','worker_complete_batch_item','worker_recover_stale_whatsapp_v2',
    'service_exchange_executor_pairing','service_cleanup_pairings_r60','service_retention_r60','service_expire_awaiting_response_leads_r60',
-   'service_register_release_candidate_r60','service_mark_release_signature_verified_r60','service_mark_release_candidate_homologated_r60','service_promote_release_candidate_r60','service_arm_messaging_resume_gate_r60'
+   'service_register_release_candidate_r60','service_mark_release_signature_verified_r60','service_mark_release_candidate_homologated_r60','service_promote_release_candidate_r60','service_arm_messaging_resume_gate_r60','mobile_register_push_device_r60','mobile_disable_push_device_r60','r60_materialize_commercial_response_deadline','r60_refresh_response_deadline_from_sent','r60_refresh_response_deadline_from_message'
  ] LOOP
    IF NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace WHERE ns.nspname='public' AND p.proname=n) THEN missing:=array_append(missing,'function:'||n); END IF;
  END LOOP;
@@ -34,7 +34,7 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid='public.platform_release_candidates'::regclass AND a.attname='signature_verified_at' AND NOT a.attisdropped) THEN missing:=array_append(missing,'column:platform_release_candidates.signature_verified_at'); END IF;
  IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='organization_messaging_state_guard_r60' AND NOT tgisinternal) THEN missing:=array_append(missing,'trigger:organization_messaging_state_guard_r60'); END IF;
 
- FOREACH n IN ARRAY ARRAY['organization_messaging_state','platform_release_candidates','platform_release_promotions','whatsapp_contacts','whatsapp_contact_aliases','conversations','conversation_messages','conversation_member_states'] LOOP
+ FOREACH n IN ARRAY ARRAY['organization_messaging_state','platform_release_candidates','platform_release_promotions','whatsapp_contacts','whatsapp_contact_aliases','conversations','conversation_messages','conversation_member_states','mobile_push_devices'] LOOP
    IF NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace WHERE ns.nspname='public' AND c.relname=n AND c.relrowsecurity AND c.relforcerowsecurity) THEN not_forced:=array_append(not_forced,n); END IF;
  END LOOP;
 
@@ -53,7 +53,13 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace WHERE ns.nspname='public' AND p.proname='service_retention_r60' AND pg_get_functiondef(p.oid) ILIKE '%evolution_webhook_receipts%' AND pg_get_functiondef(p.oid) ILIKE '%platform_runtime_heartbeats%') THEN missing:=array_append(missing,'retention:r60'); END IF;
  IF NOT EXISTS(SELECT 1 FROM pg_extension WHERE extname='pg_cron') THEN missing:=array_append(missing,'extension:pg_cron'); END IF;
  IF to_regclass('cron.job') IS NULL OR NOT EXISTS(SELECT 1 FROM cron.job WHERE jobname='vinsansi-commercial-awaiting-response-timeout-r60' AND schedule='0 3 * * *' AND command ILIKE '%service_expire_awaiting_response_leads_r60%') THEN missing:=array_append(missing,'cron:commercial_response_timeout'); END IF;
- IF NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace WHERE ns.nspname='public' AND p.proname='service_expire_awaiting_response_leads_r60' AND pg_get_functiondef(p.oid) ILIKE '%72 hours%' AND pg_get_functiondef(p.oid) ILIKE '%aguardando_resposta%' AND pg_get_functiondef(p.oid) ILIKE '%recusado%' AND pg_get_functiondef(p.oid) ILIKE '%direction = ''inbound''%') THEN missing:=array_append(missing,'commercial_timeout:72h_no_response'); END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid='public.lead_commercial'::regclass AND a.attname='awaiting_response_since' AND NOT a.attisdropped) THEN missing:=array_append(missing,'column:lead_commercial.awaiting_response_since'); END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid='public.lead_commercial'::regclass AND a.attname='response_deadline_at' AND NOT a.attisdropped) THEN missing:=array_append(missing,'column:lead_commercial.response_deadline_at'); END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='lead_commercial_response_deadline_r60_idx') THEN missing:=array_append(missing,'index:lead_commercial_response_deadline_r60_idx'); END IF;
+ IF (SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname IN('r60_materialize_commercial_response_deadline_trg','r60_refresh_response_deadline_from_sent_trg','r60_refresh_response_deadline_from_message_trg'))<>3 THEN missing:=array_append(missing,'commercial_deadline:three_triggers'); END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace ns ON ns.oid=p.pronamespace WHERE ns.nspname='public' AND p.proname='service_expire_awaiting_response_leads_r60' AND pg_get_functiondef(p.oid) ILIKE '%response_deadline_at%' AND pg_get_functiondef(p.oid) NOT ILIKE '%JOIN public.conversation_messages%' AND pg_get_functiondef(p.oid) NOT ILIKE '%JOIN public.conversations%' AND pg_get_functiondef(p.oid) NOT ILIKE '%JOIN public.sents%') THEN missing:=array_append(missing,'commercial_timeout:materialized_deadline_only'); END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid='public.conversation_messages'::regclass AND a.attname='mobile_push_sent_at' AND NOT a.attisdropped) THEN missing:=array_append(missing,'column:conversation_messages.mobile_push_sent_at'); END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid='public.mobile_push_devices'::regclass AND a.attname='last_error' AND NOT a.attisdropped) THEN missing:=array_append(missing,'column:mobile_push_devices.last_error'); END IF;
 
  IF array_length(missing,1) IS NOT NULL OR array_length(bad_acl,1) IS NOT NULL OR array_length(not_forced,1) IS NOT NULL OR array_length(legacy,1) IS NOT NULL THEN
    RAISE EXCEPTION 'r60_schema_gate_failed:%',jsonb_build_object('missing',missing,'badAcl',bad_acl,'notForceRls',not_forced,'legacy',legacy)::text;

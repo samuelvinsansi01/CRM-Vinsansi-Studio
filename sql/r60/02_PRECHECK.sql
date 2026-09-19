@@ -8,7 +8,7 @@ DECLARE
   required_column record;
 BEGIN
   FOREACH table_name IN ARRAY ARRAY[
-    'organizations','organization_members','users','leads','branches','countries','states','cities','contact_sources','channels',
+    'organizations','organization_members','users','leads','lead_commercial','crm_notifications','branches','countries','states','cities','contact_sources','channels',
     'chips','instances','instance_credentials','instance_runtime_states','queues','queue_items','queue_item_dispatch_parts','templates','sents',
     'worker_batches','worker_batch_items','recovery_requests','platform_runtime_heartbeats','organization_tool_installations',
     'conversations','conversation_messages','conversation_contact_aliases','conversation_member_states','conversation_presence','evolution_webhook_receipts',
@@ -25,7 +25,9 @@ BEGIN
     ('queue_items','queue_items_id'),('queue_items','organizations_id'),('queue_items','queue_items_payload_snapshot'),('queue_items','queue_items_attempts'),
     ('queue_item_dispatch_parts','queue_item_dispatch_parts_id'),('queue_item_dispatch_parts','queue_items_id'),('queue_item_dispatch_parts','queue_item_dispatch_parts_key'),('queue_item_dispatch_parts','queue_item_dispatch_parts_content_hash'),
     ('instances','instances_id'),('instances','organizations_id'),('instance_credentials','instances_id'),('instance_credentials','vault_secret_id'),
-    ('organization_tool_installations','organization_tool_installations_id'),('organization_tool_installations','external_installation_id')
+    ('organization_tool_installations','organization_tool_installations_id'),('organization_tool_installations','external_installation_id'),
+    ('lead_commercial','organizations_id'),('lead_commercial','leads_id'),('lead_commercial','commercial_stage'),('lead_commercial','preview_due_date'),('lead_commercial','lead_commercial_updated_at'),
+    ('crm_notifications','crm_notifications_id'),('crm_notifications','organizations_id'),('crm_notifications','notification_type'),('crm_notifications','target_page'),('crm_notifications','last_event_at'),('crm_notifications','read_at')
   ) AS v(rel,col) LOOP
     IF to_regclass('public.'||required_column.rel) IS NOT NULL AND NOT EXISTS(
       SELECT 1 FROM pg_attribute a WHERE a.attrelid=('public.'||required_column.rel)::regclass AND a.attname=required_column.col AND a.attnum>0 AND NOT a.attisdropped
@@ -35,7 +37,10 @@ BEGIN
   FOREACH function_name IN ARRAY ARRAY[
     'current_organization_id','current_organization_member_id','auth_user_has_organization_permission','has_organization_permission',
     'chat_message_status_rank','effective_whatsapp_phone','service_get_evolution_instances','service_runtime_heartbeat','refresh_operational_alerts',
-    'service_claim_recovery_request','service_complete_recovery_request','instagram_recover_stale_items_v2'
+    'service_claim_recovery_request','service_complete_recovery_request','instagram_recover_stale_items_v2',
+    'dashboard_summary_r59','list_leads_page_r59','set_lead_commercial_stage_r59','set_lead_preview_due_date_r59',
+    'list_projects_r59','set_project_payment_received_r59','set_project_stage_r59','update_project_financials_r59','update_project_stage_dates_r59',
+    'mark_all_crm_notifications_read','mark_crm_notification_read'
   ] LOOP
     IF NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=function_name) THEN
       missing:=array_append(missing,'function:'||function_name);

@@ -5,6 +5,7 @@ import workerProvision from './desktop/worker-provision.js';
 import schemaHealth from './schema-health.js';
 import publicConfig from './public-config.js';
 import releaseCandidate from './release-candidate.js';
+import releaseAdmin from './release-admin.js';
 
 const handlers = {
   'chat/send': sendChatMessage,
@@ -13,6 +14,7 @@ const handlers = {
   'schema-health': schemaHealth,
   'public-config': publicConfig,
   'release-candidate': releaseCandidate,
+  'release-admin': releaseAdmin,
 };
 
 export default function systemRouter(req: RoutedRequest, res: RoutedResponse) {

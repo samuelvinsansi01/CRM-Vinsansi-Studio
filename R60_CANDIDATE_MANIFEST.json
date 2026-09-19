@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
-  "releaseId": "vinsansi-r60-seq60-r60.31",
-  "release": "2.4.0-R60.31",
+  "releaseId": "vinsansi-r60-seq60-r60.32",
+  "release": "2.4.0-R60.32",
   "releaseStage": "candidate",
-  "generatedAt": "2026-09-16T07:15:00Z",
+  "generatedAt": "2026-09-18T04:30:00.000Z",
   "releaseSequence": 60,
-  "issuedAt": "2026-09-16T07:15:00Z",
-  "expiresAt": "2027-09-16T06:40:00Z",
+  "issuedAt": "2026-09-18T04:30:00.000Z",
+  "expiresAt": "2027-09-18T04:30:00.000Z",
   "productionReady": false,
   "resumeAllowed": false,
   "schemaTarget": "r60",
@@ -18,7 +18,7 @@
   },
   "resources": {
     "manager": {
-      "sha256": "dc97ff15fd8d7e7dabdfb99a8283bbcab395b32dfb8e7bb24c58b02f22f7cc9b"
+      "sha256": "c1807d319c50cbade60bdffa8c977b96ef7667893e15b98bba0753f68577bd57"
     },
     "worker": {
       "sha256": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973"
@@ -31,6 +31,9 @@
     },
     "instagram": {
       "sha256": "f8826927aaf2d199f1e960ce47f3934433e697c37f76289af2870971449e20d7"
+    },
+    "mobile": {
+      "sha256": "7f1ec4984d0ad7a42bfe802e3e556a380842cae5d424d7c8c5760bce8e34bc60"
     }
   },
   "imageDigests": {},
@@ -39,11 +42,16 @@
       "kind": "windows-nsis",
       "url": null,
       "sha256": null
+    },
+    "mobile": {
+      "kind": "android-apk",
+      "url": null,
+      "sha256": null
     }
   },
   "manager": {
     "toolId": "vinsansi_whatsapp_manager",
-    "latestVersion": "1.5.89",
+    "latestVersion": "1.5.90",
     "minimumSupportedVersion": "1.5.76"
   },
   "capture": {
@@ -78,5 +86,9 @@
       "version": "2026.7.3",
       "image": "cloudflare/cloudflared:2026.7.3"
     }
+  },
+  "mobile": {
+    "version": "0.1.15",
+    "androidPackage": "studio.vinsansi.mobile"
   }
 }

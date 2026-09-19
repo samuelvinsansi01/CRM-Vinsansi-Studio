@@ -78,40 +78,36 @@ async function allowedDevices(admin: SupabaseClient, organizationId: number): Pr
   }
 
   const rows = (Array.isArray(result.data) ? result.data : []) as Row[];
-  const permissionCache = new Map<number, boolean>();
-  const devices: PushDevice[] = [];
-
-  for (const row of rows) {
-    const memberId = integer(row.organization_members_id);
-    const token = text(row.expo_push_token);
-    const id = integer(row.mobile_push_devices_id);
-    if (!memberId || !id || !validExpoPushToken(token)) continue;
-
-    if (!permissionCache.has(memberId)) {
-      const permission = await admin.rpc('stage5_member_has_permission', {
-        p_organizations_id: organizationId,
-        p_organization_members_id: memberId,
-        p_permission: 'whatsapp.view',
-      });
-      permissionCache.set(memberId, !permission.error && permission.data === true);
-    }
-    if (permissionCache.get(memberId)) devices.push({ id, memberId, token });
-  }
-
-  return devices;
+  const candidates = rows.map((row) => ({ id: integer(row.mobile_push_devices_id), memberId: integer(row.organization_members_id), token: text(row.expo_push_token) }))
+    .filter((device) => device.id > 0 && device.memberId > 0 && validExpoPushToken(device.token));
+  const memberIds = [...new Set(candidates.map((device) => device.memberId))];
+  const permissions = await Promise.all(memberIds.map(async (memberId) => {
+    const permission = await admin.rpc('stage5_member_has_permission', {
+      p_organizations_id: organizationId,
+      p_organization_members_id: memberId,
+      p_permission: 'whatsapp.view',
+    });
+    return [memberId, !permission.error && permission.data === true] as const;
+  }));
+  const allowed = new Map(permissions);
+  return candidates.filter((device) => allowed.get(device.memberId) === true);
 }
 
 async function disableInvalidTokens(admin: SupabaseClient, tokens: string[]) {
   const unique = [...new Set(tokens.filter(Boolean))];
-  if (!unique.length) return;
+  if (!unique.length) return 0;
   try {
-    await admin.from('mobile_push_devices').update({
+    const result = await admin.from('mobile_push_devices').update({
       enabled: false,
       disabled_at: new Date().toISOString(),
       last_error: 'DeviceNotRegistered',
       updated_at: new Date().toISOString(),
     }).in('expo_push_token', unique);
-  } catch { /* best effort */ }
+    if (result.error) throw new Error(`mobile_push_disable_invalid_failed:${result.error.message}`);
+    return unique.length;
+  } catch {
+    return 0; // fail-soft: o próximo inbound poderá tentar novamente.
+  }
 }
 
 async function claimMessagePush(admin: SupabaseClient, messageId: number) {
@@ -129,10 +125,11 @@ async function claimMessagePush(admin: SupabaseClient, messageId: number) {
 async function releaseMessagePushClaim(admin: SupabaseClient, messageId: number, claimedAt: string) {
   if (!claimedAt) return;
   try {
-    await admin.from('conversation_messages')
+    const result = await admin.from('conversation_messages')
       .update({ mobile_push_sent_at: null })
       .eq('conversation_messages_id', messageId)
       .eq('mobile_push_sent_at', claimedAt);
+    if (result.error) throw new Error(`mobile_push_release_claim_failed:${result.error.message}`);
   } catch { /* best effort: permite retry futuro se Expo falhar */ }
 }
 
@@ -167,8 +164,8 @@ async function expoSend(admin: SupabaseClient, devices: PushDevice[], payload: R
         if (token) invalid.push(token);
       }
     });
-    await disableInvalidTokens(admin, invalid);
-    return { sent: devices.length, disabled: invalid.length };
+    const disabled = await disableInvalidTokens(admin, invalid);
+    return { sent: devices.length, disabled };
   } finally {
     clearTimeout(timer);
   }

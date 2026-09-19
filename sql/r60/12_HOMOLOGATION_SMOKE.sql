@@ -24,7 +24,7 @@ BEGIN
    'lidAccepted',public.r60_is_direct_whatsapp_alias('123456789@lid'),
    'jidNormalization',public.r60_normalize_provider_alias('5511999999999@c.us')='5511999999999@s.whatsapp.net',
    'jidLidSameCanonicalResolver',resolve_def ILIKE '%p_remote_jid_alt%' AND resolve_def ILIKE '%alias_value=ANY(aliases)%',
-   'unknownState',ingest_def ILIKE '%contact_state%' AND ingest_def ILIKE '%unknown%',
+   'unknownState',resolve_def ILIKE '%contact_state%' AND resolve_def ILIKE '%unknown%' AND ingest_def ILIKE '%contactState%',
    'leadLink',resolve_def ILIKE '%leads_normalized_phone%' AND resolve_def ILIKE '%contact_state%',
    'ignoredDrop',ingest_def ILIKE '%contact_ignored%',
    'restore',EXISTS(SELECT 1 FROM pg_proc WHERE proname='service_stage5_restore_contact'),
@@ -36,7 +36,7 @@ BEGIN
    'cursorConversations',pg_get_functiondef((SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='service_stage5_list_conversations' LIMIT 1)) ILIKE '%p_cursor_id%',
    'cursorMessages',pg_get_functiondef((SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='service_stage5_list_messages' LIMIT 1)) ILIKE '%p_before_id%',
    'presenceRealtime',pg_get_functiondef((SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='service_stage5_presence' LIMIT 1)) ILIKE '%realtime_presence%',
-   'crossTenantScoped',actor_def ILIKE '%organizations_id%' AND actor_def ILIKE '%current_organization_id%',
+   'crossTenantScoped',actor_def ~* 'm\.organizations_id[[:space:]]*=[[:space:]]*p_organizations_id' AND actor_def ILIKE '%auth.uid()%',
    'memberImpersonationBlocked',actor_def ILIKE '%auth.uid()%'
  );
 
@@ -56,7 +56,10 @@ BEGIN
    'productionRequiresVerifiedSignature',arm_def ILIKE '%signature_verified_at%',
    'authorizedResumePathOnly',arm_def ILIKE '%vinsansi.r60_resume_gate%' AND arm_def ILIKE '%platform_release_promotions%',
    'replayProtected',register_def ILIKE '%release_downgrade_rejected%' AND register_def ILIKE '%ON CONFLICT%',
-   'immutablePromotion',promote_def ILIKE '%immutable_promotion_mismatch%',
+   'immutablePromotion',promote_def ILIKE '%immutable_promotion_mismatch%' AND promote_def ILIKE '%mobile%' AND promote_def ILIKE '%distribution%' AND promote_def ILIKE '%component_hashes%' AND promote_def ILIKE '%docker_digests%',
+   'idempotentPromotion',promote_def ILIKE '%idempotent%' AND promote_def ILIKE '%release_sequence_already_promoted%' AND promote_def ILIKE '%platform_release_promotions%',
+   'mobilePushContract',to_regclass('public.mobile_push_devices') IS NOT NULL AND EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.mobile_push_devices'::regclass AND attname='last_error' AND attnum>0 AND NOT attisdropped) AND to_regprocedure('public.mobile_register_push_device_r60(bigint,uuid,text,text,text)') IS NOT NULL AND to_regprocedure('public.mobile_disable_push_device_r60(bigint,uuid)') IS NOT NULL,
+   'materializedCommercialDeadline',to_regclass('public.lead_commercial_response_deadline_r60_idx') IS NOT NULL AND to_regprocedure('public.r60_refresh_response_deadline_from_message()') IS NOT NULL,
    'productionPromotionPath',promote_def ILIKE '%production_ready%' AND promote_def ILIKE '%resume_allowed%' AND promote_def ILIKE '%signature_verified_at%'
  );
 

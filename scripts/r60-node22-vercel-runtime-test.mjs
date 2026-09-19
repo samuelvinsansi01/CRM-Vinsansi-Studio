@@ -11,7 +11,28 @@ const require = createRequire(import.meta.url);
 let ts;
 try { ts = require('typescript'); }
 catch {
-  const globalRoot = execFileSync('npm', ['root', '--global'], { encoding: 'utf8' }).trim();
+  // On Windows, npm is normally a .cmd shim. child_process.execFileSync('npm', ...)
+  // can fail with ENOENT even when npm.cmd is on PATH. Prefer the npm CLI that
+  // ships beside the exact Node runtime executing this gate, so portable/reproducible
+  // toolchains do not fall back to another machine-wide npm installation.
+  const adjacentNpmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const npmCli = [process.env.VINSANSI_NPM_CLI_JS, adjacentNpmCli].find((candidate) => candidate && fs.existsSync(candidate));
+  let globalRoot = '';
+  if (npmCli) {
+    const resolved = spawnSync(process.execPath, [npmCli, 'root', '--global'], { encoding: 'utf8' });
+    if (resolved.error) throw resolved.error;
+    if (resolved.status === 0) globalRoot = resolved.stdout.trim();
+  }
+  if (!globalRoot) {
+    if (process.platform === 'win32') {
+      const resolved = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'npm root --global'], { encoding: 'utf8' });
+      if (resolved.error) throw resolved.error;
+      if (resolved.status !== 0) throw new Error(`npm_global_root_failed:${resolved.status}:${resolved.stderr || resolved.stdout}`);
+      globalRoot = resolved.stdout.trim();
+    } else {
+      globalRoot = execFileSync('npm', ['root', '--global'], { encoding: 'utf8' }).trim();
+    }
+  }
   ts = require(path.join(globalRoot, 'typescript'));
 }
 const pass = [];
