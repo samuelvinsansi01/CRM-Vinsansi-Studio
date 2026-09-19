@@ -18,7 +18,7 @@
   },
   "resources": {
     "manager": {
-      "sha256": "c1807d319c50cbade60bdffa8c977b96ef7667893e15b98bba0753f68577bd57"
+      "sha256": "a3888e60cd3dc6b5de3d645a016f5b9232df92a8e7426206630986c75a825e0c"
     },
     "worker": {
       "sha256": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973"

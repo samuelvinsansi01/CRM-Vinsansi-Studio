@@ -1,5 +1,5 @@
 {
-  "source": "CRM - Gerenciador de Disparos v1.5.90 - HOMOLOGACAO.zip",
+  "source": "VINSANSI_GERENCIADOR_HOMOLOGACAO_PKCE_CORRIGIDO.zip",
   "managerVersion": "1.5.90",
   "workerVersion": "3.14.8",
   "gatewayVersion": "1.2.34",
@@ -124,9 +124,9 @@
   },
   "manifestSchemaVersion": 2,
   "releaseStage": "candidate",
-  "managerZipSha256": "4b9e91235e456df3511ac822aa710451e79b50a6070be884cceab594f807c55c",
+  "managerZipSha256": "e8fbe4988c16b71e554b0faa6d55ff28b1724dde4c783ab22edd09a67c9cfb7e",
   "resourceHashes": {
-    "manager": "c1807d319c50cbade60bdffa8c977b96ef7667893e15b98bba0753f68577bd57",
+    "manager": "a3888e60cd3dc6b5de3d645a016f5b9232df92a8e7426206630986c75a825e0c",
     "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
     "gateway": "1d3ea138fefd0d2de35daa22e2d6af1c031db09ef37fc50bec7a0234a17b8b0a",
     "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",
