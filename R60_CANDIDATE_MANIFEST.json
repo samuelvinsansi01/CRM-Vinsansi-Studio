@@ -18,13 +18,13 @@
   },
   "resources": {
     "manager": {
-      "sha256": "0a3c2d4b280f157fb1e2b5f8ed547f12fad6c7b719d2378f2a9932266cdedb55"
+      "sha256": "6cecffd68b646ed97f8518a5268d14aa9533480f274f88e557d27670545a5831"
     },
     "worker": {
       "sha256": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973"
     },
     "gateway": {
-      "sha256": "1d3ea138fefd0d2de35daa22e2d6af1c031db09ef37fc50bec7a0234a17b8b0a"
+      "sha256": "1ba50ccc19d1ae136101e91319072a39aba5cc243a87e43a9faa19b679f31b6f"
     },
     "capture": {
       "sha256": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1"
