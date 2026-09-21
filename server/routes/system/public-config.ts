@@ -21,9 +21,14 @@ export default async function handler(req: RoutedRequest, res: RoutedResponse) {
     return res.status(503).json({ ok: false, error: 'control_plane_public_config_incomplete' });
   }
 
+  const bootstrapValue = req.query?.bootstrap;
+  const bootstrap = String(Array.isArray(bootstrapValue) ? bootstrapValue[0] : bootstrapValue ?? '').trim() === '1';
+
   let platformRelease = null;
-  try { platformRelease = await loadPlatformRelease(); }
-  catch (error) { console.warn('[public-config] platform release unavailable', error instanceof Error ? error.message : String(error)); }
+  if (!bootstrap) {
+    try { platformRelease = await loadPlatformRelease(); }
+    catch (error) { console.warn('[public-config] platform release unavailable', error instanceof Error ? error.message : String(error)); }
+  }
 
   return res.status(200).json({
     ok: true,

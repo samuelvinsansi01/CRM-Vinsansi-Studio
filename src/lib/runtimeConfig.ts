@@ -20,7 +20,7 @@ function normalize(payload: unknown): ControlPlanePublicConfig {
 export async function loadRuntimeConfig(): Promise<ControlPlanePublicConfig> {
   if (runtimeConfig) return runtimeConfig;
   if (loading) return loading;
-  loading = fetch('/api/system?route=public-config', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+  loading = fetch('/api/system?route=public-config&bootstrap=1', { headers: { Accept: 'application/json' }, cache: 'no-store', signal: AbortSignal.timeout(10000) })
     .then(async (response) => {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(String((payload as Record<string, unknown>).error ?? `control_plane_http_${response.status}`));
