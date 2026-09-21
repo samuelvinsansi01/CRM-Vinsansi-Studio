@@ -75,13 +75,13 @@ async function controlBatch(auth: AuthContext, action: string, ids: number[], ch
   const admin = serviceClient();
   const result = action === 'start'
     ? await admin.rpc('worker_start_whatsapp_batch', {
-        p_users_id: auth.publicUserId,
+        p_organizations_id: auth.organizationId,
         p_chip_instance: chip,
         p_queue_item_ids: ids,
         p_worker_id: null,
       })
     : await admin.rpc('worker_set_whatsapp_batch_state', {
-        p_users_id: auth.publicUserId,
+        p_organizations_id: auth.organizationId,
         p_chip_instance: chip,
         p_action: action,
         p_worker_id: null,
