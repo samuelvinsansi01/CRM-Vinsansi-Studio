@@ -1,5 +1,5 @@
 {
-  "source": "VINSANSI_GERENCIADOR_HOMOLOGACAO_PKCE_BUILD_CORRIGIDO.zip",
+  "source": "VINSANSI_GERENCIADOR_HOMOLOGACAO_MENSAGERIA_ESTAVEL_V2.zip",
   "managerVersion": "1.5.90",
   "workerVersion": "3.14.8",
   "gatewayVersion": "1.2.34",
@@ -124,9 +124,9 @@
   },
   "manifestSchemaVersion": 2,
   "releaseStage": "candidate",
-  "managerZipSha256": "23beb476435ea6e43995d1a78e3cbc321fc4fd86f5373297c32d21462fd1e66e",
+  "managerZipSha256": "a19b2deb3023a20e7c9b93c36dac3a00f2b06a7c7568b00786b08824f969fd93",
   "resourceHashes": {
-    "manager": "8c7af814eb9c1c0145bfcf49bb6bcbc6f6c20bf352a6277194cf490086854ae8",
+    "manager": "0a3c2d4b280f157fb1e2b5f8ed547f12fad6c7b719d2378f2a9932266cdedb55",
     "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
     "gateway": "1d3ea138fefd0d2de35daa22e2d6af1c031db09ef37fc50bec7a0234a17b8b0a",
     "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",
