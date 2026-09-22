@@ -1,5 +1,5 @@
--- VINSANSI R60.24 — identidade correta para mensagens outbound + reparo de contatos LID provisórios
--- PushName em fromMe=true pertence ao remetente local e nunca deve nomear o destinatário.
+-- VINSANSI R60.33 — ingestão 1:1 sempre ativa + convergência SEND_MESSAGE
+-- Idempotente: não altera tabelas; substitui apenas o contrato service_role de ingestão.
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.service_ingest_evolution_message(
@@ -58,46 +58,5 @@ BEGIN
   WHERE conversations_id=v_conv;
   RETURN jsonb_build_object('ignored',false,'duplicate',false,'conversationId',v_conv,'messageId',v_msg,'contactId',v_contact,'contactState',v_state);
 END $$;
-
--- Limpa apenas contatos provisórios sem telefone/lead que nunca tiveram inbound.
--- Esses nomes podiam ter sido contaminados pelo PushName da própria conta em eventos outbound.
-WITH polluted AS (
-  SELECT wc.whatsapp_contacts_id
-  FROM public.whatsapp_contacts wc
-  WHERE wc.contact_state='unknown'
-    AND wc.leads_id IS NULL
-    AND wc.normalized_phone IS NULL
-    AND nullif(btrim(coalesce(wc.display_name,'')),'') IS NOT NULL
-    AND EXISTS (
-      SELECT 1 FROM public.conversations c
-      JOIN public.conversation_messages cm ON cm.conversations_id=c.conversations_id AND cm.organizations_id=c.organizations_id
-      WHERE c.organizations_id=wc.organizations_id AND c.whatsapp_contacts_id=wc.whatsapp_contacts_id AND cm.direction='outbound'
-    )
-    AND NOT EXISTS (
-      SELECT 1 FROM public.conversations c
-      JOIN public.conversation_messages cm ON cm.conversations_id=c.conversations_id AND cm.organizations_id=c.organizations_id
-      WHERE c.organizations_id=wc.organizations_id AND c.whatsapp_contacts_id=wc.whatsapp_contacts_id AND cm.direction='inbound'
-    )
-)
-UPDATE public.whatsapp_contacts wc
-SET display_name=NULL,whatsapp_contacts_updated_at=now()
-FROM polluted p
-WHERE wc.whatsapp_contacts_id=p.whatsapp_contacts_id;
-
-UPDATE public.conversations c
-SET contact_name=NULL,conversations_updated_at=now()
-WHERE EXISTS (
-  SELECT 1 FROM public.whatsapp_contacts wc
-  WHERE wc.whatsapp_contacts_id=c.whatsapp_contacts_id
-    AND wc.organizations_id=c.organizations_id
-    AND wc.contact_state='unknown'
-    AND wc.leads_id IS NULL
-    AND wc.normalized_phone IS NULL
-    AND wc.display_name IS NULL
-)
-AND NOT EXISTS (
-  SELECT 1 FROM public.conversation_messages cm
-  WHERE cm.organizations_id=c.organizations_id AND cm.conversations_id=c.conversations_id AND cm.direction='inbound'
-);
 
 COMMIT;

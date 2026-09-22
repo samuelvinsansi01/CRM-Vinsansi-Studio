@@ -14,15 +14,16 @@ function directJid(v:unknown){const jid=text(v).toLowerCase().replace(/@c\.us$/,
 function nonDirect(v:unknown){const jid=text(v).toLowerCase();return jid==='status@broadcast'||jid.endsWith('@g.us')||jid.endsWith('@broadcast')||jid.endsWith('@newsletter');}
 function normalizeStatus(v:unknown){const s=text(v).toLowerCase();if(['read','read_receipt','played'].includes(s))return'read';if(['delivered','delivery','delivered_to_user'].includes(s))return'delivered';if(['sent','server_ack','accepted'].includes(s))return'sent';if(['failed','error'].includes(s))return'failed';if(['pending','sending'].includes(s))return s;return'';}
 function isoTimestamp(v:unknown){const n=Number(v);if(Number.isFinite(n)&&n>0){const ms=n<10_000_000_000?n*1000:n;return new Date(ms).toISOString();}const d=new Date(text(v));return Number.isNaN(d.getTime())?null:d.toISOString();}
-function messageShape(data:Row){const key=record(data.key??data.Key);const message=record(data.message??data.Message);const remote=directJid(key.remoteJid??key.remote_jid);const alt=directJid(key.remoteJidAlt??key.remote_jid_alt);const fromMe=key.fromMe===true||key.from_me===true;const id=text(key.id??key.ID);let type='text',body='';
+function messageShape(data:Row){const key=record(data.key??data.Key);const message=record(data.message??data.Message);const remote=directJid(key.remoteJid??key.remote_jid);const alt=directJid(key.remoteJidAlt??key.remote_jid_alt);const fromMe=key.fromMe===true||key.from_me===true;const id=text(key.id??key.ID);let type='text',body='',mediaUrl='',mediaMimeType='',mediaFileName='';
  if(typeof message.conversation==='string')body=text(message.conversation);
  else if(record(message.extendedTextMessage).text){body=text(record(message.extendedTextMessage).text);}
- else if(message.imageMessage){type='image';body='[Imagem]';}
+ else if(message.imageMessage){const media=record(message.imageMessage);type='image';body='[Imagem]';mediaUrl=text(media.url??media.URL);mediaMimeType=text(media.mimetype??media.mimeType??media.Mimetype);mediaFileName=text(media.fileName??media.filename??media.FileName);}
  else if(message.audioMessage){type='audio';body='[Áudio]';}
  else if(message.stickerMessage){type='sticker';body='[Figurinha]';}
- else if(message.documentMessage){type='document';body='[Documento]';}
+ else if(message.documentMessage){const media=record(message.documentMessage);type='document';body='[Documento]';mediaUrl=text(media.url??media.URL);mediaMimeType=text(media.mimetype??media.mimeType??media.Mimetype);mediaFileName=text(media.fileName??media.filename??media.FileName);}
  else {const mt=text(data.messageType??data.message_type).toLowerCase();if(['image','audio','sticker','document'].includes(mt)){type=mt;body=mt==='image'?'[Imagem]':mt==='audio'?'[Áudio]':mt==='sticker'?'[Figurinha]':'[Documento]';}}
- return{id,remote,alt,fromMe,type,body,pushName:text(data.pushName??data.push_name),timestamp:isoTimestamp(data.messageTimestamp??data.timestamp),status:normalizeStatus(data.status)};
+ if(type==='document'&&mediaMimeType&&mediaMimeType.toLowerCase()!=='application/pdf'){mediaUrl='';mediaFileName='';}
+ return{id,remote,alt,fromMe,type,body,mediaUrl,mediaMimeType,mediaFileName,pushName:text(data.pushName??data.push_name),timestamp:isoTimestamp(data.messageTimestamp??data.timestamp),status:normalizeStatus(data.status)};
 }
 
 export default async function handler(req:RoutedRequest,res:RoutedResponse){
@@ -42,7 +43,7 @@ export default async function handler(req:RoutedRequest,res:RoutedResponse){
   if(['messages.upsert','message','messages_upsert','send.message','send_message','sendmessage'].includes(event)){
     if(!msg.id||!msg.remote)return res.status(200).json({ok:true,ignored:true,reason:'non_direct_or_missing_identity'});
     const rawForIdentity={key:{remoteJid:msg.remote,...(msg.alt?{remoteJidAlt:msg.alt}:{})}};
-    const result=await admin.rpc('service_ingest_evolution_message',{p_instances_id:Number(instanceId),p_event_type:event,p_external_message_id:msg.id,p_remote_jid:msg.remote,p_from_me:msg.fromMe,p_message_type:msg.type,p_message_body:msg.body,p_message_status:msg.status||null,p_contact_name:msg.fromMe?null:(msg.pushName||null),p_provider_timestamp:msg.timestamp,p_raw_payload:rawForIdentity,p_media_url:null,p_media_mime_type:null,p_media_file_name:null,p_quoted_external_message_id:null});if(result.error)throw new Error(result.error.message);
+    const result=await admin.rpc('service_ingest_evolution_message',{p_instances_id:Number(instanceId),p_event_type:event,p_external_message_id:msg.id,p_remote_jid:msg.remote,p_from_me:msg.fromMe,p_message_type:msg.type,p_message_body:msg.body,p_message_status:msg.status||null,p_contact_name:msg.fromMe?null:(msg.pushName||null),p_provider_timestamp:msg.timestamp,p_raw_payload:rawForIdentity,p_media_url:msg.mediaUrl||null,p_media_mime_type:msg.mediaMimeType||null,p_media_file_name:msg.mediaFileName||null,p_quoted_external_message_id:null});if(result.error)throw new Error(result.error.message);
     const outcome=record(result.data);if(!msg.fromMe&&outcome.ignored!==true&&outcome.duplicate!==true){try{await notifyInboundWhatsappMessage({instanceId:Number(instanceId),externalMessageId:msg.id});}catch(error){console.warn('[mobile-push]',error instanceof Error?error.message:'push_failed');}}
     return res.status(200).json({ok:true,...outcome});
   }

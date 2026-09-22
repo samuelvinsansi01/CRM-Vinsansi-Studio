@@ -1,8 +1,8 @@
 {
-  "source": "VINSANSI_GERENCIADOR_HOMOLOGACAO_PRESENCA_TUNNEL_CORRIGIDOS.zip",
-  "managerVersion": "1.5.90",
+  "source": "VINSANSI_GERENCIADOR_R60_FASE1_MENSAGERIA_v1.5.91_CANDIDATE.zip",
+  "managerVersion": "1.5.91",
   "workerVersion": "3.14.8",
-  "gatewayVersion": "1.2.34",
+  "gatewayVersion": "1.2.35",
   "captureVersion": "1.0.53",
   "instagramVersion": "2.0.8",
   "releaseSequence": 60,
@@ -120,15 +120,25 @@
     "remoteJid": true,
     "remoteJidAlt": true,
     "messageStatus": true,
-    "dropNonDirectBeforeCrm": true
+    "dropNonDirectBeforeCrm": true,
+    "ingestionAlwaysOn": true,
+    "sendMessageFromPhone": true,
+    "requiredSubscriptions": [
+      "MESSAGE",
+      "SEND_MESSAGE",
+      "READ_RECEIPT",
+      "CONNECTION",
+      "QRCODE",
+      "CONTACT"
+    ]
   },
   "manifestSchemaVersion": 2,
   "releaseStage": "candidate",
-  "managerZipSha256": "e5cb7bbce1412225596e9b5a7263f7beb1bd31c1d3e589519973701bf0b52bc6",
+  "managerZipSha256": "e748a9b44d6dc4621447b6b4a66d816a30f5cc8b6eeb689eed440e08ab0b7eb9",
   "resourceHashes": {
-    "manager": "6cecffd68b646ed97f8518a5268d14aa9533480f274f88e557d27670545a5831",
+    "manager": "b3182e028eff0c12ab5106eeb85791a4ad9c59511cf81cb227eff18171383715",
     "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
-    "gateway": "1ba50ccc19d1ae136101e91319072a39aba5cc243a87e43a9faa19b679f31b6f",
+    "gateway": "7fb49c85dcb6a939b38b729cbe62316d122d716343ff233c82026bbb04783409",
     "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",
     "instagram": "f8826927aaf2d199f1e960ce47f3934433e697c37f76289af2870971449e20d7",
     "mobile": "7f1ec4984d0ad7a42bfe802e3e556a380842cae5d424d7c8c5760bce8e34bc60"
