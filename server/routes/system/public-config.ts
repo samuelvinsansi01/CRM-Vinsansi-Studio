@@ -24,10 +24,23 @@ export default async function handler(req: RoutedRequest, res: RoutedResponse) {
   const bootstrapValue = req.query?.bootstrap;
   const bootstrap = String(Array.isArray(bootstrapValue) ? bootstrapValue[0] : bootstrapValue ?? '').trim() === '1';
 
-  let platformRelease = null;
-  if (!bootstrap) {
-    try { platformRelease = await loadPlatformRelease(); }
-    catch (error) { console.warn('[public-config] platform release storage unavailable; serving bundled Candidate', error instanceof Error ? error.message : String(error)); platformRelease = bundledPlatformRelease(); }
+  const bundledRelease = bundledPlatformRelease();
+  let platformRelease = bootstrap ? null : bundledRelease;
+  // Candidate é autocontido: public-config nunca deve depender do PostgREST/DB para
+  // liberar o Gerenciador. A autoridade publicada continua sendo este endpoint,
+  // mas o manifesto Candidate é servido do bundle verificado sem I/O de banco.
+  // Production continua consultando o registro promovido, com fallback fail-closed
+  // para o bundle apenas se ele próprio já for Production válido.
+  if (!bootstrap && bundledRelease.releaseStage === 'production') {
+    try {
+      platformRelease = await Promise.race([
+        loadPlatformRelease(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('platform_release_storage_timeout')), 2500)),
+      ]);
+    } catch (error) {
+      console.warn('[public-config] platform release storage unavailable; serving bundled release', error instanceof Error ? error.message : String(error));
+      platformRelease = bundledRelease;
+    }
   }
 
   return res.status(200).json({
