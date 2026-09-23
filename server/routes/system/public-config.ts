@@ -1,5 +1,5 @@
 import type { RoutedRequest, RoutedResponse } from '../dispatch.js';
-import { loadPlatformRelease } from '../../platform/release.js';
+import { bundledPlatformRelease, loadPlatformRelease } from '../../platform/release.js';
 
 function env(...keys: string[]) {
   for (const key of keys) {
@@ -27,7 +27,7 @@ export default async function handler(req: RoutedRequest, res: RoutedResponse) {
   let platformRelease = null;
   if (!bootstrap) {
     try { platformRelease = await loadPlatformRelease(); }
-    catch (error) { console.warn('[public-config] platform release unavailable', error instanceof Error ? error.message : String(error)); }
+    catch (error) { console.warn('[public-config] platform release storage unavailable; serving bundled Candidate', error instanceof Error ? error.message : String(error)); platformRelease = bundledPlatformRelease(); }
   }
 
   return res.status(200).json({
