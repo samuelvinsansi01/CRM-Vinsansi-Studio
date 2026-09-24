@@ -1,7 +1,7 @@
 {
-  "source": "VINSANSI_GERENCIADOR_R60_RESILIENCIA_v1.5.96_CANDIDATE.zip",
-  "managerVersion": "1.5.96",
-  "workerVersion": "3.14.8",
+  "source": "VINSANSI_GERENCIADOR_R60_LOCAL_DISPATCH_v1.5.97_CANDIDATE.zip",
+  "managerVersion": "1.5.97",
+  "workerVersion": "3.14.9",
   "gatewayVersion": "1.2.36",
   "captureVersion": "1.0.53",
   "instagramVersion": "2.0.8",
@@ -109,6 +109,19 @@
     "instagram_recover_stale_items_v2": [
       "p_organizations_id",
       "p_stale_before"
+    ],
+    "worker_claim_manual_message_r60": [
+      "p_worker_id"
+    ],
+    "worker_report_manual_message_r60": [
+      "p_worker_id",
+      "p_conversation_messages_id",
+      "p_claim_token",
+      "p_status",
+      "p_external_message_id",
+      "p_error_message",
+      "p_provider_payload",
+      "p_retry_after_ms"
     ]
   },
   "gateway": {
@@ -134,10 +147,10 @@
   },
   "manifestSchemaVersion": 2,
   "releaseStage": "candidate",
-  "managerZipSha256": "61b1b48d66145348330c20bc17a57100ed7e202b804cb1eb604839c10052c9ff",
+  "managerZipSha256": "f07f54aea3cb347d1d7e8408c4ba5bed6d608d7ce688e36355c63bdca43cdffe",
   "resourceHashes": {
-    "manager": "554b1a11cfd899bda1a49e00bcba825c1647bc3e7b7c9300ba3856c19c404e47",
-    "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
+    "manager": "cc722fa856c677a585eba5c351c7d5d57d6206344cd20a9718fc62fe8f7031c9",
+    "worker": "ac6cc916c5f31cfcdc6076283ef3f059c4a7ea76de05fc85308057f10dfbf86b",
     "gateway": "4b91ba980a7f434cb84b5e103d1477cd4c6bb71490deac8b1a5c93f8fc89b564",
     "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",
     "instagram": "f8826927aaf2d199f1e960ce47f3934433e697c37f76289af2870971449e20d7",

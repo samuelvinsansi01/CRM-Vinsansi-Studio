@@ -559,8 +559,9 @@ export function ConversationsPage() {
       // O envio confirmado jamais pode transformar um envio confirmado em "Falha" por reconciliação visual.
       // Ele permanece visível como otimista até a linha canônica aparecer via Realtime/consulta.
       // Isso evita o "pisca e some" por read-after-write.
-      const confirmedStatus = ['sent','delivered','read','reconciliation_required'].includes(String(result.status))
-        ? String(result.status) as ConversationMessage['status']
+      const returnedStatus=String(result.status);
+      const confirmedStatus = ['pending','sending','sent','delivered','read','reconciliation_required'].includes(returnedStatus)
+        ? returnedStatus as ConversationMessage['status']
         : 'sent';
       setMessages((current) => current.map((item) => item.id === optimisticId ? {
         ...item, externalId: result.external_message_id || item.externalId, status: confirmedStatus, errorMessage: '',
