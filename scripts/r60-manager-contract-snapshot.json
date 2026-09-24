@@ -1,6 +1,6 @@
 {
-  "source": "VINSANSI_GERENCIADOR_R60_AUTOHEAL_v1.5.95_CANDIDATE.zip",
-  "managerVersion": "1.5.95",
+  "source": "VINSANSI_GERENCIADOR_R60_RESILIENCIA_v1.5.96_CANDIDATE.zip",
+  "managerVersion": "1.5.96",
   "workerVersion": "3.14.8",
   "gatewayVersion": "1.2.36",
   "captureVersion": "1.0.53",
@@ -134,9 +134,9 @@
   },
   "manifestSchemaVersion": 2,
   "releaseStage": "candidate",
-  "managerZipSha256": "7fcd4de7060b868b71254537e2bc6c5a922beaaee04c84dce89323b6f4100a63",
+  "managerZipSha256": "61b1b48d66145348330c20bc17a57100ed7e202b804cb1eb604839c10052c9ff",
   "resourceHashes": {
-    "manager": "54c9cda0a92362d77029c98c1ec9669c8014fd25b0d503216930db3daffe0746",
+    "manager": "554b1a11cfd899bda1a49e00bcba825c1647bc3e7b7c9300ba3856c19c404e47",
     "worker": "385fb4ac59a87f77b40cd7eab0b61c78cc6804a64b6435e29593e8d506f37973",
     "gateway": "4b91ba980a7f434cb84b5e103d1477cd4c6bb71490deac8b1a5c93f8fc89b564",
     "capture": "fec360d561c45770cc56ba35e756f8c3b9762277a6f8205a7a93f9ee46c822f1",

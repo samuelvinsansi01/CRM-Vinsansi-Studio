@@ -106,6 +106,7 @@ export function App() {
         <div className="login-panel">
           <strong>Não foi possível carregar a organização.</strong>
           <p>{organizationError}</p>
+          <p>O CRM continuará tentando automaticamente e preservará o último contexto válido quando existir.</p>
           <button type="button" className="button button--primary" onClick={() => void refreshOrganization()}>
             Tentar novamente
           </button>

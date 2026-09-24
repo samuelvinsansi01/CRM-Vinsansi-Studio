@@ -13,27 +13,36 @@ async function gatewaySend(instanceUrl:string,instanceName:string,apiKey:string,
   if(!instanceUrl||!instanceName||!apiKey||!recipient||!/^[A-F0-9]{20}$/.test(reservedMessageId)){
     const error=new Error('manual_gateway_command_invalid') as ProviderError;error.explicit=true;throw error;
   }
-  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),30_000);
-  try{
-    const endpoint=`${instanceUrl.replace(/\/$/,'')}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/messages/text`;
-    const response=await fetch(endpoint,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json',apikey:apiKey,'X-Vinsansi-Homologation-Manual':'1'},body:JSON.stringify({number:recipient,text:message,delay:0,messageId:reservedMessageId}),signal:controller.signal});
-    const raw=await response.text();let payload:Record<string,unknown>={};try{payload=raw?JSON.parse(raw) as Record<string,unknown>:{};}catch{payload={raw};}
-    if(!response.ok){
-      const error=new Error(String(payload.error||payload.message||`gateway_http_${response.status}`)) as ProviderError;
-      error.payload=payload;
-      error.uncertain=payload.uncertain===true;
-      error.explicit=!error.uncertain;
+  const endpoint=`${instanceUrl.replace(/\/$/,'')}/v1/whatsapp/instances/${encodeURIComponent(instanceName)}/messages/text`;
+  const delays=[0,700,1800];
+  let lastPayload:Record<string,unknown>={};
+  for(let attempt=0;attempt<delays.length;attempt++){
+    if(delays[attempt])await new Promise(resolve=>setTimeout(resolve,delays[attempt]));
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),30_000);
+    try{
+      const response=await fetch(endpoint,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json',apikey:apiKey,'X-Vinsansi-Homologation-Manual':'1'},body:JSON.stringify({number:recipient,text:message,delay:0,messageId:reservedMessageId}),signal:controller.signal});
+      const raw=await response.text();let payload:Record<string,unknown>={};try{payload=raw?JSON.parse(raw) as Record<string,unknown>:{};}catch{payload={raw};}lastPayload=payload;
+      // 530 é erro de borda/túnel antes do Gateway. Repetimos somente esse caso,
+      // com a mesma identidade reservada. Timeouts/transportes continuam incertos
+      // e jamais são reenviados automaticamente.
+      if(response.status===530&&attempt<delays.length-1)continue;
+      if(!response.ok){
+        const error=new Error(String(payload.error||payload.message||`gateway_http_${response.status}`)) as ProviderError;
+        error.payload=payload;
+        error.uncertain=payload.uncertain===true;
+        error.explicit=!error.uncertain;
+        throw error;
+      }
+      const id=externalMessageId(payload)||reservedMessageId;
+      if(id!==reservedMessageId){const error=new Error('manual_gateway_provider_id_mismatch') as ProviderError;error.uncertain=true;error.payload=payload;throw error;}
+      return {externalMessageId:reservedMessageId,payload:{...payload,edgeRetryCount:attempt}};
+    }catch(error){
+      if((error as {name?:string})?.name==='AbortError'){const uncertain=new Error('manual_gateway_timeout_uncertain') as ProviderError;uncertain.uncertain=true;throw uncertain;}
+      if(error instanceof TypeError){const uncertain=new Error(`manual_gateway_transport_uncertain:${error.message}`) as ProviderError;uncertain.uncertain=true;throw uncertain;}
       throw error;
-    }
-    const id=externalMessageId(payload)||reservedMessageId;
-    if(id!==reservedMessageId){const error=new Error('manual_gateway_provider_id_mismatch') as ProviderError;error.uncertain=true;error.payload=payload;throw error;}
-    return {externalMessageId:reservedMessageId,payload};
-  }catch(error){
-    if((error as {name?:string})?.name==='AbortError'){const uncertain=new Error('manual_gateway_timeout_uncertain') as ProviderError;uncertain.uncertain=true;throw uncertain;}
-    if(error instanceof TypeError){const uncertain=new Error(`manual_gateway_transport_uncertain:${error.message}`) as ProviderError;uncertain.uncertain=true;throw uncertain;}
-    throw error;
+    }finally{clearTimeout(timer);}
   }
-  finally{clearTimeout(timer);}
+  const error=new Error('gateway_http_530') as ProviderError;error.payload=lastPayload;error.explicit=true;throw error;
 }
 
 export default async function handler(req:Stage5Request,res:Stage5Response){

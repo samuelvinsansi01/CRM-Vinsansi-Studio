@@ -35,18 +35,28 @@ type OrganizationContextValue = {
 };
 
 const Context = createContext<OrganizationContextValue | null>(null);
-const ORGANIZATION_CACHE_KEY = 'crm:organization-context-cache:v1';
+const ORGANIZATION_CACHE_KEY = 'crm:organization-context-cache:v2';
+const ORGANIZATION_PERSISTENT_CACHE_PREFIX = 'crm:organization-context-last-good:v1:';
 const INVITATION_CHECK_PREFIX = 'crm:organization-invitations-checked:v1:';
+
+function validCachedContext(value: OrganizationContext | null, usersId: string) {
+  return Boolean(value && String(value.actorUsersId ?? '') === usersId && Array.isArray(value.permissions) && Array.isArray(value.organizations));
+}
 
 function readCachedOrganizationContext(usersId: string): OrganizationContext | null {
   if (!usersId || typeof window === 'undefined') return null;
   try {
-    const raw = window.sessionStorage.getItem(ORGANIZATION_CACHE_KEY);
-    if (!raw) return null;
-    const value = JSON.parse(raw) as OrganizationContext;
-    if (String(value?.actorUsersId ?? '') !== usersId) return null;
-    if (!Array.isArray(value?.permissions) || !Array.isArray(value?.organizations)) return null;
-    return value;
+    const sessionRaw = window.sessionStorage.getItem(ORGANIZATION_CACHE_KEY);
+    if (sessionRaw) {
+      const sessionValue = JSON.parse(sessionRaw) as OrganizationContext;
+      if (validCachedContext(sessionValue, usersId)) return sessionValue;
+    }
+    const persistentRaw = window.localStorage.getItem(`${ORGANIZATION_PERSISTENT_CACHE_PREFIX}${usersId}`);
+    if (!persistentRaw) return null;
+    const record = JSON.parse(persistentRaw) as { savedAt?: string; value?: OrganizationContext };
+    const savedAt = Date.parse(String(record.savedAt || ''));
+    if (!Number.isFinite(savedAt) || Date.now() - savedAt > 7 * 24 * 60 * 60 * 1000) return null;
+    return validCachedContext(record.value ?? null, usersId) ? record.value! : null;
   } catch {
     return null;
   }
@@ -55,10 +65,12 @@ function readCachedOrganizationContext(usersId: string): OrganizationContext | n
 function persistCachedOrganizationContext(value: OrganizationContext | null) {
   if (typeof window === 'undefined') return;
   try {
-    if (value) window.sessionStorage.setItem(ORGANIZATION_CACHE_KEY, JSON.stringify(value));
-    else window.sessionStorage.removeItem(ORGANIZATION_CACHE_KEY);
+    if (value) {
+      window.sessionStorage.setItem(ORGANIZATION_CACHE_KEY, JSON.stringify(value));
+      window.localStorage.setItem(`${ORGANIZATION_PERSISTENT_CACHE_PREFIX}${value.actorUsersId}`, JSON.stringify({ savedAt: new Date().toISOString(), value }));
+    } else window.sessionStorage.removeItem(ORGANIZATION_CACHE_KEY);
   } catch {
-    // Cache é apenas uma otimização de boot; RLS e RPCs continuam autoritativos.
+    // Cache contém apenas contexto de UI. RLS/RPCs continuam autoritativos.
   }
 }
 
@@ -187,6 +199,12 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       if (inviteTimer !== null) window.clearTimeout(inviteTimer);
     };
   }, [isAuthenticated, passwordRecovery, setContext, syncOrganization, user]);
+
+  useEffect(() => {
+    if (!isAuthenticated || passwordRecovery || context || !error) return undefined;
+    const timer = window.setInterval(() => void syncOrganization(true), 15_000);
+    return () => window.clearInterval(timer);
+  }, [context, error, isAuthenticated, passwordRecovery, syncOrganization]);
 
   const switchOrganization = useCallback(async (organizationId: string) => {
     if (!organizationId || organizationId === contextRef.current?.organization?.id) return;
